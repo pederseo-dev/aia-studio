@@ -134,8 +134,10 @@ Toda modificación es una **operación** serializable:
 
 ## 5. Decisiones confirmadas (2026-11-02)
 
-- **Empezamos construyendo y ajustamos con prueba y error.** El formato `aia/0.1` es provisional; está descrito en
-  [formato.md](formato.md).
+- **Empezamos construyendo y ajustamos con prueba y error**, por fases ([plan.md](plan.md)). Un primer prototipo
+  probó la idea y quedó guardado en la etiqueta de git `prototipo-0`; la base se rehace limpia.
+- **Convenciones**: coordenadas como en SVG (Y hacia abajo), ángulos en grados con positivos en sentido horario y
+  tiempo en **segundos** (los fps solo sirven para mostrar frames y para el snapping).
 - **MCP desde el comienzo.** La IA del usuario (la que ya paga: Claude Desktop, Claude Code, Cursor...) maneja los
   personajes por un servidor MCP local, sin API keys. MCP y editor escriben los mismos archivos usando el mismo motor
   de operaciones, y cada lote queda en el historial con su origen.
@@ -145,8 +147,9 @@ Toda modificación es una **operación** serializable:
 - **El personaje define cómo se mueve; la app decide cuándo.** Params, drivers y (más adelante) la state machine son
   datos del personaje. Comportamientos como el parpadeo automático o el lip-sync son código de la app que usa el
   personaje.
-- **Drivers v0.1**: numéricos aditivos con interpolación por tramos, y de slot con umbrales. Es más simple que
-  `param → acción` de la sección 2.4; si se queda corto, lo cambiamos.
+- **Lo que dejó el prototipo**: drivers numéricos aditivos con interpolación por tramos y drivers de slot con
+  umbrales funcionaron bien para una cara simple. Son un caso particular de `param → acción` (sección 2.4), que es lo
+  que se construye en la fase 4.
 
 ## 6. Formato de exportación (por definir)
 
@@ -166,7 +169,6 @@ app con IA conviene un formato aparte. Propuesta inicial, a validar con el prime
 - ¿Deformación por pesos (v2) en el corto plazo o el estilo recortable alcanza al principio?
 - ¿Personajes generados por la IA desde piezas de una biblioteca, o dibujados por el usuario
   y animados por la IA?
-- ¿Tiempo en segundos o en frames? Propuesta: segundos, con un fps solo para mostrarlos.
 - ¿Hace falta importar `.moho` o `.riv` existentes? Por ahora no; es caro y no es la base.
 - Hay que descomprimir un `.moho` real para verificar el esquema de keyframes, que no está
   documentado públicamente.

@@ -1,6 +1,6 @@
 # Plan de construcción
 
-> Estado: **propuesta** (2026-11-02). Se basa en [sintesis.md](sintesis.md) y en la investigación de
+> Estado: **fase 0 terminada; sigue la fase 1** (2026-11-02). Se basa en [sintesis.md](sintesis.md) y en la investigación de
 > [Moho](investigacion/moho-lua.md) y [Rive](investigacion/rive-runtime.md).
 
 ## Cómo trabajamos
@@ -30,7 +30,7 @@ confundió. Corremos al menos con el cliente que más se use (Claude Desktop o C
 
 ---
 
-## Fase 0: preparación
+## Fase 0: preparación ✅ (2026-11-02)
 
 - Iniciar git. Guardar el prototipo actual en la etiqueta `prototipo-0` para poder consultarlo, y borrarlo del árbol
   de trabajo.

@@ -24,13 +24,17 @@ personajes** y **el usuario pueda corregir a mano** cuando haga falta.
 npm install
 npm run dev     # editor en http://localhost:5173
 npm test        # pruebas del núcleo
+npm run mcp     # servidor MCP por stdio (normalmente lo arranca el cliente de IA)
 ```
+
+> Estado: **fase 0** del [plan](docs/plan.md). La base está lista y vacía; el prototipo que probó la idea quedó en
+> la etiqueta de git `prototipo-0` (`git show prototipo-0 --stat`).
 
 ### Conectar tu IA (MCP, sin API key)
 
 La IA que ya usas maneja los personajes a través de un servidor MCP local (`mcp/server.js`). Trabaja sobre los
-mismos archivos de `personajes/` que el editor, así que lo que hace la IA aparece en vivo en el navegador y lo que
-retocas a mano queda en el historial para que la IA lo respete.
+mismos archivos que el editor, así que lo que hace la IA aparece en vivo en el navegador y lo que retocas a mano
+queda en el historial para que la IA lo respete.
 
 - **Claude Code**: ya está configurado en [.mcp.json](.mcp.json); al abrir la carpeta te pide aprobarlo.
 - **Claude Desktop**: agrega esto en *Settings → Developer → Edit Config* (`claude_desktop_config.json`) y reinicia:
@@ -48,19 +52,21 @@ retocas a mano queda en el historial para que la IA lo respete.
 
 - **Otros clientes MCP** (Cursor, etc.): el mismo comando, `node <ruta>/mcp/server.js`, por stdio.
 
-Herramientas: `format_guide`, `list_characters`, `get_character`, `create_character`, `apply_ops`, `render_svg` y
-`get_history`. El formato está en [docs/formato.md](docs/formato.md).
+Por ahora solo tiene `get_status`; las herramientas de edición llegan en la fase 1.
 
 ## Estructura
 
 | Carpeta | Qué hay |
 | --- | --- |
-| `src/core/` | Formato, validación, operaciones y pose. Sin dependencias; corre en el navegador y en Node. |
-| `src/runtime/` | `Avatar`: monta un personaje en la página y lo mueve con sus params. |
+| `schema/` | Definición de cada tipo (fuente única de verdad: validación, inspector y guía para la IA). |
+| `src/core/` | Documento, validación, operaciones y evaluación. Sin DOM; corre en el navegador y en Node. |
+| `src/render/` | Renderer SVG. |
 | `src/editor/` | El editor web. |
-| `servidor/` | Lectura y escritura de personajes en disco, y la API local que usa el editor. |
+| `servidor/` | Lectura y escritura en disco, y la API local que usa el editor (plugin de Vite). |
 | `mcp/` | Servidor MCP para la IA. |
-| `personajes/` | Los personajes (`.json`) y su historial de cambios (`.historial.jsonl`). |
+| `personajes/` | Los documentos de personajes. |
+| `tests/` | Pruebas del núcleo (`node --test`). |
+| `docs/pruebas-ia/` | Tareas y resultados de las pruebas con IA de cada fase. |
 | `referencias/` | Código de terceros para estudiar (ignorado por git). |
 
 ## Documentación

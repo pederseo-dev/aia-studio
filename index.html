@@ -7,48 +7,7 @@
     <link rel="stylesheet" href="/src/editor/estilos.css" />
   </head>
   <body>
-    <header>
-      <strong>aia-studio</strong>
-      <select id="personajes" aria-label="Personaje"></select>
-      <span id="aviso" role="status"></span>
-      <label class="interruptor"><input type="checkbox" id="ver-huesos" checked /> Huesos</label>
-    </header>
-
-    <main>
-      <aside id="panel-izq">
-        <section>
-          <h2>Params</h2>
-          <p class="ayuda">Controles de alto nivel. Es lo que maneja la IA en tiempo real.</p>
-          <div id="params"></div>
-          <button id="reiniciar-params" type="button">Valores por defecto</button>
-        </section>
-        <section>
-          <h2>Comportamientos</h2>
-          <p class="ayuda">Código de la app, no del personaje.</p>
-          <label class="interruptor"><input type="checkbox" id="auto-parpadeo" checked /> Parpadeo automático</label>
-          <label class="interruptor"><input type="checkbox" id="simular-habla" /> Simular habla</label>
-        </section>
-      </aside>
-
-      <div id="escenario"></div>
-
-      <aside id="panel-der">
-        <section>
-          <h2>Huesos</h2>
-          <ul id="huesos" class="arbol"></ul>
-        </section>
-        <section id="propiedades" hidden>
-          <h2 id="titulo-propiedades"></h2>
-          <div id="campos"></div>
-          <p class="ayuda">Arrastra sobre el nombre o escribe un valor. <kbd>Ctrl</kbd>+<kbd>Z</kbd> deshace tus cambios.</p>
-        </section>
-        <section>
-          <h2>Historial</h2>
-          <ol id="historial"></ol>
-        </section>
-      </aside>
-    </main>
-
+    <main id="app"></main>
     <script type="module" src="/src/editor/main.js"></script>
   </body>
 </html>

@@ -1,110 +1,14 @@
 :root {
-  --fondo: #17151c;
-  --panel: #1f1c26;
-  --borde: #322d3d;
-  --texto: #e8e4ef;
-  --suave: #9a93a8;
-  --acento: #8b9cff;
-  --ia: #f2b35b;
-  --escenario: #f4f1ea;
   color-scheme: dark;
-  font: 13px/1.4 system-ui, sans-serif;
+  font: 14px/1.5 system-ui, sans-serif;
 }
-
-* { box-sizing: border-box; }
 
 body {
   margin: 0;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--fondo);
-  color: var(--texto);
+  background: #17151c;
+  color: #e8e4ef;
 }
 
-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--borde);
+#app {
+  padding: 24px;
 }
-
-#aviso { flex: 1; color: var(--ia); }
-
-main {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 260px 1fr 280px;
-}
-
-aside {
-  overflow-y: auto;
-  background: var(--panel);
-  padding: 4px 12px 12px;
-}
-#panel-izq { border-right: 1px solid var(--borde); }
-#panel-der { border-left: 1px solid var(--borde); }
-
-h2 {
-  margin: 14px 0 6px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--suave);
-}
-
-.ayuda { margin: 0 0 8px; color: var(--suave); font-size: 12px; }
-
-button, select, input {
-  font: inherit;
-  color: inherit;
-  background: var(--fondo);
-  border: 1px solid var(--borde);
-  border-radius: 4px;
-  padding: 3px 6px;
-}
-button { cursor: pointer; }
-button:hover { border-color: var(--acento); }
-
-.interruptor { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
-
-.param { margin-bottom: 8px; }
-.param .fila { display: flex; justify-content: space-between; }
-.param .valor { color: var(--suave); font-variant-numeric: tabular-nums; }
-.param input { width: 100%; padding: 0; }
-
-#escenario {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--escenario);
-}
-#escenario svg { width: min(100%, 80vh); height: auto; }
-#escenario [data-part], #escenario [data-slot] { cursor: pointer; }
-
-.arbol, .arbol ul { list-style: none; margin: 0; padding: 0; }
-.arbol ul { padding-left: 14px; }
-.arbol button {
-  width: 100%;
-  text-align: left;
-  border: none;
-  background: none;
-  padding: 2px 6px;
-}
-.arbol button.seleccionado { background: var(--acento); color: #111; }
-
-.campo { display: grid; grid-template-columns: 80px 1fr; align-items: center; gap: 6px; margin-bottom: 4px; }
-.campo label { cursor: ew-resize; user-select: none; color: var(--suave); }
-.campo input { width: 100%; }
-
-#historial { margin: 0; padding-left: 18px; color: var(--suave); font-size: 12px; }
-#historial .ai { color: var(--ia); }
-#historial .user { color: var(--acento); }
-
-/* Superposición de huesos */
-.huesos-overlay line { stroke: #8b9cff; stroke-width: 2; opacity: 0.8; }
-.huesos-overlay circle { fill: #8b9cff; stroke: #111; stroke-width: 1; }
-.huesos-overlay circle.seleccionado { fill: #f2b35b; }
