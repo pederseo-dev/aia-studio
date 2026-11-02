@@ -3,13 +3,14 @@
 
 import { buscar } from '../core/documento.js';
 import { validarValor } from '../core/esquema.js';
-import { ejecutar, esquema, estado, previsualizar, seleccionar, suscribir } from './estado.js';
+import { origenDelValor, valorEfectivo } from '../core/estilos.js';
+import { ejecutar, esquema, estado, fijar, previsualizar, seleccionar, suscribir } from './estado.js';
 
 const ORDEN_DE_GRUPOS = ['General', 'Forma', 'Transformación', 'Apariencia', 'Lienzo', 'Tiempo'];
 
 export function montarInspector(raiz) {
   suscribir((c) => {
-    if ('doc' in c || 'seleccion' in c) dibujar();
+    if ('doc' in c || 'seleccion' in c || 'edicion' in c) dibujar();
   });
 
   function dibujar() {
@@ -52,14 +53,16 @@ export function montarInspector(raiz) {
   }
 
   function campo(objetivo, datos, prop, p) {
-    const guardado = datos[prop];
-    const valor = guardado !== undefined ? guardado : p.default;
+    const esObjeto = objetivo !== 'meta';
+    const origen = esObjeto ? origenDelValor(estado.doc, datos, prop) : datos[prop] !== undefined ? 'propio' : 'defecto';
+    const valor = esObjeto ? valorEfectivo(esquema, estado.doc, datos, prop) : (datos[prop] ?? p.default);
     const div = document.createElement('div');
-    div.className = `campo${guardado === undefined ? ' por-defecto' : ''}`;
+    div.className = `campo${origen === 'defecto' ? ' por-defecto' : origen === 'estilo' ? ' por-defecto por-estilo' : ''}`;
     div.dataset.prop = prop;
     const label = document.createElement('label');
     label.textContent = prop;
-    label.title = `${p.description ?? ''}${p.default !== undefined ? `\nPor defecto: ${JSON.stringify(p.default)}` : ''}`;
+    const deDonde = origen === 'estilo' ? `\nViene del estilo "${datos.style}".` : '';
+    label.title = `${p.description ?? ''}${p.default !== undefined ? `\nPor defecto: ${JSON.stringify(p.default)}` : ''}${deDonde}`;
     const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Volver al valor por defecto' });
     restablecer.addEventListener('click', () => ejecutar([{ op: 'unset', target: objetivo, props: [prop] }], `${objetivo}.${prop} por defecto`));
 
@@ -190,6 +193,46 @@ const CONTROLES = {
     for (const v of p.values) select.append(new Option(v, v, false, v === valor));
     select.addEventListener('change', () => confirmar(select.value));
     return select;
+  },
+
+  // Los vértices se editan en el lienzo; aquí solo se resume y se entra a editarlos.
+  vertices({ valor, objetivo }) {
+    const caja = document.createElement('div');
+    caja.className = 'color';
+    const boton = Object.assign(document.createElement('button'), { type: 'button', textContent: estado.edicion === objetivo ? 'Terminar' : 'Editar puntos' });
+    boton.title = 'También con doble clic en el path o Enter';
+    boton.addEventListener('click', () => fijar(estado.edicion === objetivo ? { edicion: null, vertice: null } : { edicion: objetivo, seleccion: objetivo, vertice: null, herramienta: 'seleccionar' }));
+    const resumen = document.createElement('span');
+    const curvos = valor.filter((v) => (v.mode ?? 'straight') !== 'straight').length;
+    resumen.textContent = `${valor.length} puntos${curvos ? `, ${curvos} curvos` : ''}`;
+    caja.append(resumen, boton);
+    return caja;
+  },
+
+  // Paradas de un degradado: color, offset y quitar; más un botón para agregar.
+  stops({ valor, confirmar }) {
+    const lista = document.createElement('div');
+    lista.className = 'lista-paradas';
+    const cambiar = (i, cambios) => confirmar(valor.map((s, j) => (j === i ? { ...s, ...cambios } : s)).sort((a, b) => a.offset - b.offset));
+    valor.forEach((s, i) => {
+      const fila = document.createElement('div');
+      fila.className = 'parada';
+      const color = Object.assign(document.createElement('input'), { type: 'color', value: s.color.length === 4 ? '#' + [...s.color.slice(1)].map((d) => d + d).join('') : s.color.slice(0, 7) });
+      color.addEventListener('change', () => cambiar(i, { color: color.value }));
+      const offset = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 1, step: 0.05, value: s.offset, title: 'Posición, de 0 a 1' });
+      offset.addEventListener('change', () => cambiar(i, { offset: Math.min(1, Math.max(0, Number(offset.value) || 0)) }));
+      const opacidad = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 1, step: 0.1, value: s.opacity ?? 1, title: 'Opacidad' });
+      opacidad.addEventListener('change', () => cambiar(i, { opacity: Math.min(1, Math.max(0, Number(opacidad.value))) }));
+      const quitar = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '×', title: 'Quitar parada' });
+      quitar.style.visibility = valor.length > 1 ? 'visible' : 'hidden';
+      quitar.addEventListener('click', () => confirmar(valor.filter((_, j) => j !== i)));
+      fila.append(color, offset, opacidad, quitar);
+      lista.append(fila);
+    });
+    const agregar = Object.assign(document.createElement('button'), { type: 'button', textContent: '+ Parada' });
+    agregar.addEventListener('click', () => confirmar([...valor, { offset: 1, color: valor.at(-1)?.color ?? '#ffffff' }].sort((a, b) => a.offset - b.offset)));
+    lista.append(agregar);
+    return lista;
   },
 
   ref({ p, valor, confirmar, objetivo }) {

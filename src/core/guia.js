@@ -5,6 +5,7 @@ import { FORMATO } from './formato.js';
 
 function rango(p) {
   if (p.type === 'enum') return p.values.join(' \\| ');
+  if (p.type === 'ref' && p.refTypes) return `id de ${p.refTypes.join(' o ')}`;
   if (p.min == null && p.max == null) return '';
   return `${p.min ?? '−∞'} … ${p.max ?? '∞'}`;
 }
@@ -19,7 +20,7 @@ function tabla(propiedades) {
 
 export function guiaParaIA(esquema) {
   const tipos = [...esquema.tipos.values()]
-    .map((t) => `### \`${t.name}\`${t.container ? ' (puede tener hijos)' : ''}\n\n${t.description}\n\n${tabla(t.properties)}`)
+    .map((t) => `### \`${t.name}\`${t.container ? ' (puede tener hijos)' : ''}${t.resource ? ' (recurso)' : ''}\n\n${t.description}\n\n${tabla(t.properties)}`)
     .join('\n\n');
 
   return `# Guía de aia-studio (formato ${FORMATO})
@@ -73,6 +74,51 @@ corregir y reintentar.
 \`index\` es la posición entre los hermanos en orden de dibujo: \`0\` = al fondo; sin \`index\` = al frente.
 \`move\` no cambia \`x\`/\`y\`: si cambias de padre, recalcula la posición si quieres que el objeto quede en el mismo lugar.
 Para copiar un documento entero, usa \`create_document\` con \`copy_from\`.
+
+## Formas libres (\`path\`)
+
+Lo más cómodo es pasar un trazado SVG en \`d\` (un solo subtrazado, cualquier comando: M L H V C S Q T A Z) y el
+editor lo convierte a vértices:
+
+\`\`\`json
+{ "op": "create", "type": "path", "id": "ear_l", "parent": "head", "props": { "d": "M-60 -150 C-80 -220 -20 -200 -30 -150 Z", "fill": "#3a2a4d" } }
+\`\`\`
+
+Las coordenadas de \`d\` y de los vértices son **relativas al path**: su \`x\`/\`y\` es el pivote. Para que el path gire
+desde un punto concreto, pon ese punto en \`x\`/\`y\` y dibuja alrededor de (0, 0).
+
+Lo que se guarda es \`vertices\` (y \`closed\`). Cada vértice tiene \`x\`, \`y\` y, si es curvo, sus tangentes en
+polares (ángulo en grados con Y hacia abajo: 0 = derecha, 90 = abajo; distancia en px):
+
+| Vértice | Forma |
+| --- | --- |
+| Recto | \`{ "x": 0, "y": 0 }\`, con \`"radius": 8\` para redondear la esquina |
+| Curva suave simétrica | \`{ "x": 0, "y": 0, "mode": "mirrored", "angle": 0, "dist": 20 }\` |
+| Curva suave con largos distintos | \`{ "x": 0, "y": 0, "mode": "asymmetric", "angle": 0, "inDist": 10, "outDist": 30 }\` |
+| Pico (tangentes independientes) | \`{ "x": 0, "y": 0, "mode": "detached", "inAngle": 200, "inDist": 15, "outAngle": -20, "outDist": 15 }\` |
+
+\`angle\`/\`outAngle\` es la dirección de la tangente que sale hacia el vértice siguiente; la de entrada apunta hacia
+el anterior (en mirrored y asymmetric es \`angle + 180\`). Para retocar un vértice suelto puedes leer \`vertices\`,
+cambiar ese elemento y reenviar la lista completa con \`set\`.
+
+## Estilos y degradados (recursos)
+
+\`style\`, \`linear_gradient\` y \`radial_gradient\` son **recursos**: van en la raíz, no se dibujan y las formas los
+usan por id.
+
+- **Estilo compartido:** crea un \`style\` (por ejemplo \`skin\` con \`fill\` y \`stroke\`) y pon \`"style": "skin"\` en
+  las formas. Las propiedades que la forma no tenga propias salen del estilo; cambiar el estilo cambia todas a la
+  vez. Úsalo para la paleta del personaje: piel, pelo, ropa, contorno.
+- **Degradado:** crea un \`linear_gradient\` o \`radial_gradient\` con sus \`stops\` y pon su id en \`fillGradient\` de
+  la forma (o del estilo). Sus coordenadas van de 0 a 1 sobre la caja de la forma.
+
+\`\`\`json
+[
+  { "op": "create", "type": "linear_gradient", "id": "fur_shade", "props": { "stops": [{ "offset": 0, "color": "#f5a142" }, { "offset": 1, "color": "#c86b1e" }] } },
+  { "op": "create", "type": "style", "id": "fur", "props": { "fillGradient": "fur_shade", "stroke": "#4a2a10", "strokeWidth": 3 } },
+  { "op": "set", "target": "body", "props": { "style": "fur" } }
+]
+\`\`\`
 
 ## Tipos
 

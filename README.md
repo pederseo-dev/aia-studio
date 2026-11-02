@@ -37,6 +37,11 @@ npm run mcp     # servidor MCP por stdio (normalmente lo arranca el cliente de I
 | --- | --- |
 | Seleccionar y mover | Herramienta `V`; arrastrar en el lienzo (Shift = un solo eje) o flechas (Shift = 10 px). |
 | Crear formas | `R` rectángulo, `E` elipse: arrastrar en el lienzo (Shift = cuadrado o círculo). |
+| Pluma | `P`: clic = vértice recto, clic y arrastrar = curvo, clic en el primero = cerrar, Enter o Esc = terminar abierto. |
+| Editar puntos | Doble clic en un path o Enter: arrastrar anclas y tangentes (Alt = separar), doble clic en un ancla = recto/curvo, clic en el contorno = agregar, Supr = borrar. Enter o Esc para salir. |
+| Rotar, escalar, pivote | Manijas de la selección: círculo de arriba = rotar (Shift = de a 15°), esquinas = escalar desde el pivote (Shift = proporcional), punto del pivote = moverlo sin mover el dibujo (grupos y paths). |
+| Estilos y degradados | «+ Estilo» y «+ Degradado» en Recursos; las formas los usan con `style` y `fillGradient` en el inspector. Lo que viene del estilo se ve en naranja. |
+| Importar SVG | Botón «Importar SVG»: las formas llegan como paths editables dentro de un grupo. |
 | Grupos | `G` crea un grupo; arrastrar filas en el árbol para reordenar o meter dentro de un grupo. |
 | Duplicar | `Ctrl+D` duplica la selección con sus hijos; «Copiar» en la barra crea una copia del documento. |
 | Renombrar | Doble clic en el árbol o el campo de id del inspector. |

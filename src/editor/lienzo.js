@@ -1,10 +1,14 @@
-// Lienzo: dibuja el documento, maneja la cámara (pan y zoom) y las herramientas de seleccionar, mover y crear formas.
+// Lienzo: dibuja el documento, maneja la cámara (pan y zoom) y reparte los eventos entre las herramientas:
+// seleccionar (con manijas), pluma, edición de puntos y creación de formas.
 
 import { buscar } from '../core/documento.js';
-import { leer, leerMeta } from '../core/esquema.js';
-import { aplicar, invertir, matrizMundo } from '../core/geometria.js';
+import { leerMeta } from '../core/esquema.js';
+import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
 import { contenidoSvg } from '../render/svg.js';
-import { docVisible, ejecutar, esquema, estado, fijar, idLibre, padreParaNuevo, previsualizar, seleccionar, suscribir } from './estado.js';
+import { docVisible, ejecutar, esquema, estado, fijar, idLibre, padreParaNuevo, seleccionar, suscribir } from './estado.js';
+import { crearPluma } from './pluma.js';
+import { crearPuntos } from './puntos.js';
+import { crearTransformar } from './transformar.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const redondear = (v) => Math.round(v * 10) / 10;
@@ -18,10 +22,42 @@ export function montarLienzo(contenedor) {
   let ajustadoPara = null;
   let espacio = false;
 
+  // Lo que comparten las herramientas. "Pantalla" = píxeles dentro del lienzo, el espacio de la superposición.
+  const ctx = {
+    documentoG,
+    superposicion,
+    matrizCamara: () => [camara.zoom, 0, 0, camara.zoom, camara.x, camara.y],
+    puntoPantalla: (e) => {
+      const r = vista.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    },
+    elemento: (id) => documentoG.querySelector(`[data-id="${CSS.escape(id)}"]`),
+    crear(tipo, atributos, titulo) {
+      const el = document.createElementNS(NS, tipo);
+      for (const [k, v] of Object.entries(atributos)) if (v !== '') el.setAttribute(k, v);
+      if (titulo) el.append(Object.assign(document.createElementNS(NS, 'title'), { textContent: titulo }));
+      return el;
+    },
+    arrastrar,
+    redibujar: () => dibujarSuperposicion(),
+  };
+  const transformar = crearTransformar(ctx);
+  const pluma = crearPluma(ctx);
+  const puntos = crearPuntos(ctx);
+
   suscribir((c) => {
     if ('doc' in c || 'previa' in c) dibujarDocumento();
-    else if ('seleccion' in c) dibujarSuperposicion();
-    if ('herramienta' in c) contenedor.className = `herramienta-${estado.herramienta}`;
+    else if ('seleccion' in c || 'edicion' in c || 'vertice' in c) dibujarSuperposicion();
+    if ('herramienta' in c) {
+      contenedor.className = `herramienta-${estado.herramienta}`;
+      if (estado.herramienta !== 'path' && pluma.activa()) pluma.terminar(false);
+      if (estado.herramienta !== 'seleccionar' && estado.edicion) fijar({ edicion: null, vertice: null });
+      dibujarSuperposicion();
+    }
+    // Salir de la edición de puntos si cambia la selección o el path desaparece.
+    if (estado.edicion && ('seleccion' in c || 'doc' in c) && (estado.seleccion !== estado.edicion || !buscar(estado.doc, estado.edicion))) {
+      fijar({ edicion: null, vertice: null });
+    }
     if ('id' in c && estado.doc && ajustadoPara !== estado.id) ajustar();
   });
 
@@ -40,28 +76,24 @@ export function montarLienzo(contenedor) {
 
   function dibujarSuperposicion() {
     superposicion.replaceChildren();
-    const el = estado.seleccion && documentoG.querySelector(`[data-id="${CSS.escape(estado.seleccion)}"]`);
-    if (!el) return;
-    const m = el.getCTM();
-    const punto = (x, y) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f];
-    const caja = el.getBBox();
-    if (caja.width || caja.height) {
-      const esquinas = [
-        punto(caja.x, caja.y),
-        punto(caja.x + caja.width, caja.y),
-        punto(caja.x + caja.width, caja.y + caja.height),
-        punto(caja.x, caja.y + caja.height),
-      ];
-      superposicion.append(crear('polygon', { class: 'seleccion', points: esquinas.map((p) => p.join(',')).join(' ') }));
+    if (!estado.doc) return;
+    if (estado.edicion) {
+      const el = ctx.elemento(estado.edicion);
+      if (el) {
+        // Contorno del path en edición, encima de todo.
+        const contorno = el.querySelector(':scope > path')?.cloneNode();
+        if (contorno) {
+          const m = el.getCTM();
+          contorno.setAttribute('class', 'contorno-edicion');
+          contorno.setAttribute('transform', `matrix(${m.a} ${m.b} ${m.c} ${m.d} ${m.e} ${m.f})`);
+          superposicion.append(contorno);
+        }
+      }
+      puntos.dibujar();
+    } else {
+      transformar.dibujar();
     }
-    const [px, py] = punto(0, 0);
-    superposicion.append(crear('circle', { class: 'pivote', cx: px, cy: py, r: 4 }));
-  }
-
-  function crear(tipo, atributos) {
-    const el = document.createElementNS(NS, tipo);
-    for (const [k, v] of Object.entries(atributos)) el.setAttribute(k, v);
-    return el;
+    pluma.dibujar();
   }
 
   // ---------- Cámara ----------
@@ -84,19 +116,12 @@ export function montarLienzo(contenedor) {
     aplicarCamara();
   }
 
-  const pantallaADoc = (e) => {
-    const r = vista.getBoundingClientRect();
-    return [(e.clientX - r.left - camara.x) / camara.zoom, (e.clientY - r.top - camara.y) / camara.zoom];
-  };
-
   vista.addEventListener(
     'wheel',
     (e) => {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
-        const r = vista.getBoundingClientRect();
-        const mx = e.clientX - r.left;
-        const my = e.clientY - r.top;
+        const [mx, my] = ctx.puntoPantalla(e);
         const zoom = Math.min(20, Math.max(0.05, camara.zoom * Math.exp(-e.deltaY * 0.002)));
         camara.x = mx - ((mx - camara.x) * zoom) / camara.zoom;
         camara.y = my - ((my - camara.y) * zoom) / camara.zoom;
@@ -120,28 +145,51 @@ export function montarLienzo(contenedor) {
 
   // Sigue el puntero hasta soltarlo.
   function arrastrar(e, mover, soltar) {
-    vista.setPointerCapture(e.pointerId);
-    const alMover = (ev) => mover(ev);
+    try {
+      vista.setPointerCapture(e.pointerId);
+    } catch {
+      // puntero que ya no está activo (o evento sintético): se sigue sin captura
+    }
     const alSoltar = (ev) => {
-      vista.removeEventListener('pointermove', alMover);
+      vista.removeEventListener('pointermove', mover);
       vista.removeEventListener('pointerup', alSoltar);
       vista.removeEventListener('pointercancel', alSoltar);
       soltar(ev);
     };
-    vista.addEventListener('pointermove', alMover);
+    vista.addEventListener('pointermove', mover);
     vista.addEventListener('pointerup', alSoltar);
     vista.addEventListener('pointercancel', alSoltar);
   }
 
-  // ---------- Herramientas ----------
+  // ---------- Eventos ----------
 
   vista.addEventListener('pointerdown', (e) => {
     contenedor.focus();
     if (!estado.doc) return;
     if (e.button === 1 || (e.button === 0 && espacio)) return panear(e);
     if (e.button !== 0) return;
-    if (estado.herramienta === 'seleccionar') return seleccionarYMover(e);
-    return crearForma(e, estado.herramienta);
+    const manija = e.target.closest('[data-manija]')?.dataset.manija;
+    if (manija) return estado.edicion ? puntos.manija(e, manija) : transformar.manija(e, manija);
+    if (estado.herramienta === 'path') return pluma.pointerdown(e);
+    if (estado.herramienta === 'rect' || estado.herramienta === 'ellipse') return crearForma(e, estado.herramienta);
+    if (estado.edicion) {
+      if (puntos.pointerdown(e)) return;
+      fijar({ edicion: null, vertice: null });
+    }
+    transformar.seleccionarYMover(e);
+  });
+
+  vista.addEventListener('pointermove', (e) => estado.herramienta === 'path' && pluma.hover(e));
+
+  vista.addEventListener('dblclick', (e) => {
+    if (estado.herramienta !== 'seleccionar') return;
+    // Por la captura del puntero, el doble clic llega a la vista: se busca qué hay debajo.
+    const debajo = document.elementFromPoint(e.clientX, e.clientY) ?? e.target;
+    const manija = debajo.closest('[data-manija^="ancla-"]')?.dataset.manija;
+    if (manija && estado.edicion) return puntos.alternar(Number(manija.split('-')[1]));
+    const g = debajo.closest('[data-id]');
+    const obj = g && documentoG.contains(g) && buscar(estado.doc, g.dataset.id);
+    if (obj?.type === 'path') editarPuntos(obj.id);
   });
 
   function panear(e) {
@@ -159,72 +207,42 @@ export function montarLienzo(contenedor) {
     );
   }
 
-  function seleccionarYMover(e) {
-    const g = e.target.closest('[data-id]');
-    if (!g || !documentoG.contains(g)) return seleccionar(null);
-    const id = g.dataset.id;
-    seleccionar(id);
-
-    const obj = buscar(estado.doc, id);
-    const inversa = invertir(matrizMundo(estado.doc, esquema, obj.parent ?? null));
-    const x0 = leer(esquema, obj, 'x');
-    const y0 = leer(esquema, obj, 'y');
-    const [lx0, ly0] = aplicar(inversa, ...pantallaADoc(e));
-    const inicio = { x: e.clientX, y: e.clientY };
-    let ops = null;
-
-    arrastrar(
-      e,
-      (ev) => {
-        if (!ops && Math.hypot(ev.clientX - inicio.x, ev.clientY - inicio.y) < 3) return;
-        let [lx, ly] = aplicar(inversa, ...pantallaADoc(ev));
-        // Shift: mover solo en el eje dominante.
-        if (ev.shiftKey) Math.abs(lx - lx0) > Math.abs(ly - ly0) ? (ly = ly0) : (lx = lx0);
-        ops = [{ op: 'set', target: id, props: { x: redondear(x0 + lx - lx0), y: redondear(y0 + ly - ly0) } }];
-        previsualizar(ops);
-      },
-      () => (ops ? ejecutar(ops, `mover ${id}`) : previsualizar(null)),
-    );
-  }
-
   function crearForma(e, tipo) {
     const padre = padreParaNuevo();
-    const inversa = invertir(matrizMundo(estado.doc, esquema, padre));
-    const p0 = pantallaADoc(e);
-    const s0 = [e.clientX, e.clientY];
-    const r = vista.getBoundingClientRect();
-    const borrador = crear(tipo === 'ellipse' ? 'ellipse' : 'rect', { class: 'borrador' });
+    const inversa = invertir(multiplicar(ctx.matrizCamara(), matrizMundo(estado.doc, esquema, padre)));
+    const s0 = ctx.puntoPantalla(e);
+    const borrador = ctx.crear(tipo === 'ellipse' ? 'ellipse' : 'rect', { class: 'borrador' });
     superposicion.append(borrador);
 
     const caja = (ev) => {
-      let dx = ev.clientX - s0[0];
-      let dy = ev.clientY - s0[1];
+      const s = ctx.puntoPantalla(ev);
+      let dx = s[0] - s0[0];
+      let dy = s[1] - s0[1];
       // Shift: cuadrado o círculo.
       if (ev.shiftKey) {
         const lado = Math.max(Math.abs(dx), Math.abs(dy));
         dx = Math.sign(dx || 1) * lado;
         dy = Math.sign(dy || 1) * lado;
       }
-      return { x: Math.min(s0[0], s0[0] + dx) - r.left, y: Math.min(s0[1], s0[1] + dy) - r.top, w: Math.abs(dx), h: Math.abs(dy), dx, dy };
+      return { x: Math.min(s0[0], s0[0] + dx), y: Math.min(s0[1], s0[1] + dy), w: Math.abs(dx), h: Math.abs(dy), fin: [s0[0] + dx, s0[1] + dy] };
     };
 
     arrastrar(
       e,
       (ev) => {
         const c = caja(ev);
-        if (tipo === 'ellipse') Object.entries({ cx: c.x + c.w / 2, cy: c.y + c.h / 2, rx: c.w / 2, ry: c.h / 2 }).forEach(([k, v]) => borrador.setAttribute(k, v));
-        else Object.entries({ x: c.x, y: c.y, width: c.w, height: c.h }).forEach(([k, v]) => borrador.setAttribute(k, v));
+        const atributos = tipo === 'ellipse' ? { cx: c.x + c.w / 2, cy: c.y + c.h / 2, rx: c.w / 2, ry: c.h / 2 } : { x: c.x, y: c.y, width: c.w, height: c.h };
+        for (const [k, v] of Object.entries(atributos)) borrador.setAttribute(k, v);
       },
       (ev) => {
         borrador.remove();
         const c = caja(ev);
-        const p1 = [p0[0] + c.dx / camara.zoom, p0[1] + c.dy / camara.zoom];
-        const [ax, ay] = aplicar(inversa, ...p0);
-        const [bx, by] = aplicar(inversa, ...p1);
-        const chica = c.w < 4 && c.h < 4;
-        const props = chica
-          ? { x: redondear(ax), y: redondear(ay) }
-          : { x: redondear((ax + bx) / 2), y: redondear((ay + by) / 2), width: redondear(Math.abs(bx - ax)), height: redondear(Math.abs(by - ay)) };
+        const [ax, ay] = aplicar(inversa, ...s0);
+        const [bx, by] = aplicar(inversa, ...c.fin);
+        const props =
+          c.w < 4 && c.h < 4
+            ? { x: redondear(ax), y: redondear(ay) }
+            : { x: redondear((ax + bx) / 2), y: redondear((ay + by) / 2), width: redondear(Math.abs(bx - ax)), height: redondear(Math.abs(by - ay)) };
         const id = idLibre(tipo);
         ejecutar([{ op: 'create', type: tipo, id, parent: padre, props }], `crear ${id}`);
         fijar({ herramienta: 'seleccionar' });
@@ -233,5 +251,14 @@ export function montarLienzo(contenedor) {
     );
   }
 
-  return { ajustar };
+  function editarPuntos(id) {
+    fijar({ herramienta: 'seleccionar', seleccion: id, edicion: id, vertice: null });
+  }
+
+  return {
+    ajustar,
+    editarPuntos,
+    pluma,
+    puntos,
+  };
 }

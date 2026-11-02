@@ -12,6 +12,7 @@
 // `index` es la posición entre los hermanos en orden de dibujo: 0 = al fondo; sin index = al frente.
 
 import { sugerir } from './esquema.js';
+import { parsearD } from './trazado.js';
 import { ErrorDeValidacion, ID, buscar, hijos, subarbol, validar } from './documento.js';
 
 const ESTRUCTURA = new Set(['id', 'type', 'parent']);
@@ -92,6 +93,16 @@ function insertar(doc, obj, padre, index) {
   doc.objects.splice(pos, 0, obj);
 }
 
+/** Azúcar para la IA: un path acepta `d` (trazado SVG de un solo subtrazado) y se guarda como vértices. */
+function expandirD(tipo, props) {
+  if (props?.d === undefined) return props;
+  if (!tipo?.properties.vertices) throw new Error(`"d" solo sirve en tipos con vértices (path), no en ${tipo?.name ?? 'meta'}`);
+  const subtrazados = parsearD(props.d);
+  if (subtrazados.length !== 1) throw new Error(`d tiene ${subtrazados.length} subtrazados; crea un path por cada uno`);
+  const { d, ...resto } = props;
+  return { closed: subtrazados[0].closed, ...resto, vertices: subtrazados[0].vertices };
+}
+
 function comprobarProps(props) {
   if (!props || typeof props !== 'object' || Array.isArray(props)) throw new Error('props debe ser un objeto { propiedad: valor }');
   for (const [k, v] of Object.entries(props)) {
@@ -109,16 +120,18 @@ function aplicarUna(doc, op, esquema) {
       if (buscar(doc, op.id)) throw new Error(`ya existe un objeto "${op.id}"`);
       const padre = contenedor(doc, op.parent, esquema);
       if (op.props !== undefined) comprobarProps(op.props);
-      insertar(doc, { id: op.id, type: op.type, parent: padre, ...structuredClone(op.props ?? {}) }, padre, op.index);
+      const props = expandirD(tipo, op.props) ?? {};
+      insertar(doc, { id: op.id, type: op.type, parent: padre, ...structuredClone(props) }, padre, op.index);
       return [{ op: 'delete', target: op.id }];
     }
 
     case 'set': {
       comprobarProps(op.props);
       const obj = op.target === 'meta' ? doc.meta : objetivo(doc, op.target);
+      const props = op.target === 'meta' ? op.props : expandirD(esquema.tipos.get(obj.type), op.props);
       const anteriores = {};
       const nuevas = [];
-      for (const [k, v] of Object.entries(op.props)) {
+      for (const [k, v] of Object.entries(props)) {
         if (k in obj) anteriores[k] = obj[k];
         else nuevas.push(k);
         obj[k] = structuredClone(v);

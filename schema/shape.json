@@ -4,7 +4,9 @@
   "extends": "transformable",
   "description": "Forma con relleno y contorno.",
   "properties": {
+    "style": { "type": "ref", "refTypes": ["style"], "default": null, "nullable": true, "group": "Apariencia", "description": "Estilo compartido. Las propiedades de apariencia que la forma no tenga propias se toman de él." },
     "fill": { "type": "color", "default": "#c8c2d4", "nullable": true, "animatable": true, "group": "Apariencia", "description": "Color de relleno. null = sin relleno." },
+    "fillGradient": { "type": "ref", "refTypes": ["linear_gradient", "radial_gradient"], "default": null, "nullable": true, "group": "Apariencia", "description": "Degradado de relleno (id de un linear_gradient o radial_gradient). Si está, reemplaza a fill." },
     "stroke": { "type": "color", "default": null, "nullable": true, "animatable": true, "group": "Apariencia", "description": "Color del contorno. null = sin contorno." },
     "strokeWidth": { "type": "number", "default": 2, "min": 0, "animatable": true, "group": "Apariencia", "description": "Grosor del contorno en px." }
   }

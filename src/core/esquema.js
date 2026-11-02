@@ -1,7 +1,9 @@
 // Esquema: las definiciones de schema/*.json resueltas (herencia incluida). Es la fuente única de verdad de qué tipos
 // existen y qué propiedades tienen; de aquí salen la validación, el inspector del editor y la guía para la IA.
 
-const TIPOS_DE_PROPIEDAD = new Set(['number', 'string', 'boolean', 'color', 'enum', 'ref']);
+import { erroresDeVertice } from './trazado.js';
+
+const TIPOS_DE_PROPIEDAD = new Set(['number', 'string', 'boolean', 'color', 'enum', 'ref', 'vertices', 'stops']);
 const COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 /** @param {object[]} defs contenido de schema/*.json */
@@ -24,6 +26,8 @@ export function crearEsquema(defs) {
       description: def.description ?? '',
       abstract: !!def.abstract,
       container: def.container ?? base?.container ?? false,
+      // Recurso: vive en la raíz, no se dibuja y otros objetos lo usan por referencia (estilos, degradados).
+      resource: def.resource ?? base?.resource ?? false,
       ancestros: base ? [base.name, ...base.ancestros] : [],
       properties: { ...base?.properties, ...def.properties },
     };
@@ -58,6 +62,21 @@ export function validarValor(p, valor) {
       return p.values.includes(valor) ? null : `debe ser uno de: ${p.values.join(', ')}`;
     case 'ref':
       return typeof valor === 'string' ? null : 'debe ser el id de un objeto';
+    case 'vertices': {
+      if (!Array.isArray(valor)) return 'debe ser una lista de vértices';
+      const errores = valor.flatMap((v, i) => erroresDeVertice(v).map((e) => `[${i}] ${e}`));
+      return errores.length ? errores.slice(0, 5).join('; ') + (errores.length > 5 ? ` (y ${errores.length - 5} más)` : '') : null;
+    }
+    case 'stops': {
+      if (!Array.isArray(valor) || !valor.length) return 'debe ser una lista de paradas [{ offset, color }]';
+      for (const [i, s] of valor.entries()) {
+        if (typeof s?.offset !== 'number' || s.offset < 0 || s.offset > 1) return `[${i}].offset debe ser un número de 0 a 1`;
+        if (typeof s.color !== 'string' || !COLOR.test(s.color)) return `[${i}].color debe ser "#rrggbb"`;
+        if (s.opacity !== undefined && (typeof s.opacity !== 'number' || s.opacity < 0 || s.opacity > 1)) return `[${i}].opacity debe ser de 0 a 1`;
+        if (i && s.offset < valor[i - 1].offset) return 'las paradas deben ir en orden de offset';
+      }
+      return null;
+    }
   }
   return 'tipo de propiedad desconocido';
 }

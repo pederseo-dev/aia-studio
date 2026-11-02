@@ -14,6 +14,8 @@ export const estado = {
   doc: null,
   previa: null, // documento con un cambio en curso (arrastre, scrub), todavía sin guardar
   seleccion: null,
+  edicion: null, // id del path cuyos puntos se están editando
+  vertice: null, // índice del vértice seleccionado en la edición de puntos
   herramienta: 'seleccionar',
   historial: { entradas: [], user: { deshacer: false, rehacer: false } },
 };

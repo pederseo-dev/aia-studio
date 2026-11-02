@@ -1,6 +1,6 @@
 # Plan de construcción
 
-> Estado: **fase 1 terminada; sigue la fase 2** (2026-11-02). Se basa en [sintesis.md](sintesis.md) y en la investigación de
+> Estado: **fase 2 construida; falta su prueba con IA** (2026-11-02). Se basa en [sintesis.md](sintesis.md) y en la investigación de
 > [Moho](investigacion/moho-lua.md) y [Rive](investigacion/rive-runtime.md).
 
 ## Cómo trabajamos
@@ -94,7 +94,19 @@ Notas de lo construido:
 **Prueba con IA:** armar la estructura de un personaje simple con grupos y primitivas; renombrar y reordenar;
 corregir algo que el usuario cambió a mano sin pisarlo.
 
-## Fase 2: dibujo
+## Fase 2: dibujo 🔶 construida, falta la prueba con IA
+
+Notas de lo construido:
+- `path` con vértices en polares (straight con `radius`, mirrored, asymmetric, detached). La IA puede pasar `d` de
+  SVG (todos los comandos, arcos incluidos) y se convierte a vértices.
+- Recursos `style`, `linear_gradient` y `radial_gradient`: van en la raíz, no se dibujan y las formas los usan por
+  id (`style`, `fillGradient`). Valor propio → estilo → valor por defecto.
+- Editor: manijas para rotar, escalar desde el pivote y mover el pivote (grupos y paths, compensando el contenido),
+  pluma, edición de puntos (arrastrar anclas y tangentes, Alt separa, doble clic recto/curvo, clic en el contorno
+  agrega, Supr borra) e importar SVG (formas con transformaciones y colores; se descartan scripts y eventos).
+- **Cambios respecto del plan:** los rellenos y contornos apilables quedan para más adelante (por ahora se logra
+  con formas duplicadas). Un path tiene un solo contorno: los agujeros (anillos) todavía no se pueden hacer, y al
+  importar, cada subtrazado se vuelve un path aparte.
 
 - Paths con vértices editables. Un solo tipo de vértice con `mode`: `straight` (con `radius`), `mirrored`,
   `asymmetric`, `detached`, y tangentes en **polares** (ángulo + distancia) *(de Rive)*.

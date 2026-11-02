@@ -17,7 +17,10 @@
         <button type="button" data-herramienta="seleccionar" title="Seleccionar y mover (V)">↖ Seleccionar</button>
         <button type="button" data-herramienta="rect" title="Rectángulo (R)">▭ Rectángulo</button>
         <button type="button" data-herramienta="ellipse" title="Elipse (E)">◯ Elipse</button>
+        <button type="button" data-herramienta="path" title="Pluma (P): clic = vértice recto, arrastrar = curvo, clic en el primero = cerrar, Enter = terminar">✒ Pluma</button>
       </div>
+      <button id="importar" type="button" title="Importar un archivo SVG como formas editables">Importar SVG</button>
+      <input id="archivo-svg" type="file" accept=".svg,image/svg+xml" hidden />
       <span class="separador"></span>
       <button id="deshacer" type="button" title="Deshacer tu último cambio (Ctrl+Z)">↶</button>
       <button id="rehacer" type="button" title="Rehacer (Ctrl+Shift+Z)">↷</button>
@@ -35,6 +38,12 @@
           <button id="borrar" type="button" title="Borrar selección (Supr)">Borrar</button>
         </div>
         <ul id="arbol" class="arbol" role="tree"></ul>
+        <div class="cabecera">
+          <h2>Recursos</h2>
+          <button id="nuevo-estilo" type="button" title="Estilo compartido: varias formas toman de él su relleno y contorno">+ Estilo</button>
+          <button id="nuevo-degradado" type="button" title="Degradado lineal para usar en fillGradient">+ Degradado</button>
+        </div>
+        <ul id="recursos" class="arbol"></ul>
       </aside>
 
       <section id="lienzo" tabindex="-1" aria-label="Lienzo">

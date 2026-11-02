@@ -1,0 +1,9 @@
+{
+  "name": "path",
+  "extends": "shape",
+  "description": "Forma libre hecha de vértices con curvas. Los vértices están en las coordenadas del propio path: x/y del path es su pivote. Al crear o cambiar un path también se puede pasar \"d\" con un trazado SVG (un solo subtrazado) y se convierte a vértices.",
+  "properties": {
+    "vertices": { "type": "vertices", "default": [], "animatable": true, "group": "Forma", "description": "Lista de vértices. Ver la sección «Vértices» de la guía." },
+    "closed": { "type": "boolean", "default": true, "animatable": false, "group": "Forma", "description": "Si es true, el último vértice se une con el primero." }
+  }
+}

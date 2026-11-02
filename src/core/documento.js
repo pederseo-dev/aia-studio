@@ -70,14 +70,18 @@ export function validar(doc, esquema) {
       errores.push(`${o.id}: tipo desconocido "${o.type}".${sugerir(o.type, esquema.tipos.keys())} Tipos: ${[...esquema.tipos.keys()].join(', ')}`);
       continue;
     }
-    if (o.parent != null) {
+    if (tipo.resource && o.parent != null) errores.push(`${o.id}: es un recurso (${o.type}) y va en la raíz (parent: null)`);
+    else if (o.parent != null) {
       const padre = buscar(doc, o.parent);
       if (!padre) errores.push(`${o.id}: el padre "${o.parent}" no existe.${sugerir(o.parent, ids)}`);
       else if (!esquema.tipos.get(padre.type)?.container) errores.push(`${o.id}: su padre "${o.parent}" es un ${padre.type} y no puede tener hijos (usa un group)`);
     }
     revisarPropiedades(o.id, o, propiedadesGuardadas(o), tipo, errores, avisos);
     for (const [prop, p] of Object.entries(tipo.properties)) {
-      if (p.type === 'ref' && o[prop] != null && !ids.has(o[prop])) errores.push(`${o.id}.${prop}: el objeto "${o[prop]}" no existe`);
+      if (p.type !== 'ref' || o[prop] == null) continue;
+      const referido = buscar(doc, o[prop]);
+      if (!referido) errores.push(`${o.id}.${prop}: el objeto "${o[prop]}" no existe.${sugerir(o[prop], ids)}`);
+      else if (p.refTypes && !p.refTypes.includes(referido.type)) errores.push(`${o.id}.${prop}: "${o[prop]}" es un ${referido.type}; se esperaba ${p.refTypes.join(' o ')}`);
     }
   }
 

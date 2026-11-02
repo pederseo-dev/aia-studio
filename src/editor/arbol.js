@@ -6,9 +6,11 @@ import { leer } from '../core/esquema.js';
 import { aplicar, invertir, matrizMundo } from '../core/geometria.js';
 import { ejecutar, esquema, estado, seleccionar, suscribir } from './estado.js';
 
-const ICONOS = { group: '▣', rect: '▭', ellipse: '◯' };
+const ICONOS = { group: '▣', rect: '▭', ellipse: '◯', path: '✒', style: '◆', linear_gradient: '▤', radial_gradient: '◍' };
+const esRecurso = (o) => esquema.tipos.get(o.type)?.resource;
 
-export function montarArbol(raiz) {
+/** Árbol de objetos en `raiz` y lista de recursos (estilos, degradados) en `raizRecursos`. */
+export function montarArbol(raiz, raizRecursos) {
   let arrastrado = null;
 
   suscribir((c) => {
@@ -17,17 +19,24 @@ export function montarArbol(raiz) {
 
   function dibujar() {
     const doc = estado.doc;
-    if (!doc) return raiz.replaceChildren();
-    if (!doc.objects.length) {
-      raiz.innerHTML = '<li class="vacio">Vacío. Dibuja con las herramientas o pídeselo a la IA.</li>';
-      return;
-    }
-    raiz.replaceChildren(...rama(doc, null, 0));
+    if (!doc) return raiz.replaceChildren(), raizRecursos.replaceChildren();
+    const objetos = rama(doc, null, 0);
+    if (objetos.length) raiz.replaceChildren(...objetos);
+    else raiz.innerHTML = '<li class="vacio">Vacío. Dibuja con las herramientas o pídeselo a la IA.</li>';
+    const recursos = doc.objects.filter(esRecurso).map((o) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<div class="fila${o.id === estado.seleccion ? ' seleccionada' : ''}" data-id="${o.id}" style="padding-left:8px"><span class="tipo" title="${o.type}">${ICONOS[o.type] ?? '•'}</span><span class="nombre"></span></div>`;
+      li.querySelector('.nombre').textContent = o.id;
+      return li;
+    });
+    if (recursos.length) raizRecursos.replaceChildren(...recursos);
+    else raizRecursos.innerHTML = '<li class="vacio">Sin estilos ni degradados.</li>';
     raiz.querySelector('.seleccionada')?.scrollIntoView({ block: 'nearest' });
   }
 
   function rama(doc, padre, nivel) {
     return hijos(doc, padre)
+      .filter((o) => !esRecurso(o))
       .reverse()
       .map((o) => {
         const li = document.createElement('li');
@@ -53,7 +62,12 @@ export function montarArbol(raiz) {
       });
   }
 
-  raiz.addEventListener('click', (e) => {
+  for (const lista of [raiz, raizRecursos]) {
+    lista.addEventListener('click', alHacerClic);
+    lista.addEventListener('dblclick', renombrar);
+  }
+
+  function alHacerClic(e) {
     const fila = e.target.closest('.fila');
     if (!fila) return;
     const id = fila.dataset.id;
@@ -63,10 +77,10 @@ export function montarArbol(raiz) {
       return;
     }
     seleccionar(id);
-  });
+  }
 
   // Renombrar con doble clic.
-  raiz.addEventListener('dblclick', (e) => {
+  function renombrar(e) {
     const nombre = e.target.closest('.nombre');
     if (!nombre) return;
     const anterior = nombre.closest('.fila').dataset.id;
@@ -92,7 +106,7 @@ export function montarArbol(raiz) {
       ev.stopPropagation();
     });
     input.addEventListener('blur', () => terminar(true));
-  });
+  }
 
   // ---------- Arrastrar para reordenar o reparentar ----------
 

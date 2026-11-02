@@ -124,6 +124,21 @@ h2 {
 .seleccion { fill: none; stroke: var(--acento); stroke-width: 1.5; }
 .pivote { stroke: var(--acento); stroke-width: 1.5; fill: var(--lienzo); }
 .borrador { fill: #8b9cff22; stroke: var(--acento); stroke-dasharray: 4 3; }
+#lienzo.herramienta-path { cursor: crosshair; }
+.manija { pointer-events: all; fill: #fff; stroke: var(--acento); stroke-width: 1.5; cursor: pointer; }
+.pivote.manija { fill: var(--lienzo); cursor: move; }
+[data-manija="rotar"] { cursor: grab; }
+.ancla { fill: #fff; stroke: var(--acento); stroke-width: 1.5; }
+.ancla.activa { fill: var(--acento); }
+.tangente { stroke: var(--acento); stroke-width: 1; opacity: 0.8; }
+.tangente-punto { fill: var(--acento); stroke: #fff; stroke-width: 1; }
+.contorno-edicion { fill: none !important; stroke: var(--acento) !important; stroke-width: 1px !important; vector-effect: non-scaling-stroke; }
+.trazo-pluma { fill: none; stroke: var(--acento); stroke-width: 1.5; }
+.trazo-pluma.guia { stroke-dasharray: 4 3; opacity: 0.7; }
+.lista-paradas { display: flex; flex-direction: column; gap: 4px; }
+.parada { display: grid; grid-template-columns: 28px 1fr 52px 20px; gap: 4px; align-items: center; }
+.parada input[type=color] { width: 28px; height: 24px; padding: 1px; }
+.campo.por-estilo input:not([type=checkbox]):not([type=color]), .campo.por-estilo select { color: var(--ia); }
 
 /* ---------- Inspector ---------- */
 

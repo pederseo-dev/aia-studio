@@ -1,0 +1,12 @@
+{
+  "name": "linear_gradient",
+  "resource": true,
+  "description": "Degradado lineal (recurso, no se dibuja). Las coordenadas van de 0 a 1 sobre la caja de la forma que lo usa: (0,0) arriba a la izquierda, (1,1) abajo a la derecha.",
+  "properties": {
+    "x1": { "type": "number", "default": 0.5, "step": 0.01, "group": "Degradado", "description": "Inicio X, de 0 a 1 sobre la caja de la forma." },
+    "y1": { "type": "number", "default": 0, "step": 0.01, "group": "Degradado", "description": "Inicio Y, de 0 a 1 sobre la caja de la forma." },
+    "x2": { "type": "number", "default": 0.5, "step": 0.01, "group": "Degradado", "description": "Fin X, de 0 a 1 sobre la caja de la forma." },
+    "y2": { "type": "number", "default": 1, "step": 0.01, "group": "Degradado", "description": "Fin Y, de 0 a 1 sobre la caja de la forma." },
+    "stops": { "type": "stops", "default": [{ "offset": 0, "color": "#ffffff" }, { "offset": 1, "color": "#000000" }], "group": "Degradado", "description": "Paradas de color: [{ offset de 0 a 1, color, opacity opcional de 0 a 1 }], en orden de offset." }
+  }
+}

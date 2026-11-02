@@ -4,6 +4,7 @@ import { buscar, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { montarArbol } from './arbol.js';
 import { montarHistorial } from './historial.js';
+import { operacionesDeImportar } from './importar.js';
 import { montarInspector } from './inspector.js';
 import { montarLienzo } from './lienzo.js';
 import {
@@ -13,7 +14,7 @@ import {
 
 const $ = (s) => document.querySelector(s);
 
-montarArbol($('#arbol'));
+montarArbol($('#arbol'), $('#recursos'));
 montarInspector($('#inspector'));
 montarHistorial($('#entradas'), $('#deshacer'), $('#rehacer'));
 const lienzo = montarLienzo($('#lienzo'));
@@ -45,6 +46,29 @@ $('#nuevo-grupo').addEventListener('click', nuevoGrupo);
 $('#duplicar').addEventListener('click', duplicarSeleccion);
 $('#nuevo').addEventListener('click', () => nuevoDocumento());
 $('#copiar-documento').addEventListener('click', () => estado.id && nuevoDocumento(estado.id));
+$('#nuevo-estilo').addEventListener('click', () => nuevoRecurso('style', 'style', { fill: '#c8c2d4', stroke: '#2b2135' }));
+$('#nuevo-degradado').addEventListener('click', () => nuevoRecurso('linear_gradient', 'gradient'));
+$('#importar').addEventListener('click', () => $('#archivo-svg').click());
+$('#archivo-svg').addEventListener('change', async (e) => {
+  const archivo = e.target.files[0];
+  e.target.value = '';
+  if (!archivo || !estado.doc) return;
+  try {
+    const nombre = archivo.name.replace(/\.svg$/i, '');
+    const { ops, grupo } = operacionesDeImportar(await archivo.text(), { doc: estado.doc, padre: padreParaNuevo(), nombre });
+    ejecutar(ops, `importar ${archivo.name} (${ops.length - 1} formas)`);
+    seleccionar(grupo);
+  } catch (err) {
+    avisar(err.message, true);
+  }
+});
+
+function nuevoRecurso(tipo, base, props) {
+  if (!estado.doc) return;
+  const id = idLibre(base);
+  ejecutar([{ op: 'create', type: tipo, id, ...(props ? { props } : {}) }], `crear ${id}`);
+  seleccionar(id);
+}
 
 /** Duplica la selección con sus hijos, un poco desplazada, y selecciona la copia. */
 function duplicarSeleccion() {
@@ -93,10 +117,11 @@ async function nuevoDocumento(copiarDe) {
 
 // ---------- Teclado ----------
 
-const ATAJOS = { v: 'seleccionar', r: 'rect', e: 'ellipse' };
+const ATAJOS = { v: 'seleccionar', r: 'rect', e: 'ellipse', p: 'path' };
+const salirDeEdicion = () => fijar({ edicion: null, vertice: null });
 
 window.addEventListener('keydown', (e) => {
-  if (e.target.closest('input, select, textarea')) return;
+  if (e.target.closest?.('input, select, textarea')) return;
   const mod = e.ctrlKey || e.metaKey;
   const tecla = e.key.toLowerCase();
   if (mod && tecla === 'z') {
@@ -115,8 +140,23 @@ window.addEventListener('keydown', (e) => {
   if (ATAJOS[tecla]) return fijar({ herramienta: ATAJOS[tecla] });
   if (tecla === 'g') return nuevoGrupo();
   if (tecla === 'f') return lienzo.ajustar();
-  if (e.key === 'Escape') return estado.herramienta !== 'seleccionar' ? fijar({ herramienta: 'seleccionar' }) : seleccionar(null);
-  if (e.key === 'Delete' || e.key === 'Backspace') return borrarSeleccion();
+
+  // Pluma: Enter o Escape terminan el trazo abierto.
+  if (estado.herramienta === 'path' && lienzo.pluma.activa() && (e.key === 'Enter' || e.key === 'Escape')) return lienzo.pluma.terminar(false);
+  // Enter entra o sale de la edición de puntos de un path.
+  if (e.key === 'Enter') {
+    if (estado.edicion) return salirDeEdicion();
+    const sel = estado.seleccion && buscar(estado.doc, estado.seleccion);
+    if (sel?.type === 'path') return lienzo.editarPuntos(sel.id);
+  }
+  if (e.key === 'Escape') {
+    if (estado.edicion) return salirDeEdicion();
+    return estado.herramienta !== 'seleccionar' ? fijar({ herramienta: 'seleccionar' }) : seleccionar(null);
+  }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (estado.edicion) return lienzo.puntos.borrarVertice();
+    return borrarSeleccion();
+  }
 
   // Flechas: mover la selección 1 px (Shift: 10 px).
   const flechas = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
