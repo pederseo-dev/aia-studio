@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { crearDocumento, validar } from '../src/core/documento.js';
-import { aplicarOperaciones } from '../src/core/operaciones.js';
+import { aplicarOperaciones, compactar, resumirOperaciones } from '../src/core/operaciones.js';
 import { aplicar, matrizMundo } from '../src/core/geometria.js';
 import { guiaParaIA } from '../src/core/guia.js';
 import { DIBUJAR, svgDocumento } from '../src/render/svg.js';
@@ -58,6 +58,31 @@ test('cada operación se deshace exactamente con sus inversas', () => {
     assert.notDeepEqual(cambiado, doc, JSON.stringify(ops));
     assert.deepEqual(op(cambiado, ...inversas).doc, doc, JSON.stringify(ops));
   }
+});
+
+test('duplicate copia el subárbol con ids nuevos y se deshace', () => {
+  const doc = robot();
+  const { doc: copia, inversas } = op(doc, { op: 'duplicate', target: 'head', id: 'head_b', suffix: 'b', props: { x: 50 } });
+  const ids = copia.objects.map((o) => o.id);
+  assert.deepEqual(ids.slice(0, 5), ['body', 'torso', 'head', 'eye_l', 'eye_r']);
+  assert.deepEqual(copia.objects.filter((o) => o.parent === 'body').map((o) => o.id), ['torso', 'head', 'head_b']);
+  assert.deepEqual(copia.objects.filter((o) => o.parent === 'head_b').map((o) => o.id), ['eye_l_b', 'eye_r_b']);
+  assert.equal(copia.objects.find((o) => o.id === 'head_b').x, 50);
+  assert.deepEqual(op(copia, ...inversas).doc, doc);
+  assert.throws(() => op(copia, { op: 'duplicate', target: 'head', suffix: 'b' }), /ya existe un objeto "head_b"/);
+  assert.throws(() => op(copia, { op: 'duplicate', target: 'head', id: 'head_c', suffix: 'b' }), /ya existe un objeto "eye_l_b"/);
+  const raiz = op(doc, { op: 'duplicate', target: 'eye_l', parent: null, index: 0 }).doc;
+  assert.equal(raiz.objects.filter((o) => (o.parent ?? null) === null)[0].id, 'eye_l_copy');
+});
+
+test('compactar junta los set seguidos y el resumen es legible', () => {
+  const ops = [
+    { op: 'set', target: 'head', props: { x: 1 } },
+    { op: 'set', target: 'head', props: { x: 2, y: 5 } },
+    { op: 'set', target: 'torso', props: { x: 3 } },
+  ];
+  assert.deepEqual(compactar(ops), [{ op: 'set', target: 'head', props: { x: 2, y: 5 } }, ops[2]]);
+  assert.deepEqual(resumirOperaciones([...ops, { op: 'create', type: 'rect', id: 'a' }]), ['head.x', 'head.y', 'torso.x', 'crear a']);
 });
 
 test('rename actualiza a los hijos', () => {

@@ -33,8 +33,8 @@ export function aiaDocumentos() {
 
           if (!id && metodo === 'GET') return responder(res, 200, await almacen.listar());
           if (!id && metodo === 'POST') {
-            const { id: nuevo, meta } = await leerCuerpo(req);
-            return responder(res, 200, await almacen.crear(nuevo, meta ?? {}, { origen: ORIGEN }));
+            const { id: nuevo, meta, copiarDe } = await leerCuerpo(req);
+            return responder(res, 200, await almacen.crear(nuevo, meta ?? {}, { origen: ORIGEN, copiarDe }));
           }
           if (id && !accion && metodo === 'GET') return responder(res, 200, await almacen.leer(id));
           if (accion === 'historial' && metodo === 'GET') return responder(res, 200, await almacen.historial(id));
@@ -42,8 +42,8 @@ export function aiaDocumentos() {
             const { ops, nota } = await leerCuerpo(req);
             return responder(res, 200, await almacen.operar(id, ops, { origen: ORIGEN, nota }));
           }
-          if (accion === 'deshacer' && metodo === 'POST') return responder(res, 200, { doc: await almacen.deshacer(id, ORIGEN) });
-          if (accion === 'rehacer' && metodo === 'POST') return responder(res, 200, { doc: await almacen.rehacer(id, ORIGEN) });
+          if (accion === 'deshacer' && metodo === 'POST') return responder(res, 200, await almacen.deshacer(id, ORIGEN));
+          if (accion === 'rehacer' && metodo === 'POST') return responder(res, 200, await almacen.rehacer(id, ORIGEN));
           responder(res, 404, { error: 'Ruta desconocida' });
         } catch (e) {
           responder(res, 400, { error: e.message });

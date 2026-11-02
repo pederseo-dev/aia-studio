@@ -1,6 +1,6 @@
 # Plan de construcción
 
-> Estado: **fase 1 probada con IA; faltan los ajustes que salieron de la prueba** (2026-11-02). Se basa en [sintesis.md](sintesis.md) y en la investigación de
+> Estado: **fase 1 terminada; sigue la fase 2** (2026-11-02). Se basa en [sintesis.md](sintesis.md) y en la investigación de
 > [Moho](investigacion/moho-lua.md) y [Rive](investigacion/rive-runtime.md).
 
 ## Cómo trabajamos
@@ -52,11 +52,16 @@ confundió. Corremos al menos con el cliente que más se use (Claude Desktop o C
 
 **Listo cuando:** el repo arranca vacío pero con `npm run dev`, `npm test` y `npm run mcp` funcionando.
 
-## Fase 1: esquema, documento y cáscara del editor 🔶 probada con IA, faltan ajustes
+## Fase 1: esquema, documento y cáscara del editor ✅ (2026-11-02)
 
-La prueba con IA salió 8/8 sin rechazos ([resultados](pruebas-ia/fase-1.md)). Antes de pasar a la fase 2 hay que
-resolver lo que encontró: agrupar en el historial los cambios seguidos del editor, duplicar objetos y documentos, y
-dar respuestas más informativas en `undo`, `apply_ops` y `get_history`.
+La prueba con IA salió 8/8 sin rechazos ([resultados](pruebas-ia/fase-1.md)). Ajustes hechos con lo que encontró:
+- El editor junta los cambios seguidos sobre lo mismo (flechas, campos numéricos) en un solo lote: una entrada de
+  historial y un paso de deshacer.
+- Operación `duplicate` (objeto con sus hijos) y `create_document` con `copy_from` y `background`. En el editor:
+  `Ctrl+D` y el botón «Copiar» del documento.
+- `apply_ops`, `undo` y `redo` devuelven el árbol resultante y dicen qué lote tocaron; `get_history` es un resumen
+  por defecto (qué propiedades tocó cada lote) y se puede filtrar por origen.
+- La guía fija que izquierda y derecha son las del personaje (`_l`, `_r`).
 
 Notas de lo construido:
 - Las operaciones son `create`, `set`, `unset`, `delete`, `move` y `rename`, dirigidas por id (`target`) y no por

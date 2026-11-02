@@ -6,6 +6,8 @@
 //   { op: 'delete', target: 'head' }                                     ← borra también los hijos
 //   { op: 'move',   target: 'eye_l', parent?: 'face' | null, index?: 0 } ← reparentar y/o reordenar
 //   { op: 'rename', target: 'eye_l', id: 'left_eye' }                    ← actualiza las referencias
+//   { op: 'duplicate', target: 'arm_l', id?: 'arm_r', suffix?: 'copy', parent?, index?, props? }
+//                                                     ← copia con sus hijos; los hijos reciben el sufijo
 //
 // `index` es la posición entre los hermanos en orden de dibujo: 0 = al fondo; sin index = al frente.
 
@@ -35,6 +37,36 @@ export function aplicarOperaciones(doc, ops, esquema) {
   return { doc: siguiente, inversas, avisos: avisos.filter((a) => !previos.has(a)) };
 }
 
+/** Junta los `set` seguidos sobre el mismo objetivo en uno solo (el último valor gana). */
+export function compactar(ops) {
+  const resultado = [];
+  for (const op of ops) {
+    const anterior = resultado.at(-1);
+    if (op.op === 'set' && anterior?.op === 'set' && anterior.target === op.target) {
+      resultado[resultado.length - 1] = { ...anterior, props: { ...anterior.props, ...op.props } };
+    } else {
+      resultado.push(op);
+    }
+  }
+  return resultado;
+}
+
+/** Resumen corto de un lote para mostrar: "head.x, head.rotation, crear eye_l". */
+export function resumirOperaciones(ops) {
+  const partes = [];
+  for (const op of ops) {
+    if (op.op === 'set') partes.push(...Object.keys(op.props).map((p) => `${op.target}.${p}`));
+    else if (op.op === 'unset') partes.push(...op.props.map((p) => `${op.target}.${p} (por defecto)`));
+    else if (op.op === 'create') partes.push(`crear ${op.id}`);
+    else if (op.op === 'rename') partes.push(`renombrar ${op.target} → ${op.id}`);
+    else if (op.op === 'duplicate') partes.push(`duplicar ${op.target}`);
+    else if (op.op === 'delete') partes.push(`borrar ${op.target}`);
+    else if (op.op === 'move') partes.push(`mover ${op.target}`);
+    else partes.push(op.op);
+  }
+  return [...new Set(partes)];
+}
+
 function objetivo(doc, id) {
   const obj = buscar(doc, id);
   if (!obj) throw new Error(`no existe el objeto "${id}".${sugerir(id, doc.objects.map((o) => o.id))}`);
@@ -54,7 +86,8 @@ function insertar(doc, obj, padre, index) {
   const i = Math.max(0, Math.min(index ?? hermanos.length, hermanos.length));
   let pos;
   if (i < hermanos.length) pos = doc.objects.indexOf(hermanos[i]);
-  else if (hermanos.length) pos = doc.objects.indexOf(hermanos.at(-1)) + 1;
+  // Al frente: después de todo el subárbol del último hermano, para que la lista plana siga ordenada por ramas.
+  else if (hermanos.length) pos = Math.max(...subarbol(doc, hermanos.at(-1).id).map((id) => doc.objects.findIndex((o) => o.id === id))) + 1;
   else pos = padre == null ? doc.objects.length : doc.objects.indexOf(buscar(doc, padre)) + 1;
   doc.objects.splice(pos, 0, obj);
 }
@@ -162,7 +195,43 @@ function aplicarUna(doc, op, esquema) {
       return [{ op: 'rename', target: op.id, id: anterior }];
     }
 
+    case 'duplicate': {
+      const original = objetivo(doc, op.target);
+      const sufijo = op.suffix ?? 'copy';
+      if (!/^[a-z0-9_]+$/.test(sufijo)) throw new Error(`suffix inválido "${sufijo}": minúsculas, números y _`);
+      const ids = subarbol(doc, original.id);
+      const mapa = new Map(ids.map((id) => [id, id === original.id && op.id ? op.id : `${id}_${sufijo}`]));
+      for (const nuevo of mapa.values()) {
+        if (!ID.test(nuevo)) throw new Error(`id inválido "${nuevo}": usa minúsculas, números y _, empezando con letra`);
+        if (buscar(doc, nuevo)) throw new Error(`ya existe un objeto "${nuevo}"; elige otro id o suffix`);
+      }
+      const padreOriginal = original.parent ?? null;
+      const padre = 'parent' in op ? contenedor(doc, op.parent, esquema) : padreOriginal;
+      if (op.props !== undefined) comprobarProps(op.props);
+
+      // Copias en el orden de la lista plana, con padres y referencias apuntando a las copias.
+      const copias = doc.objects
+        .filter((o) => mapa.has(o.id))
+        .map((o) => {
+          const c = structuredClone(o);
+          c.id = mapa.get(o.id);
+          c.parent = o.id === original.id ? padre : mapa.get(o.parent);
+          for (const [prop, p] of Object.entries(esquema.tipos.get(c.type)?.properties ?? {})) {
+            if (p.type === 'ref' && mapa.has(c[prop])) c[prop] = mapa.get(c[prop]);
+          }
+          return c;
+        });
+      const raiz = copias.find((c) => c.id === mapa.get(original.id));
+      Object.assign(raiz, structuredClone(op.props ?? {}));
+      // Por defecto queda justo delante del original.
+      const index = op.index ?? (padre === padreOriginal ? hijos(doc, padre).indexOf(original) + 1 : undefined);
+      insertar(doc, raiz, padre, index);
+      let pos = doc.objects.indexOf(raiz) + 1;
+      for (const c of copias) if (c !== raiz) doc.objects.splice(pos++, 0, c);
+      return [{ op: 'delete', target: raiz.id }];
+    }
+
     default:
-      throw new Error(`operación desconocida "${op?.op}". Usa create, set, unset, delete, move o rename`);
+      throw new Error(`operación desconocida "${op?.op}". Usa create, set, unset, delete, move, rename o duplicate`);
   }
 }

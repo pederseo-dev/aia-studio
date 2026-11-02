@@ -25,14 +25,15 @@ test('deshacer y rehacer van por origen', () =>
     await a.operar('robot', [{ op: 'create', type: 'ellipse', id: 'head' }], { origen: 'ai', nota: 'cabeza' });
 
     // La IA deshace lo suyo; el retoque del usuario se mantiene.
-    let doc = await a.deshacer('robot', 'ai');
+    let { doc, entrada } = await a.deshacer('robot', 'ai');
     assert.deepEqual(doc.objects.map((o) => o.id), ['torso']);
     assert.equal(doc.objects[0].fill, '#ff0000');
+    assert.deepEqual(entrada, { n: 4, nota: 'cabeza', ops: 1 });
 
-    doc = await a.rehacer('robot', 'ai');
+    ({ doc } = await a.rehacer('robot', 'ai'));
     assert.deepEqual(doc.objects.map((o) => o.id), ['torso', 'head']);
 
-    doc = await a.deshacer('robot', 'user');
+    ({ doc } = await a.deshacer('robot', 'user'));
     assert.equal(doc.objects[0].fill, undefined);
     await assert.rejects(a.deshacer('robot', 'user'), /nada tuyo/);
 
@@ -59,6 +60,11 @@ test('listar y errores de documento', () =>
     await a.crear('a', {}, { origen: 'user' });
     assert.deepEqual(await a.listar(), [{ id: 'a', name: 'Sin nombre' }, { id: 'b', name: 'Bee' }].map((d) => (d.id === 'a' ? { id: 'a', name: 'a' } : d)));
     await assert.rejects(a.crear('a', {}, { origen: 'user' }), /Ya existe/);
+    await a.operar('b', [{ op: 'create', type: 'rect', id: 'r' }], { origen: 'user' });
+    const copia = await a.crear('c', { name: 'Bee 2' }, { origen: 'ai', copiarDe: 'b' });
+    assert.deepEqual(copia.objects.map((o) => o.id), ['r']);
+    assert.equal(copia.meta.name, 'Bee 2');
+    assert.deepEqual((await a.historial('c')).entradas.map((e) => e.nota), ['copia de b']);
     await assert.rejects(a.leer('zzz'), /No existe/);
     await assert.rejects(a.leer('../x'), /inválido/);
   }));

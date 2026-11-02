@@ -38,6 +38,7 @@ npm run mcp     # servidor MCP por stdio (normalmente lo arranca el cliente de I
 | Seleccionar y mover | Herramienta `V`; arrastrar en el lienzo (Shift = un solo eje) o flechas (Shift = 10 px). |
 | Crear formas | `R` rectángulo, `E` elipse: arrastrar en el lienzo (Shift = cuadrado o círculo). |
 | Grupos | `G` crea un grupo; arrastrar filas en el árbol para reordenar o meter dentro de un grupo. |
+| Duplicar | `Ctrl+D` duplica la selección con sus hijos; «Copiar» en la barra crea una copia del documento. |
 | Renombrar | Doble clic en el árbol o el campo de id del inspector. |
 | Ajustar valores | Escribir en el inspector o arrastrar sobre el nombre de la propiedad (Shift = fino, Alt = grueso). `↺` vuelve al valor por defecto. |
 | Vista | Rueda = desplazar, Ctrl + rueda = zoom, Espacio + arrastrar o botón del medio = mover, `F` = ajustar. |

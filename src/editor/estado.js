@@ -3,7 +3,7 @@
 
 import { crearEsquema } from '../core/esquema.js';
 import { buscar } from '../core/documento.js';
-import { aplicarOperaciones } from '../core/operaciones.js';
+import { aplicarOperaciones, compactar } from '../core/operaciones.js';
 
 const defs = import.meta.glob('../../schema/*.json', { eager: true, import: 'default' });
 export const esquema = crearEsquema(Object.values(defs));
@@ -29,7 +29,8 @@ export const docVisible = () => estado.previa ?? estado.doc;
 // ---------- Servidor ----------
 
 async function pedir(ruta, cuerpo) {
-  const opciones = cuerpo === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) };
+  // keepalive: un lote agrupado que se envía al cerrar la pestaña igual llega.
+  const opciones = cuerpo === undefined ? undefined : { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) };
   const res = await fetch(`/api/documentos${ruta}`, opciones);
   const datos = await res.json();
   if (!res.ok) throw new Error(datos.error);
@@ -38,7 +39,7 @@ async function pedir(ruta, cuerpo) {
 
 export const api = {
   listar: () => pedir(''),
-  crear: (id, meta) => pedir('', { id, meta }),
+  crear: (id, meta, copiarDe) => pedir('', { id, meta, copiarDe }),
   leer: (id) => pedir(`/${id}`),
   historial: (id) => pedir(`/${id}/historial`),
   operar: (id, ops, nota) => pedir(`/${id}/ops`, { ops, nota }),
@@ -65,6 +66,7 @@ export async function cargarDocumentos() {
 }
 
 export async function abrir(id) {
+  await enviarPendiente();
   const doc = await api.leer(id);
   history.replaceState(null, '', `?doc=${encodeURIComponent(id)}`);
   fijar({ id, doc, previa: null, seleccion: null });
@@ -88,7 +90,27 @@ export function previsualizar(ops) {
 // Los lotes se envían en orden, uno detrás de otro.
 let fila = Promise.resolve();
 
-export function ejecutar(ops, nota) {
+// Cambios seguidos sobre lo mismo (flechas, flechitas de un campo numérico) se juntan en un solo lote:
+// una sola entrada en el historial y un solo paso de deshacer.
+const ESPERA_AGRUPADO = 800;
+let pendiente = null;
+
+export const hayPendiente = () => pendiente !== null || enCamino > 0;
+
+/** Envía ya el lote agrupado que esté esperando. */
+export function enviarPendiente() {
+  if (!pendiente) return fila;
+  const { id, ops, nota, temporizador } = pendiente;
+  clearTimeout(temporizador);
+  pendiente = null;
+  return enviar(id, ops, nota);
+}
+
+/**
+ * Aplica un lote al instante en pantalla y lo guarda. Con `agrupar` (una clave como "flechas:head"), los lotes
+ * seguidos con la misma clave se juntan hasta que pasa un momento sin cambios.
+ */
+export function ejecutar(ops, nota, { agrupar } = {}) {
   let resultado;
   try {
     resultado = aplicarOperaciones(estado.doc, ops, esquema);
@@ -99,14 +121,33 @@ export function ejecutar(ops, nota) {
   }
   fijar({ doc: resultado.doc, previa: null });
   if (resultado.avisos.length) avisar(resultado.avisos.join(' · '));
-  const id = estado.id;
+
+  if (pendiente && (pendiente.clave !== agrupar || pendiente.id !== estado.id)) enviarPendiente();
+  if (!agrupar) return enviar(estado.id, ops, nota);
+  if (pendiente) {
+    clearTimeout(pendiente.temporizador);
+    pendiente.ops = compactar([...pendiente.ops, ...ops]);
+  } else {
+    pendiente = { clave: agrupar, id: estado.id, ops: compactar(ops), nota };
+  }
+  pendiente.temporizador = setTimeout(enviarPendiente, ESPERA_AGRUPADO);
+  return Promise.resolve(true);
+}
+
+let enCamino = 0;
+
+function enviar(id, ops, nota) {
+  enCamino++;
   fila = fila.then(async () => {
     try {
       const { doc } = await api.operar(id, ops, nota);
-      if (estado.id === id) fijar({ doc });
+      // Si quedan lotes por llegar al servidor, la pantalla ya va por delante: no se pisa con un estado viejo.
+      if (estado.id === id && !pendiente && enCamino === 1) fijar({ doc });
     } catch (e) {
       avisar(e.message, true);
       if (estado.id === id) fijar({ doc: await api.leer(id) });
+    } finally {
+      enCamino--;
     }
     await refrescarHistorial();
     return true;
@@ -116,6 +157,7 @@ export function ejecutar(ops, nota) {
 
 async function revertir(tipo) {
   if (!estado.id) return;
+  await enviarPendiente();
   try {
     const { doc } = await api[tipo](estado.id);
     fijar({ doc, previa: null });

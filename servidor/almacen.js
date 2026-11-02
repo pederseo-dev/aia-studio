@@ -89,7 +89,7 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
     await escribir(id, resultado.doc);
     const nota = entrada.nota?.replace(/^(deshacer|rehacer): /, '') ?? '';
     await registrar(id, { origen, tipo, ref: entrada.n, nota: `${tipo}: ${nota}`, ops: entrada.inversas, inversas: resultado.inversas });
-    return resultado.doc;
+    return { doc: resultado.doc, entrada: { n: entrada.n, nota, ops: entrada.ops.length } };
   }
 
   return {
@@ -110,7 +110,8 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
       return lista;
     },
 
-    crear: (id, meta, { origen, nota }) =>
+    /** Crea un documento vacío o, con `copiarDe`, una copia de otro (sin su historial). */
+    crear: (id, meta, { origen, nota, copiarDe }) =>
       enFila(async () => {
         try {
           await fs.access(ruta(id, 'documento.json'));
@@ -118,7 +119,12 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
         } catch (e) {
           if (e.code !== 'ENOENT') throw e;
         }
-        const doc = crearDocumento(meta);
+        let doc = crearDocumento(meta);
+        if (copiarDe) {
+          const base = await leer(copiarDe);
+          doc = { ...base, meta: { ...base.meta, ...meta } };
+          nota ??= `copia de ${copiarDe}`;
+        }
         const { errores } = validar(doc, esquema);
         if (errores.length) throw new ErrorDeValidacion(errores);
         await fs.mkdir(path.dirname(ruta(id, 'documento.json')), { recursive: true });

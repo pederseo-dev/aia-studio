@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { hijos } from '../src/core/documento.js';
 import { leerMeta } from '../src/core/esquema.js';
 import { guiaParaIA } from '../src/core/guia.js';
+import { resumirOperaciones } from '../src/core/operaciones.js';
 import { svgDocumento } from '../src/render/svg.js';
 import { crearAlmacen } from '../servidor/almacen.js';
 import { cargarEsquema } from '../servidor/esquema.js';
@@ -74,6 +75,15 @@ const operacion = z.discriminatedUnion('op', [
     index: z.number().int().optional().describe('posición entre hermanos: 0 = al fondo; omitido = al frente'),
   }),
   z.object({ op: z.literal('rename'), target: z.string(), id: z.string().describe('id nuevo') }),
+  z.object({
+    op: z.literal('duplicate'),
+    target: z.string().describe('objeto a copiar, con todos sus hijos'),
+    id: z.string().optional().describe('id de la copia; por defecto <target>_<suffix>'),
+    suffix: z.string().optional().describe('sufijo para los ids de los hijos copiados (por defecto "copy")'),
+    parent: z.string().nullable().optional().describe('padre de la copia; omitido = el mismo que el original'),
+    index: z.number().int().optional().describe('posición entre hermanos; omitido = justo delante del original'),
+    props: props.optional().describe('propiedades a cambiar en la copia, por ejemplo { "x": 40 }'),
+  }),
 ]);
 
 servidor.registerTool(
@@ -100,18 +110,20 @@ servidor.registerTool(
 servidor.registerTool(
   'create_document',
   {
-    description: 'Crea un documento vacío.',
+    description: 'Crea un documento vacío o, con copy_from, una copia de otro documento (sin su historial).',
     inputSchema: {
       id,
       name: z.string().optional().describe('nombre visible'),
       width: z.number().optional().describe('ancho del lienzo en px (por defecto 800)'),
       height: z.number().optional().describe('alto del lienzo en px (por defecto 800)'),
+      background: z.string().nullable().optional().describe('color de fondo "#rrggbb"; null = transparente'),
+      copy_from: z.string().optional().describe('id de un documento existente para copiar sus objetos'),
     },
   },
-  seguro(async ({ id, name, width, height }) => {
-    const meta = Object.fromEntries(Object.entries({ name, width, height }).filter(([, v]) => v !== undefined));
-    await almacen.crear(id, meta, { origen: ORIGEN });
-    return texto(`Documento "${id}" creado.`);
+  seguro(async ({ id, name, width, height, background, copy_from }) => {
+    const meta = Object.fromEntries(Object.entries({ name, width, height, background }).filter(([, v]) => v !== undefined));
+    const doc = await almacen.crear(id, meta, { origen: ORIGEN, copiarDe: copy_from });
+    return texto(`Documento "${id}" creado${copy_from ? ` como copia de "${copy_from}"` : ''}.\n\nÁrbol:\n${esquemaDelArbol(doc)}`);
   }),
 );
 
@@ -129,41 +141,51 @@ servidor.registerTool(
   },
   seguro(async ({ id, ops, note }) => {
     const { doc, avisos } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note });
-    const partes = [`Aplicadas ${ops.length} operaciones. El documento tiene ${doc.objects.length} objetos.`];
+    const partes = [`Aplicadas ${ops.length} operaciones.`];
     if (avisos.length) partes.push(`Avisos:\n${avisos.map((a) => `- ${a}`).join('\n')}`);
+    partes.push(`Árbol resultante (del fondo al frente):\n${esquemaDelArbol(doc)}`);
     return texto(partes.join('\n\n'));
   }),
 );
 
+const revertir = (tipo) =>
+  seguro(async ({ id }) => {
+    const { doc, entrada } = await almacen[tipo](id, ORIGEN);
+    const verbo = tipo === 'deshacer' ? 'Deshecho' : 'Rehecho';
+    return texto(`${verbo} el lote #${entrada.n} "${entrada.nota}" (${entrada.ops} operaciones).\n\nÁrbol resultante:\n${esquemaDelArbol(doc)}`);
+  });
+
 servidor.registerTool(
   'undo',
-  { description: 'Deshace tu último lote (solo los de la IA; nunca los retoques del usuario).', inputSchema: { id } },
-  seguro(async ({ id }) => {
-    await almacen.deshacer(id, ORIGEN);
-    return texto('Deshecho.');
-  }),
+  { description: 'Deshace tu último lote (solo los de la IA; nunca los retoques del usuario) y dice cuál deshizo.', inputSchema: { id } },
+  revertir('deshacer'),
 );
 
 servidor.registerTool(
   'redo',
-  { description: 'Rehace el último lote tuyo que deshiciste.', inputSchema: { id } },
-  seguro(async ({ id }) => {
-    await almacen.rehacer(id, ORIGEN);
-    return texto('Rehecho.');
-  }),
+  { description: 'Rehace el último lote tuyo que deshiciste y dice cuál rehizo.', inputSchema: { id } },
+  revertir('rehacer'),
 );
 
 servidor.registerTool(
   'get_history',
   {
     description:
-      'Últimos cambios del documento, del más viejo al más nuevo, con origen ("ai" o "user"), nota y operaciones. ' +
-      'Los de origen "user" son retoques a mano: respétalos.',
-    inputSchema: { id, limit: z.number().int().min(1).max(200).optional().describe('cuántos (por defecto 20)') },
+      'Últimos cambios del documento, del más viejo al más nuevo. Por defecto es un resumen: origen ("ai" o ' +
+      '"user"), nota y qué propiedades u objetos tocó cada lote. Los de origen "user" son retoques a mano: respétalos.',
+    inputSchema: {
+      id,
+      limit: z.number().int().min(1).max(200).optional().describe('cuántos lotes (por defecto 20)'),
+      origin: z.enum(['ai', 'user']).optional().describe('solo los lotes de ese origen'),
+      detail: z.boolean().optional().describe('true = incluir las operaciones completas de cada lote'),
+    },
   },
-  seguro(async ({ id, limit }) => {
-    const { entradas } = await almacen.historial(id, limit ?? 20);
-    return texto(entradas.map(({ inversas, ...e }) => e));
+  seguro(async ({ id, limit, origin, detail }) => {
+    const { entradas } = await almacen.historial(id, 1000);
+    const elegidas = entradas.filter((e) => !origin || e.origen === origin).slice(-(limit ?? 20));
+    return texto(
+      elegidas.map(({ inversas, ops, ...e }) => ({ ...e, ...(detail ? { ops } : { toca: resumirOperaciones(ops) }) })),
+    );
   }),
 );
 

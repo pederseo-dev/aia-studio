@@ -64,9 +64,10 @@ export function montarInspector(raiz) {
     restablecer.addEventListener('click', () => ejecutar([{ op: 'unset', target: objetivo, props: [prop] }], `${objetivo}.${prop} por defecto`));
 
     const cambio = (v) => [{ op: 'set', target: objetivo, props: { [prop]: v } }];
+    // Varios cambios seguidos de la misma propiedad (flechitas del campo, escribir y corregir) son un solo paso.
     const confirmar = (v) => {
       if (Object.is(v, valor)) return previsualizar(null);
-      ejecutar(cambio(v), `${objetivo}.${prop}`);
+      ejecutar(cambio(v), `${objetivo}.${prop}`, { agrupar: `${objetivo}.${prop}` });
     };
     const control = CONTROLES[p.type]({ p, valor, previsualizar: (v) => previsualizar(cambio(v)), confirmar, div, label, objetivo });
     div.append(label, control, restablecer);

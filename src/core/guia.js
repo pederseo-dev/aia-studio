@@ -51,6 +51,8 @@ aia-studio es un editor de personajes 2D. Un documento es JSON; tú lo modificas
 - \`objects\` es una **lista plana**: la jerarquía se arma con \`parent\` (null = raíz).
 - \`id\`: minúsculas, números y \`_\`, empezando con letra. Único en el documento. Usa nombres que digan qué es
   (\`eye_l\`, \`arm_r\`, \`head\`).
+- **Izquierda y derecha son las del personaje**, como en cualquier rig: en un personaje de frente, \`arm_l\` es el
+  brazo que el espectador ve a su derecha. Usa los sufijos \`_l\` y \`_r\`.
 - Las propiedades que no aparecen usan su valor por defecto. Solo se guarda lo que cambia.
 
 ## Operaciones
@@ -66,8 +68,11 @@ corregir y reintentar.
 | \`delete\` | \`{ "op": "delete", "target": "head" }\` | Borra el objeto **y todos sus hijos**. |
 | \`move\` | \`{ "op": "move", "target": "eye_l", "parent": "face", "index": 0 }\` | Cambia de padre y/o de orden. Sin \`parent\` conserva el actual; \`null\` = raíz. |
 | \`rename\` | \`{ "op": "rename", "target": "eye_l", "id": "left_eye" }\` | Cambia el id y actualiza las referencias. |
+| \`duplicate\` | \`{ "op": "duplicate", "target": "arm_l", "id": "arm_r", "suffix": "r", "props": { "x": 110, "scaleX": -1 } }\` | Copia el objeto con todos sus hijos. Los hijos copiados se llaman \`<id>_<suffix>\`. La copia queda justo delante del original. |
 
 \`index\` es la posición entre los hermanos en orden de dibujo: \`0\` = al fondo; sin \`index\` = al frente.
+\`move\` no cambia \`x\`/\`y\`: si cambias de padre, recalcula la posición si quieres que el objeto quede en el mismo lugar.
+Para copiar un documento entero, usa \`create_document\` con \`copy_from\`.
 
 ## Tipos
 
@@ -79,8 +84,8 @@ ${tipos}
 
 ## Cómo trabajar bien
 
-1. **Mira el historial** (\`get_history\`) antes de editar un documento existente. Las entradas con origen \`user\`
-   son retoques a mano: respétalos y no los pises.
+1. **Mira el historial** (\`get_history\`, con \`origin: "user"\` para ver solo lo del usuario) antes de editar un
+   documento existente. Esas entradas son retoques a mano: respétalos y no los pises.
 2. **Usa grupos como articulaciones.** El \`x\`/\`y\` de un grupo es su pivote: para que una cabeza gire desde el
    cuello, pon el grupo \`head\` en el cuello y dibuja la cara con \`y\` negativa dentro del grupo.
 3. **Mira el resultado** con \`render_preview\` después de cada cambio importante.
