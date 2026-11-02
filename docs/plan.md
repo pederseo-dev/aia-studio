@@ -1,6 +1,6 @@
 # Plan de construcción
 
-> Estado: **fase 1 construida; falta su prueba con IA** (2026-11-02). Se basa en [sintesis.md](sintesis.md) y en la investigación de
+> Estado: **fase 1 probada con IA; faltan los ajustes que salieron de la prueba** (2026-11-02). Se basa en [sintesis.md](sintesis.md) y en la investigación de
 > [Moho](investigacion/moho-lua.md) y [Rive](investigacion/rive-runtime.md).
 
 ## Cómo trabajamos
@@ -52,7 +52,11 @@ confundió. Corremos al menos con el cliente que más se use (Claude Desktop o C
 
 **Listo cuando:** el repo arranca vacío pero con `npm run dev`, `npm test` y `npm run mcp` funcionando.
 
-## Fase 1: esquema, documento y cáscara del editor 🔶 construida, falta la prueba con IA
+## Fase 1: esquema, documento y cáscara del editor 🔶 probada con IA, faltan ajustes
+
+La prueba con IA salió 8/8 sin rechazos ([resultados](pruebas-ia/fase-1.md)). Antes de pasar a la fase 2 hay que
+resolver lo que encontró: agrupar en el historial los cambios seguidos del editor, duplicar objetos y documentos, y
+dar respuestas más informativas en `undo`, `apply_ops` y `get_history`.
 
 Notas de lo construido:
 - Las operaciones son `create`, `set`, `unset`, `delete`, `move` y `rename`, dirigidas por id (`target`) y no por

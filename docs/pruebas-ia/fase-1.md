@@ -40,3 +40,26 @@ Pasar las tareas **una por una, tal cual**, sin pistas extra.
 
 | Fecha | Cliente y modelo | Logradas | Rechazos | Correcciones a mano | Notas |
 | --- | --- | --- | --- | --- | --- |
+| 2026-11-02 | Claude Code (sesión nueva), Opus 5.5 | 8/8 (7 y 8 las hizo el usuario a mano) | 0 | 0 | Ver abajo. |
+
+### Corrida del 2026-11-02
+
+- **Lo que salió bien:** entendió el formato solo con `get_guide`. Puso los pivotes donde correspondía sin que se lo
+  pidieran: la cabeza en el cuello y los brazos en los hombros. Ordenó las capas con `move` + `index`, renombró con
+  `rename` sin romper la jerarquía, respetó todos los retoques del usuario y usó `undo` y `render_preview` como se
+  esperaba. Fuera de la lista, el usuario le pidió un pingüino: 53 formas en grupos, también sin rechazos.
+- **Tarea 6:** el usuario había agrandado solo el ojo izquierdo. La IA igualó el derecho a ese tamaño en vez de
+  agrandar los dos, para no pisar el retoque. Fue razonable y lo explicó.
+- **Tarea 10:** como no hay forma de copiar, recreó los 18 objetos en un documento nuevo, con el grupo raíz a
+  escala 0.5.
+
+**Problemas encontrados** (por orden de importancia):
+
+1. **El historial del editor se llena de ruido.** Cada flecha, clic en el campo numérico o paso de arrastre del
+   usuario es una entrada: unas 95 por un retoque normal. La IA no pudo reconstruir qué cambió el usuario desde el
+   historial y tuvo que comparar documentos. Además, `Ctrl+Z` deshace de a 1 px.
+2. **No hay forma de duplicar**, ni objetos ni documentos.
+3. **Faltan respuestas útiles:** `undo` no dice qué deshizo, `apply_ops` no devuelve el árbol resultante y
+   `get_history` no tiene una vista resumida.
+4. **Detalles:** `create_document` no acepta `background`, y la guía no dice si izquierda/derecha son las del
+   espectador o las del personaje (la IA usó las del espectador).
