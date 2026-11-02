@@ -27,8 +27,21 @@ npm test        # pruebas del núcleo
 npm run mcp     # servidor MCP por stdio (normalmente lo arranca el cliente de IA)
 ```
 
-> Estado: **fase 0** del [plan](docs/plan.md). La base está lista y vacía; el prototipo que probó la idea quedó en
-> la etiqueta de git `prototipo-0` (`git show prototipo-0 --stat`).
+> Estado: **fase 1** del [plan](docs/plan.md): esquema, operaciones con deshacer por origen, editor con árbol,
+> lienzo e inspector, y MCP con vista previa en PNG. El prototipo que probó la idea quedó en la etiqueta de git
+> `prototipo-0`.
+
+### Editor
+
+| Acción | Cómo |
+| --- | --- |
+| Seleccionar y mover | Herramienta `V`; arrastrar en el lienzo (Shift = un solo eje) o flechas (Shift = 10 px). |
+| Crear formas | `R` rectángulo, `E` elipse: arrastrar en el lienzo (Shift = cuadrado o círculo). |
+| Grupos | `G` crea un grupo; arrastrar filas en el árbol para reordenar o meter dentro de un grupo. |
+| Renombrar | Doble clic en el árbol o el campo de id del inspector. |
+| Ajustar valores | Escribir en el inspector o arrastrar sobre el nombre de la propiedad (Shift = fino, Alt = grueso). `↺` vuelve al valor por defecto. |
+| Vista | Rueda = desplazar, Ctrl + rueda = zoom, Espacio + arrastrar o botón del medio = mover, `F` = ajustar. |
+| Deshacer | `Ctrl+Z` / `Ctrl+Shift+Z`. Solo deshace tus cambios; los de la IA los deshace la IA. |
 
 ### Conectar tu IA (MCP, sin API key)
 
@@ -52,7 +65,9 @@ queda en el historial para que la IA lo respete.
 
 - **Otros clientes MCP** (Cursor, etc.): el mismo comando, `node <ruta>/mcp/server.js`, por stdio.
 
-Por ahora solo tiene `get_status`; las herramientas de edición llegan en la fase 1.
+Herramientas: `get_guide` (la guía del formato, generada desde el esquema), `list_documents`, `get_document`,
+`create_document`, `apply_ops`, `undo`, `redo`, `get_history` y `render_preview` (devuelve un PNG para que la IA vea
+lo que hizo).
 
 ## Estructura
 

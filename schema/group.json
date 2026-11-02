@@ -1,0 +1,6 @@
+{
+  "name": "group",
+  "extends": "transformable",
+  "container": true,
+  "description": "Contenedor. Sus hijos se dibujan en su sistema de coordenadas: moverlo, girarlo o escalarlo arrastra a todos. Su x/y es el pivote de giro, así que conviene ponerlo en la articulación (por ejemplo, el cuello para una cabeza)."
+}

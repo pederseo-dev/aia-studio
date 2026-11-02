@@ -7,7 +7,55 @@
     <link rel="stylesheet" href="/src/editor/estilos.css" />
   </head>
   <body>
-    <main id="app"></main>
+    <header id="barra">
+      <strong class="marca">aia-studio</strong>
+      <select id="documentos" aria-label="Documento"></select>
+      <button id="nuevo" type="button" title="Nuevo documento">Nuevo</button>
+      <span class="separador"></span>
+      <div id="herramientas" role="toolbar" aria-label="Herramientas">
+        <button type="button" data-herramienta="seleccionar" title="Seleccionar y mover (V)">↖ Seleccionar</button>
+        <button type="button" data-herramienta="rect" title="Rectángulo (R)">▭ Rectángulo</button>
+        <button type="button" data-herramienta="ellipse" title="Elipse (E)">◯ Elipse</button>
+      </div>
+      <span class="separador"></span>
+      <button id="deshacer" type="button" title="Deshacer tu último cambio (Ctrl+Z)">↶</button>
+      <button id="rehacer" type="button" title="Rehacer (Ctrl+Shift+Z)">↷</button>
+      <span id="aviso" role="status"></span>
+      <button id="ajustar" type="button" title="Ajustar a la ventana (F)">Ajustar</button>
+      <span id="zoom" title="Zoom (Ctrl + rueda)"></span>
+    </header>
+
+    <main id="espacio">
+      <aside id="panel-objetos" class="panel">
+        <div class="cabecera">
+          <h2>Objetos</h2>
+          <button id="nuevo-grupo" type="button" title="Nuevo grupo (G)">+ Grupo</button>
+          <button id="borrar" type="button" title="Borrar selección (Supr)">Borrar</button>
+        </div>
+        <ul id="arbol" class="arbol" role="tree"></ul>
+      </aside>
+
+      <section id="lienzo" tabindex="-1" aria-label="Lienzo">
+        <svg id="vista">
+          <g id="camara"><g id="documento"></g></g>
+          <g id="superposicion"></g>
+        </svg>
+      </section>
+
+      <aside id="panel-derecho" class="panel">
+        <section id="inspector"></section>
+        <section id="historial">
+          <h2>Historial</h2>
+          <ol id="entradas"></ol>
+        </section>
+      </aside>
+
+      <footer id="linea-de-tiempo" class="panel">
+        <h2>Línea de tiempo</h2>
+        <p class="ayuda">Llega en la fase 5.</p>
+      </footer>
+    </main>
+
     <script type="module" src="/src/editor/main.js"></script>
   </body>
 </html>

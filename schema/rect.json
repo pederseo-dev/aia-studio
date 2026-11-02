@@ -1,0 +1,10 @@
+{
+  "name": "rect",
+  "extends": "shape",
+  "description": "Rectángulo centrado en su x/y.",
+  "properties": {
+    "width": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Forma", "description": "Ancho en px." },
+    "height": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Forma", "description": "Alto en px." },
+    "cornerRadius": { "type": "number", "default": 0, "min": 0, "animatable": true, "group": "Forma", "description": "Radio de las esquinas en px." }
+  }
+}

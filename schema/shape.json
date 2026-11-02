@@ -1,0 +1,11 @@
+{
+  "name": "shape",
+  "abstract": true,
+  "extends": "transformable",
+  "description": "Forma con relleno y contorno.",
+  "properties": {
+    "fill": { "type": "color", "default": "#c8c2d4", "nullable": true, "animatable": true, "group": "Apariencia", "description": "Color de relleno. null = sin relleno." },
+    "stroke": { "type": "color", "default": null, "nullable": true, "animatable": true, "group": "Apariencia", "description": "Color del contorno. null = sin contorno." },
+    "strokeWidth": { "type": "number", "default": 2, "min": 0, "animatable": true, "group": "Apariencia", "description": "Grosor del contorno en px." }
+  }
+}

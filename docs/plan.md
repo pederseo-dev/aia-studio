@@ -1,6 +1,6 @@
 # Plan de construcción
 
-> Estado: **fase 0 terminada; sigue la fase 1** (2026-11-02). Se basa en [sintesis.md](sintesis.md) y en la investigación de
+> Estado: **fase 1 construida; falta su prueba con IA** (2026-11-02). Se basa en [sintesis.md](sintesis.md) y en la investigación de
 > [Moho](investigacion/moho-lua.md) y [Rive](investigacion/rive-runtime.md).
 
 ## Cómo trabajamos
@@ -52,7 +52,15 @@ confundió. Corremos al menos con el cliente que más se use (Claude Desktop o C
 
 **Listo cuando:** el repo arranca vacío pero con `npm run dev`, `npm test` y `npm run mcp` funcionando.
 
-## Fase 1: esquema, documento y cáscara del editor
+## Fase 1: esquema, documento y cáscara del editor 🔶 construida, falta la prueba con IA
+
+Notas de lo construido:
+- Las operaciones son `create`, `set`, `unset`, `delete`, `move` y `rename`, dirigidas por id (`target`) y no por
+  rutas: a la IA le resulta más natural y los errores se explican mejor (con sugerencias de ids parecidos).
+- Deshacer y rehacer van **por origen** y se calculan desde el historial: la IA deshace solo lo suyo y el usuario
+  solo lo suyo. Si el documento cambió y la inversa ya no encaja, se avisa en vez de romper nada.
+- Al reparentar desde el árbol, el editor conserva la posición en pantalla. Por MCP, `move` no toca `x`/`y`.
+- Pendiente para más adelante: selección múltiple, copiar/pegar y duplicar.
 
 **Núcleo**
 - Formato de defs inspirado en Rive (`type`, `extends`, propiedades con `type`, `default`, `animatable`, `range`,
