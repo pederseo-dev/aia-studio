@@ -1,0 +1,426 @@
+{
+  "format": "aia/0.1",
+  "name": "Prueba",
+  "canvas": {
+    "width": 400,
+    "height": 400
+  },
+  "rig": {
+    "bones": [
+      {
+        "id": "root",
+        "parent": null,
+        "x": 200,
+        "y": 395
+      },
+      {
+        "id": "neck",
+        "parent": "root",
+        "x": 0,
+        "y": -120
+      },
+      {
+        "id": "head",
+        "parent": "neck",
+        "x": 0,
+        "y": -20
+      },
+      {
+        "id": "eye_l",
+        "parent": "head",
+        "x": -32,
+        "y": -100
+      },
+      {
+        "id": "eye_r",
+        "parent": "head",
+        "x": 32,
+        "y": -100
+      },
+      {
+        "id": "pupil_l",
+        "parent": "eye_l",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "id": "pupil_r",
+        "parent": "eye_r",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "id": "brow_l",
+        "parent": "head",
+        "x": -32,
+        "y": -130
+      },
+      {
+        "id": "brow_r",
+        "parent": "head",
+        "x": 32,
+        "y": -130
+      },
+      {
+        "id": "mouth",
+        "parent": "head",
+        "x": 0,
+        "y": -48
+      }
+    ],
+    "parts": [
+      {
+        "id": "body",
+        "bone": "root",
+        "z": 0,
+        "svg": "<path d='M-120 0 C-120 -75 -70 -120 0 -120 C70 -120 120 -75 120 0 Z' fill='#5b6ee1'/>"
+      },
+      {
+        "id": "neck_skin",
+        "bone": "neck",
+        "z": 1,
+        "svg": "<rect x='-18' y='-28' width='36' height='40' rx='8' fill='#e3a985'/>"
+      },
+      {
+        "id": "hair_back",
+        "bone": "head",
+        "z": 2,
+        "svg": "<ellipse cx='0' cy='-108' rx='92' ry='100' fill='#3a2a4d'/>"
+      },
+      {
+        "id": "face",
+        "bone": "head",
+        "z": 3,
+        "svg": "<ellipse cx='0' cy='-95' rx='80' ry='92' fill='#f2c4a0'/>"
+      },
+      {
+        "id": "blush",
+        "bone": "head",
+        "z": 4,
+        "opacity": 0,
+        "svg": "<ellipse cx='-52' cy='-62' rx='14' ry='8' fill='#ff7a8a'/><ellipse cx='52' cy='-62' rx='14' ry='8' fill='#ff7a8a'/>"
+      },
+      {
+        "id": "hair_front",
+        "bone": "head",
+        "z": 5,
+        "svg": "<path d='M-82 -112 C-78 -182 -30 -194 0 -192 C35 -194 80 -177 82 -114 C60 -142 30 -152 0 -148 C-25 -152 -60 -142 -82 -112 Z' fill='#3a2a4d'/>"
+      },
+      {
+        "id": "eye_white_l",
+        "bone": "eye_l",
+        "z": 6,
+        "svg": "<ellipse rx='15' ry='18' fill='#ffffff' stroke='#2b2135' stroke-width='2'/>"
+      },
+      {
+        "id": "eye_white_r",
+        "bone": "eye_r",
+        "z": 6,
+        "svg": "<ellipse rx='15' ry='18' fill='#ffffff' stroke='#2b2135' stroke-width='2'/>"
+      },
+      {
+        "id": "pupil_l",
+        "bone": "pupil_l",
+        "z": 7,
+        "svg": "<circle r='8' fill='#2b2135'/><circle cx='3' cy='-3' r='2.5' fill='#ffffff'/>"
+      },
+      {
+        "id": "pupil_r",
+        "bone": "pupil_r",
+        "z": 7,
+        "svg": "<circle r='8' fill='#2b2135'/><circle cx='3' cy='-3' r='2.5' fill='#ffffff'/>"
+      },
+      {
+        "id": "brow_l",
+        "bone": "brow_l",
+        "z": 8,
+        "svg": "<rect x='-16' y='-4' width='32' height='8' rx='4' fill='#3a2a4d'/>"
+      },
+      {
+        "id": "brow_r",
+        "bone": "brow_r",
+        "z": 8,
+        "svg": "<rect x='-16' y='-4' width='32' height='8' rx='4' fill='#3a2a4d'/>"
+      }
+    ],
+    "slots": [
+      {
+        "id": "mouth",
+        "bone": "mouth",
+        "z": 9,
+        "active": "neutral",
+        "options": {
+          "neutral": "<path d='M-16 0 Q0 4 16 0' fill='none' stroke='#7a2e3b' stroke-width='4' stroke-linecap='round'/>",
+          "smile": "<path d='M-22 -4 Q0 18 22 -4' fill='none' stroke='#7a2e3b' stroke-width='4' stroke-linecap='round'/>",
+          "sad": "<path d='M-18 6 Q0 -8 18 6' fill='none' stroke='#7a2e3b' stroke-width='4' stroke-linecap='round'/>",
+          "open": "<path d='M-16 -3 Q0 -5 16 -3 Q14 7 0 8 Q-14 7 -16 -3 Z' fill='#7a2e3b'/><path d='M-8 5 Q0 2 8 5 Q0 8 -8 5 Z' fill='#e0707f'/>"
+        }
+      }
+    ],
+    "params": [
+      {
+        "id": "happiness",
+        "range": [
+          -1,
+          1
+        ],
+        "default": 0,
+        "description": "Ánimo: -1 triste, 0 neutral, 1 feliz"
+      },
+      {
+        "id": "head_turn",
+        "range": [
+          -1,
+          1
+        ],
+        "default": 0,
+        "description": "Inclinación de la cabeza: -1 izquierda, 1 derecha"
+      },
+      {
+        "id": "look_x",
+        "range": [
+          -1,
+          1
+        ],
+        "default": 0,
+        "description": "Mirada horizontal: -1 izquierda, 1 derecha"
+      },
+      {
+        "id": "look_y",
+        "range": [
+          -1,
+          1
+        ],
+        "default": 0,
+        "description": "Mirada vertical: -1 arriba, 1 abajo"
+      },
+      {
+        "id": "mouth_open",
+        "range": [
+          0,
+          1
+        ],
+        "default": 0,
+        "description": "Apertura de la boca, pensado para lip-sync"
+      },
+      {
+        "id": "blink",
+        "range": [
+          0,
+          1
+        ],
+        "default": 0,
+        "description": "Párpados: 0 abiertos, 1 cerrados"
+      }
+    ]
+  },
+  "drivers": [
+    {
+      "id": "mood_mouth",
+      "param": "happiness",
+      "target": "slots.mouth.active",
+      "steps": [
+        [
+          -1,
+          "sad"
+        ],
+        [
+          -0.35,
+          "neutral"
+        ],
+        [
+          0.35,
+          "smile"
+        ]
+      ]
+    },
+    {
+      "id": "talk_mouth",
+      "param": "mouth_open",
+      "target": "slots.mouth.active",
+      "steps": [
+        [
+          0.15,
+          "open"
+        ]
+      ]
+    },
+    {
+      "id": "talk_mouth_size",
+      "param": "mouth_open",
+      "target": "bones.mouth.scaleY",
+      "in": [
+        0.15,
+        1
+      ],
+      "out": [
+        0,
+        1.2
+      ]
+    },
+    {
+      "id": "mood_brow_l_tilt",
+      "param": "happiness",
+      "target": "bones.brow_l.rotation",
+      "in": [
+        -1,
+        0,
+        1
+      ],
+      "out": [
+        -14,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "mood_brow_r_tilt",
+      "param": "happiness",
+      "target": "bones.brow_r.rotation",
+      "in": [
+        -1,
+        0,
+        1
+      ],
+      "out": [
+        14,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "mood_brow_l_lift",
+      "param": "happiness",
+      "target": "bones.brow_l.y",
+      "in": [
+        -1,
+        0,
+        1
+      ],
+      "out": [
+        -4,
+        0,
+        -6
+      ]
+    },
+    {
+      "id": "mood_brow_r_lift",
+      "param": "happiness",
+      "target": "bones.brow_r.y",
+      "in": [
+        -1,
+        0,
+        1
+      ],
+      "out": [
+        -4,
+        0,
+        -6
+      ]
+    },
+    {
+      "id": "mood_blush",
+      "param": "happiness",
+      "target": "parts.blush.opacity",
+      "in": [
+        0,
+        1
+      ],
+      "out": [
+        0,
+        0.6
+      ]
+    },
+    {
+      "id": "turn_head",
+      "param": "head_turn",
+      "target": "bones.head.rotation",
+      "in": [
+        -1,
+        1
+      ],
+      "out": [
+        -10,
+        10
+      ]
+    },
+    {
+      "id": "look_x_l",
+      "param": "look_x",
+      "target": "bones.pupil_l.x",
+      "in": [
+        -1,
+        1
+      ],
+      "out": [
+        -6,
+        6
+      ]
+    },
+    {
+      "id": "look_x_r",
+      "param": "look_x",
+      "target": "bones.pupil_r.x",
+      "in": [
+        -1,
+        1
+      ],
+      "out": [
+        -6,
+        6
+      ]
+    },
+    {
+      "id": "look_y_l",
+      "param": "look_y",
+      "target": "bones.pupil_l.y",
+      "in": [
+        -1,
+        1
+      ],
+      "out": [
+        -6,
+        6
+      ]
+    },
+    {
+      "id": "look_y_r",
+      "param": "look_y",
+      "target": "bones.pupil_r.y",
+      "in": [
+        -1,
+        1
+      ],
+      "out": [
+        -6,
+        6
+      ]
+    },
+    {
+      "id": "blink_l",
+      "param": "blink",
+      "target": "bones.eye_l.scaleY",
+      "in": [
+        0,
+        1
+      ],
+      "out": [
+        0,
+        -0.9
+      ]
+    },
+    {
+      "id": "blink_r",
+      "param": "blink",
+      "target": "bones.eye_r.scaleY",
+      "in": [
+        0,
+        1
+      ],
+      "out": [
+        0,
+        -0.9
+      ]
+    }
+  ]
+}
