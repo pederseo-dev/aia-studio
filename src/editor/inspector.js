@@ -6,7 +6,9 @@ import { validarValor } from '../core/esquema.js';
 import { origenDelValor, valorEfectivo } from '../core/estilos.js';
 import { ejecutar, esquema, estado, fijar, previsualizar, seleccionar, suscribir } from './estado.js';
 
-const ORDEN_DE_GRUPOS = ['General', 'Forma', 'Transformación', 'Apariencia', 'Lienzo', 'Tiempo'];
+const ORDEN_DE_GRUPOS = ['General', 'Forma', 'Transformación', 'Apariencia', 'Degradado', 'Lienzo', 'Tiempo'];
+const PARES = { x: 'y', scaleX: 'scaleY', width: 'height', x1: 'y1', x2: 'y2', cx: 'cy' };
+const ETIQUETAS = { x: 'X', y: 'Y', scaleX: 'Esc X', scaleY: 'Esc Y', width: 'Ancho', height: 'Alto', x1: 'X1', y1: 'Y1', x2: 'X2', y2: 'Y2', cx: 'CX', cy: 'CY' };
 
 export function montarInspector(raiz) {
   suscribir((c) => {
@@ -29,7 +31,22 @@ export function montarInspector(raiz) {
     const nombres = [...grupos.keys()].sort((a, b) => (ORDEN_DE_GRUPOS.indexOf(a) + 1 || 99) - (ORDEN_DE_GRUPOS.indexOf(b) + 1 || 99));
     for (const nombre of nombres) {
       raiz.append(Object.assign(document.createElement('h3'), { textContent: nombre }));
-      for (const [prop, p] of grupos.get(nombre)) raiz.append(campo(objetivo, datos, prop, p));
+      const props = grupos.get(nombre);
+      const enPar = new Set();
+      for (const [prop, p] of props) {
+        if (enPar.has(prop)) continue;
+        // Pares (x/y, ancho/alto, escala) en una sola fila, como en Rive.
+        const pareja = PARES[prop] && props.find(([q]) => q === PARES[prop]);
+        if (pareja) {
+          enPar.add(pareja[0]);
+          const fila = document.createElement('div');
+          fila.className = 'par';
+          fila.append(campo(objetivo, datos, prop, p, ETIQUETAS[prop]), campo(objetivo, datos, pareja[0], pareja[1], ETIQUETAS[pareja[0]]));
+          raiz.append(fila);
+        } else {
+          raiz.append(campo(objetivo, datos, prop, p));
+        }
+      }
     }
 
     if (enFoco) raiz.querySelector(`[data-prop="${enFoco}"] input, [data-prop="${enFoco}"] select`)?.focus();
@@ -52,7 +69,7 @@ export function montarInspector(raiz) {
     return div;
   }
 
-  function campo(objetivo, datos, prop, p) {
+  function campo(objetivo, datos, prop, p, etiqueta) {
     const esObjeto = objetivo !== 'meta';
     const origen = esObjeto ? origenDelValor(estado.doc, datos, prop) : datos[prop] !== undefined ? 'propio' : 'defecto';
     const valor = esObjeto ? valorEfectivo(esquema, estado.doc, datos, prop) : (datos[prop] ?? p.default);
@@ -60,9 +77,9 @@ export function montarInspector(raiz) {
     div.className = `campo${origen === 'defecto' ? ' por-defecto' : origen === 'estilo' ? ' por-defecto por-estilo' : ''}`;
     div.dataset.prop = prop;
     const label = document.createElement('label');
-    label.textContent = prop;
+    label.textContent = etiqueta ?? prop;
     const deDonde = origen === 'estilo' ? `\nViene del estilo "${datos.style}".` : '';
-    label.title = `${p.description ?? ''}${p.default !== undefined ? `\nPor defecto: ${JSON.stringify(p.default)}` : ''}${deDonde}`;
+    label.title = `${prop}: ${p.description ?? ''}${p.default !== undefined ? `\nPor defecto: ${JSON.stringify(p.default)}` : ''}${deDonde}`;
     const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Volver al valor por defecto' });
     restablecer.addEventListener('click', () => ejecutar([{ op: 'unset', target: objetivo, props: [prop] }], `${objetivo}.${prop} por defecto`));
 

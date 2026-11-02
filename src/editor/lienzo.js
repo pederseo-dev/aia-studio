@@ -104,6 +104,16 @@ export function montarLienzo(contenedor) {
     dibujarSuperposicion();
   }
 
+  /** Zoom fijo, manteniendo el centro de la vista. */
+  function fijarZoom(zoom) {
+    const r = contenedor.getBoundingClientRect();
+    const [cx, cy] = [r.width / 2, r.height / 2];
+    camara.x = cx - ((cx - camara.x) * zoom) / camara.zoom;
+    camara.y = cy - ((cy - camara.y) * zoom) / camara.zoom;
+    camara.zoom = zoom;
+    aplicarCamara();
+  }
+
   function ajustar() {
     const r = contenedor.getBoundingClientRect();
     if (!r.width || !estado.doc) return;
@@ -171,6 +181,7 @@ export function montarLienzo(contenedor) {
     const manija = e.target.closest('[data-manija]')?.dataset.manija;
     if (manija) return estado.edicion ? puntos.manija(e, manija) : transformar.manija(e, manija);
     if (estado.herramienta === 'path') return pluma.pointerdown(e);
+    if (estado.herramienta === 'rotar' || estado.herramienta === 'escalar') return transformar.conHerramienta(e, estado.herramienta);
     if (estado.herramienta === 'rect' || estado.herramienta === 'ellipse') return crearForma(e, estado.herramienta);
     if (estado.edicion) {
       if (puntos.pointerdown(e)) return;
@@ -257,6 +268,7 @@ export function montarLienzo(contenedor) {
 
   return {
     ajustar,
+    fijarZoom,
     editarPuntos,
     pluma,
     puntos,

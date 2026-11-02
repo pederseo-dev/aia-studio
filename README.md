@@ -27,26 +27,32 @@ npm test        # pruebas del núcleo
 npm run mcp     # servidor MCP por stdio (normalmente lo arranca el cliente de IA)
 ```
 
-> Estado: **fase 1** del [plan](docs/plan.md): esquema, operaciones con deshacer por origen, editor con árbol,
-> lienzo e inspector, y MCP con vista previa en PNG. El prototipo que probó la idea quedó en la etiqueta de git
-> `prototipo-0`.
+> Estado: **fase 2** del [plan](docs/plan.md): dibujo con paths, estilos y degradados, sobre el editor y el MCP de
+> la fase 1. El prototipo que probó la idea quedó en la etiqueta de git `prototipo-0`.
 
 ### Editor
+
+Arriba: el menú **☰** (nuevo, abrir, copia, importar SVG, cerrar, eliminar, atajos), las **pestañas** de los
+documentos abiertos (la × cierra la pestaña, el archivo queda en disco) y la barra con dos **grupos de
+herramientas**: Transformar (Mover, Rotar, Escalar) y Crear (Pluma, Rectángulo, Elipse). La flecha ▾ de cada grupo
+muestra las demás herramientas.
 
 | Acción | Cómo |
 | --- | --- |
 | Seleccionar y mover | Herramienta `V`; arrastrar en el lienzo (Shift = un solo eje) o flechas (Shift = 10 px). |
+| Rotar y escalar | `T` y `S`: arrastrar en cualquier parte del lienzo gira o escala la selección desde su pivote. |
 | Crear formas | `R` rectángulo, `E` elipse: arrastrar en el lienzo (Shift = cuadrado o círculo). |
 | Pluma | `P`: clic = vértice recto, clic y arrastrar = curvo, clic en el primero = cerrar, Enter o Esc = terminar abierto. |
 | Editar puntos | Doble clic en un path o Enter: arrastrar anclas y tangentes (Alt = separar), doble clic en un ancla = recto/curvo, clic en el contorno = agregar, Supr = borrar. Enter o Esc para salir. |
 | Rotar, escalar, pivote | Manijas de la selección: círculo de arriba = rotar (Shift = de a 15°), esquinas = escalar desde el pivote (Shift = proporcional), punto del pivote = moverlo sin mover el dibujo (grupos y paths). |
 | Estilos y degradados | «+ Estilo» y «+ Degradado» en Recursos; las formas los usan con `style` y `fillGradient` en el inspector. Lo que viene del estilo se ve en naranja. |
-| Importar SVG | Botón «Importar SVG»: las formas llegan como paths editables dentro de un grupo. |
-| Grupos | `G` crea un grupo; arrastrar filas en el árbol para reordenar o meter dentro de un grupo. |
-| Duplicar | `Ctrl+D` duplica la selección con sus hijos; «Copiar» en la barra crea una copia del documento. |
+| Importar SVG | ☰ → «Importar SVG…»: las formas llegan como paths editables dentro de un grupo. |
+| Grupos | `G` crea un grupo; arrastrar filas en la jerarquía para reordenar o meter dentro de un grupo; ▾/▸ pliega. |
+| Duplicar | `Ctrl+D` duplica la selección con sus hijos; ☰ → «Hacer una copia…» copia el documento. |
+| Pestañas | `+` crea un personaje, × o `Alt+W` cierra la pestaña, ☰ → «Abrir…» abre otro. Lo que crea la IA se abre en una pestaña nueva. |
 | Renombrar | Doble clic en el árbol o el campo de id del inspector. |
 | Ajustar valores | Escribir en el inspector o arrastrar sobre el nombre de la propiedad (Shift = fino, Alt = grueso). `↺` vuelve al valor por defecto. |
-| Vista | Rueda = desplazar, Ctrl + rueda = zoom, Espacio + arrastrar o botón del medio = mover, `F` = ajustar. |
+| Vista | Rueda = desplazar, Ctrl + rueda = zoom, Espacio + arrastrar o botón del medio = mover, `F` = ajustar, `1` = 100%; el botón de zoom tiene más opciones. |
 | Deshacer | `Ctrl+Z` / `Ctrl+Shift+Z`. Solo deshace tus cambios; los de la IA los deshace la IA. |
 
 ### Conectar tu IA (MCP, sin API key)

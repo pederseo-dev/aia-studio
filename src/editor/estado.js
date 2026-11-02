@@ -10,6 +10,7 @@ export const esquema = crearEsquema(Object.values(defs));
 
 export const estado = {
   documentos: [],
+  pestanas: [], // ids de los documentos abiertos, en orden
   id: null,
   doc: null,
   previa: null, // documento con un cambio en curso (arrastre, scrub), todavía sin guardar
@@ -47,6 +48,10 @@ export const api = {
   operar: (id, ops, nota) => pedir(`/${id}/ops`, { ops, nota }),
   deshacer: (id) => pedir(`/${id}/deshacer`, {}),
   rehacer: (id) => pedir(`/${id}/rehacer`, {}),
+  eliminar: async (id) => {
+    const res = await fetch(`/api/documentos/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json()).error);
+  },
 };
 
 // ---------- Avisos ----------
@@ -67,12 +72,62 @@ export async function cargarDocumentos() {
   fijar({ documentos: await api.listar() });
 }
 
+// ---------- Pestañas ----------
+
+const CLAVE_PESTANAS = 'aia-studio.pestanas';
+
+/** Pestañas recordadas de la última vez (solo las que siguen existiendo). Es una comodidad: si falla, no pasa nada. */
+export function pestanasGuardadas() {
+  try {
+    const ids = JSON.parse(localStorage.getItem(CLAVE_PESTANAS) ?? '[]');
+    return ids.filter((id) => estado.documentos.some((d) => d.id === id));
+  } catch {
+    return [];
+  }
+}
+
+function fijarPestanas(pestanas) {
+  fijar({ pestanas });
+  try {
+    localStorage.setItem(CLAVE_PESTANAS, JSON.stringify(pestanas));
+  } catch {
+    // sin almacenamiento: las pestañas no se recuerdan
+  }
+}
+
+/** Agrega una pestaña sin cambiar a ella (por ejemplo, cuando la IA crea un documento). */
+export function agregarPestana(id) {
+  if (!estado.pestanas.includes(id)) fijarPestanas([...estado.pestanas, id]);
+}
+
 export async function abrir(id) {
   await enviarPendiente();
   const doc = await api.leer(id);
+  agregarPestana(id);
   history.replaceState(null, '', `?doc=${encodeURIComponent(id)}`);
-  fijar({ id, doc, previa: null, seleccion: null });
+  fijar({ id, doc, previa: null, seleccion: null, edicion: null, vertice: null });
   await refrescarHistorial();
+}
+
+/** Cierra la pestaña (el documento sigue en disco) y pasa a la vecina, si hay. */
+export async function cerrarPestana(id) {
+  const i = estado.pestanas.indexOf(id);
+  if (i < 0) return;
+  const pestanas = estado.pestanas.filter((p) => p !== id);
+  fijarPestanas(pestanas);
+  if (id !== estado.id) return;
+  const vecina = pestanas[Math.min(i, pestanas.length - 1)];
+  if (vecina) return abrir(vecina);
+  await enviarPendiente();
+  history.replaceState(null, '', location.pathname);
+  fijar({ id: null, doc: null, previa: null, seleccion: null, edicion: null, vertice: null, historial: { entradas: [], user: { deshacer: false, rehacer: false } } });
+}
+
+/** Borra el documento del disco (con su historial) y cierra su pestaña. */
+export async function eliminarDocumento(id) {
+  await cerrarPestana(id);
+  await api.eliminar(id);
+  await cargarDocumentos();
 }
 
 export async function refrescarHistorial() {

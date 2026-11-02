@@ -107,6 +107,21 @@ export function crearTransformar(ctx) {
       );
     }
 
+    if (tipo === 'escalar-libre') {
+      // Herramienta Escalar: arrastrar en cualquier lugar escala de forma proporcional según la distancia al pivote.
+      const distancia = (p) => Math.hypot(p[0] - pivote[0], p[1] - pivote[1]);
+      const d0 = Math.max(distancia(ctx.puntoPantalla(e)), 8);
+      return ctx.arrastrar(
+        e,
+        (ev) => {
+          const f = distancia(ctx.puntoPantalla(ev)) / d0;
+          ops = [{ op: 'set', target: id, props: { scaleX: redondear(sx0 * f, 1000), scaleY: redondear(sy0 * f, 1000) } }];
+          previsualizar(ops);
+        },
+        terminar(`escalar ${id}`),
+      );
+    }
+
     if (tipo.startsWith('escalar')) {
       // Coordenadas del objeto girado pero sin su escala: así el cociente da la escala nueva.
       const marco = invertir(multiplicar(padre, matrizLocal(esquema, { ...obj, scaleX: 1, scaleY: 1 })));
@@ -152,5 +167,16 @@ export function crearTransformar(ctx) {
     }
   }
 
-  return { dibujar, seleccionarYMover, manija };
+  /**
+   * Herramientas Rotar y Escalar (como en Moho): arrastrar en cualquier parte del lienzo transforma la selección.
+   * Si se empieza sobre otro objeto, primero se selecciona ese.
+   */
+  function conHerramienta(e, herramienta) {
+    const g = e.target.closest('[data-id]');
+    if (g && ctx.documentoG.contains(g)) seleccionar(g.dataset.id);
+    if (!estado.seleccion) return;
+    manija(e, herramienta === 'rotar' ? 'rotar' : 'escalar-libre');
+  }
+
+  return { dibujar, seleccionarYMover, manija, conHerramienta };
 }

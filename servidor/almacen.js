@@ -142,6 +142,13 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
         return { doc, avisos };
       }),
 
+    /** Borra el documento y su historial. No se puede deshacer. */
+    eliminar: (id) =>
+      enFila(async () => {
+        await leer(id);
+        await fs.rm(path.dirname(ruta(id, 'documento.json')), { recursive: true });
+      }),
+
     deshacer: (id, origen) => enFila(() => revertir(id, origen, 'deshacer')),
     rehacer: (id, origen) => enFila(() => revertir(id, origen, 'rehacer')),
 

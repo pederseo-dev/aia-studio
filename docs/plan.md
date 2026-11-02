@@ -104,6 +104,10 @@ Notas de lo construido:
 - Editor: manijas para rotar, escalar desde el pivote y mover el pivote (grupos y paths, compensando el contenido),
   pluma, edición de puntos (arrastrar anclas y tangentes, Alt separa, doble clic recto/curvo, clic en el contorno
   agrega, Supr borra) e importar SVG (formas con transformaciones y colores; se descartan scripts y eventos).
+- Interfaz más cercana a Rive y Moho (pedido del usuario): menú ☰, pestañas de documentos que se pueden cerrar,
+  herramientas agrupadas (Transformar: Mover, Rotar, Escalar; Crear: Pluma, Rectángulo, Elipse), herramientas de
+  rotar y escalar arrastrando en cualquier parte (como en Moho), jerarquía plegable, inspector con pares en una
+  fila (X/Y, ancho/alto, escala) y menú de zoom.
 - **Cambios respecto del plan:** los rellenos y contornos apilables quedan para más adelante (por ahora se logra
   con formas duplicadas). Un path tiene un solo contorno: los agujeros (anillos) todavía no se pueden hacer, y al
   importar, cada subtrazado se vuelve un path aparte.

@@ -8,8 +8,9 @@ import { operacionesDeImportar } from './importar.js';
 import { montarInspector } from './inspector.js';
 import { montarLienzo } from './lienzo.js';
 import {
-  abrir, api, avisar, cargarDocumentos, deshacer, ejecutar, enviarPendiente, esquema, estado, fijar, hayPendiente,
-  idLibre, padreParaNuevo, refrescarHistorial, rehacer, seleccionar, suscribir,
+  abrir, agregarPestana, api, avisar, cargarDocumentos, cerrarPestana, deshacer, ejecutar, eliminarDocumento,
+  enviarPendiente, esquema, estado, fijar, hayPendiente, idLibre, padreParaNuevo, pestanasGuardadas,
+  refrescarHistorial, rehacer, seleccionar, suscribir,
 } from './estado.js';
 
 const $ = (s) => document.querySelector(s);
@@ -19,36 +20,170 @@ montarInspector($('#inspector'));
 montarHistorial($('#entradas'), $('#deshacer'), $('#rehacer'));
 const lienzo = montarLienzo($('#lienzo'));
 
-// ---------- Barra ----------
+// ---------- Menús desplegables (menú principal, zoom, grupos de herramientas) ----------
+
+function alternarMenu(menu, boton) {
+  const abrirlo = menu.hidden;
+  cerrarMenus();
+  if (!abrirlo) return;
+  menu.hidden = false;
+  boton?.setAttribute('aria-expanded', 'true');
+}
+
+function cerrarMenus() {
+  document.querySelectorAll('.menu').forEach((m) => (m.hidden = true));
+  document.querySelectorAll('[aria-expanded]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+}
+
+document.addEventListener('pointerdown', (e) => {
+  if (!e.target.closest('.desplegable')) cerrarMenus();
+});
+
+// ---------- Menú principal ----------
+
+const ACCIONES = {
+  nuevo: () => nuevoDocumento(),
+  abrir: mostrarAbrir,
+  copiar: () => nuevoDocumento(estado.id),
+  importar: () => $('#archivo-svg').click(),
+  cerrar: () => cerrarPestana(estado.id),
+  eliminar: async () => {
+    const d = estado.documentos.find((x) => x.id === estado.id);
+    if (!confirm(`¿Eliminar «${d?.name ?? estado.id}» y todo su historial? No se puede deshacer.`)) return;
+    try {
+      await eliminarDocumento(estado.id);
+      avisar(`Se eliminó «${d?.name ?? estado.id}»`);
+    } catch (err) {
+      avisar(err.message, true);
+    }
+  },
+  atajos: () => $('#dialogo-atajos').showModal(),
+};
+
+$('#menu-boton').addEventListener('click', () => alternarMenu($('#menu'), $('#menu-boton')));
+$('#menu').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-accion]');
+  if (!b || b.disabled) return;
+  cerrarMenus();
+  ACCIONES[b.dataset.accion]();
+});
+$('#nueva-pestana').addEventListener('click', () => nuevoDocumento());
+
+function mostrarAbrir() {
+  const lista = $('#lista-documentos');
+  lista.replaceChildren(
+    ...estado.documentos.map((d) => {
+      const li = document.createElement('li');
+      li.innerHTML = '<button type="button"><span class="nombre"></span><span class="id"></span></button>';
+      li.querySelector('.nombre').textContent = d.name;
+      li.querySelector('.id').textContent = estado.pestanas.includes(d.id) ? `${d.id} · abierto` : d.id;
+      li.querySelector('button').addEventListener('click', () => {
+        $('#dialogo-abrir').close();
+        abrir(d.id);
+      });
+      return li;
+    }),
+  );
+  if (!estado.documentos.length) lista.innerHTML = '<li class="ayuda">No hay personajes todavía.</li>';
+  $('#dialogo-abrir').showModal();
+}
+
+// ---------- Pestañas ----------
+
+function dibujarPestanas() {
+  $('#pestanas').replaceChildren(
+    ...estado.pestanas.map((id) => {
+      const d = estado.documentos.find((x) => x.id === id);
+      const pestana = document.createElement('div');
+      pestana.className = `pestana${id === estado.id ? ' activa' : ''}`;
+      pestana.setAttribute('role', 'tab');
+      pestana.setAttribute('aria-selected', String(id === estado.id));
+      pestana.title = id;
+      pestana.innerHTML = '<span class="titulo"></span><button type="button" class="cerrar" title="Cerrar pestaña (el documento no se borra)">×</button>';
+      pestana.querySelector('.titulo').textContent = d?.name ?? id;
+      pestana.addEventListener('click', (e) => (e.target.closest('.cerrar') ? cerrarPestana(id) : id !== estado.id && abrir(id)));
+      // Clic con la rueda también cierra, como en el navegador.
+      pestana.addEventListener('auxclick', (e) => e.button === 1 && cerrarPestana(id));
+      return pestana;
+    }),
+  );
+}
+
+// ---------- Grupos de herramientas ----------
+
+const GRUPOS = {
+  transformar: [
+    { id: 'seleccionar', icono: '↖', nombre: 'Mover', atajo: 'V' },
+    { id: 'rotar', icono: '⟳', nombre: 'Rotar', atajo: 'T' },
+    { id: 'escalar', icono: '⤡', nombre: 'Escalar', atajo: 'S' },
+  ],
+  crear: [
+    { id: 'path', icono: '✒', nombre: 'Pluma', atajo: 'P' },
+    { id: 'rect', icono: '▭', nombre: 'Rectángulo', atajo: 'R' },
+    { id: 'ellipse', icono: '◯', nombre: 'Elipse', atajo: 'E' },
+  ],
+};
+const ultimaDelGrupo = { transformar: 'seleccionar', crear: 'path' };
+const ATAJOS = Object.fromEntries(Object.values(GRUPOS).flat().map((h) => [h.atajo.toLowerCase(), h.id]));
+
+function dibujarGrupos() {
+  for (const [grupo, herramientas] of Object.entries(GRUPOS)) {
+    const caja = document.querySelector(`[data-grupo="${grupo}"]`);
+    const activa = herramientas.find((h) => h.id === estado.herramienta);
+    if (activa) ultimaDelGrupo[grupo] = activa.id;
+    const visible = herramientas.find((h) => h.id === ultimaDelGrupo[grupo]);
+    caja.classList.toggle('activo', !!activa);
+    caja.innerHTML = `<button type="button" class="principal" title="${visible.nombre} (${visible.atajo})">${visible.icono} ${visible.nombre}</button><button type="button" class="elegir" aria-haspopup="menu" title="Más herramientas">▾</button><div class="menu" role="menu" hidden></div>`;
+    const menu = caja.querySelector('.menu');
+    for (const h of herramientas) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'menuitem');
+      b.className = h.id === estado.herramienta ? 'marcado' : '';
+      b.innerHTML = `<span>${h.icono} ${h.nombre}</span><kbd>${h.atajo}</kbd>`;
+      b.addEventListener('click', () => {
+        cerrarMenus();
+        fijar({ herramienta: h.id });
+      });
+      menu.append(b);
+    }
+    caja.querySelector('.principal').addEventListener('click', () => fijar({ herramienta: visible.id }));
+    caja.querySelector('.elegir').addEventListener('click', (e) => alternarMenu(menu, e.currentTarget));
+  }
+}
+
+// ---------- Zoom ----------
+
+$('#zoom').addEventListener('click', () => alternarMenu($('#menu-zoom'), $('#zoom')));
+$('#menu-zoom').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-zoom]');
+  if (!b) return;
+  cerrarMenus();
+  if (b.dataset.zoom === 'ajustar') lienzo.ajustar();
+  else lienzo.fijarZoom(Number(b.dataset.zoom));
+});
+
+// ---------- Estado de la barra ----------
 
 suscribir((c) => {
-  if ('documentos' in c || 'id' in c) {
-    $('#documentos').replaceChildren(...estado.documentos.map((d) => new Option(d.name === d.id ? d.id : `${d.name} (${d.id})`, d.id, false, d.id === estado.id)));
-  }
-  if ('herramienta' in c) {
-    for (const b of document.querySelectorAll('[data-herramienta]')) b.classList.toggle('activo', b.dataset.herramienta === estado.herramienta);
+  if ('pestanas' in c || 'id' in c || 'documentos' in c) dibujarPestanas();
+  if ('herramienta' in c) dibujarGrupos();
+  if ('id' in c) {
+    for (const b of document.querySelectorAll('[data-requiere-doc]')) b.disabled = !estado.id;
+    $('#lienzo .sin-documento')?.toggleAttribute('hidden', !!estado.id);
   }
   if ('seleccion' in c || 'doc' in c) $('#borrar').disabled = $('#duplicar').disabled = !estado.seleccion;
   // Si la selección desapareció (por ejemplo, la IA borró el objeto), se limpia.
   if ('doc' in c && estado.seleccion && !buscar(estado.doc, estado.seleccion)) seleccionar(null);
 });
 
-$('#documentos').addEventListener('change', (e) => abrir(e.target.value));
-$('#herramientas').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-herramienta]');
-  if (b) fijar({ herramienta: b.dataset.herramienta });
-});
 $('#deshacer').addEventListener('click', deshacer);
 $('#rehacer').addEventListener('click', rehacer);
-$('#ajustar').addEventListener('click', () => lienzo.ajustar());
 $('#borrar').addEventListener('click', borrarSeleccion);
 $('#nuevo-grupo').addEventListener('click', nuevoGrupo);
 $('#duplicar').addEventListener('click', duplicarSeleccion);
-$('#nuevo').addEventListener('click', () => nuevoDocumento());
-$('#copiar-documento').addEventListener('click', () => estado.id && nuevoDocumento(estado.id));
 $('#nuevo-estilo').addEventListener('click', () => nuevoRecurso('style', 'style', { fill: '#c8c2d4', stroke: '#2b2135' }));
 $('#nuevo-degradado').addEventListener('click', () => nuevoRecurso('linear_gradient', 'gradient'));
-$('#importar').addEventListener('click', () => $('#archivo-svg').click());
 $('#archivo-svg').addEventListener('change', async (e) => {
   const archivo = e.target.files[0];
   e.target.value = '';
@@ -117,13 +252,18 @@ async function nuevoDocumento(copiarDe) {
 
 // ---------- Teclado ----------
 
-const ATAJOS = { v: 'seleccionar', r: 'rect', e: 'ellipse', p: 'path' };
 const salirDeEdicion = () => fijar({ edicion: null, vertice: null });
 
 window.addEventListener('keydown', (e) => {
-  if (e.target.closest?.('input, select, textarea')) return;
+  if (e.target.closest?.('input, select, textarea, dialog')) return;
   const mod = e.ctrlKey || e.metaKey;
   const tecla = e.key.toLowerCase();
+  if (e.key === 'Escape' && document.querySelector('.menu:not([hidden])')) return cerrarMenus();
+  if (e.altKey && tecla === 'w') {
+    e.preventDefault();
+    return estado.id && cerrarPestana(estado.id);
+  }
+  if (!estado.doc) return;
   if (mod && tecla === 'z') {
     e.preventDefault();
     return e.shiftKey ? rehacer() : deshacer();
@@ -140,6 +280,7 @@ window.addEventListener('keydown', (e) => {
   if (ATAJOS[tecla]) return fijar({ herramienta: ATAJOS[tecla] });
   if (tecla === 'g') return nuevoGrupo();
   if (tecla === 'f') return lienzo.ajustar();
+  if (tecla === '1') return lienzo.fijarZoom(1);
 
   // Pluma: Enter o Escape terminan el trazo abierto.
   if (estado.herramienta === 'path' && lienzo.pluma.activa() && (e.key === 'Enter' || e.key === 'Escape')) return lienzo.pluma.terminar(false);
@@ -173,7 +314,14 @@ window.addEventListener('pagehide', enviarPendiente);
 // ---------- Cambios desde fuera (la IA por MCP, u otro proceso) ----------
 
 import.meta.hot?.on('aia:documento', async ({ id }) => {
-  if (!estado.documentos.some((d) => d.id === id)) await cargarDocumentos();
+  // Un documento nuevo (por ejemplo, creado por la IA) se abre en una pestaña sin quitarte de la actual.
+  if (!estado.documentos.some((d) => d.id === id)) {
+    await cargarDocumentos();
+    agregarPestana(id);
+    if (!estado.id) return abrir(id);
+    avisar(`Se creó «${estado.documentos.find((d) => d.id === id)?.name ?? id}» en una pestaña nueva`);
+    return;
+  }
   if (id !== estado.id || hayPendiente()) return;
   const doc = await api.leer(id);
   if (JSON.stringify(doc) !== JSON.stringify(estado.doc)) {
@@ -186,9 +334,10 @@ import.meta.hot?.on('aia:historial', ({ id }) => id === estado.id && refrescarHi
 
 // ---------- Inicio ----------
 
-fijar({ herramienta: 'seleccionar' });
+fijar({ herramienta: 'seleccionar', id: null });
 await cargarDocumentos();
 const pedido = new URLSearchParams(location.search).get('doc');
-const inicial = estado.documentos.find((d) => d.id === pedido)?.id ?? estado.documentos[0]?.id;
+const recordadas = pestanasGuardadas();
+for (const id of recordadas) agregarPestana(id);
+const inicial = estado.documentos.find((d) => d.id === pedido)?.id ?? recordadas[0];
 if (inicial) await abrir(inicial);
-else avisar('No hay documentos todavía: crea uno con «Nuevo» o pídeselo a la IA.');

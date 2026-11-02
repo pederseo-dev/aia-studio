@@ -37,6 +37,7 @@ export function aiaDocumentos() {
             return responder(res, 200, await almacen.crear(nuevo, meta ?? {}, { origen: ORIGEN, copiarDe }));
           }
           if (id && !accion && metodo === 'GET') return responder(res, 200, await almacen.leer(id));
+          if (id && !accion && metodo === 'DELETE') return responder(res, 200, await almacen.eliminar(id) ?? { ok: true });
           if (accion === 'historial' && metodo === 'GET') return responder(res, 200, await almacen.historial(id));
           if (accion === 'ops' && metodo === 'POST') {
             const { ops, nota } = await leerCuerpo(req);

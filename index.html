@@ -7,46 +7,105 @@
     <link rel="stylesheet" href="/src/editor/estilos.css" />
   </head>
   <body>
-    <header id="barra">
-      <strong class="marca">aia-studio</strong>
-      <select id="documentos" aria-label="Documento"></select>
-      <button id="nuevo" type="button" title="Nuevo documento">Nuevo</button>
-      <button id="copiar-documento" type="button" title="Crear una copia de este documento">Copiar</button>
-      <span class="separador"></span>
-      <div id="herramientas" role="toolbar" aria-label="Herramientas">
-        <button type="button" data-herramienta="seleccionar" title="Seleccionar y mover (V)">↖ Seleccionar</button>
-        <button type="button" data-herramienta="rect" title="Rectángulo (R)">▭ Rectángulo</button>
-        <button type="button" data-herramienta="ellipse" title="Elipse (E)">◯ Elipse</button>
-        <button type="button" data-herramienta="path" title="Pluma (P): clic = vértice recto, arrastrar = curvo, clic en el primero = cerrar, Enter = terminar">✒ Pluma</button>
+    <header id="cabecera">
+      <!-- Fila 1: menú y pestañas de documentos abiertos -->
+      <div id="fila-pestanas">
+        <div class="desplegable">
+          <button id="menu-boton" type="button" class="icono" aria-haspopup="menu" aria-expanded="false" title="Menú">☰</button>
+          <div id="menu" class="menu" role="menu" hidden>
+            <button type="button" role="menuitem" data-accion="nuevo">Nuevo personaje…</button>
+            <button type="button" role="menuitem" data-accion="abrir">Abrir…</button>
+            <button type="button" role="menuitem" data-accion="copiar" data-requiere-doc>Hacer una copia…</button>
+            <hr />
+            <button type="button" role="menuitem" data-accion="importar" data-requiere-doc>Importar SVG…</button>
+            <hr />
+            <button type="button" role="menuitem" data-accion="cerrar" data-requiere-doc>Cerrar pestaña <kbd>Alt+W</kbd></button>
+            <button type="button" role="menuitem" data-accion="eliminar" data-requiere-doc class="peligro">Eliminar documento…</button>
+            <hr />
+            <button type="button" role="menuitem" data-accion="atajos">Atajos de teclado</button>
+          </div>
+        </div>
+        <strong class="marca">aia-studio</strong>
+        <div id="pestanas" role="tablist" aria-label="Documentos abiertos"></div>
+        <button id="nueva-pestana" type="button" class="icono" title="Nuevo personaje">+</button>
+        <span id="aviso" role="status"></span>
       </div>
-      <button id="importar" type="button" title="Importar un archivo SVG como formas editables">Importar SVG</button>
+
+      <!-- Fila 2: herramientas agrupadas, deshacer y zoom -->
+      <div id="barra" role="toolbar" aria-label="Herramientas">
+        <div class="grupo-herramientas desplegable" data-grupo="transformar"></div>
+        <div class="grupo-herramientas desplegable" data-grupo="crear"></div>
+        <span class="separador"></span>
+        <button id="deshacer" type="button" class="icono" title="Deshacer tu último cambio (Ctrl+Z)">↶</button>
+        <button id="rehacer" type="button" class="icono" title="Rehacer (Ctrl+Shift+Z)">↷</button>
+        <span class="espaciador"></span>
+        <div class="desplegable">
+          <button id="zoom" type="button" title="Zoom (Ctrl + rueda)" aria-haspopup="menu">100%</button>
+          <div id="menu-zoom" class="menu derecha" role="menu" hidden>
+            <button type="button" role="menuitem" data-zoom="ajustar">Ajustar a la ventana <kbd>F</kbd></button>
+            <button type="button" role="menuitem" data-zoom="0.5">50%</button>
+            <button type="button" role="menuitem" data-zoom="1">100% <kbd>1</kbd></button>
+            <button type="button" role="menuitem" data-zoom="2">200%</button>
+          </div>
+        </div>
+      </div>
       <input id="archivo-svg" type="file" accept=".svg,image/svg+xml" hidden />
-      <span class="separador"></span>
-      <button id="deshacer" type="button" title="Deshacer tu último cambio (Ctrl+Z)">↶</button>
-      <button id="rehacer" type="button" title="Rehacer (Ctrl+Shift+Z)">↷</button>
-      <span id="aviso" role="status"></span>
-      <button id="ajustar" type="button" title="Ajustar a la ventana (F)">Ajustar</button>
-      <span id="zoom" title="Zoom (Ctrl + rueda)"></span>
     </header>
+
+    <dialog id="dialogo-abrir">
+      <h2>Abrir personaje</h2>
+      <ul id="lista-documentos" class="lista-dialogo"></ul>
+      <form method="dialog"><button>Cerrar</button></form>
+    </dialog>
+
+    <dialog id="dialogo-atajos">
+      <h2>Atajos de teclado</h2>
+      <table class="atajos">
+        <tr><th colspan="2">Transformar</th></tr>
+        <tr><td><kbd>V</kbd></td><td>Mover (seleccionar y arrastrar)</td></tr>
+        <tr><td><kbd>T</kbd></td><td>Rotar alrededor del pivote (Shift: de a 15°)</td></tr>
+        <tr><td><kbd>S</kbd></td><td>Escalar desde el pivote</td></tr>
+        <tr><th colspan="2">Crear</th></tr>
+        <tr><td><kbd>P</kbd></td><td>Pluma (Enter o Esc para terminar)</td></tr>
+        <tr><td><kbd>R</kbd> / <kbd>E</kbd></td><td>Rectángulo / elipse (Shift: cuadrado o círculo)</td></tr>
+        <tr><td><kbd>G</kbd></td><td>Nuevo grupo</td></tr>
+        <tr><th colspan="2">Edición</th></tr>
+        <tr><td><kbd>Enter</kbd></td><td>Editar los puntos del path seleccionado</td></tr>
+        <tr><td><kbd>Ctrl+D</kbd></td><td>Duplicar</td></tr>
+        <tr><td><kbd>Supr</kbd></td><td>Borrar (en edición de puntos: el vértice)</td></tr>
+        <tr><td>Flechas</td><td>Mover 1 px (Shift: 10 px)</td></tr>
+        <tr><td><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Shift+Z</kbd></td><td>Deshacer / rehacer tus cambios</td></tr>
+        <tr><th colspan="2">Vista</th></tr>
+        <tr><td><kbd>F</kbd> / <kbd>1</kbd></td><td>Ajustar / 100%</td></tr>
+        <tr><td>Rueda · Ctrl+rueda</td><td>Desplazar · zoom</td></tr>
+        <tr><td>Espacio + arrastrar</td><td>Mover la vista</td></tr>
+        <tr><td><kbd>Alt+W</kbd></td><td>Cerrar la pestaña</td></tr>
+      </table>
+      <form method="dialog"><button>Cerrar</button></form>
+    </dialog>
 
     <main id="espacio">
       <aside id="panel-objetos" class="panel">
         <div class="cabecera">
-          <h2>Objetos</h2>
-          <button id="nuevo-grupo" type="button" title="Nuevo grupo (G)">+ Grupo</button>
-          <button id="duplicar" type="button" title="Duplicar selección con sus hijos (Ctrl+D)">Duplicar</button>
-          <button id="borrar" type="button" title="Borrar selección (Supr)">Borrar</button>
+          <h2>Jerarquía</h2>
+          <button id="nuevo-grupo" type="button" class="icono" title="Nuevo grupo (G)">▣+</button>
+          <button id="duplicar" type="button" class="icono" title="Duplicar selección con sus hijos (Ctrl+D)">⧉</button>
+          <button id="borrar" type="button" class="icono" title="Borrar selección (Supr)">✕</button>
         </div>
         <ul id="arbol" class="arbol" role="tree"></ul>
         <div class="cabecera">
           <h2>Recursos</h2>
-          <button id="nuevo-estilo" type="button" title="Estilo compartido: varias formas toman de él su relleno y contorno">+ Estilo</button>
-          <button id="nuevo-degradado" type="button" title="Degradado lineal para usar en fillGradient">+ Degradado</button>
+          <button id="nuevo-estilo" type="button" class="icono" title="Nuevo estilo compartido: varias formas toman de él su relleno y contorno">◆+</button>
+          <button id="nuevo-degradado" type="button" class="icono" title="Nuevo degradado lineal para usar en fillGradient">▤+</button>
         </div>
         <ul id="recursos" class="arbol"></ul>
       </aside>
 
       <section id="lienzo" tabindex="-1" aria-label="Lienzo">
+        <div class="sin-documento">
+          <p>No hay ningún personaje abierto.</p>
+          <p class="ayuda">Créalo con <b>+</b>, ábrelo desde el menú <b>☰ → Abrir…</b> o pídeselo a la IA.</p>
+        </div>
         <svg id="vista">
           <g id="camara"><g id="documento"></g></g>
           <g id="superposicion"></g>

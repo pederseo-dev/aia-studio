@@ -12,6 +12,9 @@ const esRecurso = (o) => esquema.tipos.get(o.type)?.resource;
 /** Árbol de objetos en `raiz` y lista de recursos (estilos, degradados) en `raizRecursos`. */
 export function montarArbol(raiz, raizRecursos) {
   let arrastrado = null;
+  // Grupos plegados, por documento (estado del editor: no va en el documento).
+  const plegados = new Map();
+  const plegadosDe = () => plegados.get(estado.id) ?? plegados.set(estado.id, new Set()).get(estado.id);
 
   suscribir((c) => {
     if ('doc' in c || 'seleccion' in c) dibujar();
@@ -46,12 +49,15 @@ export function montarArbol(raiz, raizRecursos) {
         fila.className = `fila${o.id === estado.seleccion ? ' seleccionada' : ''}${visible ? '' : ' oculta'}`;
         fila.dataset.id = o.id;
         fila.draggable = true;
-        fila.style.paddingLeft = `${8 + nivel * 14}px`;
-        fila.innerHTML = `<span class="tipo" title="${o.type}">${ICONOS[o.type] ?? '•'}</span><span class="nombre"></span>
+        fila.style.paddingLeft = `${4 + nivel * 14}px`;
+        const tieneHijos = hijos(doc, o.id).length > 0;
+        const plegado = plegadosDe().has(o.id);
+        fila.innerHTML = `<button type="button" class="plegar${tieneHijos ? '' : ' vacio'}" title="${plegado ? 'Desplegar' : 'Plegar'}" tabindex="-1">${plegado ? '▸' : '▾'}</button>
+          <span class="tipo" title="${o.type}">${ICONOS[o.type] ?? '•'}</span><span class="nombre"></span>
           <button type="button" class="ojo${visible ? '' : ' oculto'}" title="${visible ? 'Ocultar' : 'Mostrar'}">${visible ? '◉' : '○'}</button>`;
         fila.querySelector('.nombre').textContent = o.id;
         li.append(fila);
-        const subrama = rama(doc, o.id, nivel + 1);
+        const subrama = plegado ? [] : rama(doc, o.id, nivel + 1);
         if (subrama.length) {
           const ul = document.createElement('ul');
           ul.setAttribute('role', 'group');
@@ -71,6 +77,11 @@ export function montarArbol(raiz, raizRecursos) {
     const fila = e.target.closest('.fila');
     if (!fila) return;
     const id = fila.dataset.id;
+    if (e.target.closest('.plegar')) {
+      const conjunto = plegadosDe();
+      conjunto.has(id) ? conjunto.delete(id) : conjunto.add(id);
+      return dibujar();
+    }
     if (e.target.closest('.ojo')) {
       const visible = leer(esquema, buscar(estado.doc, id), 'visible');
       ejecutar([visible ? { op: 'set', target: id, props: { visible: false } } : { op: 'unset', target: id, props: ['visible'] }], `${visible ? 'ocultar' : 'mostrar'} ${id}`);
