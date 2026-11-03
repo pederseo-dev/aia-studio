@@ -7,7 +7,7 @@ import { leer } from '../core/esquema.js';
 import { aplicarOperaciones } from '../core/operaciones.js';
 import { alternarSeleccion, ejecutar, esquema, estado, mantenerPosicion, seleccionRaices, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 
-const ICONOS = { group: '▣', rect: '▭', ellipse: '◯', path: '✒', style: '◆', linear_gradient: '▤', radial_gradient: '◍' };
+const ICONOS = { group: '▣', rect: '▭', ellipse: '◯', path: '✒', bone: '⟋', style: '◆', linear_gradient: '▤', radial_gradient: '◍', pose: '♟' };
 const esRecurso = (o) => esquema.tipos.get(o.type)?.resource;
 
 /** Árbol de objetos en `raiz` y lista de recursos (estilos, degradados) en `raizRecursos`. */
@@ -47,7 +47,9 @@ export function montarArbol(raiz, raizRecursos) {
       .map((o) => {
         const li = document.createElement('li');
         li.setAttribute('role', 'treeitem');
-        const visible = leer(esquema, o, 'visible');
+        // Los huesos no tienen ojo: no se dibujan en el personaje.
+        const conOjo = 'visible' in esquema.tipos.get(o.type).properties;
+        const visible = !conOjo || leer(esquema, o, 'visible');
         const fila = document.createElement('div');
         fila.className = `fila${claseSeleccion(o.id)}${visible ? '' : ' oculta'}`;
         fila.dataset.id = o.id;
@@ -56,9 +58,10 @@ export function montarArbol(raiz, raizRecursos) {
         const tieneHijos = hijos(doc, o.id).length > 0;
         const plegado = plegadosDe().has(o.id);
         fila.innerHTML = `<button type="button" class="plegar${tieneHijos ? '' : ' vacio'}" title="${plegado ? 'Desplegar' : 'Plegar'}" tabindex="-1">${plegado ? '▸' : '▾'}</button>
-          <span class="tipo" title="${o.type}">${ICONOS[o.type] ?? '•'}</span><span class="nombre"></span>
-          <button type="button" class="ojo${visible ? '' : ' oculto'}" title="${visible ? 'Ocultar' : 'Mostrar'}">${visible ? '◉' : '○'}</button>`;
+          <span class="tipo" title="${o.type}">${ICONOS[o.type] ?? '•'}</span><span class="nombre"></span>${o.bone ? '<span class="enlace">⟋</span>' : ''}
+          ${conOjo ? `<button type="button" class="ojo${visible ? '' : ' oculto'}" title="${visible ? 'Ocultar' : 'Mostrar'}">${visible ? '◉' : '○'}</button>` : ''}`;
         fila.querySelector('.nombre').textContent = o.id;
+        if (o.bone) fila.querySelector('.enlace').title = `Sigue al hueso ${o.bone}`;
         li.append(fila);
         const subrama = plegado ? [] : rama(doc, o.id, nivel + 1);
         if (subrama.length) {
@@ -190,6 +193,14 @@ export function montarArbol(raiz, raizRecursos) {
       doc = aplicarOperaciones(doc, lote, esquema).doc;
       ops.push(...lote);
     };
+    if (donde === 'dentro' && destino.type === 'bone') {
+      // Sobre un hueso: los huesos pasan a ser sus hijos; el dibujo no se mete adentro, se enlaza (como Ctrl+B).
+      for (const id of ids) {
+        if (buscar(doc, id).type === 'bone') paso([{ op: 'move', target: id, parent: destino.id }, ...mantenerPosicion(doc, id, destino.id)]);
+        else paso([{ op: 'set', target: id, props: { bone: destino.id } }]);
+      }
+      return ejecutar(ops, `${nombre} al hueso ${destino.id}`);
+    }
     if (donde === 'dentro') {
       for (const id of ids) paso([{ op: 'move', target: id, parent: destino.id }, ...mantenerPosicion(doc, id, destino.id)]);
       return ejecutar(ops, `mover ${nombre} dentro de ${destino.id}`);

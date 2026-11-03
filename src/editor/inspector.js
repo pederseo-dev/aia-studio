@@ -5,7 +5,9 @@
 
 import { buscar } from '../core/documento.js';
 import { validarValor } from '../core/esquema.js';
+import { valoresDeHueso } from '../core/esqueleto.js';
 import { origenDelValor, valorEfectivo } from '../core/estilos.js';
+import { opsDePose, poseActiva } from './huesos.js';
 import { ejecutar, esquema, estado, fijar, previsualizar, seleccionar, suscribir } from './estado.js';
 
 const ORDEN_DE_GRUPOS = ['General', 'Forma', 'Transformación', 'Apariencia', 'Degradado', 'Lienzo', 'Tiempo'];
@@ -14,7 +16,7 @@ const ETIQUETAS = { x: 'X', y: 'Y', scaleX: 'Esc X', scaleY: 'Esc Y', width: 'An
 
 export function montarInspector(raiz) {
   suscribir((c) => {
-    if ('doc' in c || 'seleccion' in c || 'edicion' in c) dibujar();
+    if ('doc' in c || 'seleccion' in c || 'edicion' in c || 'pose' in c) dibujar();
   });
 
   function dibujar() {
@@ -34,6 +36,8 @@ export function montarInspector(raiz) {
 
     raiz.replaceChildren(otros.length ? tituloVarios(obj, otros) : obj ? titulo(obj, tipo) : Object.assign(document.createElement('h2'), { textContent: 'Documento' }));
     if (otros.length && !propiedades.length) raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'No tienen propiedades en común.' }));
+    const pose = poseActiva();
+    if (pose && obj?.type === 'bone' && !otros.length) seccionDePose(obj, pose);
 
     const grupos = Map.groupBy(propiedades, ([, p]) => p.group ?? 'Otros');
     const nombres = [...grupos.keys()].sort((a, b) => (ORDEN_DE_GRUPOS.indexOf(a) + 1 || 99) - (ORDEN_DE_GRUPOS.indexOf(b) + 1 || 99));
@@ -58,6 +62,40 @@ export function montarInspector(raiz) {
     }
 
     if (enFoco) raiz.querySelector(`[data-prop="${enFoco}"] input, [data-prop="${enFoco}"] select`)?.focus();
+  }
+
+  /** Con una pose activa, los valores del hueso en esa pose (lo que no fija la pose se ve como en el montaje). */
+  function seccionDePose(hueso, pose) {
+    raiz.append(Object.assign(document.createElement('h3'), { className: 'en-pose', textContent: `Pose «${pose.id}»` }));
+    const fijados = pose.bones?.[hueso.id] ?? {};
+    const valores = valoresDeHueso(esquema, hueso, pose);
+    const definiciones = esquema.tipos.get('bone').properties;
+    const fila = (campos) => {
+      const div = document.createElement('div');
+      div.className = campos.length > 1 ? 'par' : '';
+      for (const k of campos) div.append(campoDePose(hueso, pose, k, definiciones[k], valores[k], k in fijados));
+      return div;
+    };
+    raiz.append(fila(['x', 'y']), fila(['rotation']), fila(['scaleX', 'scaleY']));
+    raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'Lo que sigue es el montaje (la pose de reposo).' }));
+  }
+
+  function campoDePose(hueso, pose, k, p, valor, fijado) {
+    const div = document.createElement('div');
+    div.className = `campo${fijado ? '' : ' por-defecto'}`;
+    div.dataset.prop = `pose.${k}`;
+    const label = Object.assign(document.createElement('label'), { textContent: ETIQUETAS[k] ?? k });
+    label.title = `${k} del hueso en la pose${fijado ? '' : ' (no la fija: es la del montaje)'}`;
+    const cambio = (v) => opsDePose(estado.doc, pose.id, hueso.id, { [k]: v });
+    const confirmar = (v) => {
+      if (Object.is(v, valor) && fijado) return previsualizar(null);
+      ejecutar(cambio(v), `pose ${pose.id}: ${hueso.id}.${k}`, { agrupar: `pose:${pose.id}.${hueso.id}.${k}` });
+    };
+    const control = CONTROLES.number({ p, valor, previsualizar: (v) => previsualizar(cambio(v)), confirmar, div, label });
+    const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Quitar de la pose (vuelve al montaje)' });
+    restablecer.addEventListener('click', () => ejecutar(opsDePose(estado.doc, pose.id, hueso.id, { [k]: undefined }), `pose ${pose.id}: ${hueso.id}.${k} del montaje`));
+    div.append(label, control, restablecer);
+    return div;
   }
 
   // Lo que el campo necesita saber de una selección múltiple (se arma en cada dibujo).
@@ -248,6 +286,24 @@ const CONTROLES = {
     const curvos = valor.filter((v) => (v.mode ?? 'straight') !== 'straight').length;
     resumen.textContent = `${valor.length} puntos${curvos ? `, ${curvos} curvos` : ''}`;
     caja.append(resumen, boton);
+    return caja;
+  },
+
+  // Una pose se edita en el lienzo: aquí se resume y se activa.
+  pose({ valor, objetivo }) {
+    const caja = document.createElement('div');
+    caja.className = 'resumen-pose';
+    const lista = document.createElement('ul');
+    for (const [hueso, campos] of Object.entries(valor)) {
+      const li = document.createElement('li');
+      li.textContent = `${hueso}: ${Object.entries(campos).map(([k, v]) => `${k} ${v}`).join(', ')}`;
+      lista.append(li);
+    }
+    if (!lista.children.length) lista.innerHTML = '<li>Todavía no mueve ningún hueso.</li>';
+    const activa = estado.pose === objetivo;
+    const boton = Object.assign(document.createElement('button'), { type: 'button', textContent: activa ? 'Volver al montaje' : 'Ver y editar en el lienzo' });
+    boton.addEventListener('click', () => fijar({ pose: activa ? null : objetivo }));
+    caja.append(lista, boton);
     return caja;
   },
 

@@ -35,9 +35,15 @@
       <div id="barra" role="toolbar" aria-label="Herramientas">
         <div class="grupo-herramientas desplegable" data-grupo="transformar"></div>
         <div class="grupo-herramientas desplegable" data-grupo="crear"></div>
+        <div class="grupo-herramientas desplegable" data-grupo="esqueleto"></div>
         <span class="separador"></span>
         <button id="deshacer" type="button" class="icono" title="Deshacer tu último cambio (Ctrl+Z)">↶</button>
         <button id="rehacer" type="button" class="icono" title="Rehacer (Ctrl+Shift+Z)">↷</button>
+        <span class="separador"></span>
+        <label id="modo" title="Montaje: se edita el personaje y su esqueleto en reposo. Pose: se giran los huesos y el dibujo enlazado los sigue, sin tocar el montaje.">
+          <span>Ver</span>
+          <select id="pose" data-requiere-doc></select>
+        </label>
         <span class="espaciador"></span>
         <div class="desplegable">
           <button id="zoom" type="button" title="Zoom (Ctrl + rueda)" aria-haspopup="menu">100%</button>
@@ -69,6 +75,10 @@
         <tr><td><kbd>P</kbd></td><td>Pluma (Enter o Esc para terminar)</td></tr>
         <tr><td><kbd>R</kbd> / <kbd>E</kbd></td><td>Rectángulo / elipse (Shift: cuadrado o círculo)</td></tr>
         <tr><td><kbd>G</kbd></td><td>Nuevo grupo vacío</td></tr>
+        <tr><th colspan="2">Esqueleto</th></tr>
+        <tr><td><kbd>B</kbd></td><td>Hueso: arrastrar en vacío crea (hijo del seleccionado; desde su punta, encadenado), arrastrar un hueso lo gira</td></tr>
+        <tr><td><kbd>Ctrl+B</kbd></td><td>Enlazar la selección al hueso seleccionado (sin hueso: desenlazar)</td></tr>
+        <tr><td>Con una pose</td><td>Arrastrar un hueso o el dibujo enlazado gira el hueso en la pose</td></tr>
         <tr><th colspan="2">Edición</th></tr>
         <tr><td><kbd>Enter</kbd></td><td>Editar los puntos del path seleccionado</td></tr>
         <tr><td>Clic · <kbd>Ctrl</kbd>/<kbd>Shift</kbd> + clic</td><td>Seleccionar · agregar o quitar (en la jerarquía, Shift = tramo)</td></tr>

@@ -3,7 +3,9 @@
 
 import { erroresDeVertice } from './trazado.js';
 
-const TIPOS_DE_PROPIEDAD = new Set(['number', 'string', 'boolean', 'color', 'enum', 'ref', 'vertices', 'stops']);
+const TIPOS_DE_PROPIEDAD = new Set(['number', 'string', 'boolean', 'color', 'enum', 'ref', 'vertices', 'stops', 'pose']);
+const CAMPOS_DE_POSE = ['x', 'y', 'rotation', 'scaleX', 'scaleY'];
+const ID_DE_POSE = /^[a-z][a-z0-9_]*$/;
 const COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 /** @param {object[]} defs contenido de schema/*.json */
@@ -28,6 +30,9 @@ export function crearEsquema(defs) {
       container: def.container ?? base?.container ?? false,
       // Recurso: vive en la raíz, no se dibuja y otros objetos lo usan por referencia (estilos, degradados).
       resource: def.resource ?? base?.resource ?? false,
+      // Restricciones de jerarquía: qué tipos puede tener como padre (además de la raíz) y como hijos.
+      parentTypes: def.parentTypes ?? base?.parentTypes ?? null,
+      childTypes: def.childTypes ?? base?.childTypes ?? null,
       ancestros: base ? [base.name, ...base.ancestros] : [],
       properties: { ...base?.properties, ...def.properties },
     };
@@ -74,6 +79,18 @@ export function validarValor(p, valor) {
         if (typeof s.color !== 'string' || !COLOR.test(s.color)) return `[${i}].color debe ser "#rrggbb"`;
         if (s.opacity !== undefined && (typeof s.opacity !== 'number' || s.opacity < 0 || s.opacity > 1)) return `[${i}].opacity debe ser de 0 a 1`;
         if (i && s.offset < valor[i - 1].offset) return 'las paradas deben ir en orden de offset';
+      }
+      return null;
+    }
+    case 'pose': {
+      if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return 'debe ser un objeto { id_de_hueso: { rotation, x, y, scaleX, scaleY } }';
+      for (const [id, campos] of Object.entries(valor)) {
+        if (!ID_DE_POSE.test(id)) return `"${id}" no es un id de hueso válido`;
+        if (!campos || typeof campos !== 'object' || Array.isArray(campos)) return `${id} debe ser un objeto { rotation?, x?, y?, scaleX?, scaleY? }`;
+        for (const [k, v] of Object.entries(campos)) {
+          if (!CAMPOS_DE_POSE.includes(k)) return `${id}.${k}: en una pose solo van ${CAMPOS_DE_POSE.join(', ')}.${sugerir(k, CAMPOS_DE_POSE)}`;
+          if (typeof v !== 'number' || !Number.isFinite(v)) return `${id}.${k} debe ser un número`;
+        }
       }
       return null;
     }

@@ -123,8 +123,9 @@ const GRUPOS = {
     { id: 'rect', icono: '▭', nombre: 'Rectángulo', atajo: 'R' },
     { id: 'ellipse', icono: '◯', nombre: 'Elipse', atajo: 'E' },
   ],
+  esqueleto: [{ id: 'hueso', icono: '⟋', nombre: 'Hueso', atajo: 'B' }],
 };
-const ultimaDelGrupo = { transformar: 'seleccionar', crear: 'path' };
+const ultimaDelGrupo = { transformar: 'seleccionar', crear: 'path', esqueleto: 'hueso' };
 const ATAJOS = Object.fromEntries(Object.values(GRUPOS).flat().map((h) => [h.atajo.toLowerCase(), h.id]));
 
 function dibujarGrupos() {
@@ -263,6 +264,56 @@ function agruparSeleccion() {
   seleccionar(grupo);
 }
 
+/**
+ * Ctrl+B: pega los objetos seleccionados al hueso seleccionado (el principal, o el único hueso de la selección).
+ * Sin ningún hueso en la selección, los suelta. Como en Moho, enlazar no mueve nada: el dibujo sigue al hueso al posar.
+ */
+function enlazarSeleccion() {
+  const ids = estado.seleccionados.filter((id) => buscar(estado.doc, id));
+  const huesos = ids.filter((id) => buscar(estado.doc, id).type === 'bone');
+  const hueso = huesos.includes(estado.seleccion) ? estado.seleccion : huesos.length === 1 ? huesos[0] : null;
+  if (huesos.length > 1 && !hueso) return avisar('Para enlazar, deja un solo hueso en la selección', true);
+  const objetos = ids.filter((id) => 'bone' in esquema.tipos.get(buscar(estado.doc, id).type).properties);
+  if (!objetos.length) return avisar(hueso ? 'Selecciona también el dibujo que quieres pegar al hueso' : 'Selecciona dibujo y un hueso (Ctrl + clic)', true);
+  const ops = objetos.map((id) => (hueso ? { op: 'set', target: id, props: { bone: hueso } } : { op: 'unset', target: id, props: ['bone'] }));
+  ejecutar(ops, hueso ? `enlazar ${nombreDe(objetos)} a ${hueso}` : `desenlazar ${nombreDe(objetos)}`);
+  avisar(hueso ? `${nombreDe(objetos)} sigue${objetos.length > 1 ? 'n' : ''} a ${hueso}` : `${nombreDe(objetos)} ya no sigue${objetos.length > 1 ? 'n' : ''} a ningún hueso`);
+}
+
+// ---------- Montaje y poses ----------
+
+const NUEVA_POSE = '__nueva';
+
+function dibujarPoses() {
+  const select = $('#pose');
+  const poses = estado.doc ? estado.doc.objects.filter((o) => o.type === 'pose') : [];
+  select.replaceChildren(new Option('Montaje', ''), ...poses.map((p) => new Option(`Pose: ${p.id}`, p.id)), new Option('＋ Nueva pose…', NUEVA_POSE));
+  select.value = estado.pose ?? '';
+  $('#modo').classList.toggle('en-pose', !!estado.pose);
+}
+
+$('#pose').addEventListener('change', (e) => {
+  const valor = e.target.value;
+  if (valor !== NUEVA_POSE) return fijar({ pose: valor || null });
+  const base = prompt('Nombre de la pose (por ejemplo wave, look_up):', '')?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!base) return dibujarPoses();
+  const id = /^[a-z]/.test(base) ? base : `pose_${base}`;
+  if (buscar(estado.doc, id)) {
+    avisar(`Ya existe "${id}"`, true);
+    return dibujarPoses();
+  }
+  ejecutar([{ op: 'create', type: 'pose', id }], `crear pose ${id}`);
+  fijar({ pose: id });
+});
+
+suscribir((c) => {
+  if ('doc' in c || 'pose' in c || 'id' in c) {
+    // Si la pose activa desapareció (deshacer, la IA la borró), se vuelve al montaje.
+    if (estado.pose && buscar(estado.doc ?? { objects: [] }, estado.pose)?.type !== 'pose') return fijar({ pose: null });
+    dibujarPoses();
+  }
+});
+
 /** Crea un documento vacío o, con `copiarDe`, una copia del documento indicado. */
 async function nuevoDocumento(copiarDe) {
   const actual = copiarDe && estado.documentos.find((d) => d.id === copiarDe);
@@ -312,6 +363,10 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     return agruparSeleccion();
   }
+  if (mod && tecla === 'b') {
+    e.preventDefault();
+    return enlazarSeleccion();
+  }
   if (mod && tecla === 'a') {
     // Todo lo que está en la raíz (sin los recursos).
     e.preventDefault();
@@ -343,7 +398,8 @@ window.addEventListener('keydown', (e) => {
   // Flechas: mover la selección 1 px (Shift: 10 px).
   const flechas = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   const raices = seleccionRaices();
-  if (flechas[e.key] && raices.length) {
+  // En una pose, las flechas no mueven el montaje.
+  if (flechas[e.key] && raices.length && !estado.pose) {
     e.preventDefault();
     const [dx, dy] = flechas[e.key].map((d) => d * (e.shiftKey ? 10 : 1));
     const ops = raices.map((id) => {

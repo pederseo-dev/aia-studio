@@ -3,6 +3,8 @@
 import { buscar, hijos } from '../core/documento.js';
 import { leerMeta } from '../core/esquema.js';
 import { valorEfectivo } from '../core/estilos.js';
+import { evaluarEsqueleto } from '../core/esqueleto.js';
+import { IDENTIDAD, invertir, matrizLocal, matrizMundo, multiplicar } from '../core/geometria.js';
 import { verticesAD } from '../core/trazado.js';
 
 const n = (v) => +v.toFixed(3);
@@ -10,7 +12,9 @@ const atributo = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
 const idDeRecurso = (id) => `aia-${id}`;
 
 // Cómo se dibuja cada tipo concreto del esquema (los recursos no se dibujan). Una prueba verifica que no falte ninguno.
+// Los huesos no se dibujan en el personaje: el editor los muestra en su superposición.
 export const DIBUJAR = {
+  bone: null,
   group: () => '',
   rect: (v) => {
     const w = v('width');
@@ -54,20 +58,44 @@ function transformacion(v) {
 
 const lector = (doc, esquema, obj) => Object.assign((prop) => valorEfectivo(esquema, doc, obj, prop), { doc });
 
-function nodo(doc, esquema, obj) {
+/**
+ * Con una pose, un objeto que sigue a otro hueso que su padre recibe una matriz completa: la que lo deja donde el
+ * delta de su hueso lo lleva, vista desde el padre (que ya se movió con el suyo).
+ */
+function transformacionEnPose(doc, esquema, obj, v, ctx) {
+  const delta = obj.bone ? (ctx.esqueleto.delta.get(obj.bone) ?? IDENTIDAD) : ctx.deltaPadre;
+  if (delta === ctx.deltaPadre) return { delta, atributo: transformacion(v) };
+  const padre = matrizMundo(doc, esquema, obj.parent ?? null);
+  const m = multiplicar(multiplicar(multiplicar(invertir(padre), multiplicar(invertir(ctx.deltaPadre), delta)), padre), matrizLocal(esquema, obj));
+  return { delta, atributo: ` transform="matrix(${m.map(n).join(' ')})"` };
+}
+
+function nodo(doc, esquema, obj, ctx) {
   const v = lector(doc, esquema, obj);
+  const { delta, atributo: transformar } = ctx.esqueleto ? transformacionEnPose(doc, esquema, obj, v, ctx) : { delta: IDENTIDAD, atributo: transformacion(v) };
   const atributos = [
     ` data-id="${obj.id}"`,
-    transformacion(v),
+    transformar,
     v('opacity') !== 1 ? ` opacity="${n(v('opacity'))}"` : '',
     v('visible') ? '' : ' display="none"',
   ].join('');
-  const contenido = DIBUJAR[obj.type](v) + hijos(doc, obj.id).map((h) => nodo(doc, esquema, h)).join('');
+  const sub = { ...ctx, deltaPadre: delta };
+  const contenido = DIBUJAR[obj.type](v) + hijos(doc, obj.id).map((h) => nodo(doc, esquema, h, sub)).join('');
   return `<g${atributos}>${contenido}</g>`;
 }
 
-/** Contenido del SVG (definiciones + fondo + objetos), para insertar dentro de otro <svg> o <g>. */
-export function contenidoSvg(doc, esquema) {
+/** La pose pedida (por id o como objeto), o null para el montaje. */
+function resolverPose(doc, pose) {
+  if (!pose) return null;
+  const p = typeof pose === 'string' ? buscar(doc, pose) : pose;
+  return p?.type === 'pose' ? p : null;
+}
+
+/**
+ * Contenido del SVG (definiciones + fondo + objetos), para insertar dentro de otro <svg> o <g>.
+ * `pose`: id de una pose del documento (o el objeto) para dibujar al personaje posado; sin ella, el montaje.
+ */
+export function contenidoSvg(doc, esquema, { pose } = {}) {
   const fondo = leerMeta(esquema, doc, 'background');
   const w = leerMeta(esquema, doc, 'width');
   const h = leerMeta(esquema, doc, 'height');
@@ -75,12 +103,39 @@ export function contenidoSvg(doc, esquema) {
   const definiciones = raiz.filter((o) => DEFINIR[o.type]).map((o) => DEFINIR[o.type](o, lector(doc, esquema, o)));
   const defs = definiciones.length ? `<defs>${definiciones.join('')}</defs>` : '';
   const rect = fondo == null ? '' : `<rect data-fondo="" width="${w}" height="${h}" fill="${atributo(fondo)}"/>`;
-  const objetos = raiz.filter((o) => !esquema.tipos.get(o.type).resource).map((o) => nodo(doc, esquema, o));
+  const poseActiva = resolverPose(doc, pose);
+  const ctx = { esqueleto: poseActiva ? evaluarEsqueleto(doc, esquema, poseActiva) : null, deltaPadre: IDENTIDAD };
+  const objetos = raiz.filter((o) => DIBUJAR[o.type]).map((o) => nodo(doc, esquema, o, ctx));
   return defs + rect + objetos.join('');
 }
 
-export function svgDocumento(doc, esquema) {
-  const w = leerMeta(esquema, doc, 'width');
-  const h = leerMeta(esquema, doc, 'height');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">${contenidoSvg(doc, esquema)}</svg>`;
+/**
+ * El esqueleto dibujado encima, con el id de cada hueso: para revisar dónde quedaron (en el editor se ven en su
+ * superposición; esto es para las vistas previas de la IA).
+ */
+function svgHuesos(doc, esquema, pose) {
+  const huesos = doc.objects.filter((o) => o.type === 'bone');
+  if (!huesos.length) return '';
+  const { posado } = evaluarEsqueleto(doc, esquema, resolverPose(doc, pose));
+  const partes = huesos.map((h) => {
+    const m = posado.get(h.id);
+    const largo = valorEfectivo(esquema, doc, h, 'length');
+    const ancho = Math.min(9, Math.max(3, largo * 0.12));
+    const puntos = [[0, 0], [largo * 0.2, ancho], [largo, 0], [largo * 0.2, -ancho]].map((p) => p.map(n).join(',')).join(' ');
+    const [ox, oy] = [m[4], m[5]];
+    const forma = `<g transform="matrix(${m.map(n).join(' ')})"><polygon points="${puntos}" fill="#ff3d7f55" stroke="#ff3d7f" stroke-width="1.5" vector-effect="non-scaling-stroke"/></g>`;
+    const nombre = `<text x="${n(ox + 6)}" y="${n(oy - 6)}" font-family="sans-serif" font-size="12" fill="#ff3d7f" stroke="#ffffff" stroke-width="3" paint-order="stroke">${atributo(h.id)}</text>`;
+    return forma + `<circle cx="${n(ox)}" cy="${n(oy)}" r="3" fill="#ff3d7f"/>` + nombre;
+  });
+  return `<g data-huesos="">${partes.join('')}</g>`;
+}
+
+/**
+ * SVG completo. `region` ({ x, y, width, height }) recorta una parte del documento; `huesos: true` dibuja el
+ * esqueleto encima.
+ */
+export function svgDocumento(doc, esquema, { region, huesos, ...opciones } = {}) {
+  const r = region ?? { x: 0, y: 0, width: leerMeta(esquema, doc, 'width'), height: leerMeta(esquema, doc, 'height') };
+  const encima = huesos ? svgHuesos(doc, esquema, opciones.pose) : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${n(r.x)} ${n(r.y)} ${n(r.width)} ${n(r.height)}" width="${n(r.width)}" height="${n(r.height)}">${contenidoSvg(doc, esquema, opciones)}${encima}</svg>`;
 }

@@ -10,6 +10,7 @@
   --ia: #f2b35b;
   --error: #ff7a7a;
   --lienzo: #2a2631;
+  --pose: #5fd3a0; /* modo pose: el lienzo se enmarca en este color, como la línea de tiempo de Moho en una acción */
   color-scheme: dark;
   font: 13px/1.4 system-ui, sans-serif;
 }
@@ -76,6 +77,9 @@ kbd { font: 11px ui-monospace, monospace; color: var(--suave); border: 1px solid
 /* Fila de herramientas */
 #barra { display: flex; align-items: center; gap: 6px; padding: 5px 8px; }
 .separador { width: 1px; align-self: stretch; background: var(--borde); }
+#modo { display: flex; align-items: center; gap: 6px; color: var(--suave); }
+#modo select { max-width: 180px; }
+#modo.en-pose select { border-color: var(--pose); color: var(--pose); }
 .espaciador { flex: 1; }
 #zoom { min-width: 56px; font-variant-numeric: tabular-nums; }
 
@@ -169,6 +173,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 .fila.soltar-despues { border-bottom-color: var(--acento); }
 .fila.soltar-dentro { background: #33395f; outline: 1px solid var(--acento); }
 .arbol .vacio { padding: 10px; color: var(--tenue); }
+.fila .enlace { color: var(--pose); font-size: 11px; }
 
 /* ---------- Lienzo ---------- */
 
@@ -183,7 +188,18 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 .recuadro { fill: #8b9cff18; stroke: var(--acento); stroke-width: 1; stroke-dasharray: 4 3; }
 .seleccion.secundaria { stroke-dasharray: 3 3; opacity: 0.8; }
 .borrador { fill: #8b9cff22; stroke: var(--acento); stroke-dasharray: 4 3; }
-#lienzo.herramienta-path { cursor: crosshair; }
+#lienzo.herramienta-path, #lienzo.herramienta-hueso { cursor: crosshair; }
+#lienzo.modo-pose { box-shadow: inset 0 0 0 2px var(--pose); cursor: default; }
+.huesos { opacity: 0.45; }
+.huesos.activos { opacity: 1; }
+.hueso { fill: #ffffff22; stroke: #ffffffaa; stroke-width: 1.2; }
+.huesos.activos .hueso { pointer-events: all; cursor: grab; }
+.hueso.seleccionado { fill: #8b9cff55; stroke: var(--acento); }
+.hueso.principal { stroke-width: 2; }
+.modo-pose .hueso { stroke: var(--pose); fill: #5fd3a022; }
+.modo-pose .hueso.seleccionado { fill: #5fd3a066; }
+.union-hueso { stroke: #ffffff66; stroke-width: 1; stroke-dasharray: 3 3; }
+.borrador-hueso { stroke: var(--acento); stroke-width: 2; stroke-dasharray: 5 3; }
 #lienzo.herramienta-rotar { cursor: alias; }
 #lienzo.herramienta-escalar { cursor: nwse-resize; }
 .manija { pointer-events: all; fill: #fff; stroke: var(--acento); stroke-width: 1.5; cursor: pointer; }
@@ -204,6 +220,8 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 /* ---------- Inspector ---------- */
 
 #inspector { padding: 8px 10px 4px; }
+#inspector h3.en-pose { color: var(--pose); }
+.resumen-pose ul { margin: 0 0 6px; padding-left: 16px; color: var(--suave); }
 #inspector .titulo-varios p { margin: 2px 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .campo.mixto input:not([type=checkbox]):not([type=color]), .campo.mixto select { font-style: italic; color: var(--suave); }
 .campo.mixto label::after { content: ' ≠'; color: var(--tenue); }

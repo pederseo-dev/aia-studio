@@ -27,7 +27,7 @@ npm test        # pruebas del núcleo
 npm run mcp     # servidor MCP por stdio (normalmente lo arranca el cliente de IA)
 ```
 
-> Estado: **fase 2 terminada** del [plan](docs/plan.md): dibujo con paths, estilos y degradados, sobre el editor y el MCP de
+> Estado: **fase 3** del [plan](docs/plan.md) (huesos y poses): dibujo con paths, estilos y degradados, sobre el editor y el MCP de
 > la fase 1. El prototipo que probó la idea quedó en la etiqueta de git `prototipo-0`.
 
 ### Editor
@@ -48,6 +48,9 @@ muestra las demás herramientas.
 | Rotar, escalar, pivote | Manijas de la selección: círculo de arriba = rotar (Shift = de a 15°), esquinas = escalar desde el pivote (Shift = proporcional), punto del pivote = moverlo sin mover el dibujo (grupos y paths). |
 | Estilos y degradados | «+ Estilo» y «+ Degradado» en Recursos; las formas los usan con `style` y `fillGradient` en el inspector. Lo que viene del estilo se ve en naranja. |
 | Importar SVG | ☰ → «Importar SVG…»: las formas llegan como paths editables dentro de un grupo. |
+| Huesos | `B`: arrastrar en vacío crea un hueso (hijo del seleccionado), desde su punta encadena otro, arrastrar un hueso lo gira, el círculo del origen lo mueve y Alt + la punta cambia dirección y largo. |
+| Enlazar al esqueleto | Seleccionar el dibujo y un hueso (Ctrl + clic) y `Ctrl+B`, soltar el dibujo sobre el hueso en la jerarquía, o elegir `bone` en el inspector. Enlazar no mueve nada. |
+| Poses | «Ver» en la barra: Montaje o una pose (o «＋ Nueva pose…»). En una pose, arrastrar un hueso o el dibujo enlazado lo gira sin tocar el montaje. |
 | Grupos | `G` crea un grupo; arrastrar filas en la jerarquía para reordenar o meter dentro de un grupo; ▾/▸ pliega. |
 | Duplicar | `Ctrl+D` duplica la selección con sus hijos; ☰ → «Hacer una copia…» copia el documento. |
 | Pestañas | `+` crea un personaje, × o `Alt+W` cierra la pestaña, ☰ → «Abrir…» abre otro. Lo que crea la IA se abre en una pestaña nueva. |
@@ -79,8 +82,8 @@ queda en el historial para que la IA lo respete.
 - **Otros clientes MCP** (Cursor, etc.): el mismo comando, `node <ruta>/mcp/server.js`, por stdio.
 
 Herramientas: `get_guide` (la guía del formato, generada desde el esquema), `list_documents`, `get_document`,
-`create_document`, `apply_ops`, `undo`, `redo`, `get_history` y `render_preview` (devuelve un PNG para que la IA vea
-lo que hizo).
+`create_document`, `apply_ops`, `undo`, `redo`, `get_history`, `set_pose` (crea o ajusta una pose con nombre) y
+`render_preview` (devuelve un PNG para que la IA vea lo que hizo; con `pose`, `region` o `bones`).
 
 ## Estructura
 

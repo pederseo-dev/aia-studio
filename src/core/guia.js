@@ -20,7 +20,10 @@ function tabla(propiedades) {
 
 export function guiaParaIA(esquema) {
   const tipos = [...esquema.tipos.values()]
-    .map((t) => `### \`${t.name}\`${t.container ? ' (puede tener hijos)' : ''}${t.resource ? ' (recurso)' : ''}\n\n${t.description}\n\n${tabla(t.properties)}`)
+    .map((t) => {
+      const hijosPermitidos = t.childTypes ? ` (solo puede tener hijos ${t.childTypes.join(', ')})` : t.container ? ' (puede tener hijos)' : '';
+      return `### \`${t.name}\`${hijosPermitidos}${t.resource ? ' (recurso)' : ''}\n\n${t.description}\n\n${tabla(t.properties)}`;
+    })
     .join('\n\n');
 
   return `# Guía de aia-studio (formato ${FORMATO})
@@ -120,6 +123,42 @@ usan por id.
 ]
 \`\`\`
 
+## Huesos y poses
+
+El esqueleto va **aparte del dibujo**, como en Moho: los \`bone\` solo tienen huesos como hijos, y el dibujo no se
+mete dentro de ellos sino que se **enlaza** con la propiedad \`bone\` (de cualquier forma o grupo). Así el orden de
+dibujo queda libre (un brazo puede ir detrás del torso aunque su hueso sea hijo del torso).
+
+- Un hueso nace en su \`x\`/\`y\` (relativo a su hueso padre; el hueso raíz, relativo al documento) y apunta según
+  \`rotation\` (0 = derecha, 90 = abajo, -90 = arriba) con largo \`length\`. Para encadenar, el hijo va en la punta del
+  padre: \`x: <length del padre>, y: 0\`. Su \`rotation\` (y su \`x\`/\`y\`) son **relativos al hueso padre**: el ángulo
+  en pantalla es la suma de los ángulos de la cadena. \`get_document\` muestra dónde queda cada hueso en el documento.
+- **Montaje:** los valores guardados en los huesos son la pose de reposo. Ubica los huesos sobre el dibujo tal como
+  está. **Enlazar no mueve nada**: un objeto con \`"bone": "forearm_l"\` (y todos sus hijos) acompaña a ese hueso
+  solo cuando una pose lo mueve.
+- Enlaza en el nivel más alto que convenga: el grupo \`head\` al hueso \`head\`, y los hijos del grupo lo siguen sin
+  enlazarlos uno por uno. Un hijo con su propio \`bone\` sigue al suyo.
+- **Poses:** una \`pose\` es un recurso con nombre que fija valores de algunos huesos (absolutos, como en el
+  montaje) sin cambiar el montaje. Se crea con \`set_pose\` (o con \`apply_ops\`) y se mira con
+  \`render_preview\` pasando \`pose\`. \`minAngle\`/\`maxAngle\` de un hueso limitan la rotación en las poses.
+- Los huesos no salen en la imagen del personaje: para revisar dónde quedaron, usa \`render_preview\` con
+  \`bones: true\` (y \`pose\`, para verlos posados).
+
+\`\`\`json
+[
+  { "op": "create", "type": "bone", "id": "spine", "props": { "x": 300, "y": 420, "rotation": -90, "length": 120 } },
+  { "op": "create", "type": "bone", "id": "neck", "parent": "spine", "props": { "x": 120, "length": 40 } },
+  { "op": "create", "type": "bone", "id": "upper_arm_l", "parent": "spine", "props": { "x": 100, "y": 50, "rotation": 180, "length": 70 } },
+  { "op": "set", "target": "head", "props": { "bone": "neck" } },
+  { "op": "set", "target": "arm_l", "props": { "bone": "upper_arm_l" } },
+  { "op": "create", "type": "pose", "id": "wave", "props": { "bones": { "upper_arm_l": { "rotation": 45 } } } }
+]
+\`\`\`
+
+Aquí \`spine\` apunta hacia arriba (-90°). \`upper_arm_l\` nace a la derecha del espectador (en el marco de \`spine\`,
+\`y\` positiva cae a la derecha) y cuelga hacia abajo: -90 + 180 = 90° en pantalla. En la pose \`wave\` queda en
+-90 + 45 = -45°: levantado hacia arriba y afuera.
+
 ## Tipos
 
 ### \`meta\` (propiedades del documento, se cambian con \`target: "meta"\`)
@@ -137,5 +176,6 @@ ${tipos}
 3. **Mira el resultado** con \`render_preview\` después de cada cambio importante.
 4. **Prefiere pocos lotes grandes** con una nota clara (\`note\`): cada lote es un paso de deshacer para el usuario.
 5. Si te equivocas, \`undo\` deshace tu último lote (solo los tuyos, nunca los del usuario).
+6. Para revisar un detalle chico, \`render_preview\` acepta \`region\` (un recorte del documento) además de \`pose\`.
 `;
 }

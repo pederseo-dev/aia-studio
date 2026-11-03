@@ -1,0 +1,8 @@
+{
+  "name": "pose",
+  "resource": true,
+  "description": "Pose con nombre: valores de huesos que reemplazan a los del montaje mientras la pose está activa (\"saludando\", \"mirando arriba\"). No cambia el montaje. Cada hueso puede fijar rotation, x, y, scaleX y scaleY; lo que no se indica queda como en el montaje.",
+  "properties": {
+    "bones": { "type": "pose", "default": {}, "group": "Pose", "description": "{ id_de_hueso: { rotation?, x?, y?, scaleX?, scaleY? } }. Valores absolutos (como en el montaje), no sumas." }
+  }
+}

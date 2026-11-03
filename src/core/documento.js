@@ -75,6 +75,11 @@ export function validar(doc, esquema) {
       const padre = buscar(doc, o.parent);
       if (!padre) errores.push(`${o.id}: el padre "${o.parent}" no existe.${sugerir(o.parent, ids)}`);
       else if (!esquema.tipos.get(padre.type)?.container) errores.push(`${o.id}: su padre "${o.parent}" es un ${padre.type} y no puede tener hijos (usa un group)`);
+      else if (tipo.parentTypes && !tipo.parentTypes.includes(padre.type)) errores.push(`${o.id}: un ${o.type} solo puede estar en la raíz o dentro de ${tipo.parentTypes.join(' o ')} (su padre "${o.parent}" es un ${padre.type})`);
+      else if (esquema.tipos.get(padre.type).childTypes && !esquema.tipos.get(padre.type).childTypes.includes(o.type)) {
+        const pista = padre.type === 'bone' ? '; para pegar un dibujo a un hueso, déjalo donde está y ponle la propiedad bone' : '';
+        errores.push(`${o.id}: un ${padre.type} solo puede tener hijos ${esquema.tipos.get(padre.type).childTypes.join(' o ')} y "${o.id}" es un ${o.type}${pista}`);
+      }
     }
     revisarPropiedades(o.id, o, propiedadesGuardadas(o), tipo, errores, avisos);
     for (const [prop, p] of Object.entries(tipo.properties)) {
@@ -82,6 +87,14 @@ export function validar(doc, esquema) {
       const referido = buscar(doc, o[prop]);
       if (!referido) errores.push(`${o.id}.${prop}: el objeto "${o[prop]}" no existe.${sugerir(o[prop], ids)}`);
       else if (p.refTypes && !p.refTypes.includes(referido.type)) errores.push(`${o.id}.${prop}: "${o[prop]}" es un ${referido.type}; se esperaba ${p.refTypes.join(' o ')}`);
+    }
+    // Las poses nombran huesos que tienen que existir.
+    for (const [prop, p] of Object.entries(tipo.properties)) {
+      if (p.type !== 'pose' || !o[prop] || typeof o[prop] !== 'object') continue;
+      const huesos = doc.objects.filter((h) => h.type === 'bone').map((h) => h.id);
+      for (const id of Object.keys(o[prop])) {
+        if (!huesos.includes(id)) errores.push(`${o.id}.${prop}: no existe el hueso "${id}".${sugerir(id, huesos)}`);
+      }
     }
   }
 

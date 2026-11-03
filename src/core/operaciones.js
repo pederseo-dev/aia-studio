@@ -3,9 +3,10 @@
 //   { op: 'create', type: 'rect', id: 'eye_l', parent: 'head', index?: 0, props?: { width: 20 } }
 //   { op: 'set',    target: 'eye_l' | 'meta', props: { x: 10, fill: '#ffffff' } }
 //   { op: 'unset',  target: 'eye_l' | 'meta', props: ['x'] }            ← vuelve al valor por defecto
-//   { op: 'delete', target: 'head' }                                     ← borra también los hijos
+//   { op: 'delete', target: 'head' }                                     ← borra también los hijos y suelta
+//                                                                          las referencias a lo borrado
 //   { op: 'move',   target: 'eye_l', parent?: 'face' | null, index?: 0 } ← reparentar y/o reordenar
-//   { op: 'rename', target: 'eye_l', id: 'left_eye' }                    ← actualiza las referencias
+//   { op: 'rename', target: 'eye_l', id: 'left_eye' }                    ← actualiza las referencias (y las poses)
 //   { op: 'duplicate', target: 'arm_l', id?: 'arm_r', suffix?: 'copy', parent?, index?, props? }
 //                                                     ← copia con sus hijos; los hijos reciben el sufijo
 //
@@ -162,7 +163,22 @@ function aplicarUna(doc, op, esquema) {
       const quitados = [];
       doc.objects.forEach((o, pos) => ids.has(o.id) && quitados.push({ pos, obj: o }));
       doc.objects = doc.objects.filter((o) => !ids.has(o.id));
-      return [{ op: '_restore', root: op.target, entries: quitados }];
+      // Lo que apuntaba a algo borrado (un estilo, un hueso) se suelta; deshacer lo vuelve a enlazar.
+      const reenlazar = [];
+      for (const o of doc.objects) {
+        const anteriores = {};
+        for (const [prop, p] of Object.entries(esquema.tipos.get(o.type)?.properties ?? {})) {
+          if (p.type === 'ref' && ids.has(o[prop])) {
+            anteriores[prop] = o[prop];
+            delete o[prop];
+          } else if (p.type === 'pose' && o[prop] && Object.keys(o[prop]).some((id) => ids.has(id))) {
+            anteriores[prop] = structuredClone(o[prop]);
+            o[prop] = Object.fromEntries(Object.entries(o[prop]).filter(([id]) => !ids.has(id)));
+          }
+        }
+        if (Object.keys(anteriores).length) reenlazar.push({ op: 'set', target: o.id, props: anteriores });
+      }
+      return [{ op: '_restore', root: op.target, entries: quitados }, ...reenlazar];
     }
 
     case '_restore': {
@@ -203,7 +219,10 @@ function aplicarUna(doc, op, esquema) {
       for (const o of doc.objects) {
         if (o.parent === anterior) o.parent = op.id;
         const tipo = esquema.tipos.get(o.type);
-        for (const [prop, p] of Object.entries(tipo?.properties ?? {})) if (p.type === 'ref' && o[prop] === anterior) o[prop] = op.id;
+        for (const [prop, p] of Object.entries(tipo?.properties ?? {})) {
+          if (p.type === 'ref' && o[prop] === anterior) o[prop] = op.id;
+          if (p.type === 'pose' && o[prop]?.[anterior]) o[prop] = Object.fromEntries(Object.entries(o[prop]).map(([id, v]) => [id === anterior ? op.id : id, v]));
+        }
       }
       return [{ op: 'rename', target: op.id, id: anterior }];
     }

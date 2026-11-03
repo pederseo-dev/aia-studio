@@ -1,6 +1,6 @@
 # Plan de construcción
 
-> Estado: **fase 2 terminada** (2026-11-03); sigue la fase 3. Se basa en [sintesis.md](sintesis.md) y en la investigación de
+> Estado: **fase 3 construida; falta su prueba con IA** (2026-11-03). Se basa en [sintesis.md](sintesis.md) y en la investigación de
 > [Moho](investigacion/moho-lua.md) y [Rive](investigacion/rive-runtime.md).
 
 ## Cómo trabajamos
@@ -134,7 +134,27 @@ Notas de lo construido:
 **Prueba con IA:** dibujar un personaje original a partir de una descripción; corregir proporciones; cambiar la
 paleta usando los estilos compartidos.
 
-## Fase 3: huesos
+## Fase 3: huesos 🔶 construida, falta la prueba con IA
+
+Notas de lo construido:
+- `bone` con `x`, `y`, `rotation`, escala, `length`, `independentAngle` y límites `minAngle`/`maxAngle`. Los huesos
+  **solo tienen huesos como hijos** (`parentTypes`/`childTypes` en el esquema): el esqueleto va aparte del dibujo y
+  el orden de dibujo queda libre.
+- **Layer binding** con la propiedad `bone` de cualquier objeto transformable. Un objeto sin `bone` sigue al hueso de
+  su padre. Como en Moho, enlazar no mueve nada: el objeto sigue el *delta* del hueso (de dónde está en el montaje a
+  dónde está en la pose).
+- **Poses con nombre** como recurso `pose` (`bones: { hueso: { rotation, x, y, scaleX, scaleY } }`, valores
+  absolutos). Es el puente hacia las acciones de la fase 4: una pose es una acción de un solo cuadro.
+- Borrar un hueso suelta lo enlazado y lo quita de las poses (deshacer lo devuelve); renombrarlo actualiza todo.
+- Editor: herramienta Hueso (B) para crear arrastrando (hijo del seleccionado; desde su punta, encadenado), girar,
+  mover el origen y ajustar la punta (Alt, o con Mover). `Ctrl+B` y soltar en la jerarquía enlazan. Selector
+  «Ver: Montaje / Pose» en la barra; en una pose el lienzo se enmarca en verde, arrastrar un hueso (o el dibujo
+  enlazado) lo gira en la pose y el inspector muestra los valores de la pose arriba de los del montaje.
+- MCP: `set_pose` (suma a la pose y devuelve la imagen), `render_preview` con `pose`, `region` (recorte, que pidió la
+  IA en la fase 2) y `bones` (el esqueleto encima, con nombres). `get_document` muestra dónde queda cada hueso en el
+  documento, para no tener que sumar ángulos relativos.
+- **Cambios respecto del plan:** el runtime incremental (dirty flags, límite de pasadas) queda para la fase 5, cuando
+  haya cuadros que recalcular; por ahora el esqueleto se evalúa entero en cada dibujo, que alcanza de sobra.
 
 - Huesos con `length`, cinemática directa, `independentAngle` y límites de ángulo *(de Moho)*.
 - **Layer binding**: un objeto pegado a un hueso, sin deformar.

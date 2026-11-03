@@ -1,11 +1,12 @@
 // Lienzo: dibuja el documento, maneja la cámara (pan y zoom) y reparte los eventos entre las herramientas:
-// seleccionar (con manijas), pluma, edición de puntos y creación de formas.
+// seleccionar (con manijas), pluma, edición de puntos, creación de formas y huesos (con la pose activa, si hay).
 
 import { buscar } from '../core/documento.js';
 import { leerMeta } from '../core/esquema.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
 import { contenidoSvg } from '../render/svg.js';
 import { docVisible, ejecutar, esquema, estado, fijar, idLibre, padreParaNuevo, seleccionar, suscribir } from './estado.js';
+import { crearHuesos } from './huesos.js';
 import { crearPluma } from './pluma.js';
 import { crearPuntos } from './puntos.js';
 import { crearTransformar } from './transformar.js';
@@ -44,12 +45,14 @@ export function montarLienzo(contenedor) {
   const transformar = crearTransformar(ctx);
   const pluma = crearPluma(ctx);
   const puntos = crearPuntos(ctx);
+  const huesos = crearHuesos(ctx);
 
   suscribir((c) => {
-    if ('doc' in c || 'previa' in c) dibujarDocumento();
+    if ('pose' in c) contenedor.classList.toggle('modo-pose', !!estado.pose);
+    if ('doc' in c || 'previa' in c || 'pose' in c) dibujarDocumento();
     else if ('seleccion' in c || 'edicion' in c || 'vertice' in c) dibujarSuperposicion();
     if ('herramienta' in c) {
-      contenedor.className = `herramienta-${estado.herramienta}`;
+      contenedor.className = `herramienta-${estado.herramienta}${estado.pose ? ' modo-pose' : ''}`;
       if (estado.herramienta !== 'path' && pluma.activa()) pluma.terminar(false);
       if (estado.herramienta !== 'seleccionar' && estado.edicion) fijar({ edicion: null, vertice: null });
       dibujarSuperposicion();
@@ -70,7 +73,7 @@ export function montarLienzo(contenedor) {
     if (!doc) return documentoG.replaceChildren();
     const w = leerMeta(esquema, doc, 'width');
     const h = leerMeta(esquema, doc, 'height');
-    documentoG.innerHTML = `${contenidoSvg(doc, esquema)}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
+    documentoG.innerHTML = `${contenidoSvg(doc, esquema, { pose: estado.pose })}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
     dibujarSuperposicion();
   }
 
@@ -90,9 +93,11 @@ export function montarLienzo(contenedor) {
         }
       }
       puntos.dibujar();
-    } else {
+    } else if (!estado.pose) {
+      // En una pose no se transforma el dibujo: solo se posan huesos.
       transformar.dibujar();
     }
+    huesos.dibujar();
     pluma.dibujar();
   }
 
@@ -179,7 +184,11 @@ export function montarLienzo(contenedor) {
     if (e.button === 1 || (e.button === 0 && espacio)) return panear(e);
     if (e.button !== 0) return;
     const manija = e.target.closest('[data-manija]')?.dataset.manija;
+    if (manija?.startsWith('hueso-')) return huesos.manija(e, manija);
     if (manija) return estado.edicion ? puntos.manija(e, manija) : transformar.manija(e, manija);
+    // Con una pose activa, el lienzo posa: se giran huesos (o el dibujo a través de su hueso).
+    if (estado.pose) return huesos.pointerdownPose(e);
+    if (estado.herramienta === 'hueso') return huesos.pointerdown(e);
     if (estado.herramienta === 'path') return pluma.pointerdown(e);
     if (estado.herramienta === 'rotar' || estado.herramienta === 'escalar') return transformar.conHerramienta(e, estado.herramienta);
     if (estado.herramienta === 'rect' || estado.herramienta === 'ellipse') return crearForma(e, estado.herramienta);

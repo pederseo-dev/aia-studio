@@ -6,7 +6,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { hijos } from '../src/core/documento.js';
+import { buscar, hijos } from '../src/core/documento.js';
+import { CAMPOS_DE_POSE, evaluarEsqueleto, puntaDe } from '../src/core/esqueleto.js';
+import { aplicar } from '../src/core/geometria.js';
 import { leerMeta } from '../src/core/esquema.js';
 import { guiaParaIA } from '../src/core/guia.js';
 import { resumirOperaciones } from '../src/core/operaciones.js';
@@ -43,9 +45,21 @@ const seguro = (fn) => async (args) => {
 /** Árbol legible del documento: una línea por objeto, indentado por jerarquía, del fondo al frente. */
 function esquemaDelArbol(doc) {
   const lineas = [];
+  const { reposo } = evaluarEsqueleto(doc, esquema);
+  const r = (v) => Math.round(v);
   const recorrer = (padre, nivel) => {
     for (const o of hijos(doc, padre)) {
-      lineas.push(`${'  '.repeat(nivel)}- ${o.id} (${o.type})`);
+      let detalle = '';
+      if (o.bone) detalle = ` → hueso ${o.bone}`;
+      if (o.type === 'pose') detalle = ` [${Object.keys(o.bones ?? {}).join(', ') || 'vacía'}]`;
+      if (o.type === 'bone') {
+        // Dónde queda en el documento: con ángulos relativos encadenados, esto ahorra cuentas.
+        const m = reposo.get(o.id);
+        const [ox, oy] = aplicar(m, 0, 0);
+        const [px, py] = puntaDe(esquema, o, m);
+        detalle = ` de (${r(ox)}, ${r(oy)}) a (${r(px)}, ${r(py)}), ${r((Math.atan2(m[1], m[0]) * 180) / Math.PI)}° en pantalla`;
+      }
+      lineas.push(`${'  '.repeat(nivel)}- ${o.id} (${o.type})${detalle}`);
       recorrer(o.id, nivel + 1);
     }
   };
@@ -61,7 +75,7 @@ const operacion = z.discriminatedUnion('op', [
     op: z.literal('create'),
     type: z.string().describe('tipo de objeto: ' + [...esquema.tipos.keys()].join(', ')),
     id: z.string().describe('id nuevo: minúsculas, números y _'),
-    parent: z.string().nullable().optional().describe('id del grupo padre; omitido o null = raíz'),
+    parent: z.string().nullable().optional().describe('id del grupo padre (o del hueso padre, para un bone); omitido o null = raíz'),
     index: z.number().int().optional().describe('posición entre hermanos: 0 = al fondo; omitido = al frente'),
     props: props.optional(),
   }),
@@ -189,21 +203,77 @@ servidor.registerTool(
   }),
 );
 
+const region = z
+  .object({ x: z.number(), y: z.number(), width: z.number().positive(), height: z.number().positive() })
+  .describe('recorte del documento, en sus coordenadas (para ver un detalle de cerca)');
+
+/** PNG del documento (opcionalmente posado y recortado) como resultado de herramienta. */
+function vistaPrevia(doc, { width, pose, region, bones }, encabezado) {
+  if (pose && buscar(doc, pose)?.type !== 'pose') {
+    const poses = doc.objects.filter((o) => o.type === 'pose').map((o) => o.id);
+    throw new Error(`no existe la pose "${pose}". Poses: ${poses.join(', ') || 'ninguna'}`);
+  }
+  const png = svgAPng(svgDocumento(doc, esquema, { pose, region, huesos: bones }), width ?? 600);
+  const tamaño = region ? `recorte de ${region.width}×${region.height} en (${region.x}, ${region.y})` : `${leerMeta(esquema, doc, 'width')}×${leerMeta(esquema, doc, 'height')} px`;
+  const resumen = `${tamaño}, ${doc.objects.length} objetos, ${pose ? `en la pose "${pose}"` : 'en el montaje'}.`;
+  return {
+    content: [
+      { type: 'image', data: Buffer.from(png).toString('base64'), mimeType: 'image/png' },
+      { type: 'text', text: encabezado ? `${encabezado}\n${resumen}` : resumen },
+    ],
+  };
+}
+
 servidor.registerTool(
   'render_preview',
   {
-    description: 'Devuelve una imagen PNG del documento tal como lo ve el usuario. Úsala para revisar tus cambios.',
-    inputSchema: { id, width: z.number().int().min(64).max(2048).optional().describe('ancho de la imagen en px (por defecto 600)') },
+    description:
+      'Devuelve una imagen PNG del documento tal como lo ve el usuario. Úsala para revisar tus cambios. Con pose, ' +
+      'muestra al personaje en esa pose; con region, un recorte para ver un detalle; con bones, el esqueleto encima.',
+    inputSchema: {
+      id,
+      width: z.number().int().min(64).max(2048).optional().describe('ancho de la imagen en px (por defecto 600)'),
+      pose: z.string().optional().describe('id de una pose del documento; omitida = el montaje'),
+      region: region.optional(),
+      bones: z.boolean().optional().describe('true = dibujar los huesos encima, con su id (en el editor siempre se ven)'),
+    },
   },
-  seguro(async ({ id, width }) => {
-    const doc = await almacen.leer(id);
-    const png = svgAPng(svgDocumento(doc, esquema), width ?? 600);
-    return {
-      content: [
-        { type: 'image', data: Buffer.from(png).toString('base64'), mimeType: 'image/png' },
-        { type: 'text', text: `${leerMeta(esquema, doc, 'width')}×${leerMeta(esquema, doc, 'height')} px, ${doc.objects.length} objetos.` },
-      ],
-    };
+  seguro(async ({ id, ...opciones }) => vistaPrevia(await almacen.leer(id), opciones)),
+);
+
+const camposDeHueso = z
+  .object(Object.fromEntries(CAMPOS_DE_POSE.map((k) => [k, z.number().optional()])))
+  .strict()
+  .describe('valores absolutos del hueso en la pose, relativos a su hueso padre como en el montaje');
+
+servidor.registerTool(
+  'set_pose',
+  {
+    description:
+      'Crea o actualiza una pose con nombre (recurso pose) sin tocar el montaje, y devuelve cómo se ve. Por defecto ' +
+      'se suma a lo que la pose ya tenía; un hueso con {} vuelve al montaje dentro de la pose.',
+    inputSchema: {
+      id,
+      pose: z.string().describe('id de la pose, por ejemplo "wave" o "look_up"'),
+      bones: z.record(z.string(), camposDeHueso).describe('{ id_de_hueso: { rotation?, x?, y?, scaleX?, scaleY? } }'),
+      replace: z.boolean().optional().describe('true = la pose queda solo con estos huesos'),
+      note: z.string().optional().describe('qué hace, para el historial'),
+      width: z.number().int().min(64).max(2048).optional().describe('ancho de la vista previa'),
+      show_bones: z.boolean().optional().describe('true = la vista previa muestra el esqueleto'),
+    },
+  },
+  seguro(async ({ id, pose, bones, replace, note, width, show_bones }) => {
+    const existente = buscar(await almacen.leer(id), pose);
+    if (existente && existente.type !== 'pose') throw new Error(`"${pose}" ya existe y es un ${existente.type}; elige otro id para la pose`);
+    const valores = replace ? {} : structuredClone(existente?.bones ?? {});
+    for (const [hueso, campos] of Object.entries(bones)) {
+      if (Object.keys(campos).length) valores[hueso] = { ...valores[hueso], ...campos };
+      else delete valores[hueso];
+    }
+    const ops = existente ? [{ op: 'set', target: pose, props: { bones: valores } }] : [{ op: 'create', type: 'pose', id: pose, props: { bones: valores } }];
+    const { doc, avisos } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `pose ${pose}` });
+    const lista = Object.entries(valores).map(([h, c]) => `${h} ${JSON.stringify(c)}`).join(', ') || 'vacía';
+    return vistaPrevia(doc, { width, pose, bones: show_bones }, `Pose "${pose}": ${lista}.${avisos.length ? `\nAvisos: ${avisos.join('; ')}` : ''}`);
   }),
 );
 

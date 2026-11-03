@@ -22,7 +22,7 @@ function robot() {
 }
 
 test('el esquema resuelve la herencia y solo expone tipos concretos', () => {
-  assert.deepEqual([...esquema.tipos.keys()].sort(), ['ellipse', 'group', 'linear_gradient', 'path', 'radial_gradient', 'rect', 'style']);
+  assert.deepEqual([...esquema.tipos.keys()].sort(), ['bone', 'ellipse', 'group', 'linear_gradient', 'path', 'pose', 'radial_gradient', 'rect', 'style']);
   assert.equal(esquema.tipos.get('style').resource, true);
   assert.equal(esquema.tipos.get('path').resource, false);
   const rect = esquema.tipos.get('rect');
@@ -32,7 +32,7 @@ test('el esquema resuelve la herencia y solo expone tipos concretos', () => {
 });
 
 test('cada tipo concreto que no es recurso tiene cómo dibujarse', () => {
-  for (const [nombre, tipo] of esquema.tipos) if (!tipo.resource) assert.ok(DIBUJAR[nombre], `falta DIBUJAR.${nombre}`);
+  for (const [nombre, tipo] of esquema.tipos) if (!tipo.resource) assert.ok(nombre in DIBUJAR, `falta DIBUJAR.${nombre}`);
 });
 
 test('crear arma la jerarquía y el orden de dibujo', () => {
