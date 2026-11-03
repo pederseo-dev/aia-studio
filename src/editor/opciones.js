@@ -2,8 +2,9 @@
 // y ofrece como botones las acciones que tienen atajo. Así no hace falta saberse los atajos para descubrir qué sigue.
 
 import { buscar } from '../core/documento.js';
-import { huesoDe } from '../core/esqueleto.js';
-import { ejecutar, esquema, estado, fijar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
+import { leer } from '../core/esquema.js';
+import { huesoDe, repartirEntreHuesos } from '../core/esqueleto.js';
+import { avisar, ejecutar, esquema, estado, fijar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 import { opsDePose } from './huesos.js';
 
 /**
@@ -11,7 +12,7 @@ import { opsDePose } from './huesos.js';
  */
 export function montarOpciones(raiz, acciones) {
   suscribir((c) => {
-    if (['doc', 'seleccion', 'herramienta', 'pose', 'edicion', 'enlazando', 'id'].some((k) => k in c)) dibujar();
+    if (['doc', 'seleccion', 'herramienta', 'pose', 'edicion', 'vertice', 'enlazando', 'id'].some((k) => k in c)) dibujar();
   });
 
   const boton = (texto, titulo, alHacerClic, clase = '') => {
@@ -56,7 +57,10 @@ export function montarOpciones(raiz, acciones) {
     }
 
     if (estado.edicion) {
-      return [texto('Puntos: arrastra anclas y tangentes (Alt separa), doble clic en un ancla = recto o curvo, clic en el contorno agrega, <kbd>Supr</kbd> borra.'), boton('Terminar', 'Salir de la edición de puntos (Enter)', () => fijar({ edicion: null, vertice: null }), 'principal')];
+      const partes = [texto('Puntos: arrastra anclas y tangentes (Alt separa), doble clic en un ancla = recto o curvo, clic en el contorno agrega, <kbd>Supr</kbd> borra.')];
+      if (huesos.length) partes.push(...huesosDePuntos(doc, huesos));
+      partes.push(boton('Terminar', 'Salir de la edición de puntos (Enter)', () => fijar({ edicion: null, vertice: null }), 'principal'));
+      return partes;
     }
 
     if (sel?.type === 'bone' && !varios) return opcionesDeHueso(doc, sel);
@@ -98,6 +102,41 @@ export function montarOpciones(raiz, acciones) {
     }
 
     return [texto(huesos.length ? 'Clic para seleccionar; arrastra en vacío para un recuadro. Los huesos se eligen con la herramienta Hueso (B) o en la jerarquía.' : 'Clic para seleccionar; arrastra en vacío para seleccionar con un recuadro.')];
+  }
+
+  /**
+   * Enlace por punto: el hueso que sigue el vértice elegido, y repartir todos entre los huesos cercanos. Así un solo
+   * path se dobla con una cadena de huesos.
+   */
+  function huesosDePuntos(doc, huesos) {
+    const path = buscar(doc, estado.edicion);
+    const vertices = leer(esquema, path, 'vertices');
+    const guardar = (nuevos, nota) => ejecutar([{ op: 'set', target: path.id, props: { vertices: nuevos } }], `${nota} en ${path.id}`);
+    const partes = [];
+    if (estado.vertice != null && vertices[estado.vertice]) {
+      const i = estado.vertice;
+      const etiqueta = Object.assign(document.createElement('label'), { className: 'texto', textContent: `Punto ${i} sigue a ` });
+      const select = document.createElement('select');
+      select.append(new Option(`(el de la forma${huesoDe(doc, path.id) ? `: ${huesoDe(doc, path.id)}` : ''})`, ''), ...huesos.map((h) => new Option(h.id, h.id)));
+      select.value = vertices[i].bone ?? '';
+      select.addEventListener('change', () => {
+        const { bone, ...resto } = vertices[i];
+        guardar(vertices.map((v, j) => (j === i ? (select.value ? { ...resto, bone: select.value } : resto) : v)), `punto ${i} ${select.value ? `a ${select.value}` : 'sin hueso'}`);
+      });
+      etiqueta.append(select);
+      partes.push(etiqueta);
+    }
+    partes.push(
+      boton('Repartir entre huesos', 'Cada punto sigue al hueso más cercano: el path se dobla con la cadena en las poses', () => {
+        try {
+          guardar(repartirEntreHuesos(doc, esquema, path.id), 'repartir puntos entre huesos');
+        } catch (e) {
+          avisar(e.message, true);
+        }
+      }),
+    );
+    if (vertices.some((v) => v.bone)) partes.push(boton('Quitar huesos', 'Los puntos vuelven a seguir al hueso de la forma', () => guardar(vertices.map(({ bone, ...v }) => v), 'puntos sin hueso')));
+    return partes;
   }
 
   function opcionesDeHueso(doc, hueso) {

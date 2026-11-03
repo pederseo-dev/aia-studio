@@ -12,6 +12,7 @@
 //
 // `index` es la posición entre los hermanos en orden de dibujo: 0 = al fondo; sin index = al frente.
 
+import { expandirDesdeHasta } from './esqueleto.js';
 import { sugerir } from './esquema.js';
 import { parsearD } from './trazado.js';
 import { ErrorDeValidacion, ID, buscar, hijos, subarbol, validar } from './documento.js';
@@ -104,6 +105,13 @@ function expandirD(tipo, props) {
   return { closed: subtrazados[0].closed, ...resto, vertices: subtrazados[0].vertices };
 }
 
+/** Azúcar para la IA: un bone acepta `from` y `to` ([x, y] en el documento) en vez de x, y, rotation y length. */
+function expandirHueso(doc, esquema, tipo, padre, props, actual) {
+  if (props?.from === undefined && props?.to === undefined) return props;
+  if (tipo !== 'bone') throw new Error(`"from"/"to" solo sirven en huesos (bone), no en ${tipo}`);
+  return expandirDesdeHasta(doc, esquema, padre, props, actual);
+}
+
 function comprobarProps(props) {
   if (!props || typeof props !== 'object' || Array.isArray(props)) throw new Error('props debe ser un objeto { propiedad: valor }');
   for (const [k, v] of Object.entries(props)) {
@@ -118,10 +126,15 @@ function aplicarUna(doc, op, esquema) {
       const tipo = esquema.tipos.get(op.type);
       if (!tipo) throw new Error(`tipo desconocido "${op.type}".${sugerir(op.type, esquema.tipos.keys())} Tipos: ${[...esquema.tipos.keys()].join(', ')}`);
       if (!ID.test(op.id ?? '')) throw new Error(`id inválido "${op.id}": usa minúsculas, números y _, empezando con letra`);
-      if (buscar(doc, op.id)) throw new Error(`ya existe un objeto "${op.id}"`);
+      const repetido = buscar(doc, op.id);
+      if (repetido) {
+        // Los ids son únicos en todo el documento: dibujo, huesos y recursos comparten el espacio de nombres.
+        const pista = op.type === 'bone' && repetido.type !== 'bone' ? ` Para huesos conviene el sufijo _bone: "${op.id}_bone".` : '';
+        throw new Error(`ya existe un objeto "${op.id}" (${repetido.type}).${pista}`);
+      }
       const padre = contenedor(doc, op.parent, esquema);
       if (op.props !== undefined) comprobarProps(op.props);
-      const props = expandirD(tipo, op.props) ?? {};
+      const props = expandirHueso(doc, esquema, op.type, padre, expandirD(tipo, op.props)) ?? {};
       insertar(doc, { id: op.id, type: op.type, parent: padre, ...structuredClone(props) }, padre, op.index);
       return [{ op: 'delete', target: op.id }];
     }
@@ -129,7 +142,7 @@ function aplicarUna(doc, op, esquema) {
     case 'set': {
       comprobarProps(op.props);
       const obj = op.target === 'meta' ? doc.meta : objetivo(doc, op.target);
-      const props = op.target === 'meta' ? op.props : expandirD(esquema.tipos.get(obj.type), op.props);
+      const props = op.target === 'meta' ? op.props : expandirHueso(doc, esquema, obj.type, obj.parent ?? null, expandirD(esquema.tipos.get(obj.type), op.props), obj);
       const anteriores = {};
       const nuevas = [];
       for (const [k, v] of Object.entries(props)) {
@@ -171,6 +184,9 @@ function aplicarUna(doc, op, esquema) {
           if (p.type === 'ref' && ids.has(o[prop])) {
             anteriores[prop] = o[prop];
             delete o[prop];
+          } else if (p.type === 'vertices' && o[prop]?.some((v) => ids.has(v.bone))) {
+            anteriores[prop] = structuredClone(o[prop]);
+            o[prop] = o[prop].map(({ bone, ...v }) => (bone === undefined || ids.has(bone) ? v : { ...v, bone }));
           } else if (p.type === 'pose' && o[prop] && Object.keys(o[prop]).some((id) => ids.has(id))) {
             anteriores[prop] = structuredClone(o[prop]);
             o[prop] = Object.fromEntries(Object.entries(o[prop]).filter(([id]) => !ids.has(id)));
@@ -222,6 +238,7 @@ function aplicarUna(doc, op, esquema) {
         for (const [prop, p] of Object.entries(tipo?.properties ?? {})) {
           if (p.type === 'ref' && o[prop] === anterior) o[prop] = op.id;
           if (p.type === 'pose' && o[prop]?.[anterior]) o[prop] = Object.fromEntries(Object.entries(o[prop]).map(([id, v]) => [id === anterior ? op.id : id, v]));
+          if (p.type === 'vertices' && o[prop]?.some((v) => v.bone === anterior)) o[prop] = o[prop].map((v) => (v.bone === anterior ? { ...v, bone: op.id } : v));
         }
       }
       return [{ op: 'rename', target: op.id, id: anterior }];

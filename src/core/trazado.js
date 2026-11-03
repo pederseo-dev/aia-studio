@@ -28,6 +28,9 @@ const largo = ([x, y]) => Math.hypot(x, y);
 const anguloDe = ([x, y]) => r2(Math.atan2(y, x) / RAD);
 const normalizarAngulo = (a) => ((((a + 180) % 360) + 360) % 360) - 180;
 
+/** Un vértice rehecho conserva el hueso que seguía el original (enlace por punto). */
+export const conHueso = (original, nuevo) => (original?.bone ? { ...nuevo, bone: original.bone } : nuevo);
+
 /** Tangentes de un vértice como vectores relativos al ancla. */
 export function tangentes(v) {
   switch (v.mode ?? 'straight') {
@@ -314,7 +317,7 @@ export function transformarVertices(vertices, m) {
     const { entrada, salida } = tangentes(v);
     const lineal = ([x, y]) => [m[0] * x + m[2] * y, m[1] * x + m[3] * y];
     const extra = v.radius ? { radius: r2(v.radius * escala) } : {};
-    return verticeDesdeTangentes(m[0] * v.x + m[2] * v.y + m[4], m[1] * v.x + m[3] * v.y + m[5], lineal(entrada), lineal(salida), extra);
+    return conHueso(v, verticeDesdeTangentes(m[0] * v.x + m[2] * v.y + m[4], m[1] * v.x + m[3] * v.y + m[5], lineal(entrada), lineal(salida), extra));
   });
 }
 
@@ -357,7 +360,7 @@ export function dividirTramo(vertices, i, t) {
   // Tramo recto: el vértice nuevo también es recto.
   if (p1[0] === p0[0] && p1[1] === p0[1] && p2[0] === p3[0] && p2[1] === p3[1]) {
     const p = lerp(p0, p3, t);
-    return [...vertices.slice(0, i + 1), { x: r2(p[0]), y: r2(p[1]) }, ...vertices.slice(i + 1)];
+    return [...vertices.slice(0, i + 1), conHueso(vertices[i], { x: r2(p[0]), y: r2(p[1]) }), ...vertices.slice(i + 1)];
   }
   const a = lerp(p0, p1, t);
   const b = lerp(p1, p2, t);
@@ -370,11 +373,11 @@ export function dividirTramo(vertices, i, t) {
   const conTangente = (v, cual, punto) => {
     const t2 = tangentes(v);
     t2[cual] = [punto[0] - v.x, punto[1] - v.y];
-    return verticeDesdeTangentes(v.x, v.y, t2.entrada, t2.salida);
+    return conHueso(v, verticeDesdeTangentes(v.x, v.y, t2.entrada, t2.salida));
   };
   resultado[i] = conTangente(vertices[i], 'salida', a);
   resultado[j] = conTangente(vertices[j], 'entrada', c);
-  const nuevo = verticeDesdeTangentes(medio[0], medio[1], [ab[0] - medio[0], ab[1] - medio[1]], [bc[0] - medio[0], bc[1] - medio[1]]);
+  const nuevo = conHueso(vertices[i], verticeDesdeTangentes(medio[0], medio[1], [ab[0] - medio[0], ab[1] - medio[1]], [bc[0] - medio[0], bc[1] - medio[1]]));
   resultado.splice(i + 1, 0, nuevo);
   return resultado;
 }
@@ -386,7 +389,9 @@ export function erroresDeVertice(v) {
   if (!MODOS.includes(modo)) return [`mode debe ser ${MODOS.join(', ')}`];
   const errores = [];
   const campos = CAMPOS_DE_VERTICE[modo];
-  for (const k of Object.keys(v)) if (!campos.includes(k)) errores.push(`campo "${k}" no va en un vértice ${modo} (campos: ${campos.join(', ')})`);
+  // `bone` (enlace por punto) vale en cualquier modo; que el hueso exista lo revisa el documento.
+  for (const k of Object.keys(v)) if (k !== 'bone' && !campos.includes(k)) errores.push(`campo "${k}" no va en un vértice ${modo} (campos: ${campos.join(', ')}, y bone)`);
+  if (v.bone !== undefined && (typeof v.bone !== 'string' || !v.bone)) errores.push('bone debe ser el id de un hueso');
   for (const k of campos) {
     if (k === 'mode' || (k === 'radius' && v.radius === undefined)) continue;
     if (typeof v[k] !== 'number' || !Number.isFinite(v[k])) errores.push(`falta ${k} (número)`);

@@ -5,7 +5,7 @@
 import { buscar } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
-import { dividirTramo, manijas, muestrearTramo, tangentes, verticeDesdeTangentes } from '../core/trazado.js';
+import { conHueso, dividirTramo, manijas, muestrearTramo, tangentes, verticeDesdeTangentes } from '../core/trazado.js';
 import { docVisible, ejecutar, esquema, estado, fijar, previsualizar } from './estado.js';
 
 const CERCA_DEL_CONTORNO = 8; // px
@@ -20,7 +20,8 @@ export function crearPuntos(ctx) {
     if (!obj) return;
     const m = matriz();
     const pantalla = (p) => aplicar(m, ...p);
-    manijas(leer(esquema, obj, 'vertices')).forEach((h, i) => {
+    const vertices = leer(esquema, obj, 'vertices');
+    manijas(vertices).forEach((h, i) => {
       const a = pantalla(h.ancla);
       for (const [cual, punto] of [['entrada', h.entrada], ['salida', h.salida]]) {
         if (!punto) continue;
@@ -29,7 +30,11 @@ export function crearPuntos(ctx) {
         ctx.superposicion.append(ctx.crear('circle', { class: 'manija tangente-punto', 'data-manija': `${cual}-${i}`, cx: t[0], cy: t[1], r: 4 }, 'Tangente (Alt: separar)'));
       }
       ctx.superposicion.append(
-        ctx.crear('rect', { class: `manija ancla${i === estado.vertice ? ' activa' : ''}`, 'data-manija': `ancla-${i}`, x: a[0] - 4.5, y: a[1] - 4.5, width: 9, height: 9 }, `Vértice ${i} (doble clic: recto/curvo)`),
+        ctx.crear(
+          'rect',
+          { class: `manija ancla${i === estado.vertice ? ' activa' : ''}${vertices[i].bone ? ' con-hueso' : ''}`, 'data-manija': `ancla-${i}`, x: a[0] - 4.5, y: a[1] - 4.5, width: 9, height: 9 },
+          `Vértice ${i}${vertices[i].bone ? `, sigue a ${vertices[i].bone}` : ''} (doble clic: recto/curvo)`,
+        ),
       );
     });
   }
@@ -65,7 +70,7 @@ export function crearPuntos(ctx) {
             const l = Math.hypot(...t[cual]) || 1;
             t[otra] = [(-t[cual][0] / l) * largoOtra, (-t[cual][1] / l) * largoOtra];
           }
-          nuevos[i] = verticeDesdeTangentes(v.x, v.y, t.entrada, t.salida);
+          nuevos[i] = conHueso(v, verticeDesdeTangentes(v.x, v.y, t.entrada, t.salida));
         }
         cambio = nuevos;
         previsualizar([{ op: 'set', target: estado.edicion, props: { vertices: nuevos } }]);
@@ -103,7 +108,7 @@ export function crearPuntos(ctx) {
     const v = vertices[i];
     const nuevos = [...vertices];
     if ((v.mode ?? 'straight') !== 'straight') {
-      nuevos[i] = { x: v.x, y: v.y };
+      nuevos[i] = conHueso(v, { x: v.x, y: v.y });
     } else {
       // Tangente paralela a la línea entre los vecinos, de un tercio de la distancia media.
       const anterior = vertices[(i - 1 + vertices.length) % vertices.length];
@@ -111,7 +116,7 @@ export function crearPuntos(ctx) {
       const dx = siguiente.x - anterior.x;
       const dy = siguiente.y - anterior.y;
       const dist = Math.round((Math.hypot(dx, dy) / 6) * 100) / 100 || 20;
-      nuevos[i] = { x: v.x, y: v.y, mode: 'mirrored', angle: Math.round((Math.atan2(dy, dx) * 180) / Math.PI * 100) / 100, dist };
+      nuevos[i] = conHueso(v, { x: v.x, y: v.y, mode: 'mirrored', angle: Math.round((Math.atan2(dy, dx) * 180) / Math.PI * 100) / 100, dist });
     }
     guardar(nuevos, 'alternar vértice');
   }

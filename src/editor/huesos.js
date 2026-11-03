@@ -218,11 +218,32 @@ export function crearHuesos(ctx) {
     if (!id) {
       const g = e.target.closest('[data-id]');
       if (!g || !ctx.documentoG.contains(g)) return seleccionar(null);
-      id = huesoDe(estado.doc, g.dataset.id);
+      id = huesoDe(estado.doc, g.dataset.id) ?? huesoCercanoDePuntos(g.dataset.id, ctx.puntoPantalla(e));
       if (!id) return seleccionar(g.dataset.id);
     }
     seleccionar(id);
     rotar(e, id);
+  }
+
+  /** Path enlazado por punto: el hueso (de los que siguen sus vértices) más cercano al clic, en la pose. */
+  function huesoCercanoDePuntos(pathId, punto) {
+    const path = buscar(estado.doc, pathId);
+    const ids = [...new Set((path?.vertices ?? []).map((v) => v.bone).filter(Boolean))];
+    if (!ids.length) return null;
+    const { posado } = evaluarEsqueleto(estado.doc, esquema, poseActiva());
+    const camara = ctx.matrizCamara();
+    let mejor = null;
+    for (const id of ids) {
+      const m = multiplicar(camara, posado.get(id));
+      const a = aplicar(m, 0, 0);
+      const b = aplicar(m, leer(esquema, buscar(estado.doc, id), 'length'), 0);
+      const [dx, dy] = [b[0] - a[0], b[1] - a[1]];
+      const l2 = dx * dx + dy * dy || 1;
+      const t = Math.max(0, Math.min(1, ((punto[0] - a[0]) * dx + (punto[1] - a[1]) * dy) / l2));
+      const d = Math.hypot(punto[0] - a[0] - dx * t, punto[1] - a[1] - dy * t);
+      if (!mejor || d < mejor.d) mejor = { id, d };
+    }
+    return mejor.id;
   }
 
   /** Arrastrar en vacío crea un hueso. Es hijo del hueso seleccionado; si se empieza en su punta, se encadena. */

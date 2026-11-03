@@ -141,6 +141,17 @@ forma no se dobla con varios huesos (la IA partió la cola en segmentos), y crea
 cuesta. Quedan como candidatos: deformación por pesos, huesos con `from`/`to` en coordenadas del documento, valores
 finales en `get_history` y avisos de `set_pose` al recortar ángulos.
 
+Ajustes hechos con lo que encontró:
+- **Enlace por punto** (el manual de Moho): cada vértice de un path acepta `bone` y, en una pose, se mueve con sus
+  tangentes según ese hueso. Un solo path se dobla con una cadena de huesos, sin partir el dibujo. En el editor, al
+  editar puntos, la barra de opciones elige el hueso del punto o «Repartir entre huesos» (el más cercano); por MCP,
+  `bind_points`. En una pose, arrastrar ese path gira el hueso más cercano al clic. Los pesos entre varios huesos
+  por punto siguen para más adelante.
+- Huesos con `from`/`to` en coordenadas del documento (se convierten a `x`, `y`, `rotation` y `length`).
+- `get_history` muestra el valor final de lo que fijó cada lote; `set_pose` avisa cuando un límite recorta un
+  ángulo; `undo` dice qué deshizo; un id repetido al crear un hueso sugiere el sufijo `_bone`, que también propone la
+  guía.
+
 Notas de lo construido:
 - `bone` con `x`, `y`, `rotation`, escala, `length`, `independentAngle` y límites `minAngle`/`maxAngle`. Los huesos
   **solo tienen huesos como hijos** (`parentTypes`/`childTypes` en el esquema): el esqueleto va aparte del dibujo y

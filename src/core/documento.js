@@ -88,6 +88,16 @@ export function validar(doc, esquema) {
       if (!referido) errores.push(`${o.id}.${prop}: el objeto "${o[prop]}" no existe.${sugerir(o[prop], ids)}`);
       else if (p.refTypes && !p.refTypes.includes(referido.type)) errores.push(`${o.id}.${prop}: "${o[prop]}" es un ${referido.type}; se esperaba ${p.refTypes.join(' o ')}`);
     }
+    // Los vértices enlazados a un hueso (enlace por punto) nombran huesos que tienen que existir.
+    for (const [prop, p] of Object.entries(tipo.properties)) {
+      if (p.type !== 'vertices' || !Array.isArray(o[prop])) continue;
+      o[prop].forEach((v, i) => {
+        if (v?.bone == null) return;
+        const hueso = buscar(doc, v.bone);
+        if (!hueso) errores.push(`${o.id}.${prop}[${i}].bone: no existe el hueso "${v.bone}".${sugerir(v.bone, doc.objects.filter((h) => h.type === 'bone').map((h) => h.id))}`);
+        else if (hueso.type !== 'bone') errores.push(`${o.id}.${prop}[${i}].bone: "${v.bone}" es un ${hueso.type}, no un hueso`);
+      });
+    }
     // Las poses nombran huesos que tienen que existir.
     for (const [prop, p] of Object.entries(tipo.properties)) {
       if (p.type !== 'pose' || !o[prop] || typeof o[prop] !== 'object') continue;

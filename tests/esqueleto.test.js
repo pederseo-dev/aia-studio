@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { buscar, crearDocumento } from '../src/core/documento.js';
-import { deltaDe, evaluarEsqueleto, puntaDe } from '../src/core/esqueleto.js';
+import { deltaDe, evaluarEsqueleto, puntaDe, repartirEntreHuesos } from '../src/core/esqueleto.js';
 import { aplicar } from '../src/core/geometria.js';
 import { aplicarOperaciones } from '../src/core/operaciones.js';
 import { svgDocumento } from '../src/render/svg.js';
@@ -79,4 +79,45 @@ test('la vista previa puede dibujar el esqueleto encima, posado', () => {
   const svg = svgDocumento(doc, esquema, { huesos: true, pose: 'up' });
   assert.match(svg, /<g data-huesos="">/);
   assert.match(svg, />lower<\/text>/);
+});
+
+test('enlace por punto: un path se dobla con varios huesos y sigue siendo uno solo', () => {
+  let doc = brazo();
+  // Una tira de (100,100) a (190,100): los dos primeros puntos siguen al hombro, la punta al antebrazo.
+  doc = op(doc, {
+    op: 'create',
+    type: 'path',
+    id: 'tira',
+    props: { closed: false, vertices: [{ x: 100, y: 100, bone: 'upper' }, { x: 150, y: 100, bone: 'upper' }, { x: 190, y: 100, bone: 'lower' }] },
+  });
+  doc = op(doc, { op: 'set', target: 'up', props: { bones: { upper: { rotation: -90 }, lower: { rotation: 90 } } } });
+  const d = svgDocumento(doc, esquema, { pose: 'up' }).match(/data-id="tira"><path d="([^"]+)"/)[1];
+  // El hombro apunta hacia arriba y el antebrazo vuelve a la derecha: el codo queda en (100, 50), la punta en (140, 50).
+  assert.equal(d, 'M100 100L100 50L140 50');
+  // Renombrar y borrar el hueso actualizan los vértices.
+  doc = op(doc, { op: 'rename', target: 'lower', id: 'fore' });
+  assert.equal(buscar(doc, 'tira').vertices[2].bone, 'fore');
+  doc = op(doc, { op: 'delete', target: 'fore' });
+  assert.deepEqual(buscar(doc, 'tira').vertices[2], { x: 190, y: 100 });
+  assert.throws(() => op(doc, { op: 'set', target: 'tira', props: { vertices: [{ x: 0, y: 0, bone: 'nada' }, { x: 1, y: 1 }] } }), /no existe el hueso "nada"/);
+});
+
+test('from/to crean huesos con coordenadas del documento, también encadenados', () => {
+  let doc = op(
+    crearDocumento({ name: 'Desde hasta' }),
+    { op: 'create', type: 'bone', id: 'spine_bone', props: { from: [300, 400], to: [300, 300] } },
+    { op: 'create', type: 'bone', id: 'arm_bone', parent: 'spine_bone', props: { from: [320, 320], to: [380, 320] } },
+  );
+  assert.deepEqual(buscar(doc, 'spine_bone'), { id: 'spine_bone', type: 'bone', parent: null, x: 300, y: 400, rotation: -90, length: 100 });
+  const arm = buscar(doc, 'arm_bone');
+  assert.deepEqual([arm.x, arm.y, arm.rotation, arm.length], [80, 20, 90, 60]);
+  // Con solo `to` se conserva el origen.
+  doc = op(doc, { op: 'set', target: 'arm_bone', props: { to: [320, 260] } });
+  assert.deepEqual([buscar(doc, 'arm_bone').x, buscar(doc, 'arm_bone').rotation, buscar(doc, 'arm_bone').length], [80, 0, 60]);
+  assert.throws(() => op(doc, { op: 'create', type: 'rect', id: 'r', props: { from: [0, 0] } }), /solo sirven en huesos/);
+});
+
+test('repartir los puntos de un path entre los huesos más cercanos', () => {
+  const doc = op(brazo(), { op: 'create', type: 'path', id: 'tira', props: { closed: false, vertices: [{ x: 100, y: 100 }, { x: 140, y: 100 }, { x: 180, y: 100 }] } });
+  assert.deepEqual(repartirEntreHuesos(doc, esquema, 'tira').map((v) => v.bone), ['upper', 'upper', 'lower']);
 });

@@ -7,7 +7,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { buscar, hijos } from '../src/core/documento.js';
-import { CAMPOS_DE_POSE, evaluarEsqueleto, puntaDe } from '../src/core/esqueleto.js';
+import { CAMPOS_DE_POSE, evaluarEsqueleto, limitarAngulo, puntaDe, repartirEntreHuesos } from '../src/core/esqueleto.js';
 import { aplicar } from '../src/core/geometria.js';
 import { leerMeta } from '../src/core/esquema.js';
 import { guiaParaIA } from '../src/core/guia.js';
@@ -65,6 +65,19 @@ function esquemaDelArbol(doc) {
   };
   recorrer(null, 0);
   return lineas.length ? lineas.join('\n') : '(vacío)';
+}
+
+/** Valor con el que quedó cada propiedad que un lote fijó con set (los largos, resumidos). */
+function valoresFinales(ops) {
+  const valores = {};
+  for (const op of ops) {
+    if (op.op !== 'set') continue;
+    for (const [k, v] of Object.entries(op.props)) {
+      const json = JSON.stringify(v);
+      valores[`${op.target}.${k}`] = Array.isArray(v) ? `(${v.length} elementos)` : json.length > 160 ? `${json.slice(0, 157)}...` : v;
+    }
+  }
+  return valores;
 }
 
 const id = z.string().describe('id del documento, por ejemplo "robot"');
@@ -166,7 +179,9 @@ const revertir = (tipo) =>
   seguro(async ({ id }) => {
     const { doc, entrada } = await almacen[tipo](id, ORIGEN);
     const verbo = tipo === 'deshacer' ? 'Deshecho' : 'Rehecho';
-    return texto(`${verbo} el lote #${entrada.n} "${entrada.nota}" (${entrada.ops} operaciones).\n\nÁrbol resultante:\n${esquemaDelArbol(doc)}`);
+    const tocaba = resumirOperaciones(entrada.lote).slice(0, 12).join(', ');
+    const sigue = tipo === 'deshacer' ? ' Lo de los lotes anteriores sigue en pie.' : '';
+    return texto(`${verbo} el lote #${entrada.n} "${entrada.nota}" (${entrada.ops} operaciones: ${tocaba}).${sigue}\n\nÁrbol resultante:\n${esquemaDelArbol(doc)}`);
   });
 
 servidor.registerTool(
@@ -198,7 +213,7 @@ servidor.registerTool(
     const { entradas } = await almacen.historial(id, 1000);
     const elegidas = entradas.filter((e) => !origin || e.origen === origin).slice(-(limit ?? 20));
     return texto(
-      elegidas.map(({ inversas, ops, ...e }) => ({ ...e, ...(detail ? { ops } : { toca: resumirOperaciones(ops) }) })),
+      elegidas.map(({ inversas, ops, ...e }) => ({ ...e, ...(detail ? { ops } : { toca: resumirOperaciones(ops), valores: valoresFinales(ops) }) })),
     );
   }),
 );
@@ -247,6 +262,32 @@ const camposDeHueso = z
   .describe('valores absolutos del hueso en la pose, relativos a su hueso padre como en el montaje');
 
 servidor.registerTool(
+  'bind_points',
+  {
+    description:
+      'Enlace por punto: cada vértice del path pasa a seguir al hueso más cercano (en el montaje) de la lista dada, ' +
+      'o de todos. Así un solo path se dobla con una cadena de huesos (cola, brazo, cuello). Cada vértice queda con ' +
+      '"bone"; se puede retocar después con set.',
+    inputSchema: {
+      id,
+      path: z.string().describe('id del path'),
+      bones: z.array(z.string()).optional().describe('huesos entre los que repartir (por defecto, todos)'),
+      note: z.string().optional().describe('qué hace, para el historial'),
+    },
+  },
+  seguro(async ({ id, path, bones, note }) => {
+    const actual = await almacen.leer(id);
+    if (buscar(actual, path)?.type !== 'path') throw new Error(`"${path}" no es un path`);
+    const vertices = repartirEntreHuesos(actual, esquema, path, bones);
+    await almacen.operar(id, [{ op: 'set', target: path, props: { vertices } }], { origen: ORIGEN, nota: note ?? `repartir ${path} entre huesos` });
+    const cuenta = {};
+    vertices.forEach((v, i) => (cuenta[v.bone] ??= []).push(i));
+    const reparto = Object.entries(cuenta).map(([h, indices]) => `${h} [${indices.join(', ')}]`).join('; ');
+    return texto(`Vértices de ${path} por hueso: ${reparto}. Míralo con render_preview y una pose.`);
+  }),
+);
+
+servidor.registerTool(
   'set_pose',
   {
     description:
@@ -273,7 +314,14 @@ servidor.registerTool(
     const ops = existente ? [{ op: 'set', target: pose, props: { bones: valores } }] : [{ op: 'create', type: 'pose', id: pose, props: { bones: valores } }];
     const { doc, avisos } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `pose ${pose}` });
     const lista = Object.entries(valores).map(([h, c]) => `${h} ${JSON.stringify(c)}`).join(', ') || 'vacía';
-    return vistaPrevia(doc, { width, pose, bones: show_bones }, `Pose "${pose}": ${lista}.${avisos.length ? `\nAvisos: ${avisos.join('; ')}` : ''}`);
+    // Lo que recortan los límites del hueso se avisa: la pose guarda el valor pedido, pero se ve el recortado.
+    const recortes = Object.entries(valores).flatMap(([h, c]) => {
+      const hueso = buscar(doc, h);
+      const visto = hueso && c.rotation !== undefined ? limitarAngulo(esquema, hueso, c.rotation) : c.rotation;
+      return visto !== c.rotation ? [`${h}.rotation ${c.rotation} queda en ${visto} por minAngle/maxAngle`] : [];
+    });
+    const notas = [...avisos, ...recortes];
+    return vistaPrevia(doc, { width, pose, bones: show_bones }, `Pose "${pose}": ${lista}.${notas.length ? `\nAvisos: ${notas.join('; ')}` : ''}`);
   }),
 );
 

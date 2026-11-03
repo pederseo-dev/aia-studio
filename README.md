@@ -51,6 +51,7 @@ muestra las demás herramientas.
 | Huesos | `B`: arrastrar en vacío crea un hueso (hijo del seleccionado), desde su punta encadena otro, arrastrar un hueso lo gira, el círculo del origen lo mueve y Alt + la punta cambia dirección y largo. |
 | Enlazar al esqueleto | Con un hueso seleccionado, «Enlazar dibujo…» en la barra de opciones y clic en las partes (Alt = su grupo). También: dibujo + hueso seleccionados y `Ctrl+B`, soltar el dibujo sobre el hueso en la jerarquía, o `bone` en el inspector. Enlazar no mueve nada: el dibujo sigue al hueso en las poses. |
 | Barra de opciones | Arriba del lienzo: qué se puede hacer con la herramienta y lo seleccionado, con botones para las acciones (por ejemplo, con un hueso: enlazar, ver lo enlazado, hueso hijo, probar en una pose). |
+| Doblar con varios huesos | Editando los puntos de un path: «Repartir entre huesos» (o el hueso de cada punto) en la barra de opciones. En las poses, el path se dobla siguiendo la cadena. |
 | Poses | «Ver» en la barra: Montaje o una pose (o «＋ Nueva pose…»). En una pose, arrastrar un hueso o el dibujo enlazado lo gira sin tocar el montaje. |
 | Grupos | `G` crea un grupo; arrastrar filas en la jerarquía para reordenar o meter dentro de un grupo; ▾/▸ pliega. |
 | Duplicar | `Ctrl+D` duplica la selección con sus hijos; ☰ → «Hacer una copia…» copia el documento. |
@@ -83,7 +84,8 @@ queda en el historial para que la IA lo respete.
 - **Otros clientes MCP** (Cursor, etc.): el mismo comando, `node <ruta>/mcp/server.js`, por stdio.
 
 Herramientas: `get_guide` (la guía del formato, generada desde el esquema), `list_documents`, `get_document`,
-`create_document`, `apply_ops`, `undo`, `redo`, `get_history`, `set_pose` (crea o ajusta una pose con nombre) y
+`create_document`, `apply_ops`, `undo`, `redo`, `get_history`, `set_pose` (crea o ajusta una pose con nombre),
+`bind_points` (reparte los puntos de un path entre huesos) y
 `render_preview` (devuelve un PNG para que la IA vea lo que hizo; con `pose`, `region` o `bones`).
 
 ## Estructura

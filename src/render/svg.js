@@ -5,7 +5,7 @@ import { leerMeta } from '../core/esquema.js';
 import { valorEfectivo } from '../core/estilos.js';
 import { evaluarEsqueleto } from '../core/esqueleto.js';
 import { IDENTIDAD, invertir, matrizLocal, matrizMundo, multiplicar } from '../core/geometria.js';
-import { verticesAD } from '../core/trazado.js';
+import { transformarVertices, verticesAD } from '../core/trazado.js';
 
 const n = (v) => +v.toFixed(3);
 const atributo = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -75,9 +75,31 @@ function transformacionEnPose(doc, esquema, obj, v, ctx) {
   return { delta, atributo: ` transform="matrix(${m.map(n).join(' ')})"` };
 }
 
+/**
+ * Enlace por punto: en una pose, cada vértice con `bone` se mueve (con sus tangentes) según el delta de su hueso, en
+ * vez del de la forma. Así un solo path se dobla siguiendo una cadena de huesos (una cola, un brazo).
+ */
+function verticesEnPose(doc, esquema, obj, vertices, delta, ctx) {
+  if (!vertices.some((vt) => vt.bone)) return vertices;
+  const reposo = matrizMundo(doc, esquema, obj.id);
+  const inversa = invertir(multiplicar(delta, reposo));
+  const matrices = new Map();
+  return vertices.map((vt) => {
+    const d = vt.bone && ctx.esqueleto.delta.get(vt.bone);
+    if (!d || d === delta) return vt;
+    if (!matrices.has(vt.bone)) matrices.set(vt.bone, multiplicar(multiplicar(inversa, d), reposo));
+    return transformarVertices([vt], matrices.get(vt.bone))[0];
+  });
+}
+
 function nodo(doc, esquema, obj, ctx) {
-  const v = lector(doc, esquema, obj);
+  let v = lector(doc, esquema, obj);
   const { delta, atributo: transformar } = ctx.esqueleto ? transformacionEnPose(doc, esquema, obj, v, ctx) : { delta: IDENTIDAD, atributo: transformacion(v) };
+  if (ctx.esqueleto && obj.type === 'path') {
+    const base = v;
+    const deformados = verticesEnPose(doc, esquema, obj, base('vertices'), delta, ctx);
+    v = Object.assign((prop) => (prop === 'vertices' ? deformados : base(prop)), { doc: base.doc });
+  }
   const atributos = [
     ` data-id="${obj.id}"`,
     transformar,

@@ -89,7 +89,7 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
     await escribir(id, resultado.doc);
     const nota = entrada.nota?.replace(/^(deshacer|rehacer): /, '') ?? '';
     await registrar(id, { origen, tipo, ref: entrada.n, nota: `${tipo}: ${nota}`, ops: entrada.inversas, inversas: resultado.inversas });
-    return { doc: resultado.doc, entrada: { n: entrada.n, nota, ops: entrada.ops.length } };
+    return { doc: resultado.doc, entrada: { n: entrada.n, nota, ops: entrada.ops.length, lote: entrada.ops } };
   }
 
   return {

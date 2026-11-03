@@ -28,7 +28,7 @@ test('deshacer y rehacer van por origen', () =>
     let { doc, entrada } = await a.deshacer('robot', 'ai');
     assert.deepEqual(doc.objects.map((o) => o.id), ['torso']);
     assert.equal(doc.objects[0].fill, '#ff0000');
-    assert.deepEqual(entrada, { n: 4, nota: 'cabeza', ops: 1 });
+    assert.deepEqual({ ...entrada, lote: entrada.lote.map((o) => o.op) }, { n: 4, nota: 'cabeza', ops: 1, lote: ['create'] });
 
     ({ doc } = await a.rehacer('robot', 'ai'));
     assert.deepEqual(doc.objects.map((o) => o.id), ['torso', 'head']);

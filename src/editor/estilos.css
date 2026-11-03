@@ -16,6 +16,8 @@
 }
 
 * { box-sizing: border-box; }
+/* `hidden` oculta siempre, aunque la clase del elemento le dé otro display. */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -222,7 +224,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 }
 .opciones .texto b { color: var(--texto); font-weight: 600; }
 .opciones kbd { font-size: 11px; }
-.opciones button { padding: 2px 8px; font-size: 12px; }
+.opciones button, .opciones select { padding: 2px 8px; font-size: 12px; }
 .opciones button.principal { border-color: var(--acento); color: var(--texto); }
 .opciones.en-pose { border-color: var(--pose); }
 .opciones.en-pose button.principal, .opciones.enlazando button.principal { border-color: var(--pose); }
@@ -236,6 +238,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 [data-manija="rotar"] { cursor: grab; }
 .ancla { fill: #fff; stroke: var(--acento); stroke-width: 1.5; }
 .ancla.activa { fill: var(--acento); }
+.ancla.con-hueso { stroke: var(--pose); }
 .tangente { stroke: var(--acento); stroke-width: 1; opacity: 0.8; }
 .tangente-punto { fill: var(--acento); stroke: #fff; stroke-width: 1; }
 .contorno-edicion { fill: none !important; stroke: var(--acento) !important; stroke-width: 1px !important; vector-effect: non-scaling-stroke; }
