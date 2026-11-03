@@ -1,6 +1,6 @@
 # Plan de construcción
 
-> Estado: **fase 3 construida; falta su prueba con IA** (2026-11-03). Se basa en [sintesis.md](sintesis.md) y en la investigación de
+> Estado: **fase 3 terminada** (2026-11-03); sigue la fase 4. Se basa en [sintesis.md](sintesis.md) y en la investigación de
 > [Moho](investigacion/moho-lua.md) y [Rive](investigacion/rive-runtime.md).
 
 ## Cómo trabajamos
@@ -134,7 +134,12 @@ Notas de lo construido:
 **Prueba con IA:** dibujar un personaje original a partir de una descripción; corregir proporciones; cambiar la
 paleta usando los estilos compartidos.
 
-## Fase 3: huesos 🔶 construida, falta la prueba con IA
+## Fase 3: huesos ✅ (2026-11-03)
+
+La prueba con IA salió 9/9 con un rechazo ([resultados](pruebas-ia/fase-3.md)). Lo más importante que mostró: una
+forma no se dobla con varios huesos (la IA partió la cola en segmentos), y crear huesos con coordenadas relativas
+cuesta. Quedan como candidatos: deformación por pesos, huesos con `from`/`to` en coordenadas del documento, valores
+finales en `get_history` y avisos de `set_pose` al recortar ángulos.
 
 Notas de lo construido:
 - `bone` con `x`, `y`, `rotation`, escala, `length`, `independentAngle` y límites `minAngle`/`maxAngle`. Los huesos

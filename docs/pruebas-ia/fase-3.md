@@ -40,3 +40,35 @@ Se trabaja sobre una copia del gato de la fase 2 (`gato_rig`, creada con «Hacer
 
 | Fecha | Cliente y modelo | Logradas | Rechazos | Correcciones a mano | Notas |
 | --- | --- | --- | --- | --- | --- |
+| 2026-11-03 | Claude Code (sesión nueva), Opus 5.5 | 9/9 | 1 | 0 | Ver abajo. |
+
+### Corrida del 2026-11-03
+
+- **Lo que salió bien:** armó el esqueleto con los ángulos relativos bien calculados: `body_bone` de la base al
+  cuello, `head_bone` desde el cuello y una cola de 4 huesos encadenados. Los huesos de las orejas quedaron del lado
+  correcto (`ear_l` a la derecha del espectador). Enlazó en el nivel alto (`cat`, `head`, `ear_l`, `ear_r`) y no
+  forma por forma. Revisó con `render_preview` y `bones: true`, hizo las poses con `set_pose` sumando (sin
+  `replace`), puso `minAngle`/`maxAngle` alrededor del montaje y `undo` deshizo solo su último lote.
+- **Tarea 6:** el usuario retocó la pose «mirando_arriba» y movió dos huesos en el montaje, no «cola_feliz» como
+  decía la consigna. La IA lo encontró en `get_history`, sumó la cabeza a «cola_feliz» y no tocó nada de lo del
+  usuario.
+- **El rechazo:** su primer lote creaba un hueso `head` y ya existía el grupo `head`. Renombró los huesos a
+  `head_bone` y `body_bone`.
+- **Cola:** como un path sigue a un solo hueso, reemplazó la cola curva por 4 rectángulos redondeados (contorno
+  detrás y relleno delante), cada uno con su `originX` en la articulación. Funciona, pero se ve más tosca que el
+  dibujo original.
+
+**Problemas encontrados** (por orden de importancia):
+
+1. **Una forma no puede doblarse con varios huesos.** Para una cola o un brazo flexible hace falta deformar un path
+   con varios huesos (pesos por vértice, la v2 del binding en la síntesis) o un tipo «tira» con ancho y extremos
+   redondeados.
+2. **Crear huesos en coordenadas relativas cuesta.** Pidió poder dar origen y punta en coordenadas del documento
+   (`from`/`to`) y que se calcule `x`, `y`, `rotation` y `length`.
+3. **`get_history` resume qué se tocó pero no el valor final**, así que tuvo que leer el documento para ver cómo
+   quedó el retoque del usuario.
+4. **Detalles:**
+   - `set_pose` no avisa cuando un ángulo se recorta por `minAngle`/`maxAngle`.
+   - No hay aviso de que un id de hueso choca con uno del dibujo (el error de "ya existe" alcanzó, pero una
+     convención `_bone` en la guía lo evitaría).
+   - `undo` podría decir qué queda en pie.

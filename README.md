@@ -27,7 +27,7 @@ npm test        # pruebas del núcleo
 npm run mcp     # servidor MCP por stdio (normalmente lo arranca el cliente de IA)
 ```
 
-> Estado: **fase 3** del [plan](docs/plan.md) (huesos y poses): dibujo con paths, estilos y degradados, sobre el editor y el MCP de
+> Estado: **fase 3 terminada** del [plan](docs/plan.md) (huesos y poses): dibujo con paths, estilos y degradados, sobre el editor y el MCP de
 > la fase 1. El prototipo que probó la idea quedó en la etiqueta de git `prototipo-0`.
 
 ### Editor
