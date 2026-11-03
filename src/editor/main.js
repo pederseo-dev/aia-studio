@@ -1,6 +1,7 @@
 // Punto de entrada del editor: monta los paneles y conecta la barra, el teclado y los avisos en vivo.
 
-import { buscar, subarbol } from '../core/documento.js';
+import { buscar, hijos, subarbol } from '../core/documento.js';
+import { aplicarOperaciones } from '../core/operaciones.js';
 import { leer } from '../core/esquema.js';
 import { montarArbol } from './arbol.js';
 import { montarHistorial } from './historial.js';
@@ -9,8 +10,8 @@ import { montarInspector } from './inspector.js';
 import { montarLienzo } from './lienzo.js';
 import {
   abrir, agregarPestana, api, avisar, cargarDocumentos, cerrarPestana, deshacer, ejecutar, eliminarDocumento,
-  enviarPendiente, esquema, estado, fijar, hayPendiente, idLibre, padreParaNuevo, pestanasGuardadas,
-  refrescarHistorial, rehacer, seleccionar, suscribir,
+  enviarPendiente, esquema, estado, fijar, hayPendiente, idLibre, mantenerPosicion, padreParaNuevo,
+  pestanasGuardadas, refrescarHistorial, rehacer, seleccionRaices, seleccionar, seleccionarVarios, suscribir,
 } from './estado.js';
 
 const $ = (s) => document.querySelector(s);
@@ -172,15 +173,18 @@ suscribir((c) => {
     for (const b of document.querySelectorAll('[data-requiere-doc]')) b.disabled = !estado.id;
     $('#lienzo .sin-documento')?.toggleAttribute('hidden', !!estado.id);
   }
-  if ('seleccion' in c || 'doc' in c) $('#borrar').disabled = $('#duplicar').disabled = !estado.seleccion;
-  // Si la selección desapareció (por ejemplo, la IA borró el objeto), se limpia.
-  if ('doc' in c && estado.seleccion && !buscar(estado.doc, estado.seleccion)) seleccionar(null);
+  if ('seleccion' in c || 'doc' in c) $('#borrar').disabled = $('#duplicar').disabled = !estado.seleccionados.length;
+  // Si algo de la selección desapareció (por ejemplo, la IA borró el objeto), se quita.
+  if ('doc' in c && estado.doc && estado.seleccionados.some((id) => !buscar(estado.doc, id))) {
+    const quedan = estado.seleccionados.filter((id) => buscar(estado.doc, id));
+    seleccionarVarios(quedan, buscar(estado.doc, estado.seleccion ?? '') ? estado.seleccion : (quedan.at(-1) ?? null));
+  }
 });
 
 $('#deshacer').addEventListener('click', deshacer);
 $('#rehacer').addEventListener('click', rehacer);
 $('#borrar').addEventListener('click', borrarSeleccion);
-$('#nuevo-grupo').addEventListener('click', nuevoGrupo);
+$('#nuevo-grupo').addEventListener('click', () => (estado.seleccionados.length > 1 ? agruparSeleccion() : nuevoGrupo()));
 $('#duplicar').addEventListener('click', duplicarSeleccion);
 $('#nuevo-estilo').addEventListener('click', () => nuevoRecurso('style', 'style', { fill: '#c8c2d4', stroke: '#2b2135' }));
 $('#nuevo-degradado').addEventListener('click', () => nuevoRecurso('linear_gradient', 'gradient'));
@@ -205,23 +209,28 @@ function nuevoRecurso(tipo, base, props) {
   seleccionar(id);
 }
 
-/** Duplica la selección con sus hijos, un poco desplazada, y selecciona la copia. */
+const nombreDe = (ids) => (ids.length === 1 ? ids[0] : `${ids.length} objetos`);
+
+/** Duplica la selección con sus hijos, un poco desplazada, y selecciona las copias. */
 function duplicarSeleccion() {
-  const obj = estado.seleccion && buscar(estado.doc, estado.seleccion);
-  if (!obj) return;
-  const ids = subarbol(estado.doc, obj.id);
+  const raices = seleccionRaices();
+  if (!raices.length) return;
+  const ids = raices.flatMap((id) => subarbol(estado.doc, id));
   let sufijo = 'copy';
   for (let n = 2; ids.some((id) => buscar(estado.doc, `${id}_${sufijo}`)); n++) sufijo = `copy${n}`;
-  const props = { x: leer(esquema, obj, 'x') + 20, y: leer(esquema, obj, 'y') + 20 };
-  ejecutar([{ op: 'duplicate', target: obj.id, suffix: sufijo, props }], `duplicar ${obj.id}`);
-  seleccionar(`${obj.id}_${sufijo}`);
+  const ops = raices.map((id) => {
+    const obj = buscar(estado.doc, id);
+    return { op: 'duplicate', target: id, suffix: sufijo, props: { x: leer(esquema, obj, 'x') + 20, y: leer(esquema, obj, 'y') + 20 } };
+  });
+  ejecutar(ops, `duplicar ${nombreDe(raices)}`);
+  seleccionarVarios(raices.map((id) => `${id}_${sufijo}`));
 }
 
 function borrarSeleccion() {
-  const id = estado.seleccion;
-  if (!id) return;
+  const raices = seleccionRaices();
+  if (!raices.length) return;
   seleccionar(null);
-  ejecutar([{ op: 'delete', target: id }], `borrar ${id}`);
+  ejecutar(raices.map((id) => ({ op: 'delete', target: id })), `borrar ${nombreDe(raices)}`);
 }
 
 function nuevoGrupo() {
@@ -229,6 +238,29 @@ function nuevoGrupo() {
   const id = idLibre('group');
   ejecutar([{ op: 'create', type: 'group', id, parent: padreParaNuevo() }], `crear ${id}`);
   seleccionar(id);
+}
+
+/**
+ * Mete la selección en un grupo nuevo (Ctrl+G). Si todos tienen el mismo padre, el grupo queda ahí, en el lugar del
+ * que estaba más al frente; si no, va a la raíz. Los objetos no se mueven de lugar en pantalla.
+ */
+function agruparSeleccion() {
+  const raices = seleccionRaices().filter((id) => !esquema.tipos.get(buscar(estado.doc, id).type).resource);
+  if (!raices.length) return;
+  const padres = new Set(raices.map((id) => buscar(estado.doc, id).parent ?? null));
+  const padre = padres.size === 1 ? [...padres][0] : null;
+  const hermanos = hijos(estado.doc, padre);
+  const frente = Math.max(...raices.map((id) => hermanos.findIndex((o) => o.id === id)));
+  const grupo = idLibre('group');
+  const ops = [{ op: 'create', type: 'group', id: grupo, parent: padre, ...(frente >= 0 ? { index: frente + 1 } : {}) }];
+  let doc = aplicarOperaciones(estado.doc, ops, esquema).doc;
+  for (const id of raices) {
+    const lote = [{ op: 'move', target: id, parent: grupo }, ...mantenerPosicion(doc, id, grupo)];
+    doc = aplicarOperaciones(doc, lote, esquema).doc;
+    ops.push(...lote);
+  }
+  ejecutar(ops, `agrupar ${nombreDe(raices)} en ${grupo}`);
+  seleccionar(grupo);
 }
 
 /** Crea un documento vacío o, con `copiarDe`, una copia del documento indicado. */
@@ -276,6 +308,15 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     return duplicarSeleccion();
   }
+  if (mod && tecla === 'g') {
+    e.preventDefault();
+    return agruparSeleccion();
+  }
+  if (mod && tecla === 'a') {
+    // Todo lo que está en la raíz (sin los recursos).
+    e.preventDefault();
+    return seleccionarVarios(hijos(estado.doc, null).filter((o) => !esquema.tipos.get(o.type).resource).map((o) => o.id));
+  }
   if (mod) return;
   if (ATAJOS[tecla]) return fijar({ herramienta: ATAJOS[tecla] });
   if (tecla === 'g') return nuevoGrupo();
@@ -301,11 +342,15 @@ window.addEventListener('keydown', (e) => {
 
   // Flechas: mover la selección 1 px (Shift: 10 px).
   const flechas = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-  const obj = estado.seleccion && buscar(estado.doc, estado.seleccion);
-  if (flechas[e.key] && obj) {
+  const raices = seleccionRaices();
+  if (flechas[e.key] && raices.length) {
     e.preventDefault();
     const [dx, dy] = flechas[e.key].map((d) => d * (e.shiftKey ? 10 : 1));
-    ejecutar([{ op: 'set', target: obj.id, props: { x: leer(esquema, obj, 'x') + dx, y: leer(esquema, obj, 'y') + dy } }], `mover ${obj.id}`, { agrupar: `flechas:${obj.id}` });
+    const ops = raices.map((id) => {
+      const obj = buscar(estado.doc, id);
+      return { op: 'set', target: id, props: { x: leer(esquema, obj, 'x') + dx, y: leer(esquema, obj, 'y') + dy } };
+    });
+    ejecutar(ops, `mover ${nombreDe(raices)}`, { agrupar: `flechas:${raices.join()}` });
   }
 });
 

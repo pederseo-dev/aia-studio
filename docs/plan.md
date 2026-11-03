@@ -1,6 +1,6 @@
 # Plan de construcción
 
-> Estado: **fase 2 construida; falta su prueba con IA** (2026-11-02). Se basa en [sintesis.md](sintesis.md) y en la investigación de
+> Estado: **fase 2 terminada** (2026-11-03); sigue la fase 3. Se basa en [sintesis.md](sintesis.md) y en la investigación de
 > [Moho](investigacion/moho-lua.md) y [Rive](investigacion/rive-runtime.md).
 
 ## Cómo trabajamos
@@ -69,7 +69,7 @@ Notas de lo construido:
 - Deshacer y rehacer van **por origen** y se calculan desde el historial: la IA deshace solo lo suyo y el usuario
   solo lo suyo. Si el documento cambió y la inversa ya no encaja, se avisa en vez de romper nada.
 - Al reparentar desde el árbol, el editor conserva la posición en pantalla. Por MCP, `move` no toca `x`/`y`.
-- Pendiente para más adelante: selección múltiple, copiar/pegar y duplicar.
+- Pendiente para más adelante: copiar/pegar entre documentos.
 
 **Núcleo**
 - Formato de defs inspirado en Rive (`type`, `extends`, propiedades con `type`, `default`, `animatable`, `range`,
@@ -94,7 +94,19 @@ Notas de lo construido:
 **Prueba con IA:** armar la estructura de un personaje simple con grupos y primitivas; renombrar y reordenar;
 corregir algo que el usuario cambió a mano sin pisarlo.
 
-## Fase 2: dibujo 🔶 construida, falta la prueba con IA
+## Fase 2: dibujo ✅ (2026-11-03)
+
+La prueba con IA salió 7/7 sin rechazos; las tareas 8 a 10 no se corrieron ([resultados](pruebas-ia/fase-2.md)).
+Lo que pidió la IA (herencia entre estilos, degradados atados al color, duplicar en espejo, vista previa con zoom)
+queda anotado allí para más adelante.
+
+Después de la prueba (pedido del usuario):
+- **Selección múltiple:** Ctrl o Shift + clic en el lienzo; recuadro arrastrando en un lugar vacío (toca formas, no
+  grupos); en la jerarquía, Ctrl + clic agrega o quita y Shift + clic toma el tramo. Mover, flechas, rotar y escalar
+  (desde el centro del conjunto, proporcional), duplicar, borrar y arrastrar en la jerarquía actúan sobre todos.
+  `Ctrl+G` agrupa la selección y `Ctrl+A` selecciona todo. El inspector muestra lo que tienen en común y marca los
+  valores distintos.
+- Recursos va en la parte de abajo del panel izquierdo, separado de la jerarquía.
 
 Notas de lo construido:
 - `path` con vértices en polares (straight con `radius`, mirrored, asymmetric, detached). La IA puede pasar `d` de

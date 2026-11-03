@@ -1,5 +1,7 @@
 // Inspector generado desde el esquema: cada propiedad del tipo seleccionado (o del documento, si no hay selección)
 // tiene su campo según su tipo. Un tipo nuevo en schema/ aparece aquí sin tocar este archivo.
+// Con varios objetos seleccionados muestra las propiedades que tienen todos; lo que se cambia se aplica a todos, y los
+// campos donde los valores difieren se marcan como mixtos (muestran el valor del objeto principal).
 
 import { buscar } from '../core/documento.js';
 import { validarValor } from '../core/esquema.js';
@@ -24,10 +26,16 @@ export function montarInspector(raiz) {
     const tipo = obj ? esquema.tipos.get(obj.type) : esquema.meta;
     const objetivo = obj ? obj.id : 'meta';
     const datos = obj ?? doc.meta;
+    const otros = obj ? estado.seleccionados.map((id) => buscar(doc, id)).filter((o) => o && o.id !== obj.id) : [];
+    // Con varios: solo lo que tienen todos (y que se puede editar en bloque).
+    const comun = ([prop, p]) => !otros.length || (!['vertices', 'stops'].includes(p.type) && otros.every((o) => esquema.tipos.get(o.type).properties[prop]?.type === p.type));
+    const propiedades = Object.entries(tipo.properties).filter(comun);
+    contexto = { otros };
 
-    raiz.replaceChildren(obj ? titulo(obj, tipo) : Object.assign(document.createElement('h2'), { textContent: 'Documento' }));
+    raiz.replaceChildren(otros.length ? tituloVarios(obj, otros) : obj ? titulo(obj, tipo) : Object.assign(document.createElement('h2'), { textContent: 'Documento' }));
+    if (otros.length && !propiedades.length) raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'No tienen propiedades en común.' }));
 
-    const grupos = Map.groupBy(Object.entries(tipo.properties), ([, p]) => p.group ?? 'Otros');
+    const grupos = Map.groupBy(propiedades, ([, p]) => p.group ?? 'Otros');
     const nombres = [...grupos.keys()].sort((a, b) => (ORDEN_DE_GRUPOS.indexOf(a) + 1 || 99) - (ORDEN_DE_GRUPOS.indexOf(b) + 1 || 99));
     for (const nombre of nombres) {
       raiz.append(Object.assign(document.createElement('h3'), { textContent: nombre }));
@@ -52,6 +60,19 @@ export function montarInspector(raiz) {
     if (enFoco) raiz.querySelector(`[data-prop="${enFoco}"] input, [data-prop="${enFoco}"] select`)?.focus();
   }
 
+  // Lo que el campo necesita saber de una selección múltiple (se arma en cada dibujo).
+  let contexto = { otros: [] };
+
+  function tituloVarios(obj, otros) {
+    const div = document.createElement('div');
+    div.className = 'titulo-varios';
+    const nombres = [obj, ...otros].map((o) => o.id);
+    div.innerHTML = `<h2>${nombres.length} objetos</h2><p class="ayuda"></p>`;
+    div.querySelector('p').textContent = nombres.join(', ');
+    div.title = `Principal: ${obj.id}. Los cambios se aplican a todos.`;
+    return div;
+  }
+
   function titulo(obj, tipo) {
     const div = document.createElement('div');
     div.className = 'campo';
@@ -73,21 +94,25 @@ export function montarInspector(raiz) {
     const esObjeto = objetivo !== 'meta';
     const origen = esObjeto ? origenDelValor(estado.doc, datos, prop) : datos[prop] !== undefined ? 'propio' : 'defecto';
     const valor = esObjeto ? valorEfectivo(esquema, estado.doc, datos, prop) : (datos[prop] ?? p.default);
+    const { otros } = contexto;
+    const objetivos = [objetivo, ...otros.map((o) => o.id)];
+    const mixto = otros.some((o) => JSON.stringify(valorEfectivo(esquema, estado.doc, o, prop)) !== JSON.stringify(valor));
     const div = document.createElement('div');
-    div.className = `campo${origen === 'defecto' ? ' por-defecto' : origen === 'estilo' ? ' por-defecto por-estilo' : ''}`;
+    div.className = `campo${origen === 'defecto' ? ' por-defecto' : origen === 'estilo' ? ' por-defecto por-estilo' : ''}${mixto ? ' mixto' : ''}`;
     div.dataset.prop = prop;
     const label = document.createElement('label');
     label.textContent = etiqueta ?? prop;
     const deDonde = origen === 'estilo' ? `\nViene del estilo "${datos.style}".` : '';
-    label.title = `${prop}: ${p.description ?? ''}${p.default !== undefined ? `\nPor defecto: ${JSON.stringify(p.default)}` : ''}${deDonde}`;
+    label.title = `${prop}: ${p.description ?? ''}${p.default !== undefined ? `\nPor defecto: ${JSON.stringify(p.default)}` : ''}${deDonde}${mixto ? `\nValores distintos: se muestra el de ${objetivo}.` : ''}`;
     const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Volver al valor por defecto' });
-    restablecer.addEventListener('click', () => ejecutar([{ op: 'unset', target: objetivo, props: [prop] }], `${objetivo}.${prop} por defecto`));
+    const nombre = otros.length ? `${objetivos.length} objetos` : objetivo;
+    restablecer.addEventListener('click', () => ejecutar(objetivos.map((t) => ({ op: 'unset', target: t, props: [prop] })), `${nombre}.${prop} por defecto`));
 
-    const cambio = (v) => [{ op: 'set', target: objetivo, props: { [prop]: v } }];
+    const cambio = (v) => objetivos.map((t) => ({ op: 'set', target: t, props: { [prop]: v } }));
     // Varios cambios seguidos de la misma propiedad (flechitas del campo, escribir y corregir) son un solo paso.
     const confirmar = (v) => {
-      if (Object.is(v, valor)) return previsualizar(null);
-      ejecutar(cambio(v), `${objetivo}.${prop}`, { agrupar: `${objetivo}.${prop}` });
+      if (Object.is(v, valor) && !mixto) return previsualizar(null);
+      ejecutar(cambio(v), `${nombre}.${prop}`, { agrupar: `${objetivos.join()}.${prop}` });
     };
     const control = CONTROLES[p.type]({ p, valor, previsualizar: (v) => previsualizar(cambio(v)), confirmar, div, label, objetivo });
     div.append(label, control, restablecer);
@@ -218,7 +243,7 @@ const CONTROLES = {
     caja.className = 'color';
     const boton = Object.assign(document.createElement('button'), { type: 'button', textContent: estado.edicion === objetivo ? 'Terminar' : 'Editar puntos' });
     boton.title = 'También con doble clic en el path o Enter';
-    boton.addEventListener('click', () => fijar(estado.edicion === objetivo ? { edicion: null, vertice: null } : { edicion: objetivo, seleccion: objetivo, vertice: null, herramienta: 'seleccionar' }));
+    boton.addEventListener('click', () => fijar(estado.edicion === objetivo ? { edicion: null, vertice: null } : { edicion: objetivo, seleccion: objetivo, seleccionados: [objetivo], vertice: null, herramienta: 'seleccionar' }));
     const resumen = document.createElement('span');
     const curvos = valor.filter((v) => (v.mode ?? 'straight') !== 'straight').length;
     resumen.textContent = `${valor.length} puntos${curvos ? `, ${curvos} curvos` : ''}`;

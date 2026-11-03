@@ -41,3 +41,21 @@ Pasar las tareas **una por una, tal cual**, sin pistas extra.
 
 | Fecha | Cliente y modelo | Logradas | Rechazos | Correcciones a mano | Notas |
 | --- | --- | --- | --- | --- | --- |
+| 2026-11-03 | Claude Code (sesión nueva), Opus 5.5 | 7/7 (8 a 10 sin correr) | 0 | 0 | Ver abajo. |
+
+### Corrida del 2026-11-03
+
+- **Lo que salió bien:** dibujó un gato con 17 paths curvos (8 abiertos: bigotes y boca), usó los cuatro estilos de
+  la paleta en 22 objetos y puso el degradado radial `fur_shade` en el estilo `fur` y no forma por forma. Los
+  pivotes quedaron donde correspondía: la cabeza en el cuello y la cola en su base. No tuvo ningún lote rechazado.
+- **Tareas 8 a 10 sin correr:** dependían de un retoque a mano de una oreja, y la pestaña con el dibujo se cerró
+  antes de hacerlo. Se saltearon para seguir con la implementación. El espejado de un retoque del usuario y el
+  pivote con compensación quedan para probarlos en la fase 3, que vuelve a necesitarlos.
+
+**Lo que pidió la IA** (para más adelante, por orden de importancia):
+
+1. **Herencia entre estilos** (un estilo base): el color del contorno se repite en varios estilos.
+2. **Degradados atados al color del estilo:** para pasar el pelaje a gris tuvo que cambiar el estilo y también las
+   paradas del degradado.
+3. **Duplicar en espejo** cambiando `_l` por `_r` en los ids de los hijos.
+4. **`render_preview` con zoom o recorte** para revisar detalles chicos (ojos, bigotes).

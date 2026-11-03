@@ -68,9 +68,13 @@
         <tr><th colspan="2">Crear</th></tr>
         <tr><td><kbd>P</kbd></td><td>Pluma (Enter o Esc para terminar)</td></tr>
         <tr><td><kbd>R</kbd> / <kbd>E</kbd></td><td>Rectángulo / elipse (Shift: cuadrado o círculo)</td></tr>
-        <tr><td><kbd>G</kbd></td><td>Nuevo grupo</td></tr>
+        <tr><td><kbd>G</kbd></td><td>Nuevo grupo vacío</td></tr>
         <tr><th colspan="2">Edición</th></tr>
         <tr><td><kbd>Enter</kbd></td><td>Editar los puntos del path seleccionado</td></tr>
+        <tr><td>Clic · <kbd>Ctrl</kbd>/<kbd>Shift</kbd> + clic</td><td>Seleccionar · agregar o quitar (en la jerarquía, Shift = tramo)</td></tr>
+        <tr><td>Arrastrar en vacío</td><td>Seleccionar con un recuadro (Ctrl/Shift: sumar)</td></tr>
+        <tr><td><kbd>Ctrl+A</kbd></td><td>Seleccionar todo</td></tr>
+        <tr><td><kbd>Ctrl+G</kbd></td><td>Agrupar la selección</td></tr>
         <tr><td><kbd>Ctrl+D</kbd></td><td>Duplicar</td></tr>
         <tr><td><kbd>Supr</kbd></td><td>Borrar (en edición de puntos: el vértice)</td></tr>
         <tr><td>Flechas</td><td>Mover 1 px (Shift: 10 px)</td></tr>
@@ -88,12 +92,12 @@
       <aside id="panel-objetos" class="panel">
         <div class="cabecera">
           <h2>Jerarquía</h2>
-          <button id="nuevo-grupo" type="button" class="icono" title="Nuevo grupo (G)">▣+</button>
+          <button id="nuevo-grupo" type="button" class="icono" title="Nuevo grupo (G) · con varios seleccionados, los agrupa (Ctrl+G)">▣+</button>
           <button id="duplicar" type="button" class="icono" title="Duplicar selección con sus hijos (Ctrl+D)">⧉</button>
           <button id="borrar" type="button" class="icono" title="Borrar selección (Supr)">✕</button>
         </div>
-        <ul id="arbol" class="arbol" role="tree"></ul>
-        <div class="cabecera">
+        <ul id="arbol" class="arbol" role="tree" aria-multiselectable="true"></ul>
+        <div class="cabecera cabecera-recursos">
           <h2>Recursos</h2>
           <button id="nuevo-estilo" type="button" class="icono" title="Nuevo estilo compartido: varias formas toman de él su relleno y contorno">◆+</button>
           <button id="nuevo-degradado" type="button" class="icono" title="Nuevo degradado lineal para usar en fillGradient">▤+</button>

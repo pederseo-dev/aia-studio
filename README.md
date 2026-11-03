@@ -27,7 +27,7 @@ npm test        # pruebas del núcleo
 npm run mcp     # servidor MCP por stdio (normalmente lo arranca el cliente de IA)
 ```
 
-> Estado: **fase 2** del [plan](docs/plan.md): dibujo con paths, estilos y degradados, sobre el editor y el MCP de
+> Estado: **fase 2 terminada** del [plan](docs/plan.md): dibujo con paths, estilos y degradados, sobre el editor y el MCP de
 > la fase 1. El prototipo que probó la idea quedó en la etiqueta de git `prototipo-0`.
 
 ### Editor
@@ -40,6 +40,7 @@ muestra las demás herramientas.
 | Acción | Cómo |
 | --- | --- |
 | Seleccionar y mover | Herramienta `V`; arrastrar en el lienzo (Shift = un solo eje) o flechas (Shift = 10 px). |
+| Seleccionar varios | Ctrl o Shift + clic; arrastrar en un lugar vacío hace un recuadro; en la jerarquía, Ctrl + clic suma y Shift + clic toma el tramo. `Ctrl+A` = todo, `Ctrl+G` = agrupar. Rotan y escalan desde el centro del conjunto; el inspector cambia lo que tienen en común. |
 | Rotar y escalar | `T` y `S`: arrastrar en cualquier parte del lienzo gira o escala la selección desde su pivote. |
 | Crear formas | `R` rectángulo, `E` elipse: arrastrar en el lienzo (Shift = cuadrado o círculo). |
 | Pluma | `P`: clic = vértice recto, clic y arrastrar = curvo, clic en el primero = cerrar, Enter o Esc = terminar abierto. |

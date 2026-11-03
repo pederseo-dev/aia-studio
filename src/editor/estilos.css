@@ -127,7 +127,11 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
   grid-template-areas: "objetos lienzo derecho" "tiempo tiempo tiempo";
 }
 .panel { background: var(--panel); overflow-y: auto; }
-#panel-objetos { grid-area: objetos; border-right: 1px solid var(--borde); }
+#panel-objetos { grid-area: objetos; border-right: 1px solid var(--borde); display: flex; flex-direction: column; overflow: hidden; }
+/* La jerarquía ocupa el alto libre; los recursos quedan abajo, con su propio desplazamiento. */
+#arbol { flex: 1; min-height: 80px; overflow-y: auto; }
+.cabecera-recursos { border-top: 1px solid var(--borde); }
+#recursos { flex: 0 0 auto; max-height: 35%; overflow-y: auto; }
 #panel-derecho { grid-area: derecho; border-left: 1px solid var(--borde); display: flex; flex-direction: column; }
 #linea-de-tiempo { grid-area: tiempo; border-top: 1px solid var(--borde); padding: 8px 12px; }
 
@@ -150,7 +154,8 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
   border-bottom: 2px solid transparent;
 }
 .fila:hover { background: var(--panel-2); }
-.fila.seleccionada { background: #3a3f6e; }
+.fila.seleccionada { background: #31355c; }
+.fila.seleccionada.principal { background: #3a3f6e; }
 .fila .tipo { width: 16px; text-align: center; color: var(--suave); }
 .fila .plegar { width: 14px; border: none; background: none; padding: 0; color: var(--tenue); font-size: 10px; }
 .fila .plegar:hover { color: var(--texto); }
@@ -175,6 +180,8 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 .marco-documento { fill: none; stroke: #00000055; stroke-width: 1; }
 .seleccion { fill: none; stroke: var(--acento); stroke-width: 1.5; }
 .pivote { stroke: var(--acento); stroke-width: 1.5; fill: var(--lienzo); }
+.recuadro { fill: #8b9cff18; stroke: var(--acento); stroke-width: 1; stroke-dasharray: 4 3; }
+.seleccion.secundaria { stroke-dasharray: 3 3; opacity: 0.8; }
 .borrador { fill: #8b9cff22; stroke: var(--acento); stroke-dasharray: 4 3; }
 #lienzo.herramienta-path { cursor: crosshair; }
 #lienzo.herramienta-rotar { cursor: alias; }
@@ -197,6 +204,9 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 /* ---------- Inspector ---------- */
 
 #inspector { padding: 8px 10px 4px; }
+#inspector .titulo-varios p { margin: 2px 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.campo.mixto input:not([type=checkbox]):not([type=color]), .campo.mixto select { font-style: italic; color: var(--suave); }
+.campo.mixto label::after { content: ' ≠'; color: var(--tenue); }
 #inspector .titulo { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; }
 #inspector .titulo .tipo { color: var(--suave); }
 #inspector h3 {

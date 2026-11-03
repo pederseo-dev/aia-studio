@@ -55,7 +55,7 @@ export function montarLienzo(contenedor) {
       dibujarSuperposicion();
     }
     // Salir de la edición de puntos si cambia la selección o el path desaparece.
-    if (estado.edicion && ('seleccion' in c || 'doc' in c) && (estado.seleccion !== estado.edicion || !buscar(estado.doc, estado.edicion))) {
+    if (estado.edicion && ('seleccion' in c || 'doc' in c) && (estado.seleccion !== estado.edicion || estado.seleccionados.length > 1 || !buscar(estado.doc, estado.edicion))) {
       fijar({ edicion: null, vertice: null });
     }
     if ('id' in c && estado.doc && ajustadoPara !== estado.id) ajustar();
@@ -263,7 +263,7 @@ export function montarLienzo(contenedor) {
   }
 
   function editarPuntos(id) {
-    fijar({ herramienta: 'seleccionar', seleccion: id, edicion: id, vertice: null });
+    fijar({ herramienta: 'seleccionar', seleccion: id, seleccionados: [id], edicion: id, vertice: null });
   }
 
   return {

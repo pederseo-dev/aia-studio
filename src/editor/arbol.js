@@ -1,10 +1,11 @@
 // Árbol de objetos: muestra la jerarquía con lo que está al frente arriba (como en Moho o Figma).
 // Arrastrar una fila cambia el orden o el padre; doble clic renombra; el ojo muestra u oculta.
+// Ctrl + clic agrega o quita de la selección; Shift + clic selecciona el tramo de filas desde la anterior.
 
 import { buscar, hijos, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
-import { aplicar, invertir, matrizMundo } from '../core/geometria.js';
-import { ejecutar, esquema, estado, seleccionar, suscribir } from './estado.js';
+import { aplicarOperaciones } from '../core/operaciones.js';
+import { alternarSeleccion, ejecutar, esquema, estado, mantenerPosicion, seleccionRaices, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 
 const ICONOS = { group: '▣', rect: '▭', ellipse: '◯', path: '✒', style: '◆', linear_gradient: '▤', radial_gradient: '◍' };
 const esRecurso = (o) => esquema.tipos.get(o.type)?.resource;
@@ -28,14 +29,16 @@ export function montarArbol(raiz, raizRecursos) {
     else raiz.innerHTML = '<li class="vacio">Vacío. Dibuja con las herramientas o pídeselo a la IA.</li>';
     const recursos = doc.objects.filter(esRecurso).map((o) => {
       const li = document.createElement('li');
-      li.innerHTML = `<div class="fila${o.id === estado.seleccion ? ' seleccionada' : ''}" data-id="${o.id}" style="padding-left:8px"><span class="tipo" title="${o.type}">${ICONOS[o.type] ?? '•'}</span><span class="nombre"></span></div>`;
+      li.innerHTML = `<div class="fila${claseSeleccion(o.id)}" data-id="${o.id}" style="padding-left:8px"><span class="tipo" title="${o.type}">${ICONOS[o.type] ?? '•'}</span><span class="nombre"></span></div>`;
       li.querySelector('.nombre').textContent = o.id;
       return li;
     });
     if (recursos.length) raizRecursos.replaceChildren(...recursos);
     else raizRecursos.innerHTML = '<li class="vacio">Sin estilos ni degradados.</li>';
-    raiz.querySelector('.seleccionada')?.scrollIntoView({ block: 'nearest' });
+    raiz.querySelector('.principal')?.scrollIntoView({ block: 'nearest' });
   }
+
+  const claseSeleccion = (id) => (id === estado.seleccion ? ' seleccionada principal' : estado.seleccionados.includes(id) ? ' seleccionada' : '');
 
   function rama(doc, padre, nivel) {
     return hijos(doc, padre)
@@ -46,7 +49,7 @@ export function montarArbol(raiz, raizRecursos) {
         li.setAttribute('role', 'treeitem');
         const visible = leer(esquema, o, 'visible');
         const fila = document.createElement('div');
-        fila.className = `fila${o.id === estado.seleccion ? ' seleccionada' : ''}${visible ? '' : ' oculta'}`;
+        fila.className = `fila${claseSeleccion(o.id)}${visible ? '' : ' oculta'}`;
         fila.dataset.id = o.id;
         fila.draggable = true;
         fila.style.paddingLeft = `${4 + nivel * 14}px`;
@@ -87,7 +90,20 @@ export function montarArbol(raiz, raizRecursos) {
       ejecutar([visible ? { op: 'set', target: id, props: { visible: false } } : { op: 'unset', target: id, props: ['visible'] }], `${visible ? 'ocultar' : 'mostrar'} ${id}`);
       return;
     }
+    if (e.ctrlKey || e.metaKey) return alternarSeleccion(id);
+    if (e.shiftKey && estado.seleccion) return seleccionarTramo(fila);
     seleccionar(id);
+  }
+
+  // Shift + clic: todas las filas visibles entre la del objeto principal y la clicada, en la misma lista.
+  function seleccionarTramo(fila) {
+    const lista = fila.closest('#arbol, #recursos') ?? raiz;
+    const filas = [...lista.querySelectorAll('.fila')].map((f) => f.dataset.id);
+    const a = filas.indexOf(estado.seleccion);
+    const b = filas.indexOf(fila.dataset.id);
+    if (a < 0) return seleccionar(fila.dataset.id);
+    const tramo = filas.slice(Math.min(a, b), Math.max(a, b) + 1);
+    seleccionarVarios([...estado.seleccionados, ...tramo], fila.dataset.id);
   }
 
   // Renombrar con doble clic.
@@ -106,7 +122,7 @@ export function montarArbol(raiz, raizRecursos) {
       const nuevo = input.value.trim();
       if (guardar && nuevo && nuevo !== anterior) {
         ejecutar([{ op: 'rename', target: anterior, id: nuevo }], `renombrar ${anterior} → ${nuevo}`);
-        if (estado.seleccion === anterior) seleccionar(buscar(estado.doc, nuevo) ? nuevo : anterior);
+        if (estado.seleccion === anterior && buscar(estado.doc, nuevo)) seleccionarVarios(estado.seleccionados.map((s) => (s === anterior ? nuevo : s)), nuevo);
       } else {
         nombre.textContent = anterior;
       }
@@ -133,6 +149,10 @@ export function montarArbol(raiz, raizRecursos) {
     raiz.querySelectorAll('.soltar-antes, .soltar-despues, .soltar-dentro').forEach((f) => f.classList.remove('soltar-antes', 'soltar-despues', 'soltar-dentro'));
   }
 
+  // Lo que se arrastra: la selección entera si la fila es parte de ella, si no solo esa fila.
+  const arrastrados = () => (estado.seleccionados.includes(arrastrado) ? seleccionRaices() : [arrastrado]);
+  const contieneA = (ids, destino) => ids.some((id) => subarbol(estado.doc, id).includes(destino));
+
   raiz.addEventListener('dragstart', (e) => {
     const fila = e.target.closest('.fila');
     arrastrado = fila?.dataset.id ?? null;
@@ -142,7 +162,7 @@ export function montarArbol(raiz, raizRecursos) {
 
   raiz.addEventListener('dragover', (e) => {
     const fila = e.target.closest('.fila');
-    if (!arrastrado || !fila || subarbol(estado.doc, arrastrado).includes(fila.dataset.id)) return;
+    if (!arrastrado || !fila || contieneA(arrastrados(), fila.dataset.id)) return;
     e.preventDefault();
     limpiarMarcas();
     fila.classList.add(`soltar-${zona(e, fila)}`);
@@ -156,30 +176,34 @@ export function montarArbol(raiz, raizRecursos) {
     e.preventDefault();
     limpiarMarcas();
     const fila = e.target.closest('.fila');
-    const id = arrastrado;
+    if (!fila || !arrastrado) return (arrastrado = null);
+    const ids = arrastrados();
     arrastrado = null;
-    if (!fila || !id || subarbol(estado.doc, id).includes(fila.dataset.id)) return;
+    if (contieneA(ids, fila.dataset.id)) return;
     const destino = buscar(estado.doc, fila.dataset.id);
     const donde = zona(e, fila);
+    const nombre = ids.length === 1 ? ids[0] : `${ids.length} objetos`;
+    // Se arma el lote paso a paso sobre una copia: cada índice depende de cómo quedó el anterior.
+    let doc = estado.doc;
+    const ops = [];
+    const paso = (lote) => {
+      doc = aplicarOperaciones(doc, lote, esquema).doc;
+      ops.push(...lote);
+    };
     if (donde === 'dentro') {
-      ejecutar([{ op: 'move', target: id, parent: destino.id }, ...mantenerPosicion(id, destino.id)], `mover ${id} dentro de ${destino.id}`);
-      return;
+      for (const id of ids) paso([{ op: 'move', target: id, parent: destino.id }, ...mantenerPosicion(doc, id, destino.id)]);
+      return ejecutar(ops, `mover ${nombre} dentro de ${destino.id}`);
     }
     // En el panel, "arriba" es "delante": antes de la fila = un lugar más al frente que el destino.
+    // Se insertan de a uno junto al destino, en el orden que conserva cómo estaban entre ellos.
     const padre = destino.parent ?? null;
-    const hermanos = hijos(estado.doc, padre).filter((o) => o.id !== id);
-    const pos = hermanos.indexOf(destino);
-    ejecutar([{ op: 'move', target: id, parent: padre, index: donde === 'antes' ? pos + 1 : pos }, ...mantenerPosicion(id, padre)], `reordenar ${id}`);
+    for (const id of donde === 'antes' ? [...ids].reverse() : ids) {
+      const hermanos = hijos(doc, padre).filter((o) => o.id !== id);
+      const pos = hermanos.findIndex((o) => o.id === destino.id);
+      paso([{ op: 'move', target: id, parent: padre, index: donde === 'antes' ? pos + 1 : pos }, ...mantenerPosicion(doc, id, padre)]);
+    }
+    ejecutar(ops, `reordenar ${nombre}`);
   });
-
-  // Al cambiar de padre, recalcula x/y para que el objeto no salte de lugar en pantalla.
-  function mantenerPosicion(id, padreNuevo) {
-    const obj = buscar(estado.doc, id);
-    if ((obj.parent ?? null) === padreNuevo) return [];
-    const mundo = aplicar(matrizMundo(estado.doc, esquema, obj.parent ?? null), leer(esquema, obj, 'x'), leer(esquema, obj, 'y'));
-    const [x, y] = aplicar(invertir(matrizMundo(estado.doc, esquema, padreNuevo)), ...mundo);
-    return [{ op: 'set', target: id, props: { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 } }];
-  }
 
   raiz.addEventListener('dragend', () => {
     arrastrado = null;
