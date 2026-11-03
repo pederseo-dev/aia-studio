@@ -5,6 +5,7 @@
 import { buscar, hijos, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { aplicarOperaciones } from '../core/operaciones.js';
+import { alternarEnlace } from './huesos.js';
 import { alternarSeleccion, ejecutar, esquema, estado, mantenerPosicion, seleccionRaices, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 
 const ICONOS = { group: '▣', rect: '▭', ellipse: '◯', path: '✒', bone: '⟋', style: '◆', linear_gradient: '▤', radial_gradient: '◍', pose: '♟' };
@@ -93,6 +94,8 @@ export function montarArbol(raiz, raizRecursos) {
       ejecutar([visible ? { op: 'set', target: id, props: { visible: false } } : { op: 'unset', target: id, props: ['visible'] }], `${visible ? 'ocultar' : 'mostrar'} ${id}`);
       return;
     }
+    // «Enlazar dibujo…»: la fila se pega al hueso (o se suelta) en vez de seleccionarse.
+    if (estado.enlazando && buscar(estado.doc, id)?.type !== 'bone') return alternarEnlace(id, estado.enlazando);
     if (e.ctrlKey || e.metaKey) return alternarSeleccion(id);
     if (e.shiftKey && estado.seleccion) return seleccionarTramo(fila);
     seleccionar(id);

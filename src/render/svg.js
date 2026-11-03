@@ -20,9 +20,14 @@ export const DIBUJAR = {
     const w = v('width');
     const h = v('height');
     const r = Math.min(v('cornerRadius'), w / 2, h / 2);
-    return `<rect x="${n(-w / 2)}" y="${n(-h / 2)}" width="${n(w)}" height="${n(h)}"${r ? ` rx="${n(r)}"` : ''}${pintura(v)}/>`;
+    return `<rect x="${n(-w * v('originX'))}" y="${n(-h * v('originY'))}" width="${n(w)}" height="${n(h)}"${r ? ` rx="${n(r)}"` : ''}${pintura(v)}/>`;
   },
-  ellipse: (v) => `<ellipse rx="${n(v('width') / 2)}" ry="${n(v('height') / 2)}"${pintura(v)}/>`,
+  ellipse: (v) => {
+    const [w, h] = [v('width'), v('height')];
+    const cx = w * (0.5 - v('originX'));
+    const cy = h * (0.5 - v('originY'));
+    return `<ellipse${cx ? ` cx="${n(cx)}"` : ''}${cy ? ` cy="${n(cy)}"` : ''} rx="${n(w / 2)}" ry="${n(h / 2)}"${pintura(v)}/>`;
+  },
   path: (v) => {
     const d = verticesAD(v('vertices'), v('closed'));
     return d ? `<path d="${d}"${pintura(v)} stroke-linejoin="round" stroke-linecap="round"/>` : '';

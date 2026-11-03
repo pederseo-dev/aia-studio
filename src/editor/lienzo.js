@@ -50,9 +50,10 @@ export function montarLienzo(contenedor) {
   suscribir((c) => {
     if ('pose' in c) contenedor.classList.toggle('modo-pose', !!estado.pose);
     if ('doc' in c || 'previa' in c || 'pose' in c) dibujarDocumento();
-    else if ('seleccion' in c || 'edicion' in c || 'vertice' in c) dibujarSuperposicion();
+    else if ('seleccion' in c || 'edicion' in c || 'vertice' in c || 'enlazando' in c) dibujarSuperposicion();
+    if ('enlazando' in c) contenedor.classList.toggle('enlazando', !!estado.enlazando);
     if ('herramienta' in c) {
-      contenedor.className = `herramienta-${estado.herramienta}${estado.pose ? ' modo-pose' : ''}`;
+      contenedor.className = `herramienta-${estado.herramienta}${estado.pose ? ' modo-pose' : ''}${estado.enlazando ? ' enlazando' : ''}`;
       if (estado.herramienta !== 'path' && pluma.activa()) pluma.terminar(false);
       if (estado.herramienta !== 'seleccionar' && estado.edicion) fijar({ edicion: null, vertice: null });
       dibujarSuperposicion();
@@ -183,6 +184,7 @@ export function montarLienzo(contenedor) {
     if (!estado.doc) return;
     if (e.button === 1 || (e.button === 0 && espacio)) return panear(e);
     if (e.button !== 0) return;
+    if (estado.enlazando) return huesos.alEnlazar(e);
     const manija = e.target.closest('[data-manija]')?.dataset.manija;
     if (manija?.startsWith('hueso-')) return huesos.manija(e, manija);
     if (manija) return estado.edicion ? puntos.manija(e, manija) : transformar.manija(e, manija);

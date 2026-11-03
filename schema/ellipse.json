@@ -1,9 +1,11 @@
 {
   "name": "ellipse",
   "extends": "shape",
-  "description": "Elipse centrada en su x/y. Con width = height es un círculo.",
+  "description": "Elipse con su pivote en x/y; por defecto centrada (originX/originY mueven el pivote dentro de la forma). Con width = height es un círculo.",
   "properties": {
     "width": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Forma", "description": "Ancho (diámetro horizontal) en px." },
-    "height": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Forma", "description": "Alto (diámetro vertical) en px." }
+    "height": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Forma", "description": "Alto (diámetro vertical) en px." },
+    "originX": { "type": "number", "default": 0.5, "step": 0.01, "group": "Forma", "description": "Dónde cae el pivote (x/y) dentro de la forma, en fracción del ancho: 0 = borde izquierdo, 0.5 = centro, 1 = borde derecho." },
+    "originY": { "type": "number", "default": 0.5, "step": 0.01, "group": "Forma", "description": "Dónde cae el pivote dentro de la forma, en fracción del alto: 0 = borde de arriba, 0.5 = centro, 1 = borde de abajo." }
   }
 }

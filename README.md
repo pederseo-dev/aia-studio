@@ -45,11 +45,12 @@ muestra las demás herramientas.
 | Crear formas | `R` rectángulo, `E` elipse: arrastrar en el lienzo (Shift = cuadrado o círculo). |
 | Pluma | `P`: clic = vértice recto, clic y arrastrar = curvo, clic en el primero = cerrar, Enter o Esc = terminar abierto. |
 | Editar puntos | Doble clic en un path o Enter: arrastrar anclas y tangentes (Alt = separar), doble clic en un ancla = recto/curvo, clic en el contorno = agregar, Supr = borrar. Enter o Esc para salir. |
-| Rotar, escalar, pivote | Manijas de la selección: círculo de arriba = rotar (Shift = de a 15°), esquinas = escalar desde el pivote (Shift = proporcional), punto del pivote = moverlo sin mover el dibujo (grupos y paths). |
+| Rotar, escalar, pivote | Manijas de la selección: círculo de arriba = rotar (Shift = de a 15°), esquinas = escalar desde el pivote (Shift = proporcional), punto del pivote = moverlo sin mover el dibujo (grupos, paths, rectángulos y elipses). |
 | Estilos y degradados | «+ Estilo» y «+ Degradado» en Recursos; las formas los usan con `style` y `fillGradient` en el inspector. Lo que viene del estilo se ve en naranja. |
 | Importar SVG | ☰ → «Importar SVG…»: las formas llegan como paths editables dentro de un grupo. |
 | Huesos | `B`: arrastrar en vacío crea un hueso (hijo del seleccionado), desde su punta encadena otro, arrastrar un hueso lo gira, el círculo del origen lo mueve y Alt + la punta cambia dirección y largo. |
-| Enlazar al esqueleto | Seleccionar el dibujo y un hueso (Ctrl + clic) y `Ctrl+B`, soltar el dibujo sobre el hueso en la jerarquía, o elegir `bone` en el inspector. Enlazar no mueve nada. |
+| Enlazar al esqueleto | Con un hueso seleccionado, «Enlazar dibujo…» en la barra de opciones y clic en las partes (Alt = su grupo). También: dibujo + hueso seleccionados y `Ctrl+B`, soltar el dibujo sobre el hueso en la jerarquía, o `bone` en el inspector. Enlazar no mueve nada: el dibujo sigue al hueso en las poses. |
+| Barra de opciones | Arriba del lienzo: qué se puede hacer con la herramienta y lo seleccionado, con botones para las acciones (por ejemplo, con un hueso: enlazar, ver lo enlazado, hueso hijo, probar en una pose). |
 | Poses | «Ver» en la barra: Montaje o una pose (o «＋ Nueva pose…»). En una pose, arrastrar un hueso o el dibujo enlazado lo gira sin tocar el montaje. |
 | Grupos | `G` crea un grupo; arrastrar filas en la jerarquía para reordenar o meter dentro de un grupo; ▾/▸ pliega. |
 | Duplicar | `Ctrl+D` duplica la selección con sus hijos; ☰ → «Hacer una copia…» copia el documento. |

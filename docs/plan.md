@@ -150,6 +150,9 @@ Notas de lo construido:
   mover el origen y ajustar la punta (Alt, o con Mover). `Ctrl+B` y soltar en la jerarquía enlazan. Selector
   «Ver: Montaje / Pose» en la barra; en una pose el lienzo se enmarca en verde, arrastrar un hueso (o el dibujo
   enlazado) lo gira en la pose y el inspector muestra los valores de la pose arriba de los del montaje.
+- Ajustes tras probarlo a mano: una **barra de opciones** sobre el lienzo explica qué se puede hacer según la
+  herramienta y la selección, con botones (con un hueso: «Enlazar dibujo…» por clics, ver lo enlazado, hueso hijo,
+  probar en una pose). Rectángulos y elipses tienen pivote movible (`originX`/`originY`, como en Rive).
 - MCP: `set_pose` (suma a la pose y devuelve la imagen), `render_preview` con `pose`, `region` (recorte, que pidió la
   IA en la fase 2) y `bones` (el esqueleto encima, con nombres). `get_document` muestra dónde queda cada hueso en el
   documento, para no tener que sumar ángulos relativos.

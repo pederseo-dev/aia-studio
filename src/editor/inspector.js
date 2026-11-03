@@ -11,8 +11,8 @@ import { opsDePose, poseActiva } from './huesos.js';
 import { ejecutar, esquema, estado, fijar, previsualizar, seleccionar, suscribir } from './estado.js';
 
 const ORDEN_DE_GRUPOS = ['General', 'Forma', 'Transformación', 'Apariencia', 'Degradado', 'Lienzo', 'Tiempo'];
-const PARES = { x: 'y', scaleX: 'scaleY', width: 'height', x1: 'y1', x2: 'y2', cx: 'cy' };
-const ETIQUETAS = { x: 'X', y: 'Y', scaleX: 'Esc X', scaleY: 'Esc Y', width: 'Ancho', height: 'Alto', x1: 'X1', y1: 'Y1', x2: 'X2', y2: 'Y2', cx: 'CX', cy: 'CY' };
+const PARES = { x: 'y', scaleX: 'scaleY', width: 'height', originX: 'originY', x1: 'y1', x2: 'y2', cx: 'cy' };
+const ETIQUETAS = { x: 'X', y: 'Y', scaleX: 'Esc X', scaleY: 'Esc Y', width: 'Ancho', height: 'Alto', originX: 'Piv X', originY: 'Piv Y', x1: 'X1', y1: 'Y1', x2: 'X2', y2: 'Y2', cx: 'CX', cy: 'CY' };
 
 export function montarInspector(raiz) {
   suscribir((c) => {

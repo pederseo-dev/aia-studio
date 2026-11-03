@@ -36,7 +36,8 @@ aia-studio es un editor de personajes 2D. Un documento es JSON; tú lo modificas
 - Coordenadas como en SVG: origen arriba a la izquierda, **Y crece hacia abajo**. Unidades en px.
 - Ángulos en **grados**; positivo = sentido horario.
 - Cada objeto se dibuja en el sistema de coordenadas de su padre: \`x\`/\`y\` son relativas al padre.
-- Las formas (\`rect\`, \`ellipse\`) están **centradas** en su \`x\`/\`y\`.
+- Las formas (\`rect\`, \`ellipse\`) están **centradas** en su \`x\`/\`y\`, salvo que \`originX\`/\`originY\` (fracciones de
+  0 a 1) pongan el pivote en otro punto: \`originY: 1\` = pivote en el borde de abajo.
 - Orden de dibujo: entre hermanos, los últimos de la lista quedan **encima**.
 
 ## Documento

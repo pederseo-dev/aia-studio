@@ -47,7 +47,7 @@ export function crearTransformar(ctx) {
     if (esquinas) manijasDeCaja(esquinas);
     const m = el.getCTM();
     const [px, py] = [m.e, m.f];
-    const movible = obj.type === 'group' || obj.type === 'path';
+    const movible = ['group', 'path', 'rect', 'ellipse'].includes(obj.type);
     ctx.superposicion.append(
       ctx.crear('circle', { class: movible ? 'pivote manija' : 'pivote', 'data-manija': movible ? 'pivote' : '', cx: px, cy: py, r: 5 }, movible ? 'Mover el pivote sin mover el dibujo' : 'Pivote'),
     );
@@ -235,6 +235,11 @@ export function crearTransformar(ctx) {
           ops = [{ op: 'set', target: id, props: { x, y } }];
           if (obj.type === 'path') {
             ops[0].props.vertices = transformarVertices(leer(esquema, obj, 'vertices'), [1, 0, 0, 1, -dx, -dy]);
+          } else if (obj.type === 'rect' || obj.type === 'ellipse') {
+            // La forma se corre dentro de su marco: el pivote pasa a otra fracción del ancho y del alto.
+            const [w, h] = [leer(esquema, obj, 'width'), leer(esquema, obj, 'height')];
+            if (w && Math.abs(dx) > 1e-6) ops[0].props.originX = redondear(leer(esquema, obj, 'originX') + dx / w, 10000);
+            if (h && Math.abs(dy) > 1e-6) ops[0].props.originY = redondear(leer(esquema, obj, 'originY') + dy / h, 10000);
           } else {
             for (const h of hijos(estado.doc, id)) {
               ops.push({ op: 'set', target: h.id, props: { x: redondear(leer(esquema, h, 'x') - dx, 100), y: redondear(leer(esquema, h, 'y') - dy, 100) } });

@@ -1,10 +1,12 @@
 {
   "name": "rect",
   "extends": "shape",
-  "description": "Rectángulo centrado en su x/y.",
+  "description": "Rectángulo con su pivote en x/y; por defecto centrado (originX/originY mueven el pivote dentro de la forma).",
   "properties": {
     "width": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Forma", "description": "Ancho en px." },
     "height": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Forma", "description": "Alto en px." },
-    "cornerRadius": { "type": "number", "default": 0, "min": 0, "animatable": true, "group": "Forma", "description": "Radio de las esquinas en px." }
+    "cornerRadius": { "type": "number", "default": 0, "min": 0, "animatable": true, "group": "Forma", "description": "Radio de las esquinas en px." },
+    "originX": { "type": "number", "default": 0.5, "step": 0.01, "group": "Forma", "description": "Dónde cae el pivote (x/y) dentro de la forma, en fracción del ancho: 0 = borde izquierdo, 0.5 = centro, 1 = borde derecho." },
+    "originY": { "type": "number", "default": 0.5, "step": 0.01, "group": "Forma", "description": "Dónde cae el pivote dentro de la forma, en fracción del alto: 0 = borde de arriba, 0.5 = centro, 1 = borde de abajo." }
   }
 }

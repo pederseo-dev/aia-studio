@@ -1,0 +1,131 @@
+// Barra de opciones sobre el lienzo (como la de Moho): dice qué se puede hacer con la herramienta y lo seleccionado,
+// y ofrece como botones las acciones que tienen atajo. Así no hace falta saberse los atajos para descubrir qué sigue.
+
+import { buscar } from '../core/documento.js';
+import { huesoDe } from '../core/esqueleto.js';
+import { ejecutar, esquema, estado, fijar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
+import { opsDePose } from './huesos.js';
+
+/**
+ * `acciones`: lo que vive en main.js y la barra también ofrece (agrupar, enlazar la selección, borrar...).
+ */
+export function montarOpciones(raiz, acciones) {
+  suscribir((c) => {
+    if (['doc', 'seleccion', 'herramienta', 'pose', 'edicion', 'enlazando', 'id'].some((k) => k in c)) dibujar();
+  });
+
+  const boton = (texto, titulo, alHacerClic, clase = '') => {
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: texto, title: titulo, className: clase });
+    b.addEventListener('click', alHacerClic);
+    return b;
+  };
+  const texto = (html) => Object.assign(document.createElement('span'), { className: 'texto', innerHTML: html });
+  const codigo = (id) => `<b>${id}</b>`;
+
+  function dibujar() {
+    const doc = estado.doc;
+    raiz.hidden = !doc;
+    if (!doc) return;
+    raiz.replaceChildren(...contenido(doc));
+    raiz.classList.toggle('en-pose', !!estado.pose);
+    raiz.classList.toggle('enlazando', !!estado.enlazando);
+  }
+
+  function contenido(doc) {
+    const sel = estado.seleccion && buscar(doc, estado.seleccion);
+    const varios = estado.seleccionados.length > 1;
+    const huesos = doc.objects.filter((o) => o.type === 'bone');
+
+    // Enlazar con clic: el modo más específico, va primero.
+    if (estado.enlazando) {
+      const n = doc.objects.filter((o) => o.bone === estado.enlazando).length;
+      return [
+        texto(`Clic en el dibujo (o en su fila de la jerarquía) para pegarlo a ${codigo(estado.enlazando)}; otro clic lo suelta. Alt + clic toma el grupo que lo contiene. ${n} enlazado${n === 1 ? '' : 's'}.`),
+        boton('Listo', 'Terminar de enlazar (Esc)', () => fijar({ enlazando: null }), 'principal'),
+      ];
+    }
+
+    if (estado.pose) {
+      const partes = [texto(`Pose ${codigo(estado.pose)}: arrastra un hueso o el dibujo enlazado para girarlo; el círculo del origen lo desplaza. El montaje no cambia.`)];
+      const pose = buscar(doc, estado.pose);
+      if (sel?.type === 'bone' && pose?.bones?.[sel.id]) {
+        partes.push(boton(`Quitar ${sel.id} de la pose`, 'El hueso vuelve a como está en el montaje, solo en esta pose', () => ejecutar(opsDePose(doc, pose.id, sel.id, Object.fromEntries(Object.keys(pose.bones[sel.id]).map((k) => [k, undefined]))), `pose ${pose.id}: ${sel.id} del montaje`)));
+      }
+      partes.push(boton('Volver al montaje', 'Para editar el dibujo y el esqueleto en reposo', () => fijar({ pose: null }), 'principal'));
+      return partes;
+    }
+
+    if (estado.edicion) {
+      return [texto('Puntos: arrastra anclas y tangentes (Alt separa), doble clic en un ancla = recto o curvo, clic en el contorno agrega, <kbd>Supr</kbd> borra.'), boton('Terminar', 'Salir de la edición de puntos (Enter)', () => fijar({ edicion: null, vertice: null }), 'principal')];
+    }
+
+    if (sel?.type === 'bone' && !varios) return opcionesDeHueso(doc, sel);
+
+    switch (estado.herramienta) {
+      case 'hueso':
+        return [texto(huesos.length ? 'Hueso: arrastra en vacío para crear uno suelto, o elige un hueso y arrastra desde su punta para encadenar. Arrastrar un hueso lo gira.' : 'Hueso: arrastra en el lienzo para crear el primero (desde la articulación hacia la punta).')];
+      case 'path':
+        return [texto('Pluma: clic = punto recto, clic y arrastrar = curvo, clic en el primero = cerrar, <kbd>Enter</kbd> = terminar abierto.')];
+      case 'rect':
+      case 'ellipse':
+        return [texto(`Arrastra para dibujar ${estado.herramienta === 'rect' ? 'un rectángulo' : 'una elipse'}; <kbd>Shift</kbd> = ${estado.herramienta === 'rect' ? 'cuadrado' : 'círculo'}.`)];
+      case 'rotar':
+      case 'escalar':
+        return [texto(`${estado.herramienta === 'rotar' ? 'Rotar' : 'Escalar'}: arrastra en cualquier parte; la selección ${estado.herramienta === 'rotar' ? 'gira' : 'escala'} desde su pivote.`)];
+    }
+
+    if (varios) {
+      const ids = estado.seleccionados;
+      const partes = [texto(`${ids.length} objetos: arrastra para moverlos; las manijas giran y escalan el conjunto.`), boton('Agrupar', 'Meterlos en un grupo nuevo (Ctrl+G)', acciones.agrupar)];
+      const hueso = ids.map((id) => buscar(doc, id)).filter((o) => o?.type === 'bone');
+      if (hueso.length === 1) partes.push(boton(`Enlazar a ${hueso[0].id}`, 'Pegar el dibujo seleccionado a este hueso (Ctrl+B)', acciones.enlazar));
+      return partes;
+    }
+
+    if (sel && !esquema.tipos.get(sel.type).resource) {
+      const partes = [texto('Arrastra para mover. Manijas: círculo de arriba = rotar, esquinas = escalar, punto = pivote (moverlo no mueve el dibujo).')];
+      const hueso = huesoDe(doc, sel.id);
+      if (sel.bone) {
+        partes.push(texto(`Sigue al hueso ${codigo(sel.bone)}.`));
+        partes.push(boton('Desenlazar', 'Que deje de seguir al hueso', () => ejecutar([{ op: 'unset', target: sel.id, props: ['bone'] }], `desenlazar ${sel.id}`)));
+        partes.push(boton('Ir al hueso', `Seleccionar ${sel.bone}`, () => seleccionar(sel.bone)));
+      } else if (hueso) {
+        partes.push(texto(`Sigue a ${codigo(hueso)} a través de su grupo.`));
+      } else if (huesos.length) {
+        partes.push(texto('Para pegarlo a un hueso: selecciona el hueso y usa «Enlazar dibujo…».'));
+      }
+      return partes;
+    }
+
+    return [texto(huesos.length ? 'Clic para seleccionar; arrastra en vacío para un recuadro. Los huesos se eligen con la herramienta Hueso (B) o en la jerarquía.' : 'Clic para seleccionar; arrastra en vacío para seleccionar con un recuadro.')];
+  }
+
+  function opcionesDeHueso(doc, hueso) {
+    const enlazados = doc.objects.filter((o) => o.bone === hueso.id);
+    const poses = doc.objects.filter((o) => o.type === 'pose');
+    const resumen = enlazados.length
+      ? `Montaje: ${codigo(hueso.id)} mueve a ${enlazados.length} objeto${enlazados.length === 1 ? '' : 's'}, pero solo en las poses; aquí se acomoda sobre el dibujo.`
+      : `Montaje: acomoda ${codigo(hueso.id)} sobre el dibujo y pégale las partes que debe mover.`;
+    const partes = [
+      texto(resumen),
+      boton('Enlazar dibujo…', 'Elegir con clics qué partes sigue este hueso', () => fijar({ enlazando: hueso.id }), enlazados.length ? '' : 'principal'),
+    ];
+    if (enlazados.length) partes.push(boton(`Ver lo enlazado (${enlazados.length})`, 'Seleccionar las partes pegadas a este hueso', () => seleccionarVarios(enlazados.map((o) => o.id))));
+    partes.push(boton('＋ Hueso hijo', 'Herramienta Hueso: arrastra desde la punta de este hueso para encadenar otro (B)', () => fijar({ herramienta: 'hueso' })));
+    partes.push(
+      boton(
+        poses.length ? `Probar en la pose ${poses[0].id}` : 'Probar en una pose',
+        'Ver cómo se mueve el dibujo al girar el hueso, sin tocar el montaje',
+        () => {
+          if (poses.length) return fijar({ pose: poses[0].id });
+          let id = 'pose_1';
+          for (let n = 2; buscar(doc, id); n++) id = `pose_${n}`;
+          ejecutar([{ op: 'create', type: 'pose', id }], `crear pose ${id}`);
+          fijar({ pose: id });
+        },
+        enlazados.length ? 'principal' : '',
+      ),
+    );
+    return partes;
+  }
+}

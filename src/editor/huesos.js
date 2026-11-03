@@ -30,6 +30,14 @@ export function opsDePose(doc, poseId, hueso, campos) {
   return [{ op: 'set', target: poseId, props: { bones } }];
 }
 
+/** Pega un objeto al hueso o, si ya estaba pegado a ese, lo suelta. */
+export function alternarEnlace(id, hueso) {
+  const obj = buscar(estado.doc, id);
+  if (!obj || !('bone' in (esquema.tipos.get(obj.type)?.properties ?? {}))) return;
+  if (obj.bone === hueso) return ejecutar([{ op: 'unset', target: id, props: ['bone'] }], `desenlazar ${id}`);
+  ejecutar([{ op: 'set', target: id, props: { bone: hueso } }], `enlazar ${id} a ${hueso}`);
+}
+
 export function crearHuesos(ctx) {
   const activos = () => estado.herramienta === 'hueso' || !!estado.pose;
   const esHueso = (id) => buscar(estado.doc, id)?.type === 'bone';
@@ -68,6 +76,20 @@ export function crearHuesos(ctx) {
       capa.append(ctx.crear('polygon', { class: clase, 'data-hueso': h.id, points: puntos.map((p) => p.join(',')).join(' ') }, h.id));
     }
     ctx.superposicion.append(capa);
+
+    // Lo que mueve el hueso elegido (o el que se está enlazando), marcado en el dibujo.
+    const marcado = estado.enlazando ?? (estado.seleccion && buscar(doc, estado.seleccion)?.type === 'bone' ? estado.seleccion : null);
+    if (marcado) {
+      for (const o of doc.objects.filter((x) => x.bone === marcado)) {
+        const el = ctx.elemento(o.id);
+        const m = el?.getCTM();
+        const caja = el?.getBBox();
+        if (!m || !caja || (!caja.width && !caja.height)) continue;
+        const p = (x, y) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f].join(',');
+        const puntos = [p(caja.x, caja.y), p(caja.x + caja.width, caja.y), p(caja.x + caja.width, caja.y + caja.height), p(caja.x, caja.y + caja.height)].join(' ');
+        ctx.superposicion.append(ctx.crear('polygon', { class: 'enlazado', points: puntos }, `${o.id} sigue a ${marcado}`));
+      }
+    }
 
     // Manijas del hueso principal seleccionado (también con Mover, para ajustarlo).
     const conManijas = activos() || estado.herramienta === 'seleccionar';
@@ -245,5 +267,14 @@ export function crearHuesos(ctx) {
     );
   }
 
-  return { dibujar, manija, pointerdown, pointerdownPose };
+  /** «Enlazar dibujo…»: cada clic en el dibujo lo pega al hueso o lo suelta (Alt: el grupo que lo contiene). */
+  function alEnlazar(e) {
+    const g = e.target.closest('[data-id]');
+    if (!g || !ctx.documentoG.contains(g)) return;
+    const obj = buscar(estado.doc, g.dataset.id);
+    const elegido = e.altKey && obj.parent ? obj.parent : obj.id;
+    alternarEnlace(elegido, estado.enlazando);
+  }
+
+  return { dibujar, manija, pointerdown, pointerdownPose, alEnlazar };
 }

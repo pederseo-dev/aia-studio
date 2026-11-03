@@ -198,6 +198,35 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 .hueso.principal { stroke-width: 2; }
 .modo-pose .hueso { stroke: var(--pose); fill: #5fd3a022; }
 .modo-pose .hueso.seleccionado { fill: #5fd3a066; }
+.enlazado { fill: #5fd3a014; stroke: var(--pose); stroke-width: 1.2; stroke-dasharray: 4 2; }
+#lienzo.enlazando { cursor: copy; }
+#lienzo.enlazando #vista * { cursor: copy; }
+.opciones {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 10px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: calc(100% - 20px);
+  padding: 5px 8px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: #1d1a23e6;
+  color: var(--suave);
+  font-size: 12px;
+}
+.opciones .texto b { color: var(--texto); font-weight: 600; }
+.opciones kbd { font-size: 11px; }
+.opciones button { padding: 2px 8px; font-size: 12px; }
+.opciones button.principal { border-color: var(--acento); color: var(--texto); }
+.opciones.en-pose { border-color: var(--pose); }
+.opciones.en-pose button.principal, .opciones.enlazando button.principal { border-color: var(--pose); }
+.opciones.enlazando { border-color: var(--pose); color: var(--texto); }
 .union-hueso { stroke: #ffffff66; stroke-width: 1; stroke-dasharray: 3 3; }
 .borrador-hueso { stroke: var(--acento); stroke-width: 2; stroke-dasharray: 5 3; }
 #lienzo.herramienta-rotar { cursor: alias; }

@@ -8,6 +8,7 @@ import { montarHistorial } from './historial.js';
 import { operacionesDeImportar } from './importar.js';
 import { montarInspector } from './inspector.js';
 import { montarLienzo } from './lienzo.js';
+import { montarOpciones } from './opciones.js';
 import {
   abrir, agregarPestana, api, avisar, cargarDocumentos, cerrarPestana, deshacer, ejecutar, eliminarDocumento,
   enviarPendiente, esquema, estado, fijar, hayPendiente, idLibre, mantenerPosicion, padreParaNuevo,
@@ -20,6 +21,7 @@ montarArbol($('#arbol'), $('#recursos'));
 montarInspector($('#inspector'));
 montarHistorial($('#entradas'), $('#deshacer'), $('#rehacer'));
 const lienzo = montarLienzo($('#lienzo'));
+montarOpciones($('#opciones'), { agrupar: () => agruparSeleccion(), enlazar: () => enlazarSeleccion() });
 
 // ---------- Menús desplegables (menú principal, zoom, grupos de herramientas) ----------
 
@@ -387,6 +389,7 @@ window.addEventListener('keydown', (e) => {
     if (sel?.type === 'path') return lienzo.editarPuntos(sel.id);
   }
   if (e.key === 'Escape') {
+    if (estado.enlazando) return fijar({ enlazando: null });
     if (estado.edicion) return salirDeEdicion();
     return estado.herramienta !== 'seleccionar' ? fijar({ herramienta: 'seleccionar' }) : seleccionar(null);
   }

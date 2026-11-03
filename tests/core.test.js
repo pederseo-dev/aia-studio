@@ -133,3 +133,14 @@ test('la guía para la IA sale del esquema', () => {
   for (const tipo of esquema.tipos.keys()) assert.ok(guia.includes(`### \`${tipo}\``));
   assert.ok(guia.includes('`cornerRadius`'));
 });
+
+test('originX/originY corren el pivote dentro de rectángulos y elipses', () => {
+  const { doc } = op(
+    crearDocumento({ name: 'Origen' }),
+    { op: 'create', type: 'rect', id: 'r', props: { width: 40, height: 20, originY: 1 } },
+    { op: 'create', type: 'ellipse', id: 'e', props: { width: 40, height: 20, originX: 0 } },
+  );
+  const svg = svgDocumento(doc, esquema);
+  assert.match(svg, /<rect x="-20" y="-20" width="40" height="20"/);
+  assert.match(svg, /<ellipse cx="20" rx="20" ry="10"/);
+});
