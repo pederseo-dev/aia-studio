@@ -152,7 +152,32 @@ Ajustes hechos con lo que encontró:
   ángulo; `undo` dice qué deshizo; un id repetido al crear un hueso sugiere el sufijo `_bone`, que también propone la
   guía.
 
-Notas de lo construido:
+**Cambio al modelo de capa de huesos de Moho (2026-11-04).** Al usarlo a mano, tener los huesos como filas sueltas
+de la jerarquía, mezcladas con el dibujo, y el enlace escondido en una propiedad que podía apuntar a cualquier hueso
+del documento resultó confuso. Se pasó al modelo de Moho:
+- Tipo `skeleton` (la *bone layer*): un contenedor transformable, como un `group`, que tiene adentro el dibujo que
+  mueve y sus huesos. Los `bone` solo pueden estar dentro de un skeleton (los raíz) o de otro hueso
+  (`requiresParent` en el esquema); el marco de los huesos raíz es el del skeleton, así que moverlo, girarlo o
+  escalarlo lleva dibujo y esqueleto juntos. Un skeleton puede ir dentro de otro y seguir a un hueso de aquel.
+- El `bone` de un objeto o de un vértice solo puede apuntar a huesos del skeleton que lo contiene (`refScope:
+  "skeleton"`), con mensajes que dicen qué huesos sirven. Siguen el enlace por capa, el enlace por punto y que enlazar
+  no mueve nada.
+- Sin enlace automático: el dibujo de un skeleton queda quieto hasta enlazarlo. «Bind all by proximity» (barra de
+  opciones y `bind_by_proximity` en el MCP) enlaza cada pieza sin hueso al más cercano al centro de su caja, con las
+  piezas más grandes posibles: un grupo sin nada enlazado adentro va entero; si ya tiene algo enlazado, se baja a sus
+  hijos. Elegimos la caja (y no el pivote) porque el pivote de los grupos suele estar en la articulación, que cae
+  justo entre dos huesos.
+- En la jerarquía, el skeleton tiene un subnodo plegable «Bones (N)» con el árbol de huesos; el dibujo no se mezcla
+  con ellos. La herramienta Bone crea en el skeleton seleccionado (o el de la selección) y, si no hay ninguno, crea
+  uno y avisa. Sacar un dibujo del skeleton de su hueso suelta el enlace y avisa.
+- Migración determinista (`npm run migrar`, `src/core/migracion.js`): si todo el dibujo enlazado está en un grupo
+  de la raíz (`cat` en los gatos), ese grupo pasa a ser el skeleton y los huesos se llevan a su marco (también en
+  las poses); si no, se crea un skeleton nuevo con el tramo de la raíz que tiene el dibujo enlazado. Deja una entrada
+  "migracion" en el historial que corta deshacer, porque las inversas de antes hablan del marco viejo.
+  `gato_rig`, `gato_expresiones` y `test_4` se migraron y se ven igual en el montaje, las poses y las mezclas de
+  params (comparado píxel a píxel; las únicas diferencias son de antialiasing, por el redondeo del SVG viejo).
+
+Notas de lo construido (antes del cambio a la capa de huesos):
 - `bone` con `x`, `y`, `rotation`, escala, `length`, `independentAngle` y límites `minAngle`/`maxAngle`. Los huesos
   **solo tienen huesos como hijos** (`parentTypes`/`childTypes` en el esquema): el esqueleto va aparte del dibujo y
   el orden de dibujo queda libre.

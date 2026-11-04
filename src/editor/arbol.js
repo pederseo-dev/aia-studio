@@ -1,13 +1,14 @@
 // Árbol de objetos: muestra la jerarquía con lo que está al frente arriba (como en Moho o Figma).
+// Los huesos no se mezclan con el dibujo: cada skeleton tiene un subnodo plegable «Bones (N)» con su árbol de huesos.
 // Arrastrar una fila cambia el orden o el padre; doble clic renombra; el ojo muestra u oculta.
 // Ctrl + clic agrega o quita de la selección; Shift + clic selecciona el tramo de filas desde la anterior.
 
 import { ICONO_DE_TIPO, ICONOS } from './iconos.js';
-import { buscar, hijos, subarbol } from '../core/documento.js';
+import { buscar, esqueletoDe, hijos, huesosDe, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { aplicarOperaciones } from '../core/operaciones.js';
-import { alternarEnlace, elegirVariante, varianteDe, variantesAMostrar } from './huesos.js';
-import { alternarSeleccion, ejecutar, esquema, estado, mantenerPosicion, seleccionRaices, seleccionar, seleccionarVarios, suscribir } from './estado.js';
+import { alternarEnlace, avisarSueltos, elegirVariante, motivoParaNoEnlazar, soltarAlMover, varianteDe, variantesAMostrar } from './huesos.js';
+import { alternarSeleccion, avisar, ejecutar, esquema, estado, mantenerPosicion, seleccionRaices, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 
 const esRecurso = (o) => esquema.tipos.get(o.type)?.resource;
 
@@ -17,8 +18,14 @@ export function montarArbol(raiz, raizRecursos) {
   // Grupos plegados, por documento (estado del editor: no va en el documento).
   const plegados = new Map();
   const plegadosDe = () => plegados.get(estado.id) ?? plegados.set(estado.id, new Set()).get(estado.id);
+  // Subnodos «Bones» abiertos (plegados por defecto), por documento: ids de skeleton.
+  const abiertos = new Map();
+  const huesosAbiertos = () => abiertos.get(estado.id) ?? abiertos.set(estado.id, new Set()).get(estado.id);
 
   suscribir((c) => {
+    // Un hueso elegido en el lienzo abre el subnodo de su skeleton, para verlo en la lista.
+    const sel = 'seleccion' in c && estado.doc && estado.seleccion && buscar(estado.doc, estado.seleccion);
+    if (sel?.type === 'bone') huesosAbiertos().add(esqueletoDe(estado.doc, sel.id));
     if ('doc' in c || 'seleccion' in c) dibujar();
   });
 
@@ -41,10 +48,13 @@ export function montarArbol(raiz, raizRecursos) {
 
   const claseSeleccion = (id) => (id === estado.seleccion ? ' seleccionada principal' : estado.seleccionados.includes(id) ? ' seleccionada' : '');
 
-  function rama(doc, padre, nivel) {
-    return hijos(doc, padre)
-      .filter((o) => !esRecurso(o))
-      .reverse()
+  /**
+   * Filas de los hijos de `padre`. El dibujo va con lo del frente arriba; con `deHuesos`, son los huesos (en el orden
+   * de la lista, que en ellos no cambia nada).
+   */
+  function rama(doc, padre, nivel, deHuesos = false) {
+    const lista = hijos(doc, padre).filter((o) => !esRecurso(o) && (o.type === 'bone') === deHuesos);
+    return (deHuesos ? lista : lista.reverse())
       .map((o) => {
         const li = document.createElement('li');
         li.setAttribute('role', 'treeitem');
@@ -72,7 +82,8 @@ export function montarArbol(raiz, raizRecursos) {
         if (o.bone) fila.querySelector('.enlace').title = `Follows bone ${o.bone}`;
         if (o.type === 'switch') fila.querySelector('.variante').textContent = `▾ ${varianteDe(doc, o) ?? 'empty'}`;
         li.append(fila);
-        const subrama = plegado ? [] : rama(doc, o.id, nivel + 1);
+        const subrama = plegado ? [] : rama(doc, o.id, nivel + 1, o.type === 'bone');
+        if (o.type === 'skeleton' && !plegado) subrama.unshift(nodoHuesos(doc, o, nivel + 1));
         if (subrama.length) {
           const ul = document.createElement('ul');
           ul.setAttribute('role', 'group');
@@ -83,6 +94,30 @@ export function montarArbol(raiz, raizRecursos) {
       });
   }
 
+  /** «Bones (N)»: el árbol de huesos del skeleton, plegado por defecto. */
+  function nodoHuesos(doc, esqueleto, nivel) {
+    const n = huesosDe(doc, esqueleto.id).length;
+    const abierto = huesosAbiertos().has(esqueleto.id);
+    const li = document.createElement('li');
+    li.setAttribute('role', 'treeitem');
+    const fila = document.createElement('div');
+    fila.className = 'fila nodo-huesos';
+    fila.dataset.huesosDe = esqueleto.id;
+    fila.style.paddingLeft = `${4 + nivel * 14}px`;
+    fila.title = n
+      ? `Bones of ${esqueleto.id}. Edit them on the canvas with the Bone tool (B); drop drawing on a bone to bind it`
+      : `${esqueleto.id} has no bones yet: draw them with the Bone tool (B)`;
+    fila.innerHTML = `<button type="button" class="plegar${n ? '' : ' vacio'}" title="${abierto ? 'Collapse' : 'Expand'}" tabindex="-1">${abierto ? '▾' : '▸'}</button><span class="tipo">${ICONOS.hueso}</span><span class="nombre">Bones (${n})</span>`;
+    li.append(fila);
+    if (abierto && n) {
+      const ul = document.createElement('ul');
+      ul.setAttribute('role', 'group');
+      ul.append(...rama(doc, esqueleto.id, nivel + 1, true));
+      li.append(ul);
+    }
+    return li;
+  }
+
   for (const lista of [raiz, raizRecursos]) {
     lista.addEventListener('click', alHacerClic);
     lista.addEventListener('dblclick', renombrar);
@@ -91,6 +126,11 @@ export function montarArbol(raiz, raizRecursos) {
   function alHacerClic(e) {
     const fila = e.target.closest('.fila');
     if (!fila) return;
+    if (fila.dataset.huesosDe) {
+      const conjunto = huesosAbiertos();
+      conjunto.has(fila.dataset.huesosDe) ? conjunto.delete(fila.dataset.huesosDe) : conjunto.add(fila.dataset.huesosDe);
+      return dibujar();
+    }
     const id = fila.dataset.id;
     if (e.target.closest('.plegar')) {
       const conjunto = plegadosDe();
@@ -151,7 +191,7 @@ export function montarArbol(raiz, raizRecursos) {
   // Renombrar con doble clic.
   function renombrar(e) {
     const nombre = e.target.closest('.nombre');
-    if (!nombre) return;
+    if (!nombre || nombre.closest('.nodo-huesos')) return;
     const anterior = nombre.closest('.fila').dataset.id;
     const input = document.createElement('input');
     input.value = anterior;
@@ -179,10 +219,23 @@ export function montarArbol(raiz, raizRecursos) {
 
   // ---------- Arrastrar para reordenar o reparentar ----------
 
-  function zona(e, fila) {
+  /**
+   * Dónde caería lo arrastrado sobre la fila: 'antes', 'despues', 'dentro' o null si no se puede. Los huesos solo
+   * van entre huesos o a un skeleton (su fila o su «Bones»); el dibujo no va entre huesos: soltarlo sobre uno lo enlaza.
+   */
+  function zona(e, fila, ids = arrastrados()) {
     const r = fila.getBoundingClientRect();
     const y = (e.clientY - r.top) / r.height;
+    const tipos = new Set(ids.map((id) => buscar(estado.doc, id)?.type === 'bone'));
+    if (tipos.size > 1) return null;
+    const sonHuesos = tipos.has(true);
+    if (fila.dataset.huesosDe) return sonHuesos ? 'dentro' : null;
     const destino = buscar(estado.doc, fila.dataset.id);
+    if (destino.type === 'bone') {
+      if (!sonHuesos || (y > 0.25 && y < 0.75)) return 'dentro';
+      return y < 0.5 ? 'antes' : 'despues';
+    }
+    if (sonHuesos) return destino.type === 'skeleton' ? 'dentro' : null;
     if (esquema.tipos.get(destino.type).container && y > 0.25 && y < 0.75) return 'dentro';
     return y < 0.5 ? 'antes' : 'despues';
   }
@@ -204,10 +257,12 @@ export function montarArbol(raiz, raizRecursos) {
 
   raiz.addEventListener('dragover', (e) => {
     const fila = e.target.closest('.fila');
-    if (!arrastrado || !fila || contieneA(arrastrados(), fila.dataset.id)) return;
+    if (!arrastrado || !fila || contieneA(arrastrados(), fila.dataset.id ?? fila.dataset.huesosDe)) return;
+    const donde = zona(e, fila);
+    if (!donde) return;
     e.preventDefault();
     limpiarMarcas();
-    fila.classList.add(`soltar-${zona(e, fila)}`);
+    fila.classList.add(`soltar-${donde}`);
   });
 
   raiz.addEventListener('dragleave', (e) => {
@@ -220,29 +275,54 @@ export function montarArbol(raiz, raizRecursos) {
     const fila = e.target.closest('.fila');
     if (!fila || !arrastrado) return (arrastrado = null);
     const ids = arrastrados();
+    const donde = zona(e, fila, ids);
     arrastrado = null;
-    if (contieneA(ids, fila.dataset.id)) return;
-    const destino = buscar(estado.doc, fila.dataset.id);
-    const donde = zona(e, fila);
+    if (!donde || contieneA(ids, fila.dataset.id ?? fila.dataset.huesosDe)) return;
+    const destino = buscar(estado.doc, fila.dataset.id ?? fila.dataset.huesosDe);
     const nombre = ids.length === 1 ? ids[0] : `${ids.length} objects`;
     // Se arma el lote paso a paso sobre una copia: cada índice depende de cómo quedó el anterior.
     let doc = estado.doc;
     const ops = [];
+    const sueltos = [];
     const paso = (lote) => {
       doc = aplicarOperaciones(doc, lote, esquema).doc;
       ops.push(...lote);
     };
+    // Un move suelta antes los enlaces que dejarían de valer (dibujo que sale del skeleton de su hueso).
+    const mover = (id, padre, index) => {
+      const soltar = soltarAlMover(doc, id, padre);
+      sueltos.push(...soltar);
+      paso([...soltar, { op: 'move', target: id, parent: padre, ...(index !== undefined ? { index } : {}) }, ...mantenerPosicion(doc, id, padre)]);
+    };
+    const terminar = (nota) => {
+      if (!ops.length) return;
+      ejecutar(ops, nota).then((ok) => ok && avisarSueltos(sueltos));
+    };
     if (donde === 'dentro' && destino.type === 'bone') {
       // Sobre un hueso: los huesos pasan a ser sus hijos; el dibujo no se mete adentro, se enlaza (como Ctrl+B).
       for (const id of ids) {
-        if (buscar(doc, id).type === 'bone') paso([{ op: 'move', target: id, parent: destino.id }, ...mantenerPosicion(doc, id, destino.id)]);
-        else paso([{ op: 'set', target: id, props: { bone: destino.id } }]);
+        if (buscar(doc, id).type === 'bone') mover(id, destino.id);
+        else {
+          const motivo = motivoParaNoEnlazar(doc, id, destino.id);
+          if (motivo) return avisar(motivo, true);
+          paso([{ op: 'set', target: id, props: { bone: destino.id } }]);
+        }
       }
-      return ejecutar(ops, `${nombre} to bone ${destino.id}`);
+      return terminar(`${nombre} to bone ${destino.id}`);
     }
     if (donde === 'dentro') {
-      for (const id of ids) paso([{ op: 'move', target: id, parent: destino.id }, ...mantenerPosicion(doc, id, destino.id)]);
-      return ejecutar(ops, `move ${nombre} into ${destino.id}`);
+      for (const id of ids) mover(id, destino.id);
+      return terminar(`move ${nombre} into ${destino.id}`);
+    }
+    if (destino.type === 'bone') {
+      // Entre huesos: su lista va en el orden de la lista plana (arriba = antes).
+      const padre = destino.parent;
+      for (const id of donde === 'antes' ? ids : [...ids].reverse()) {
+        const hermanos = hijos(doc, padre).filter((o) => o.id !== id);
+        const pos = hermanos.findIndex((o) => o.id === destino.id);
+        mover(id, padre, donde === 'antes' ? pos : pos + 1);
+      }
+      return terminar(`reorder ${nombre}`);
     }
     // En el panel, "arriba" es "delante": antes de la fila = un lugar más al frente que el destino.
     // Se insertan de a uno junto al destino, en el orden que conserva cómo estaban entre ellos.
@@ -250,9 +330,9 @@ export function montarArbol(raiz, raizRecursos) {
     for (const id of donde === 'antes' ? [...ids].reverse() : ids) {
       const hermanos = hijos(doc, padre).filter((o) => o.id !== id);
       const pos = hermanos.findIndex((o) => o.id === destino.id);
-      paso([{ op: 'move', target: id, parent: padre, index: donde === 'antes' ? pos + 1 : pos }, ...mantenerPosicion(doc, id, padre)]);
+      mover(id, padre, donde === 'antes' ? pos + 1 : pos);
     }
-    ejecutar(ops, `reorder ${nombre}`);
+    terminar(`reorder ${nombre}`);
   });
 
   raiz.addEventListener('dragend', () => {

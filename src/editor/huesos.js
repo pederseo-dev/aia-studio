@@ -1,17 +1,18 @@
 // Huesos en el lienzo: se dibujan en la superposición (no son parte del personaje) y se manejan con la herramienta
 // Hueso (B) en el montaje, o con cualquier herramienta cuando hay una pose activa.
 //
-// Montaje, herramienta Hueso: arrastrar en vacío crea un hueso (hijo del seleccionado); arrastrar desde la punta del
-// seleccionado encadena uno nuevo; arrastrar un hueso lo gira; la manija del origen lo mueve y Alt + la punta cambia
+// Los huesos viven en un skeleton (la capa de huesos de Moho). Montaje, herramienta Hueso: arrastrar en vacío crea un
+// hueso (hijo del seleccionado o, si no hay hueso seleccionado, raíz del skeleton seleccionado o del que contiene la
+// selección; sin ninguno, se crea un skeleton); arrastrar desde la punta del seleccionado encadena uno nuevo; arrastrar un hueso lo gira; la manija del origen lo mueve y Alt + la punta cambia
 // dirección y largo. Con Mover, el hueso seleccionado muestra las mismas manijas y la punta ajusta sin Alt.
 // Pose: arrastrar un hueso (o el dibujo enlazado a él) lo gira dentro de la pose; el origen lo desplaza.
 
-import { buscar } from '../core/documento.js';
+import { buscar, esqueletoDe } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
-import { evaluarEsqueleto, huesoDe, limitarAngulo, valoresDeHueso } from '../core/esqueleto.js';
-import { IDENTIDAD, aplicar, invertir, multiplicar } from '../core/geometria.js';
+import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, soltarEnlacesAjenos, valoresDeHueso } from '../core/esqueleto.js';
+import { aplicar, invertir, multiplicar } from '../core/geometria.js';
 import { mezclarPoses } from '../core/mezcla.js';
-import { docVisible, ejecutar, esquema, estado, idLibre, previsualizar, seleccionar } from './estado.js';
+import { avisar, docVisible, ejecutar, esquema, estado, idLibre, previsualizar, seleccionar } from './estado.js';
 
 const redondear = (v, d = 10) => Math.round(v * d) / d;
 const GRADOS = 180 / Math.PI;
@@ -63,12 +64,64 @@ export function variantesAMostrar(doc = estado.doc) {
   return mostrar;
 }
 
+/**
+ * El skeleton donde trabaja la herramienta Hueso: el seleccionado, el del hueso seleccionado o el que contiene la
+ * selección. null si no hay ninguno.
+ */
+export function esqueletoActivo(doc = estado.doc) {
+  const sel = estado.seleccion && buscar(doc, estado.seleccion);
+  if (!sel) return null;
+  return sel.type === 'skeleton' ? sel.id : esqueletoDe(doc, sel.id);
+}
+
+/** Por qué un objeto no puede seguir a un hueso (texto para el usuario), o null si puede. */
+export function motivoParaNoEnlazar(doc, id, hueso) {
+  const propio = esqueletoDe(doc, id);
+  const delHueso = esqueletoDe(doc, hueso);
+  if (propio === delHueso) return null;
+  return propio ? `${id} is in skeleton ${propio}; it can only follow bones of that skeleton` : `${id} is not in skeleton ${delHueso}: move it inside (Hierarchy) to bind it to its bones`;
+}
+
 /** Pega un objeto al hueso o, si ya estaba pegado a ese, lo suelta. */
 export function alternarEnlace(id, hueso) {
   const obj = buscar(estado.doc, id);
   if (!obj || !('bone' in (esquema.tipos.get(obj.type)?.properties ?? {}))) return;
   if (obj.bone === hueso) return ejecutar([{ op: 'unset', target: id, props: ['bone'] }], `unbind ${id}`);
+  const motivo = motivoParaNoEnlazar(estado.doc, id, hueso);
+  if (motivo) return avisar(motivo, true);
   ejecutar([{ op: 'set', target: id, props: { bone: hueso } }], `bind ${id} to ${hueso}`);
+}
+
+/** «Bind all by proximity»: el dibujo del skeleton que no sigue a ningún hueso va al más cercano. */
+export function enlazarPorCercania(esqueletoId) {
+  let enlaces;
+  try {
+    enlaces = enlacesPorCercania(estado.doc, esquema, esqueletoId);
+  } catch {
+    return avisar(`Skeleton ${esqueletoId} has no bones yet: create them with the Bone tool (B)`, true);
+  }
+  if (!enlaces.length) return avisar(`All the drawing in ${esqueletoId} already follows a bone`);
+  ejecutar(
+    enlaces.map(({ id, bone }) => ({ op: 'set', target: id, props: { bone } })),
+    `bind all by proximity in ${esqueletoId} (${enlaces.length})`,
+  );
+  avisar(`Bound ${enlaces.length}: ${enlaces.map((e) => `${e.id} → ${e.bone}`).join(', ')}`);
+}
+
+/**
+ * Antes de mover `id` a `padre`: lo que suelta los enlaces que dejarían de valer (dibujo que sale del skeleton de su
+ * hueso, o huesos que se van a otro skeleton). Va en el mismo lote, antes del move.
+ */
+export function soltarAlMover(doc, id, padre) {
+  const copia = structuredClone(doc);
+  buscar(copia, id).parent = padre;
+  return soltarEnlacesAjenos(copia, esquema);
+}
+
+/** Aviso para lo que soltarAlMover soltó. */
+export function avisarSueltos(ops) {
+  const ids = [...new Set(ops.map((o) => o.target))];
+  if (ids.length) avisar(`Unbound ${ids.join(', ')}: a drawing only follows bones of its own skeleton`);
 }
 
 export function crearHuesos(ctx) {
@@ -92,7 +145,7 @@ export function crearHuesos(ctx) {
       const clase = `hueso${estado.seleccionados.includes(h.id) ? ' seleccionado' : ''}${h.id === estado.seleccion ? ' principal' : ''}`;
       // Unión punteada cuando el hueso no nace en la punta de su padre.
       const padre = h.parent && buscar(doc, h.parent);
-      if (padre) {
+      if (padre?.type === 'bone') {
         const mp = multiplicar(camara, posado.get(padre.id));
         const punta = aplicar(mp, leer(esquema, padre, 'length'), 0);
         if (Math.hypot(punta[0] - o[0], punta[1] - o[1]) > 2) capa.append(ctx.crear('line', { class: 'union-hueso', x1: punta[0], y1: punta[1], x2: o[0], y2: o[1] }));
@@ -146,9 +199,11 @@ export function crearHuesos(ctx) {
     const mundo = pose ? ev.posado : ev.reposo;
     const h = buscar(doc, id);
     const camara = ctx.matrizCamara();
-    const padre = h.parent ? multiplicar(camara, mundo.get(h.parent)) : camara;
-    // El giro se mide contra el padre, salvo con ángulo independiente (solo hereda la posición).
-    const giro = h.parent && !leer(esquema, h, 'independentAngle') ? padre : camara;
+    // El marco del padre: el hueso padre o, para un hueso raíz, su skeleton.
+    const deHueso = buscar(doc, h.parent)?.type === 'bone';
+    const padre = multiplicar(camara, deHueso ? mundo.get(h.parent) : marcoDeHijos(doc, esquema, h.parent));
+    // El giro se mide contra el padre, salvo con ángulo independiente (solo hereda la posición del hueso padre).
+    const giro = !deHueso || !leer(esquema, h, 'independentAngle') ? padre : camara;
     return { doc, pose, h, valores: valoresDeHueso(esquema, h, pose), propio: multiplicar(camara, mundo.get(id)), padre, giro };
   }
 
@@ -279,14 +334,17 @@ export function crearHuesos(ctx) {
     return mejor.id;
   }
 
-  /** Arrastrar en vacío crea un hueso. Es hijo del hueso seleccionado; si se empieza en su punta, se encadena. */
+  /**
+   * Arrastrar en vacío crea un hueso. Es hijo del hueso seleccionado (si se empieza en su punta, se encadena) o un
+   * hueso raíz del skeleton activo. Sin skeleton, se crea uno en la raíz en el mismo paso.
+   */
   function crear(e) {
     const doc = estado.doc;
     const sel = estado.seleccion && buscar(doc, estado.seleccion);
     const padre = sel?.type === 'bone' ? sel : null;
-    const { reposo } = evaluarEsqueleto(doc, esquema);
+    const esqueleto = padre ? null : esqueletoActivo(doc);
     const camara = ctx.matrizCamara();
-    const marco = padre ? multiplicar(camara, reposo.get(padre.id)) : multiplicar(camara, IDENTIDAD);
+    const marco = multiplicar(camara, marcoDeHijos(doc, esquema, padre?.id ?? esqueleto));
     const inversa = invertir(marco);
     const s0 = ctx.puntoPantalla(e);
     const puntaPadre = padre && aplicar(marco, leer(esquema, padre, 'length'), 0);
@@ -315,8 +373,16 @@ export function crearHuesos(ctx) {
         const [dx, dy] = [local1[0] - local0[0], local1[1] - local0[1]];
         const id = idLibre('bone');
         const props = { x: redondear(local0[0]), y: redondear(local0[1]), rotation: redondear(Math.atan2(dy, dx) * GRADOS), length: redondear(Math.hypot(dx, dy)) };
-        ejecutar([{ op: 'create', type: 'bone', id, parent: padre?.id ?? null, props }], `create ${id}`);
+        const ops = [];
+        let destino = padre?.id ?? esqueleto;
+        if (!destino) {
+          destino = idLibre('skeleton');
+          ops.push({ op: 'create', type: 'skeleton', id: destino });
+        }
+        ops.push({ op: 'create', type: 'bone', id, parent: destino, props });
+        ejecutar(ops, padre || esqueleto ? `create ${id}` : `create ${destino} with ${id}`);
         seleccionar(id);
+        if (!padre && !esqueleto) avisar(`Bones live in a skeleton, so ${destino} was created. Drag the drawing into it in the Hierarchy, then bind it.`);
       },
     );
   }

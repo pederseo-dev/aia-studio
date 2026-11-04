@@ -15,6 +15,8 @@ export const ICONOS = {
   deshacer: trazo('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
   rehacer: trazo('<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>'),
   group: trazo('<path d="M3.5 7.5V18a1 1 0 0 0 1 1h15a1 1 0 0 0 1-1V9.5a1 1 0 0 0-1-1h-8l-2-3h-5a1 1 0 0 0-1 1z"/>'),
+  // Carpeta con un hueso: la capa de huesos.
+  skeleton: trazo('<path d="M3.5 7.5V18a1 1 0 0 0 1 1h15a1 1 0 0 0 1-1V9.5a1 1 0 0 0-1-1h-8l-2-3h-5a1 1 0 0 0-1 1z"/><path d="M9 15.5l6-3"/><circle cx="8.2" cy="15.9" r="1.1"/><circle cx="15.8" cy="12.1" r="1.1"/>'),
   switch: trazo('<path d="M4 8h13M14 4.5 17.5 8 14 11.5"/><path d="M20 16H7M10 12.5 6.5 16l3.5 3.5"/>'),
   duplicar: trazo('<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>'),
   borrar: trazo('<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5M10 11v5M14 11v5"/>'),
@@ -29,7 +31,7 @@ export const ICONOS = {
 
 // Ícono de cada tipo de objeto, para la jerarquía y los recursos.
 export const ICONO_DE_TIPO = {
-  group: ICONOS.group, switch: ICONOS.switch, rect: ICONOS.rect, ellipse: ICONOS.ellipse, path: ICONOS.path,
+  group: ICONOS.group, switch: ICONOS.switch, skeleton: ICONOS.skeleton, rect: ICONOS.rect, ellipse: ICONOS.ellipse, path: ICONOS.path,
   bone: ICONOS.hueso, style: ICONOS.estilo, linear_gradient: ICONOS.degradado, radial_gradient: ICONOS.radial,
   pose: ICONOS.pose, param: ICONOS.param, driver: ICONOS.driver,
 };

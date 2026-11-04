@@ -6,8 +6,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { buscar, hijos } from '../src/core/documento.js';
-import { evaluarEsqueleto, limitarAngulo, puntaDe, repartirEntreHuesos } from '../src/core/esqueleto.js';
+import { buscar, hijos, huesosDe } from '../src/core/documento.js';
+import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, puntaDe, repartirEntreHuesos } from '../src/core/esqueleto.js';
 import { aplicar } from '../src/core/geometria.js';
 import { leer, leerMeta, sugerir } from '../src/core/esquema.js';
 import { pesoDeDriver, valoresDeParams } from '../src/core/mezcla.js';
@@ -52,6 +52,9 @@ function esquemaDelArbol(doc) {
     for (const o of hijos(doc, padre)) {
       let detalle = '';
       if (o.bone) detalle = ` → hueso ${o.bone}`;
+      // Dibujo de un skeleton que no sigue a ningún hueso: en las poses queda quieto.
+      else if (buscar(doc, o.parent)?.type === 'skeleton' && o.type !== 'bone' && !huesoDe(doc, o.id) && !o.vertices?.some((v) => v.bone)) detalle = ' (sin hueso: queda quieto en las poses)';
+      if (o.type === 'skeleton') detalle += ` [${huesosDe(doc, o.id).length} huesos]`;
       if (o.type === 'pose') detalle = ` [${Object.keys(o.values ?? {}).join(', ') || 'vacía'}]`;
       if (o.type === 'switch') detalle = ` (muestra ${o.active ?? 'el primero'})`;
       if (o.type === 'param') {
@@ -95,7 +98,7 @@ const operacion = z.discriminatedUnion('op', [
     op: z.literal('create'),
     type: z.string().describe('tipo de objeto: ' + [...esquema.tipos.keys()].join(', ')),
     id: z.string().describe('id nuevo: minúsculas, números y _'),
-    parent: z.string().nullable().optional().describe('id del grupo padre (o del hueso padre, para un bone); omitido o null = raíz'),
+    parent: z.string().nullable().optional().describe('id del contenedor padre (group, switch o skeleton); un bone va dentro de un skeleton o de otro bone; omitido o null = raíz'),
     index: z.number().int().optional().describe('posición entre hermanos: 0 = al fondo; omitido = al frente'),
     props: props.optional(),
   }),
@@ -290,12 +293,12 @@ servidor.registerTool(
   {
     description:
       'Enlace por punto: cada vértice del path pasa a seguir al hueso más cercano (en el montaje) de la lista dada, ' +
-      'o de todos. Así un solo path se dobla con una cadena de huesos (cola, brazo, cuello). Cada vértice queda con ' +
-      '"bone"; se puede retocar después con set.',
+      'o de todos los del skeleton que contiene al path. Así un solo path se dobla con una cadena de huesos (cola, ' +
+      'brazo, cuello). Cada vértice queda con "bone"; se puede retocar después con set.',
     inputSchema: {
       id,
       path: z.string().describe('id del path'),
-      bones: z.array(z.string()).optional().describe('huesos entre los que repartir (por defecto, todos)'),
+      bones: z.array(z.string()).optional().describe('huesos de su skeleton entre los que repartir (por defecto, todos los de su skeleton)'),
       note: z.string().optional().describe('qué hace, para el historial'),
     },
   },
@@ -308,6 +311,34 @@ servidor.registerTool(
     vertices.forEach((v, i) => (cuenta[v.bone] ??= []).push(i));
     const reparto = Object.entries(cuenta).map(([h, indices]) => `${h} [${indices.join(', ')}]`).join('; ');
     return texto(`Vértices de ${path} por hueso: ${reparto}. Míralo con render_preview y una pose.`);
+  }),
+);
+
+servidor.registerTool(
+  'bind_by_proximity',
+  {
+    description:
+      'Bind all by proximity: enlaza (por capa) al hueso más cercano todo el dibujo del skeleton que todavía no sigue ' +
+      'a ningún hueso. Elige por el centro de la caja de cada pieza, en el montaje. Enlaza piezas enteras: un grupo ' +
+      'sin nada enlazado adentro va completo; si adentro ya hay algo enlazado, enlaza solo lo que falta. No toca lo ya ' +
+      'enlazado (ni los paths enlazados por punto). No mueve nada: se nota recién en las poses. Conviene revisar el ' +
+      'reparto que devuelve y corregir con set lo que haya caído en un hueso equivocado.',
+    inputSchema: {
+      id,
+      skeleton: z.string().describe('id del skeleton'),
+      note: z.string().optional().describe('qué hace, para el historial'),
+    },
+  },
+  seguro(async ({ id, skeleton, note }) => {
+    const actual = await almacen.leer(id);
+    const enlaces = enlacesPorCercania(actual, esquema, skeleton);
+    if (!enlaces.length) return texto(`Todo el dibujo de ${skeleton} ya sigue a un hueso; no hubo nada que enlazar.`);
+    const ops = enlaces.map(({ id: objeto, bone }) => ({ op: 'set', target: objeto, props: { bone } }));
+    await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `bind all by proximity in ${skeleton}` });
+    const porHueso = {};
+    for (const e of enlaces) (porHueso[e.bone] ??= []).push(e.id);
+    const reparto = Object.entries(porHueso).map(([h, ids]) => `${h} ← ${ids.join(', ')}`).join('; ');
+    return texto(`Enlazados ${enlaces.length}: ${reparto}. Míralo con render_preview y una pose (bones: true).`);
   }),
 );
 

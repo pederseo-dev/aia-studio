@@ -3,7 +3,7 @@
 
 import { crearEsquema, leer } from '../core/esquema.js';
 import { aplicar, invertir, matrizMundo } from '../core/geometria.js';
-import { buscar, subarbol } from '../core/documento.js';
+import { buscar, esqueletoDe, subarbol } from '../core/documento.js';
 import { aplicarOperaciones, compactar } from '../core/operaciones.js';
 
 const defs = import.meta.glob('../../schema/*.json', { eager: true, import: 'default' });
@@ -265,9 +265,13 @@ export function idLibre(base) {
   for (let n = 1; ; n++) if (!buscar(estado.doc, `${base}_${n}`)) return `${base}_${n}`;
 }
 
-/** Dónde se crea algo nuevo: dentro del grupo seleccionado o, si no hay un grupo seleccionado, en la raíz. */
+/**
+ * Dónde se crea algo nuevo: dentro del contenedor seleccionado o, si no hay uno, en la raíz. Con un hueso
+ * seleccionado, en su skeleton (el dibujo no va dentro de los huesos).
+ */
 export function padreParaNuevo() {
   const sel = estado.seleccion && buscar(estado.doc, estado.seleccion);
+  if (sel?.type === 'bone') return esqueletoDe(estado.doc, sel.id);
   return sel && esquema.tipos.get(sel.type).container ? sel.id : null;
 }
 

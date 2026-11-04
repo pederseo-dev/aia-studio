@@ -21,7 +21,7 @@ function tabla(propiedades) {
 export function guiaParaIA(esquema) {
   const tipos = [...esquema.tipos.values()]
     .map((t) => {
-      const hijosPermitidos = t.childTypes ? ` (solo puede tener hijos ${t.childTypes.join(', ')})` : t.container ? ' (puede tener hijos)' : '';
+      const hijosPermitidos = (t.childTypes ? ` (solo puede tener hijos ${t.childTypes.join(', ')})` : t.container ? ' (puede tener hijos)' : '') + (t.requiresParent ? ` (va dentro de ${t.parentTypes.join(' o ')}, nunca en la raíz)` : '');
       return `### \`${t.name}\`${hijosPermitidos}${t.resource ? ' (recurso)' : ''}\n\n${t.description}\n\n${tabla(t.properties)}`;
     })
     .join('\n\n');
@@ -126,29 +126,41 @@ usan por id.
 
 ## Huesos y poses
 
-El esqueleto va **aparte del dibujo**, como en Moho: los \`bone\` solo tienen huesos como hijos, y el dibujo no se
-mete dentro de ellos sino que se **enlaza** con la propiedad \`bone\` (de cualquier forma o grupo). Así el orden de
-dibujo queda libre (un brazo puede ir detrás del torso aunque su hueso sea hijo del torso).
+Como en Moho, el esqueleto vive en una **capa de huesos**: un \`skeleton\`. Es un contenedor como \`group\` que tiene
+adentro, en orden de dibujo, **el dibujo que el esqueleto mueve** y, aparte, **sus huesos**. Los \`bone\` solo pueden
+estar dentro de un \`skeleton\` (los huesos raíz) o de otro \`bone\` del mismo skeleton: nunca en la raíz ni en un
+\`group\`. El dibujo no se mete dentro de los huesos: se **enlaza** con la propiedad \`bone\` (de cualquier forma o
+grupo), así el orden de dibujo queda libre (un brazo puede ir detrás del torso aunque su hueso sea hijo del torso).
 
+- **Primero el skeleton.** Crea un \`skeleton\` (por ejemplo \`rig\`) y dibuja adentro, o mete el dibujo que ya
+  existe con \`move\`. Si el skeleton queda en \`x: 0, y: 0\` sin giro, mover algo adentro no cambia dónde se ve; si
+  tiene transformación, recalcula \`x\`/\`y\` al moverlo (como con cualquier grupo).
+- **Enlace limitado a su skeleton:** un objeto solo puede enlazarse a huesos del skeleton que lo contiene (el más
+  cercano). Lo que está fuera de todo skeleton no se enlaza. Un skeleton puede ir dentro de otro y enlazarse entero
+  a un hueso del de afuera (una mano con sus propios huesos, que sigue al antebrazo).
+- **Sin enlace no se mueve:** el dibujo de un skeleton que no tiene \`bone\` (ni lo hereda de un grupo) queda quieto
+  en las poses. \`get_document\` lo marca como "sin hueso". Para enlazar todo de una vez, \`bind_by_proximity\` pone
+  cada pieza sin enlace en el hueso más cercano (por el centro de su caja); después revisa el reparto y corrige con
+  \`set\` lo que haya caído mal.
 - Los ids son únicos en todo el documento (dibujo, huesos y recursos): nombra los huesos con el sufijo \`_bone\`
   (\`head_bone\`, \`tail_1_bone\`) para que no choquen con los grupos del dibujo.
 - **Lo más fácil es crear huesos con \`from\` y \`to\`**: origen (la articulación) y punta, como \`[x, y]\` en
-  coordenadas del **documento**. Se convierten solos a \`x\`, \`y\`, \`rotation\` y \`length\` relativos al hueso padre.
-  También sirven en \`set\` (solo \`to\` conserva el origen).
-- Lo que se guarda: un hueso nace en su \`x\`/\`y\` (relativo a su hueso padre; el hueso raíz, relativo al documento)
-  y apunta según \`rotation\` (0 = derecha, 90 = abajo, -90 = arriba) con largo \`length\`. \`rotation\` y \`x\`/\`y\` son
-  **relativos al hueso padre**: el ángulo en pantalla es la suma de la cadena. Las poses usan estos valores
-  relativos. \`get_document\` muestra dónde queda cada hueso en el documento.
+  coordenadas del **documento** (aunque el skeleton esté movido o girado). Se convierten solos a \`x\`, \`y\`,
+  \`rotation\` y \`length\` relativos al padre. También sirven en \`set\` (solo \`to\` conserva el origen).
+- Lo que se guarda: un hueso nace en su \`x\`/\`y\` (relativo a su hueso padre; un hueso raíz, relativo a su
+  skeleton) y apunta según \`rotation\` (0 = derecha, 90 = abajo, -90 = arriba) con largo \`length\`. \`rotation\` y
+  \`x\`/\`y\` son **relativos al padre**: el ángulo en pantalla es la suma de la cadena (y del giro del skeleton). Las
+  poses usan estos valores relativos. \`get_document\` muestra dónde queda cada hueso en el documento.
 - **Montaje:** los valores guardados en los huesos son la pose de reposo. Ubica los huesos sobre el dibujo tal como
-  está. **Enlazar no mueve nada**: un objeto con \`"bone": "forearm_l"\` (y todos sus hijos) acompaña a ese hueso
-  solo cuando una pose lo mueve.
+  está. **Enlazar no mueve nada**: un objeto con \`"bone": "forearm_l_bone"\` (y todos sus hijos) acompaña a ese hueso
+  solo cuando una pose lo mueve. Mover, girar o escalar el skeleton mueve el dibujo y los huesos juntos.
 - Enlaza en el nivel más alto que convenga: el grupo \`head\` al hueso \`head_bone\`, y los hijos del grupo lo siguen
   sin enlazarlos uno por uno. Un hijo con su propio \`bone\` sigue al suyo.
 - **Partes que se doblan** (cola, brazo flexible, cuello largo): no hace falta partir el dibujo. Un solo \`path\`
-  puede seguir a varios huesos **por punto**: cada vértice acepta \`"bone": "tail_2_bone"\` y, en una pose, se mueve
-  con sus tangentes según ese hueso. \`bind_points\` reparte los vértices entre los huesos más cercanos de una lista.
-  Los vértices sin \`bone\` siguen al hueso de la forma (o de su grupo). Pon vértices cerca de cada articulación para
-  que la curva se doble bien.
+  puede seguir a varios huesos **por punto**: cada vértice acepta \`"bone": "tail_2_bone"\` (de su skeleton) y, en una
+  pose, se mueve con sus tangentes según ese hueso. \`bind_points\` reparte los vértices entre los huesos más cercanos
+  de su skeleton (o de una lista). Los vértices sin \`bone\` siguen al hueso de la forma (o de su grupo). Pon
+  vértices cerca de cada articulación para que la curva se doble bien.
 - **Poses:** una \`pose\` es un recurso con nombre que fija valores (absolutos, como en el montaje) sin cambiar el
   montaje: en \`values\`, \`{ id_de_objeto: { propiedad: valor } }\`. Se crea con \`set_pose\` (o con \`apply_ops\`) y
   se mira con \`render_preview\` pasando \`pose\`. \`minAngle\`/\`maxAngle\` de un hueso limitan la rotación en las
@@ -158,19 +170,25 @@ dibujo queda libre (un brazo puede ir detrás del torso aunque su hueso sea hijo
 
 \`\`\`json
 [
-  { "op": "create", "type": "bone", "id": "spine_bone", "props": { "from": [300, 420], "to": [300, 300] } },
+  { "op": "create", "type": "skeleton", "id": "rig", "index": 0 },
+  { "op": "move", "target": "body", "parent": "rig" },
+  { "op": "move", "target": "head", "parent": "rig" },
+  { "op": "move", "target": "arm_l", "parent": "rig" },
+  { "op": "create", "type": "bone", "id": "spine_bone", "parent": "rig", "props": { "from": [300, 420], "to": [300, 300] } },
   { "op": "create", "type": "bone", "id": "neck_bone", "parent": "spine_bone", "props": { "from": [300, 300], "to": [300, 260] } },
   { "op": "create", "type": "bone", "id": "upper_arm_l_bone", "parent": "spine_bone", "props": { "from": [350, 320], "to": [350, 390] } },
+  { "op": "set", "target": "body", "props": { "bone": "spine_bone" } },
   { "op": "set", "target": "head", "props": { "bone": "neck_bone" } },
   { "op": "set", "target": "arm_l", "props": { "bone": "upper_arm_l_bone" } },
-  { "op": "create", "type": "pose", "id": "wave", "props": { "bones": { "upper_arm_l_bone": { "rotation": 45 } } } }
+  { "op": "create", "type": "pose", "id": "wave", "props": { "values": { "upper_arm_l_bone": { "rotation": 45 } } } }
 ]
 \`\`\`
 
-Con \`from\`/\`to\`, \`spine_bone\` queda en \`x: 300, y: 420, rotation: -90, length: 120\` (apunta hacia arriba), y
-\`upper_arm_l_bone\` en \`x: 100, y: 50, rotation: 180\`: relativo a \`spine_bone\`, que ya está girado -90°, así que
-en pantalla cuelga hacia abajo (-90 + 180 = 90°). En la pose \`wave\` queda en -90 + 45 = -45°: levantado hacia
-arriba y afuera.
+Los tres \`move\` meten el dibujo en \`rig\` (que está en el origen, así que nada cambia de lugar). Con \`from\`/\`to\`,
+\`spine_bone\` queda en \`x: 300, y: 420, rotation: -90, length: 120\` (apunta hacia arriba), y \`upper_arm_l_bone\` en
+\`x: 100, y: 50, rotation: 180\`: relativo a \`spine_bone\`, que ya está girado -90°, así que en pantalla cuelga hacia
+abajo (-90 + 180 = 90°). En la pose \`wave\` queda en -90 + 45 = -45°: levantado hacia arriba y afuera. En vez de los
+tres \`set\` de \`bone\` podrías usar \`bind_by_proximity\` con \`skeleton: "rig"\` y revisar lo que eligió.
 
 ## Expresiones: poses, params, drivers y switch
 

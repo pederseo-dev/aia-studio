@@ -3,7 +3,7 @@
 // Con varios objetos seleccionados muestra las propiedades que tienen todos; lo que se cambia se aplica a todos, y los
 // campos donde los valores difieren se marcan como mixtos (muestran el valor del objeto principal).
 
-import { buscar } from '../core/documento.js';
+import { buscar, esqueletoDe } from '../core/documento.js';
 import { validarValor } from '../core/esquema.js';
 import { valoresDeHueso } from '../core/esqueleto.js';
 import { origenDelValor, valorEfectivo } from '../core/estilos.js';
@@ -360,8 +360,8 @@ const CONTROLES = {
     const select = document.createElement('select');
     if (p.nullable) select.append(new Option('(none)', ''));
     for (const o of estado.doc.objects) {
-      // refScope "children": solo los hijos (el hijo activo de un switch).
-      const enAlcance = p.refScope === 'children' ? o.parent === objetivo : o.id !== objetivo;
+      // refScope "children": solo los hijos (el hijo activo de un switch); "skeleton": los huesos de su skeleton.
+      const enAlcance = p.refScope === 'children' ? o.parent === objetivo : p.refScope === 'skeleton' ? esqueletoDe(estado.doc, o.id) === esqueletoDe(estado.doc, objetivo) : o.id !== objetivo;
       if (enAlcance && (!p.refTypes || p.refTypes.includes(o.type))) select.append(new Option(o.id, o.id, false, o.id === valor));
     }
     select.addEventListener('change', () => confirmar(select.value || null));

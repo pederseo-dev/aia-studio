@@ -1,9 +1,10 @@
 // Punto de entrada del editor: monta los paneles y conecta la barra, el teclado y los avisos en vivo.
 
-import { buscar, hijos, subarbol } from '../core/documento.js';
+import { buscar, esqueletoDe, hijos, subarbol } from '../core/documento.js';
 import { aplicarOperaciones } from '../core/operaciones.js';
 import { leer } from '../core/esquema.js';
 import { montarArbol } from './arbol.js';
+import { avisarSueltos, enlazarPorCercania, motivoParaNoEnlazar, soltarAlMover } from './huesos.js';
 import { montarHistorial } from './historial.js';
 import { FLECHA, ICONOS } from './iconos.js';
 import { operacionesDeImportar } from './importar.js';
@@ -28,7 +29,7 @@ montarArbol($('#arbol'), $('#recursos'));
 montarInspector($('#inspector'));
 montarHistorial($('#entradas'), $('#deshacer'), $('#rehacer'));
 const lienzo = montarLienzo($('#lienzo'));
-montarOpciones($('#opciones'), { agrupar: () => agruparSeleccion(), switch: () => nuevoSwitch(), enlazar: () => enlazarSeleccion() });
+montarOpciones($('#opciones'), { agrupar: () => agruparSeleccion(), switch: () => nuevoSwitch(), esqueleto: () => nuevoEsqueleto(), enlazar: () => enlazarSeleccion(), enlazarTodo: enlazarPorCercania });
 montarParametros($('#parametros'), $('#nuevo-param'));
 
 // ---------- Menús desplegables (menú principal, zoom, grupos de herramientas) ----------
@@ -202,10 +203,11 @@ suscribir((c) => {
 $('#deshacer').addEventListener('click', deshacer);
 $('#rehacer').addEventListener('click', rehacer);
 $('#borrar').addEventListener('click', borrarSeleccion);
-// Grupo y switch comparten botón, como la pluma y las formas: el principal crea el último tipo elegido.
+// Grupo, switch y skeleton comparten botón, como la pluma y las formas: el principal crea el último tipo elegido.
 const CONTENEDORES = {
   group: { titulo: 'New group (G) · with several selected, groups them (Ctrl+G)', crear: () => (estado.seleccionados.length > 1 ? agruparSeleccion() : nuevoGrupo()) },
   switch: { titulo: 'New switch (Shift+G): shows one child at a time · with something selected, wraps it as variants', crear: () => nuevoSwitch() },
+  skeleton: { titulo: 'New skeleton (K): a bone layer that holds the bones and the drawing they move · with something selected, wraps it', crear: () => nuevoEsqueleto() },
 };
 let ultimoContenedor = 'group';
 function fijarContenedor(tipo) {
@@ -287,11 +289,24 @@ function nuevoSwitch() {
 }
 
 /**
+ * Skeleton (K): la capa de huesos. Con dibujo seleccionado lo mete adentro (queda quieto hasta enlazarlo); sin
+ * selección crea uno vacío. Después se le dibujan huesos con la herramienta Bone.
+ */
+function nuevoEsqueleto() {
+  if (!estado.doc) return;
+  const dibujo = seleccionRaices().filter((id) => !esquema.tipos.get(buscar(estado.doc, id).type).resource && buscar(estado.doc, id).type !== 'bone');
+  if (dibujo.length) agruparSeleccion('skeleton');
+  else nuevoGrupo('skeleton');
+  avisar('Skeleton: draw its bones with the Bone tool (B), then bind the drawing inside it (Ctrl+B or “Bind all by proximity”)');
+}
+
+/**
  * Mete la selección en un grupo nuevo (Ctrl+G). Si todos tienen el mismo padre, el grupo queda ahí, en el lugar del
  * que estaba más al frente; si no, va a la raíz. Los objetos no se mueven de lugar en pantalla.
  */
 function agruparSeleccion(tipo = 'group') {
-  const raices = seleccionRaices().filter((id) => !esquema.tipos.get(buscar(estado.doc, id).type).resource);
+  // Los huesos no se agrupan: viven en su skeleton.
+  const raices = seleccionRaices().filter((id) => !esquema.tipos.get(buscar(estado.doc, id).type).resource && buscar(estado.doc, id).type !== 'bone');
   if (!raices.length) return;
   const padres = new Set(raices.map((id) => buscar(estado.doc, id).parent ?? null));
   const padre = padres.size === 1 ? [...padres][0] : null;
@@ -300,12 +315,17 @@ function agruparSeleccion(tipo = 'group') {
   const grupo = idLibre(tipo);
   const ops = [{ op: 'create', type: tipo, id: grupo, parent: padre, ...(frente >= 0 ? { index: frente + 1 } : {}) }];
   let doc = aplicarOperaciones(estado.doc, ops, esquema).doc;
+  const sueltos = [];
   for (const id of raices) {
-    const lote = [{ op: 'move', target: id, parent: grupo }, ...mantenerPosicion(doc, id, grupo)];
+    // Lo que entra a un skeleton nuevo deja de poder seguir a los huesos del de afuera: se suelta antes.
+    const soltar = soltarAlMover(doc, id, grupo);
+    sueltos.push(...soltar);
+    const lote = [...soltar, { op: 'move', target: id, parent: grupo }, ...mantenerPosicion(doc, id, grupo)];
     doc = aplicarOperaciones(doc, lote, esquema).doc;
     ops.push(...lote);
   }
-  ejecutar(ops, `${tipo === 'switch' ? 'switch with' : 'group'} ${nombreDe(raices)} into ${grupo}`);
+  const verbo = { switch: 'switch with', skeleton: 'skeleton with' }[tipo] ?? 'group';
+  ejecutar(ops, `${verbo} ${nombreDe(raices)} into ${grupo}`).then((ok) => ok && avisarSueltos(sueltos));
   seleccionar(grupo);
 }
 
@@ -318,8 +338,15 @@ function enlazarSeleccion() {
   const huesos = ids.filter((id) => buscar(estado.doc, id).type === 'bone');
   const hueso = huesos.includes(estado.seleccion) ? estado.seleccion : huesos.length === 1 ? huesos[0] : null;
   if (huesos.length > 1 && !hueso) return avisar('To bind, leave only one bone in the selection', true);
-  const objetos = ids.filter((id) => 'bone' in esquema.tipos.get(buscar(estado.doc, id).type).properties);
+  let objetos = ids.filter((id) => 'bone' in esquema.tipos.get(buscar(estado.doc, id).type).properties);
   if (!objetos.length) return avisar(hueso ? 'Also select the artwork to bind to the bone' : 'Select artwork and a bone (Ctrl + click)', true);
+  // Solo se enlaza lo que está en el skeleton del hueso.
+  if (hueso) {
+    const ajenos = objetos.filter((id) => motivoParaNoEnlazar(estado.doc, id, hueso));
+    objetos = objetos.filter((id) => !ajenos.includes(id));
+    if (ajenos.length && !objetos.length) return avisar(motivoParaNoEnlazar(estado.doc, ajenos[0], hueso), true);
+    if (ajenos.length) avisar(`${nombreDe(ajenos)} skipped: not in skeleton ${esqueletoDe(estado.doc, hueso)}`, true);
+  }
   const ops = objetos.map((id) => (hueso ? { op: 'set', target: id, props: { bone: hueso } } : { op: 'unset', target: id, props: ['bone'] }));
   ejecutar(ops, hueso ? `bind ${nombreDe(objetos)} to ${hueso}` : `unbind ${nombreDe(objetos)}`);
   avisar(hueso ? `${nombreDe(objetos)} follow${objetos.length > 1 ? '' : 's'} ${hueso}` : `${nombreDe(objetos)} no longer follow${objetos.length > 1 ? '' : 's'} any bone`);
@@ -431,6 +458,7 @@ window.addEventListener('keydown', (e) => {
   if (mod) return;
   if (ATAJOS[tecla]) return fijar({ herramienta: ATAJOS[tecla] });
   if (tecla === 'g') return e.shiftKey ? nuevoSwitch() : nuevoGrupo();
+  if (tecla === 'k') return nuevoEsqueleto();
   if (tecla === 'f') return lienzo.ajustar();
   if (tecla === '1') return lienzo.fijarZoom(1);
 

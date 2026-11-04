@@ -48,8 +48,9 @@ muestra las demás herramientas.
 | Rotar, escalar, pivote | Manijas de la selección: círculo de arriba = rotar (Shift = de a 15°), esquinas = escalar desde el pivote (Shift = proporcional), punto del pivote = moverlo sin mover el dibujo (grupos, paths, rectángulos y elipses). |
 | Estilos y degradados | «+ Estilo» y «+ Degradado» en Recursos; las formas los usan con `style` y `fillGradient` en el inspector. Lo que viene del estilo se ve en naranja. |
 | Importar SVG | ☰ → «Importar SVG…»: las formas llegan como paths editables dentro de un grupo. |
-| Huesos | `B`: arrastrar en vacío crea un hueso (hijo del seleccionado), desde su punta encadena otro, arrastrar un hueso lo gira, el círculo del origen lo mueve y Alt + la punta cambia dirección y largo. |
-| Enlazar al esqueleto | Con un hueso seleccionado, «Enlazar dibujo…» en la barra de opciones y clic en las partes (Alt = su grupo). También: dibujo + hueso seleccionados y `Ctrl+B`, soltar el dibujo sobre el hueso en la jerarquía, o `bone` en el inspector. Enlazar no mueve nada: el dibujo sigue al hueso en las poses. |
+| Skeleton (capa de huesos) | Como la *bone layer* de Moho: contiene el dibujo y sus huesos. En la jerarquía, ▾ junto al botón de grupo → «Skeleton» (o `K`): mete la selección en un skeleton nuevo. Sus huesos están en el subnodo plegable «Bones (N)»; el dibujo de adentro queda quieto hasta enlazarlo. |
+| Huesos | `B`: arrastrar en vacío crea un hueso en el skeleton seleccionado o en el de la selección (hijo del hueso seleccionado; si no hay skeleton, se crea uno), desde su punta encadena otro, arrastrar un hueso lo gira, el círculo del origen lo mueve y Alt + la punta cambia dirección y largo. |
+| Enlazar al esqueleto | Solo se enlaza a huesos del mismo skeleton. Con un hueso seleccionado, «Bind drawing…» en la barra de opciones y clic en las partes (Alt = su grupo). También: dibujo + hueso seleccionados y `Ctrl+B`, soltar el dibujo sobre el hueso en «Bones», o `bone` en el inspector. Con el skeleton seleccionado, «Bind all by proximity» enlaza todo lo que falta al hueso más cercano. Enlazar no mueve nada: el dibujo sigue al hueso en las poses. |
 | Barra de opciones | Arriba del lienzo: qué se puede hacer con la herramienta y lo seleccionado, con botones para las acciones (por ejemplo, con un hueso: enlazar, ver lo enlazado, hueso hijo, probar en una pose). |
 | Doblar con varios huesos | Editando los puntos de un path: «Repartir entre huesos» (o el hueso de cada punto) en la barra de opciones. En las poses, el path se dobla siguiendo la cadena. |
 | Expresiones | Una pose puede cambiar cualquier cosa animable: en la pose, el inspector muestra arriba lo de la pose y Enter edita los puntos de la boca (morph). Abajo, «＋ Parámetro» crea un control y «＋ pose…» lo conecta a una pose; mover el control muestra la mezcla («Ver: Parámetros»). Un switch muestra un solo hijo (`active`). |
@@ -87,7 +88,8 @@ queda en el historial para que la IA lo respete.
 
 Herramientas: `get_guide` (la guía del formato, generada desde el esquema), `list_documents`, `get_document`,
 `create_document`, `apply_ops`, `undo`, `redo`, `get_history`, `set_pose` (crea o ajusta una pose con nombre),
-`bind_points` (reparte los puntos de un path entre huesos) y
+`bind_points` (reparte los puntos de un path entre los huesos de su skeleton), `bind_by_proximity` (enlaza al hueso
+más cercano todo el dibujo de un skeleton que todavía no sigue a ninguno) y
 `render_preview` (devuelve un PNG para que la IA vea lo que hizo; con `pose`, `params`, `region` o `bones`).
 
 ## Estructura
@@ -100,6 +102,7 @@ Herramientas: `get_guide` (la guía del formato, generada desde el esquema), `li
 | `src/editor/` | El editor web. |
 | `servidor/` | Lectura y escritura en disco, y la API local que usa el editor (plugin de Vite). |
 | `mcp/` | Servidor MCP para la IA. |
+| `scripts/` | `migrar-esqueletos.js` (`npm run migrar`): lleva documentos viejos, con huesos en la raíz, al modelo de skeleton. |
 | `personajes/` | Los documentos de personajes. |
 | `tests/` | Pruebas del núcleo (`node --test`). |
 | `docs/pruebas-ia/` | Tareas y resultados de las pruebas con IA de cada fase. |
