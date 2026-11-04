@@ -80,14 +80,14 @@ kbd { font: 11px ui-monospace, monospace; color: var(--suave); border: 1px solid
 /* Fila de herramientas: íconos de línea sin borde, la flecha chica al lado elige otra del grupo;
    la herramienta activa se marca con el color de acento, como en Rive. */
 #barra { display: flex; align-items: center; gap: 4px; padding: 4px 8px; }
-#barra button.icono, #barra .grupo-herramientas button, .cabecera button.icono, .cabecera .grupo-herramientas button {
+#barra button.icono, #barra .grupo-herramientas > button, .cabecera button.icono, .cabecera .grupo-herramientas > button {
   display: inline-flex; align-items: center; justify-content: center;
   border: none; background: none; color: var(--suave); height: 30px; border-radius: 5px;
 }
 #barra button.icono, .cabecera button.icono { width: 30px; min-width: 0; padding: 0; }
-.cabecera button.icono, .cabecera .grupo-herramientas button { height: 24px; }
+.cabecera button.icono, .cabecera .grupo-herramientas > button { height: 24px; }
 .cabecera button.icono { width: 24px; }
-:is(#barra, .cabecera) button.icono:hover:not(:disabled), :is(#barra, .cabecera) .grupo-herramientas button:hover { background: var(--panel-2); color: var(--texto); }
+:is(#barra, .cabecera) button.icono:hover:not(:disabled), :is(#barra, .cabecera) .grupo-herramientas > button:hover { background: var(--panel-2); color: var(--texto); }
 #barra .grupo-herramientas { margin-right: 6px; }
 :is(#barra, .cabecera) .grupo-herramientas .principal { width: 32px; min-width: 0; padding: 0; border-radius: 5px; }
 .cabecera .grupo-herramientas .principal { width: 24px; }
