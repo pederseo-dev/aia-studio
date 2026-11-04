@@ -13,8 +13,9 @@ const op = (doc, ...ops) => aplicarOperaciones(doc, ops, esquema).doc;
 function cara() {
   return op(
     crearDocumento({ name: 'Cara' }),
-    { op: 'create', type: 'bone', id: 'head_bone', props: { from: [100, 200], to: [100, 100] } },
-    { op: 'create', type: 'group', id: 'head', props: { x: 100, y: 200, bone: 'head_bone' } },
+    { op: 'create', type: 'skeleton', id: 'rig' },
+    { op: 'create', type: 'bone', id: 'head_bone', parent: 'rig', props: { from: [100, 200], to: [100, 100] } },
+    { op: 'create', type: 'group', id: 'head', parent: 'rig', props: { x: 100, y: 200, bone: 'head_bone' } },
     { op: 'create', type: 'switch', id: 'mouth', parent: 'head' },
     { op: 'create', type: 'rect', id: 'mouth_rest', parent: 'mouth', props: { width: 20, height: 4 } },
     { op: 'create', type: 'ellipse', id: 'mouth_o', parent: 'mouth', props: { width: 12, height: 12 } },

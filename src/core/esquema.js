@@ -29,9 +29,12 @@ export function crearEsquema(defs) {
       container: def.container ?? base?.container ?? false,
       // Recurso: vive en la raíz, no se dibuja y otros objetos lo usan por referencia (estilos, degradados).
       resource: def.resource ?? base?.resource ?? false,
-      // Restricciones de jerarquía: qué tipos puede tener como padre (además de la raíz) y como hijos.
+      // Restricciones de jerarquía: qué tipos puede tener como padre (además de la raíz, salvo con requiresParent) y
+      // como hijos.
       parentTypes: def.parentTypes ?? base?.parentTypes ?? null,
       childTypes: def.childTypes ?? base?.childTypes ?? null,
+      // Si es true, no puede estar en la raíz (los huesos van siempre dentro de un skeleton).
+      requiresParent: def.requiresParent ?? base?.requiresParent ?? false,
       ancestros: base ? [base.name, ...base.ancestros] : [],
       properties: { ...base?.properties, ...def.properties },
     };

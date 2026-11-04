@@ -60,6 +60,12 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
     const deshacer = [];
     const rehacer = [];
     for (const e of entradas) {
+      // Una migración del formato (de cualquier origen) corta las pilas: las inversas de antes ya no encajan.
+      if (e.tipo === 'migracion') {
+        deshacer.length = 0;
+        rehacer.length = 0;
+        continue;
+      }
       if (e.origen !== origen) continue;
       if (e.tipo === 'cambio') {
         deshacer.push(e.n);

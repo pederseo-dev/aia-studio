@@ -34,6 +34,37 @@ export function subarbol(doc, id) {
   return ids;
 }
 
+/**
+ * El skeleton que contiene a un objeto: su ancestro de tipo skeleton más cercano (sin contarse a sí mismo), o null.
+ * Para un hueso, es el skeleton al que pertenece.
+ */
+export function esqueletoDe(doc, id) {
+  for (let o = buscar(doc, buscar(doc, id)?.parent); o; o = buscar(doc, o.parent)) if (o.type === 'skeleton') return o.id;
+  return null;
+}
+
+/** Huesos de un skeleton (los suyos, no los de un skeleton anidado), en orden de la lista. */
+export function huesosDe(doc, esqueletoId) {
+  return doc.objects.filter((o) => o.type === 'bone' && esqueletoDe(doc, o.id) === esqueletoId);
+}
+
+/**
+ * Por qué un objeto no puede enlazarse a un hueso (null si puede): el hueso tiene que ser del skeleton que lo
+ * contiene. `dueño` es el nombre para el mensaje (por ejemplo "arm.bone" o "tail.vertices[3].bone").
+ */
+export function errorDeEnlace(doc, objId, huesoId, dueño) {
+  const hueso = buscar(doc, huesoId);
+  const todos = doc.objects.filter((h) => h.type === 'bone').map((h) => h.id);
+  if (!hueso) return `${dueño}: no existe el hueso "${huesoId}".${sugerir(huesoId, todos)}`;
+  if (hueso.type !== 'bone') return `${dueño}: "${huesoId}" es un ${hueso.type}, no un hueso`;
+  const propio = esqueletoDe(doc, objId);
+  const delHueso = esqueletoDe(doc, huesoId);
+  if (propio === delHueso) return null;
+  if (!propio) return `${dueño}: "${huesoId}" es un hueso del skeleton "${delHueso}" y ${objId} no está dentro de ningún skeleton. Un objeto solo se enlaza a huesos de su skeleton: mételo dentro de "${delHueso}" (move) o quita el enlace.`;
+  const propios = huesosDe(doc, propio).map((h) => h.id);
+  return `${dueño}: "${huesoId}" es un hueso del skeleton "${delHueso}", pero ${objId} está en el skeleton "${propio}" y solo puede enlazarse a sus huesos: ${propios.join(', ') || 'todavía no tiene'}.${sugerir(huesoId, propios)}`;
+}
+
 /** Propiedades que no son estructurales (id, type, parent). */
 export function propiedadesGuardadas(obj) {
   return Object.keys(obj).filter((k) => !ESTRUCTURA.has(k));
@@ -71,13 +102,17 @@ export function validar(doc, esquema) {
       continue;
     }
     if (tipo.resource && o.parent != null) errores.push(`${o.id}: es un recurso (${o.type}) y va en la raíz (parent: null)`);
-    else if (o.parent != null) {
+    else if (o.parent == null && tipo.requiresParent) {
+      const esqueletos = doc.objects.filter((x) => x.type === 'skeleton').map((x) => x.id);
+      const pista = esqueletos.length ? ` Esqueletos del documento: ${esqueletos.join(', ')}.` : ' Crea primero un skeleton (la capa de huesos, que también contiene el dibujo que mueve) y pon el hueso adentro.';
+      errores.push(`${o.id}: un ${o.type} no puede estar en la raíz: va dentro de ${tipo.parentTypes.join(' o ')}.${pista} (Los documentos de antes de los skeleton se convierten con npm run migrar.)`);
+    } else if (o.parent != null) {
       const padre = buscar(doc, o.parent);
       if (!padre) errores.push(`${o.id}: el padre "${o.parent}" no existe.${sugerir(o.parent, ids)}`);
       else if (!esquema.tipos.get(padre.type)?.container) errores.push(`${o.id}: su padre "${o.parent}" es un ${padre.type} y no puede tener hijos (usa un group)`);
-      else if (tipo.parentTypes && !tipo.parentTypes.includes(padre.type)) errores.push(`${o.id}: un ${o.type} solo puede estar en la raíz o dentro de ${tipo.parentTypes.join(' o ')} (su padre "${o.parent}" es un ${padre.type})`);
+      else if (tipo.parentTypes && !tipo.parentTypes.includes(padre.type)) errores.push(`${o.id}: un ${o.type} solo puede estar ${tipo.requiresParent ? '' : 'en la raíz o '}dentro de ${tipo.parentTypes.join(' o ')} (su padre "${o.parent}" es un ${padre.type})`);
       else if (esquema.tipos.get(padre.type).childTypes && !esquema.tipos.get(padre.type).childTypes.includes(o.type)) {
-        const pista = padre.type === 'bone' ? '; para pegar un dibujo a un hueso, déjalo donde está y ponle la propiedad bone' : '';
+        const pista = padre.type === 'bone' ? `; el dibujo va dentro del skeleton (${esqueletoDe(doc, padre.id) ?? 'el de ese hueso'}), no dentro del hueso: ponlo ahí y enlázalo con la propiedad bone` : '';
         errores.push(`${o.id}: un ${padre.type} solo puede tener hijos ${esquema.tipos.get(padre.type).childTypes.join(' o ')} y "${o.id}" es un ${o.type}${pista}`);
       }
     }
@@ -86,14 +121,13 @@ export function validar(doc, esquema) {
       if (p.type !== 'ref' || o[prop] == null) continue;
       errores.push(...erroresDeReferencia(doc, o, prop, p, o[prop], o.id));
     }
-    // Los vértices enlazados a un hueso (enlace por punto) nombran huesos que tienen que existir.
+    // Los vértices enlazados a un hueso (enlace por punto) nombran huesos de su skeleton.
     for (const [prop, p] of Object.entries(tipo.properties)) {
       if (p.type !== 'vertices' || !Array.isArray(o[prop])) continue;
       o[prop].forEach((v, i) => {
         if (v?.bone == null) return;
-        const hueso = buscar(doc, v.bone);
-        if (!hueso) errores.push(`${o.id}.${prop}[${i}].bone: no existe el hueso "${v.bone}".${sugerir(v.bone, doc.objects.filter((h) => h.type === 'bone').map((h) => h.id))}`);
-        else if (hueso.type !== 'bone') errores.push(`${o.id}.${prop}[${i}].bone: "${v.bone}" es un ${hueso.type}, no un hueso`);
+        const error = errorDeEnlace(doc, o.id, v.bone, `${o.id}.${prop}[${i}].bone`);
+        if (error) errores.push(error);
       });
     }
     // Las poses nombran objetos que existen y propiedades animables suyas, con valores válidos.
@@ -134,9 +168,16 @@ export function validar(doc, esquema) {
   return { errores, avisos };
 }
 
-/** Errores de una referencia: que exista, que sea del tipo pedido y, con refScope "children", que sea un hijo. */
+/**
+ * Errores de una referencia: que exista, que sea del tipo pedido y, con refScope "children", que sea un hijo; con
+ * refScope "skeleton", que sea un hueso del skeleton que contiene al objeto.
+ */
 function erroresDeReferencia(doc, o, prop, p, valor, dueño) {
   if (valor == null) return [];
+  if (p.refScope === 'skeleton') {
+    const error = errorDeEnlace(doc, o.id, valor, `${dueño}.${prop}`);
+    return error ? [error] : [];
+  }
   const referido = buscar(doc, valor);
   if (!referido) return [`${dueño}.${prop}: el objeto "${valor}" no existe.${sugerir(valor, doc.objects.map((x) => x.id))}`];
   if (p.refTypes && !p.refTypes.includes(referido.type)) return [`${dueño}.${prop}: "${valor}" es un ${referido.type}; se esperaba ${p.refTypes.join(' o ')}`];

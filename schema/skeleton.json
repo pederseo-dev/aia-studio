@@ -1,0 +1,6 @@
+{
+  "name": "skeleton",
+  "extends": "transformable",
+  "container": true,
+  "description": "Capa de huesos (como la bone layer de Moho): un contenedor que tiene el esqueleto y el dibujo que ese esqueleto mueve. Adentro van, en orden de dibujo, las formas y grupos (como un group), y los huesos raíz (bone), que nacen en su marco: moverlo, girarlo o escalarlo arrastra al dibujo y a los huesos juntos. El dibujo de adentro queda quieto hasta que se enlaza a uno de sus huesos (propiedad bone, o bind_by_proximity). Un skeleton puede ir dentro de otro y enlazarse a un hueso del de afuera."
+}

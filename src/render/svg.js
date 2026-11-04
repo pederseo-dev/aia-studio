@@ -18,6 +18,7 @@ export const DIBUJAR = {
   bone: null,
   group: () => '',
   switch: () => '',
+  skeleton: () => '',
   rect: (v) => {
     const w = v('width');
     const h = v('height');
@@ -109,7 +110,8 @@ function nodo(doc, esquema, obj, ctx) {
     v('visible') ? '' : ' display="none"',
   ].join('');
   const sub = { ...ctx, deltaPadre: delta };
-  let visibles = hijos(doc, obj.id);
+  // Los huesos de un skeleton son sus hijos, pero no se dibujan.
+  let visibles = hijos(doc, obj.id).filter((h) => DIBUJAR[h.type]);
   // Un switch dibuja un solo hijo: el activo, o el primero.
   if (obj.type === 'switch') {
     const elegido = ctx.mostrar?.[obj.id] ?? v('active');

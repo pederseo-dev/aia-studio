@@ -307,6 +307,8 @@ function aplicarUna(doc, op, esquema) {
           c.parent = o.id === original.id ? padre : mapa.get(o.parent);
           for (const [prop, p] of Object.entries(esquema.tipos.get(c.type)?.properties ?? {})) {
             if (p.type === 'ref' && mapa.has(c[prop])) c[prop] = mapa.get(c[prop]);
+            // Al copiar un skeleton entero, los vértices enlazados por punto siguen a los huesos copiados.
+            if (p.type === 'vertices' && c[prop]?.some((v) => mapa.has(v.bone))) c[prop] = c[prop].map((v) => (mapa.has(v.bone) ? { ...v, bone: mapa.get(v.bone) } : v));
           }
           return c;
         });

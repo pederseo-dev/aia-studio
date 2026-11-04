@@ -21,13 +21,13 @@ export function montarHistorial(lista, botonDeshacer, botonRehacer) {
 
     lista.replaceChildren(
       ...entradas
-        .filter((e) => e.tipo === 'cambio' || e.tipo === 'crear')
+        .filter((e) => e.tipo === 'cambio' || e.tipo === 'crear' || e.tipo === 'migracion')
         .reverse()
         .slice(0, 40)
         .map((e) => {
           const li = document.createElement('li');
           li.className = `${e.origen}${revertidas.has(e.n) ? ' revertida' : ''}`;
-          li.innerHTML = `<span class="quien">${e.origen === 'ai' ? 'AI' : 'You'}</span><span class="hora"></span><span class="nota"></span>`;
+          li.innerHTML = `<span class="quien">${e.origen === 'ai' ? 'AI' : e.origen === 'system' ? 'System' : 'You'}</span><span class="hora"></span><span class="nota"></span>`;
           li.querySelector('.hora').textContent = new Date(e.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           li.querySelector('.nota').textContent = e.nota;
           li.title = `${e.nota}\n${e.ops.length} operations`;
