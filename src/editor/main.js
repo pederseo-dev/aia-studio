@@ -189,8 +189,26 @@ suscribir((c) => {
 $('#deshacer').addEventListener('click', deshacer);
 $('#rehacer').addEventListener('click', rehacer);
 $('#borrar').addEventListener('click', borrarSeleccion);
-$('#nuevo-grupo').addEventListener('click', () => (estado.seleccionados.length > 1 ? agruparSeleccion() : nuevoGrupo()));
-$('#nuevo-switch').addEventListener('click', nuevoSwitch);
+// Grupo y switch comparten botón, como la pluma y las formas: el principal crea el último tipo elegido.
+const CONTENEDORES = {
+  group: { icono: '▣+', titulo: 'Nuevo grupo (G) · con varios seleccionados, los agrupa (Ctrl+G)', crear: () => (estado.seleccionados.length > 1 ? agruparSeleccion() : nuevoGrupo()) },
+  switch: { icono: '⇄+', titulo: 'Nuevo switch (Shift+G): muestra un solo hijo a la vez · con algo seleccionado, lo mete como variantes', crear: () => nuevoSwitch() },
+};
+let ultimoContenedor = 'group';
+function fijarContenedor(tipo) {
+  ultimoContenedor = tipo;
+  Object.assign($('#nuevo-grupo'), { textContent: CONTENEDORES[tipo].icono, title: CONTENEDORES[tipo].titulo });
+}
+fijarContenedor('group');
+$('#nuevo-grupo').addEventListener('click', () => CONTENEDORES[ultimoContenedor].crear());
+$('#crear-grupo .elegir').addEventListener('click', (e) => alternarMenu($('#crear-grupo .menu'), e.currentTarget));
+$('#crear-grupo .menu').addEventListener('click', (e) => {
+  const tipo = e.target.closest('[data-tipo]')?.dataset.tipo;
+  if (!tipo) return;
+  cerrarMenus();
+  fijarContenedor(tipo);
+  CONTENEDORES[tipo].crear();
+});
 $('#duplicar').addEventListener('click', duplicarSeleccion);
 $('#nuevo-estilo').addEventListener('click', () => nuevoRecurso('style', 'style', { fill: '#c8c2d4', stroke: '#2b2135' }));
 $('#nuevo-degradado').addEventListener('click', () => nuevoRecurso('linear_gradient', 'gradient'));

@@ -103,8 +103,14 @@
       <aside id="panel-objetos" class="panel">
         <div class="cabecera">
           <h2>Jerarquía</h2>
-          <button id="nuevo-grupo" type="button" class="icono" title="Nuevo grupo (G) · con varios seleccionados, los agrupa (Ctrl+G)">▣+</button>
-          <button id="nuevo-switch" type="button" class="icono" title="Nuevo switch (Shift+G): muestra un solo hijo a la vez. Con algo seleccionado, lo mete adentro como variantes">⇄+</button>
+          <div id="crear-grupo" class="grupo-herramientas desplegable">
+            <button id="nuevo-grupo" type="button" class="principal icono">▣+</button>
+            <button type="button" class="elegir" aria-haspopup="menu" title="Grupo o switch">▾</button>
+            <div class="menu" role="menu" hidden>
+              <button type="button" role="menuitem" data-tipo="group" title="Contenedor: sus hijos se mueven juntos. Con varios seleccionados, los agrupa"><span>▣ Grupo</span><kbd>G</kbd></button>
+              <button type="button" role="menuitem" data-tipo="switch" title="Grupo que muestra un solo hijo a la vez (bocas, visemas). Con algo seleccionado, lo mete como variantes"><span>⇄ Switch</span><kbd>Shift+G</kbd></button>
+            </div>
+          </div>
           <button id="duplicar" type="button" class="icono" title="Duplicar selección con sus hijos (Ctrl+D)">⧉</button>
           <button id="borrar" type="button" class="icono" title="Borrar selección (Supr)">✕</button>
         </div>
