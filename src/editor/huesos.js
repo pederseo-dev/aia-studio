@@ -36,6 +36,33 @@ export function opsDePose(doc, poseId, id, campos) {
   return [{ op: 'set', target: poseId, props: { values } }];
 }
 
+/** Variante que muestra un switch: la de la pose que se edita, si la fija; si no, la del montaje (o la primera). */
+export function varianteDe(doc, sw) {
+  const hijos = doc.objects.filter((o) => o.parent === sw.id);
+  const elegida = poseActiva(doc)?.values?.[sw.id]?.active ?? sw.active;
+  return hijos.find((o) => o.id === elegida)?.id ?? hijos[0]?.id ?? null;
+}
+
+/** Elegir qué muestra un switch: en la pose que se edita, si hay una; si no, en el montaje. */
+export function elegirVariante(swId, hijo) {
+  const pose = poseActiva();
+  if (pose) return ejecutar(opsDePose(estado.doc, pose.id, swId, { active: hijo }), `pose ${pose.id}: ${swId} muestra ${hijo}`);
+  ejecutar([{ op: 'set', target: swId, props: { active: hijo } }], `${swId} muestra ${hijo}`);
+}
+
+/**
+ * Variantes que hay que mostrar aunque su switch muestre otra: la seleccionada (y sus ancestros dentro de switches),
+ * para poder verla y editarla. Es solo de la vista: no cambia el documento.
+ */
+export function variantesAMostrar(doc = estado.doc) {
+  const mostrar = {};
+  for (let o = estado.seleccion && buscar(doc, estado.seleccion); o?.parent; o = buscar(doc, o.parent)) {
+    const padre = buscar(doc, o.parent);
+    if (padre?.type === 'switch' && varianteDe(doc, padre) !== o.id) mostrar[padre.id] = o.id;
+  }
+  return mostrar;
+}
+
 /** Pega un objeto al hueso o, si ya estaba pegado a ese, lo suelta. */
 export function alternarEnlace(id, hueso) {
   const obj = buscar(estado.doc, id);

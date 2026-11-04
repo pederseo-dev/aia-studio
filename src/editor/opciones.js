@@ -5,7 +5,7 @@ import { buscar } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { huesoDe, repartirEntreHuesos } from '../core/esqueleto.js';
 import { avisar, ejecutar, esquema, estado, fijar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
-import { opsDePose } from './huesos.js';
+import { elegirVariante, opsDePose, varianteDe, variantesAMostrar } from './huesos.js';
 
 /**
  * `acciones`: lo que vive en main.js y la barra también ofrece (agrupar, enlazar la selección, borrar...).
@@ -107,6 +107,16 @@ export function montarOpciones(raiz, acciones) {
     if (sel?.type === 'switch') return opcionesDeSwitch(doc, sel);
 
     if (sel && !esquema.tipos.get(sel.type).resource) {
+      const padre = sel.parent && buscar(doc, sel.parent);
+      if (padre?.type === 'switch') {
+        // Una variante de un switch: avisar si se ve solo porque está seleccionada, y dejar elegir la que se ve.
+        const deVista = variantesAMostrar(doc)[padre.id] === sel.id;
+        return [
+          texto(`${codigo(sel.id)} es una variante del switch ${codigo(padre.id)}.${deVista ? ' Se ve mientras está seleccionada para que puedas editarla, pero el switch muestra otra.' : ''}`),
+          selectorDeVariante(doc, padre),
+          boton('Ir al switch', `Seleccionar ${padre.id}`, () => seleccionar(padre.id)),
+        ];
+      }
       const partes = [texto('Arrastra para mover. Manijas: círculo de arriba = rotar, esquinas = escalar, punto = pivote (moverlo no mueve el dibujo).')];
       const hueso = huesoDe(doc, sel.id);
       if (sel.bone) {
@@ -165,17 +175,22 @@ export function montarOpciones(raiz, acciones) {
     if (!variantes.length) {
       return [texto(`Switch ${codigo(sw.id)} vacío: arrastra dibujos adentro en la jerarquía, o dibuja con él seleccionado. Cada hijo es una variante y se ve una a la vez.`)];
     }
-    const visible = variantes.find((o) => o.id === sw.active) ?? variantes[0];
-    const etiqueta = Object.assign(document.createElement('label'), { className: 'texto', textContent: `Switch ${sw.id} muestra ` });
-    const select = document.createElement('select');
-    select.append(...variantes.map((o) => new Option(o.id, o.id, false, o.id === visible.id)));
-    select.title = 'La variante que se ve en el montaje. Para cambiarla según un control, crea una pose por variante (active) y conéctalas con drivers.';
-    select.addEventListener('change', () => ejecutar([{ op: 'set', target: sw.id, props: { active: select.value } }], `${sw.id} muestra ${select.value}`));
-    etiqueta.append(select);
     return [
-      etiqueta,
+      selectorDeVariante(doc, sw),
       texto(`${variantes.length} variante${variantes.length === 1 ? '' : 's'}. Para agregar: arrastra dibujos adentro o dibuja con el switch seleccionado. Para un control (visemas): una pose por variante que cambie <b>active</b>, y drivers con <b>equals</b>.`),
     ];
+  }
+
+  /** «X muestra [lista]»: en una pose cambia la pose; si no, el montaje. */
+  function selectorDeVariante(doc, sw) {
+    const variantes = doc.objects.filter((o) => o.parent === sw.id);
+    const etiqueta = Object.assign(document.createElement('label'), { className: 'texto', textContent: `${estado.pose ? `En la pose ${estado.pose}, ` : ''}${sw.id} muestra ` });
+    const select = document.createElement('select');
+    select.append(...variantes.map((o) => new Option(o.id, o.id, false, o.id === varianteDe(doc, sw))));
+    select.title = 'Qué variante se ve. Para que la elija un control: una pose por variante (active) y drivers con equals.';
+    select.addEventListener('change', () => elegirVariante(sw.id, select.value));
+    etiqueta.append(select);
+    return etiqueta;
   }
 
   function opcionesDeHueso(doc, hueso) {

@@ -111,7 +111,10 @@ function nodo(doc, esquema, obj, ctx) {
   const sub = { ...ctx, deltaPadre: delta };
   let visibles = hijos(doc, obj.id);
   // Un switch dibuja un solo hijo: el activo, o el primero.
-  if (obj.type === 'switch') visibles = [visibles.find((h) => h.id === v('active')) ?? visibles[0]].filter(Boolean);
+  if (obj.type === 'switch') {
+    const elegido = ctx.mostrar?.[obj.id] ?? v('active');
+    visibles = [visibles.find((h) => h.id === elegido) ?? visibles[0]].filter(Boolean);
+  }
   const contenido = DIBUJAR[obj.type](v) + visibles.map((h) => nodo(doc, esquema, h, sub)).join('');
   return `<g${atributos}>${contenido}</g>`;
 }
@@ -133,7 +136,7 @@ export function resolverPose(doc, esquema, pose, params) {
  * `pose`: id de una pose (o el objeto) para dibujarla sola; `params`: valores de params para dibujar la mezcla de
  * poses que dan los drivers; sin ninguno de los dos, el montaje.
  */
-export function contenidoSvg(montaje, esquema, { pose, params } = {}) {
+export function contenidoSvg(montaje, esquema, { pose, params, mostrar } = {}) {
   const poseActiva = resolverPose(montaje, esquema, pose, params);
   // Lo que no es hueso toma los valores de la pose; los huesos se mueven por el esqueleto (con su delta).
   const doc = aplicarPose(montaje, esquema, poseActiva);
@@ -144,7 +147,8 @@ export function contenidoSvg(montaje, esquema, { pose, params } = {}) {
   const definiciones = raiz.filter((o) => DEFINIR[o.type]).map((o) => DEFINIR[o.type](o, lector(doc, esquema, o)));
   const defs = definiciones.length ? `<defs>${definiciones.join('')}</defs>` : '';
   const rect = fondo == null ? '' : `<rect data-fondo="" width="${w}" height="${h}" fill="${atributo(fondo)}"/>`;
-  const ctx = { esqueleto: poseActiva ? evaluarEsqueleto(doc, esquema, poseActiva) : null, deltaPadre: IDENTIDAD };
+  // `mostrar`: { id_de_switch: id_de_hijo } para ver una variante sin cambiarla (el editor, al seleccionarla).
+  const ctx = { esqueleto: poseActiva ? evaluarEsqueleto(doc, esquema, poseActiva) : null, deltaPadre: IDENTIDAD, mostrar };
   const objetos = raiz.filter((o) => DIBUJAR[o.type]).map((o) => nodo(doc, esquema, o, ctx));
   return defs + rect + objetos.join('');
 }

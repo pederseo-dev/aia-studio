@@ -6,7 +6,7 @@ import { leerMeta } from '../core/esquema.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
 import { contenidoSvg } from '../render/svg.js';
 import { docVisible, ejecutar, esquema, estado, fijar, idLibre, padreParaNuevo, seleccionar, suscribir } from './estado.js';
-import { crearHuesos } from './huesos.js';
+import { crearHuesos, variantesAMostrar } from './huesos.js';
 import { crearPluma } from './pluma.js';
 import { crearPuntos } from './puntos.js';
 import { crearTransformar } from './transformar.js';
@@ -22,6 +22,7 @@ export function montarLienzo(contenedor) {
   const camara = { x: 0, y: 0, zoom: 1 };
   let ajustadoPara = null;
   let espacio = false;
+  let mostrando = '{}'; // variantes de switch que se muestran por la selección
 
   // Lo que comparten las herramientas. "Pantalla" = píxeles dentro del lienzo, el espacio de la superposición.
   const ctx = {
@@ -51,6 +52,8 @@ export function montarLienzo(contenedor) {
     if ('pose' in c) contenedor.classList.toggle('modo-pose', !!estado.pose);
     if ('params' in c) contenedor.classList.toggle('modo-params', !!estado.params && !estado.pose);
     if ('doc' in c || 'previa' in c || 'pose' in c || 'params' in c) dibujarDocumento();
+    // Seleccionar una variante oculta de un switch la muestra (solo en la vista): hay que redibujar el documento.
+    else if ('seleccion' in c && JSON.stringify(variantesAMostrar()) !== mostrando) dibujarDocumento();
     else if ('seleccion' in c || 'edicion' in c || 'vertice' in c || 'enlazando' in c) dibujarSuperposicion();
     if ('enlazando' in c) contenedor.classList.toggle('enlazando', !!estado.enlazando);
     if ('herramienta' in c) {
@@ -77,7 +80,9 @@ export function montarLienzo(contenedor) {
     const h = leerMeta(esquema, doc, 'height');
     // Lo que se ve: la pose que se edita, la mezcla de los params (vista Parámetros) o el montaje.
     const vista = estado.pose ? { pose: estado.pose } : estado.params ? { params: estado.params } : {};
-    documentoG.innerHTML = `${contenidoSvg(doc, esquema, vista)}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
+    const mostrar = estado.params && !estado.pose ? {} : variantesAMostrar(doc);
+    mostrando = JSON.stringify(mostrar);
+    documentoG.innerHTML = `${contenidoSvg(doc, esquema, { ...vista, mostrar })}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
     dibujarSuperposicion();
   }
 

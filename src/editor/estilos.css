@@ -189,6 +189,8 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 .fila:hover .ojo, .fila .ojo.oculto { opacity: 1; }
 .fila.oculta .nombre { color: var(--tenue); }
 .fila.apagada .nombre { color: var(--tenue); font-style: italic; }
+.fila .variante { border: 1px solid var(--borde); background: var(--panel-2); color: var(--suave); font-size: 11px; padding: 0 6px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fila .variante:hover { color: var(--texto); border-color: var(--acento); }
 .fila.soltar-antes { border-top-color: var(--acento); }
 .fila.soltar-despues { border-bottom-color: var(--acento); }
 .fila.soltar-dentro { background: #33395f; outline: 1px solid var(--acento); }

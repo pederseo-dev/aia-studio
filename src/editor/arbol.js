@@ -5,7 +5,7 @@
 import { buscar, hijos, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { aplicarOperaciones } from '../core/operaciones.js';
-import { alternarEnlace } from './huesos.js';
+import { alternarEnlace, elegirVariante, varianteDe, variantesAMostrar } from './huesos.js';
 import { alternarSeleccion, ejecutar, esquema, estado, mantenerPosicion, seleccionRaices, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 
 const ICONOS = { group: '▣', switch: '⇄', rect: '▭', ellipse: '◯', path: '✒', bone: '⟋', style: '◆', linear_gradient: '▤', radial_gradient: '◍', pose: '♟', param: '◐', driver: '⤳' };
@@ -52,11 +52,13 @@ export function montarArbol(raiz, raizRecursos) {
         const conOjo = 'visible' in esquema.tipos.get(o.type).properties;
         const visible = !conOjo || leer(esquema, o, 'visible');
         const fila = document.createElement('div');
-        // En un switch, las variantes que no se ven quedan atenuadas.
+        // En un switch, las variantes que no se ven quedan atenuadas (la seleccionada se muestra igual, para editarla).
         const padre = o.parent && buscar(doc, o.parent);
-        const apagada = padre?.type === 'switch' && o.id !== (padre.active ?? hijos(doc, padre.id)[0]?.id);
+        const activa = padre?.type === 'switch' ? varianteDe(doc, padre) : null;
+        const apagada = activa != null && o.id !== activa;
+        const deVista = apagada && variantesAMostrar(doc)[padre.id] === o.id;
         fila.className = `fila${claseSeleccion(o.id)}${visible ? '' : ' oculta'}${apagada ? ' apagada' : ''}`;
-        if (apagada) fila.title = `No se ve: el switch ${padre.id} muestra ${padre.active ?? hijos(doc, padre.id)[0]?.id}`;
+        if (apagada) fila.title = deVista ? `Se ve mientras está seleccionada; el switch ${padre.id} muestra ${activa}` : `No se ve: el switch ${padre.id} muestra ${activa}`;
         fila.dataset.id = o.id;
         fila.draggable = true;
         fila.style.paddingLeft = `${4 + nivel * 14}px`;
@@ -64,9 +66,11 @@ export function montarArbol(raiz, raizRecursos) {
         const plegado = plegadosDe().has(o.id);
         fila.innerHTML = `<button type="button" class="plegar${tieneHijos ? '' : ' vacio'}" title="${plegado ? 'Desplegar' : 'Plegar'}" tabindex="-1">${plegado ? '▸' : '▾'}</button>
           <span class="tipo" title="${o.type}">${ICONOS[o.type] ?? '•'}</span><span class="nombre"></span>${o.bone ? '<span class="enlace">⟋</span>' : ''}
+          ${o.type === 'switch' ? '<span class="desplegable variante-switch"><button type="button" class="variante" title="Qué variante muestra (en una pose, se guarda en la pose)"></button><div class="menu" role="menu" hidden></div></span>' : ''}
           ${conOjo ? `<button type="button" class="ojo${visible ? '' : ' oculto'}" title="${visible ? 'Ocultar' : 'Mostrar'}">${visible ? '◉' : '○'}</button>` : ''}`;
         fila.querySelector('.nombre').textContent = o.id;
         if (o.bone) fila.querySelector('.enlace').title = `Sigue al hueso ${o.bone}`;
+        if (o.type === 'switch') fila.querySelector('.variante').textContent = `▾ ${varianteDe(doc, o) ?? 'vacío'}`;
         li.append(fila);
         const subrama = plegado ? [] : rama(doc, o.id, nivel + 1);
         if (subrama.length) {
@@ -93,6 +97,13 @@ export function montarArbol(raiz, raizRecursos) {
       conjunto.has(id) ? conjunto.delete(id) : conjunto.add(id);
       return dibujar();
     }
+    // Botón de variante de un switch: abre la lista de sus hijos (como el menú de un switch layer de Moho).
+    const item = e.target.closest('[data-variante]');
+    if (item) {
+      item.closest('.menu').hidden = true;
+      return elegirVariante(id, item.dataset.variante);
+    }
+    if (e.target.closest('.variante')) return abrirVariantes(fila, id);
     if (e.target.closest('.ojo')) {
       const visible = leer(esquema, buscar(estado.doc, id), 'visible');
       ejecutar([visible ? { op: 'set', target: id, props: { visible: false } } : { op: 'unset', target: id, props: ['visible'] }], `${visible ? 'ocultar' : 'mostrar'} ${id}`);
@@ -114,6 +125,27 @@ export function montarArbol(raiz, raizRecursos) {
     if (a < 0) return seleccionar(fila.dataset.id);
     const tramo = filas.slice(Math.min(a, b), Math.max(a, b) + 1);
     seleccionarVarios([...estado.seleccionados, ...tramo], fila.dataset.id);
+  }
+
+  function abrirVariantes(fila, id) {
+    const boton = fila.querySelector('.variante');
+    const menu = fila.querySelector('.variante-switch .menu');
+    const activa = varianteDe(estado.doc, buscar(estado.doc, id));
+    const variantes = hijos(estado.doc, id);
+    menu.replaceChildren(
+      ...(variantes.length
+        ? variantes.map((h) => {
+            const b = Object.assign(document.createElement('button'), { type: 'button', className: h.id === activa ? 'marcado' : '', textContent: h.id });
+            b.setAttribute('role', 'menuitemradio');
+            b.dataset.variante = h.id;
+            return b;
+          })
+        : [Object.assign(document.createElement('span'), { className: 'ayuda', textContent: 'Vacío: arrastra dibujos adentro.' })]),
+    );
+    // Fijo en la pantalla: la lista de la jerarquía tiene su propio desplazamiento y lo cortaría.
+    const r = boton.getBoundingClientRect();
+    Object.assign(menu.style, { position: 'fixed', top: `${r.bottom + 4}px`, left: `${r.left}px`, minWidth: '160px' });
+    menu.hidden = !menu.hidden;
   }
 
   // Renombrar con doble clic.
