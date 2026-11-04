@@ -12,6 +12,39 @@ import { aplicarOperaciones } from '../src/core/operaciones.js';
 export const CARPETA_PERSONAJES = fileURLToPath(new URL('../personajes/', import.meta.url));
 const ID_DOCUMENTO = /^[a-z][a-z0-9_-]*$/;
 
+// Operaciones que cambian la estructura de un objeto (no una propiedad suelta): tocan "todo" el objeto.
+const ESTRUCTURALES = new Set(['create', 'delete', 'move', 'rename', 'duplicate', '_restore', '_place']);
+
+/** (id, propiedad) que toca un lote, con sus inversas: Map id → Set de propiedades ("*" = el objeto entero). */
+function tocados(entrada) {
+  const mapa = new Map();
+  const sumar = (id, prop) => id != null && (mapa.get(id) ?? mapa.set(id, new Set()).get(id)).add(prop);
+  for (const op of [...(entrada.ops ?? []), ...(entrada.inversas ?? [])]) {
+    if (op.op === 'set') Object.keys(op.props ?? {}).forEach((k) => sumar(op.target, k));
+    else if (op.op === 'unset') (op.props ?? []).forEach((k) => sumar(op.target, k));
+    else if (ESTRUCTURALES.has(op.op)) {
+      sumar(op.target ?? op.id, '*');
+      if (op.op === 'rename' || op.op === 'create') sumar(op.id, '*');
+      // Meter algo en un contenedor también lo toca: deshacer la creación del contenedor se llevaría ese hijo.
+      if (op.parent != null) sumar(op.parent, 'children');
+      for (const { obj } of op.entries ?? []) sumar(obj?.id, '*');
+    }
+  }
+  return mapa;
+}
+
+/** Nombres "id.prop" (o "id", si alguno cambió el objeto entero) que dos lotes tocan en común. */
+function comunes(a, b) {
+  const salida = new Set();
+  for (const [id, propsA] of a) {
+    const propsB = b.get(id);
+    if (!propsB) continue;
+    if (propsB.has('*')) salida.add(id);
+    else for (const p of propsB) if (propsA.has('*') || propsA.has(p)) salida.add(`${id}.${p}`);
+  }
+  return salida;
+}
+
 export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
   // Las escrituras de este proceso van en fila para no pisarse entre sí.
   let fila = Promise.resolve();
@@ -81,11 +114,43 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
     return { deshacer, rehacer };
   }
 
+  /**
+   * Lotes de otro origen posteriores a `entrada` que siguen en pie y tocan alguna de sus mismas (id, propiedad):
+   * deshacerla o rehacerla los pisaría. Un cambio que su origen ya deshizo (o un deshacer que ya rehizo) se cancela y
+   * no cuenta. Devuelve [{ quien, n, nota, props: ["r.x", ...] }].
+   */
+  function choquesConOtros(entradas, entrada) {
+    const propias = tocados(entrada);
+    const enPie = new Map(); // origen → Map(n → entrada)
+    for (const e of entradas.slice(entrada.n)) {
+      if (e.tipo === 'migracion') return []; // la migración ya cortó las pilas
+      if (e.origen === entrada.origen || !['cambio', 'deshacer', 'rehacer'].includes(e.tipo)) continue;
+      const delOrigen = enPie.get(e.origen) ?? enPie.set(e.origen, new Map()).get(e.origen);
+      // Deshacer un lote (o rehacer un deshacer) que también es posterior: se anulan entre sí.
+      if (e.tipo !== 'cambio' && delOrigen.has(e.ref)) delOrigen.delete(e.ref);
+      else delOrigen.set(e.n, e);
+    }
+    const choques = [];
+    for (const delOrigen of enPie.values()) {
+      for (const e of delOrigen.values()) {
+        const props = [...comunes(propias, tocados(e))];
+        if (props.length) choques.push({ quien: e.origen, n: e.n, nota: e.nota ?? '', props });
+      }
+    }
+    return choques;
+  }
+
   async function revertir(id, origen, tipo) {
     const entradas = await historial(id);
     const pila = pilas(entradas, origen)[tipo === 'deshacer' ? 'deshacer' : 'rehacer'];
-    if (!pila.length) throw new Error(tipo === 'deshacer' ? 'No hay nada tuyo para deshacer' : 'No hay nada para rehacer');
+    if (!pila.length) throw new Error(tipo === 'deshacer' ? 'Nothing of yours to undo' : 'Nothing to redo');
     const entrada = entradas[pila.at(-1) - 1];
+    const choques = choquesConOtros(entradas, entrada);
+    if (choques.length) {
+      const verbo = tipo === 'deshacer' ? 'undo' : 'redo';
+      const detalle = choques.map(({ quien, n, nota, props }) => `${props.join(', ')} (changed by ${quien === 'user' ? 'the user' : quien === 'ai' ? 'the AI' : quien} in #${n} "${nota}")`).join('; ');
+      throw new Error(`Can't ${verbo} #${entrada.n} "${entrada.nota ?? ''}": it would overwrite later changes from another origin: ${detalle}. Change those properties by hand instead, or ask whoever made them.`);
+    }
     let resultado;
     try {
       resultado = aplicarOperaciones(await leer(id), entrada.inversas, esquema);
@@ -93,8 +158,9 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
       throw new Error(`No se puede ${tipo}: el documento cambió después y ya no encaja.\n${e.message}`);
     }
     await escribir(id, resultado.doc);
-    const nota = entrada.nota?.replace(/^(deshacer|rehacer): /, '') ?? '';
-    await registrar(id, { origen, tipo, ref: entrada.n, nota: `${tipo}: ${nota}`, ops: entrada.inversas, inversas: resultado.inversas });
+    // La nota la ve el usuario en el historial: en inglés (los prefijos viejos en español también se limpian).
+    const nota = entrada.nota?.replace(/^(deshacer|rehacer|undo|redo): /, '') ?? '';
+    await registrar(id, { origen, tipo, ref: entrada.n, nota: `${tipo === 'deshacer' ? 'undo' : 'redo'}: ${nota}`, ops: entrada.inversas, inversas: resultado.inversas });
     return { doc: resultado.doc, entrada: { n: entrada.n, nota, ops: entrada.ops.length, lote: entrada.ops } };
   }
 
@@ -129,13 +195,13 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
         if (copiarDe) {
           const base = await leer(copiarDe);
           doc = { ...base, meta: { ...base.meta, ...meta } };
-          nota ??= `copia de ${copiarDe}`;
+          nota ??= `copy of ${copiarDe}`;
         }
         const { errores } = validar(doc, esquema);
         if (errores.length) throw new ErrorDeValidacion(errores);
         await fs.mkdir(path.dirname(ruta(id, 'documento.json')), { recursive: true });
         await escribir(id, doc);
-        await registrar(id, { origen, tipo: 'crear', nota: nota ?? 'documento creado', ops: [], inversas: [] });
+        await registrar(id, { origen, tipo: 'crear', nota: nota ?? 'document created', ops: [], inversas: [] });
         return doc;
       }),
 
@@ -144,7 +210,7 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
       enFila(async () => {
         const { doc, inversas, avisos } = aplicarOperaciones(await leer(id), ops, esquema);
         await escribir(id, doc);
-        await registrar(id, { origen, tipo: 'cambio', nota: nota || `${ops.length} cambios`, ops, inversas });
+        await registrar(id, { origen, tipo: 'cambio', nota: nota || `${ops.length} ${ops.length === 1 ? 'change' : 'changes'}`, ops, inversas });
         return { doc, avisos };
       }),
 
