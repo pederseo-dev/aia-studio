@@ -274,9 +274,18 @@ const CONTROLES = {
     return envoltura;
   },
 
-  string({ valor, confirmar }) {
-    const input = Object.assign(document.createElement('input'), { type: 'text', value: valor ?? '' });
-    input.addEventListener('change', () => confirmar(input.value));
+  string({ p, valor, confirmar }) {
+    const input = Object.assign(document.createElement('input'), { type: 'text', value: valor ?? '', placeholder: p.nullable ? 'ninguno' : '' });
+    // Vacío en una propiedad que admite null = null (por ejemplo, la opción inicial de un param enum).
+    input.addEventListener('change', () => confirmar(input.value === '' && p.nullable ? null : input.value));
+    return input;
+  },
+
+  // Lista de textos (las opciones de un param enum): se escribe separada por comas.
+  strings({ valor, confirmar }) {
+    const input = Object.assign(document.createElement('input'), { type: 'text', value: valor.join(', '), placeholder: 'rest, a, e, o, m' });
+    input.title = 'Separadas por comas';
+    input.addEventListener('change', () => confirmar(input.value.split(',').map((t) => t.trim()).filter(Boolean)));
     return input;
   },
 

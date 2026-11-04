@@ -175,10 +175,43 @@ export function montarOpciones(raiz, acciones) {
     if (!variantes.length) {
       return [texto(`Switch ${codigo(sw.id)} vacío: arrastra dibujos adentro en la jerarquía, o dibuja con él seleccionado. Cada hijo es una variante y se ve una a la vez.`)];
     }
-    return [
-      selectorDeVariante(doc, sw),
-      texto(`${variantes.length} variante${variantes.length === 1 ? '' : 's'}. Para agregar: arrastra dibujos adentro o dibuja con el switch seleccionado. Para un control (visemas): una pose por variante que cambie <b>active</b>, y drivers con <b>equals</b>.`),
+    // ¿Ya lo elige algún param? (un driver cuya pose cambia el active de este switch)
+    const controles = [
+      ...new Set(
+        doc.objects
+          .filter((o) => o.type === 'driver' && buscar(doc, o.pose)?.values?.[sw.id]?.active !== undefined)
+          .map((o) => o.param)
+          .filter(Boolean),
+      ),
     ];
+    const partes = [selectorDeVariante(doc, sw), texto(`${variantes.length} variante${variantes.length === 1 ? '' : 's'}: para agregar, arrastra dibujos adentro o dibuja con el switch seleccionado.`)];
+    if (controles.length) partes.push(texto(`Lo elige el control ${controles.map(codigo).join(', ')} (abajo, en Parámetros).`));
+    else partes.push(boton('Crear control', 'Un parámetro con una opción por variante (lista abajo, en Parámetros): crea una pose por variante y sus drivers', () => crearControl(doc, sw, variantes), 'principal'));
+    return partes;
+  }
+
+  /**
+   * Arma lo que se necesita para elegir la variante desde un control: un param enum con una opción por hijo, una pose
+   * por opción (que pone ese hijo en active) y un driver con equals para cada una.
+   */
+  function crearControl(doc, sw, variantes) {
+    const base = prompt('Nombre del control (por ejemplo viseme, mouth_shape):', `${sw.id}_choice`)?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!base) return;
+    const param = /^[a-z]/.test(base) ? base : `param_${base}`;
+    // Opciones cortas: sin el prefijo del switch si todas lo tienen (mouth_a → a).
+    const prefijo = `${sw.id}_`;
+    const corto = variantes.every((v) => v.id.startsWith(prefijo) && v.id.length > prefijo.length);
+    const opciones = variantes.map((v) => (corto ? v.id.slice(prefijo.length) : v.id));
+    const ops = [{ op: 'create', type: 'param', id: param, props: { kind: 'enum', options: opciones, initial: opciones[variantes.findIndex((v) => v.id === varianteDe(doc, sw))] ?? opciones[0] } }];
+    variantes.forEach((v, i) => {
+      const pose = `${param}_${opciones[i]}`;
+      ops.push({ op: 'create', type: 'pose', id: pose, props: { values: { [sw.id]: { active: v.id } } } });
+      ops.push({ op: 'create', type: 'driver', id: `${pose}_driver`, props: { param, pose, equals: opciones[i] } });
+    });
+    const repetido = ops.find((o) => buscar(doc, o.id));
+    if (repetido) return avisar(`Ya existe "${repetido.id}"; elige otro nombre para el control`, true);
+    ejecutar(ops, `control ${param} para ${sw.id} (${opciones.length} opciones)`);
+    avisar(`Listo: el control ${param} está abajo, en Parámetros`);
   }
 
   /** «X muestra [lista]»: en una pose cambia la pose; si no, el montaje. */
