@@ -2,12 +2,13 @@
   "name": "param",
   "resource": true,
   "description": "Parámetro del personaje: el control de alto nivel que usa la app o la IA (\"happiness\", \"head_turn\", \"mouth\"). No hace nada por sí mismo: los drivers lo conectan con poses. Su valor no se guarda en el documento; lo pone quien usa el personaje (el editor con sus controles, la vista previa con params).",
+  "help": "Parameter of the character: the high-level control used by the app or the AI. Drivers connect it to poses; its value is not saved.",
   "properties": {
-    "kind": { "type": "enum", "values": ["number", "boolean", "enum"], "default": "number", "group": "Parámetro", "description": "number = un valor entre min y max; boolean = 0 o 1; enum = una de options (texto)." },
-    "min": { "type": "number", "default": 0, "group": "Parámetro", "description": "Valor mínimo (number)." },
-    "max": { "type": "number", "default": 1, "group": "Parámetro", "description": "Valor máximo (number)." },
-    "default": { "type": "number", "default": 0, "group": "Parámetro", "description": "Valor inicial (number; en boolean, 0 o 1)." },
-    "options": { "type": "strings", "default": [], "group": "Parámetro", "description": "Opciones de un enum, por ejemplo [\"rest\", \"a\", \"e\", \"o\", \"m\"]." },
-    "initial": { "type": "string", "default": null, "nullable": true, "group": "Parámetro", "description": "Opción inicial de un enum (null = la primera)." }
+    "kind": { "type": "enum", "values": ["number", "boolean", "enum"], "default": "number", "group": "Parámetro", "help": "number = a value between min and max; boolean = 0 or 1; enum = one of the options.", "description": "number = un valor entre min y max; boolean = 0 o 1; enum = una de options (texto)." },
+    "min": { "type": "number", "default": 0, "group": "Parámetro", "help": "Minimum value (number).", "description": "Valor mínimo (number)." },
+    "max": { "type": "number", "default": 1, "group": "Parámetro", "help": "Maximum value (number).", "description": "Valor máximo (number)." },
+    "default": { "type": "number", "default": 0, "group": "Parámetro", "help": "Initial value (number; for boolean, 0 or 1).", "description": "Valor inicial (number; en boolean, 0 o 1)." },
+    "options": { "type": "strings", "default": [], "group": "Parámetro", "help": "Options of an enum, for example rest, a, e, o, m.", "description": "Opciones de un enum, por ejemplo [\"rest\", \"a\", \"e\", \"o\", \"m\"]." },
+    "initial": { "type": "string", "default": null, "nullable": true, "group": "Parámetro", "help": "Initial option of an enum (empty = the first one).", "description": "Opción inicial de un enum (null = la primera)." }
   }
 }

@@ -2,10 +2,11 @@
   "name": "radial_gradient",
   "resource": true,
   "description": "Degradado radial (recurso, no se dibuja). Las coordenadas van de 0 a 1 sobre la caja de la forma que lo usa.",
+  "help": "Radial gradient (an asset, not drawn). Coordinates go from 0 to 1 over the box of the shape.",
   "properties": {
-    "cx": { "type": "number", "default": 0.5, "step": 0.01, "group": "Degradado", "description": "Centro X, de 0 a 1 sobre la caja de la forma." },
-    "cy": { "type": "number", "default": 0.5, "step": 0.01, "group": "Degradado", "description": "Centro Y, de 0 a 1 sobre la caja de la forma." },
-    "r": { "type": "number", "default": 0.5, "min": 0, "step": 0.01, "group": "Degradado", "description": "Radio, en fracción de la caja de la forma." },
-    "stops": { "type": "stops", "default": [{ "offset": 0, "color": "#ffffff" }, { "offset": 1, "color": "#000000" }], "group": "Degradado", "description": "Paradas de color: [{ offset de 0 a 1, color, opacity opcional de 0 a 1 }], en orden de offset." }
+    "cx": { "type": "number", "default": 0.5, "step": 0.01, "group": "Degradado", "help": "Center X, from 0 to 1 over the box of the shape.", "description": "Centro X, de 0 a 1 sobre la caja de la forma." },
+    "cy": { "type": "number", "default": 0.5, "step": 0.01, "group": "Degradado", "help": "Center Y, from 0 to 1 over the box of the shape.", "description": "Centro Y, de 0 a 1 sobre la caja de la forma." },
+    "r": { "type": "number", "default": 0.5, "min": 0, "step": 0.01, "group": "Degradado", "help": "Radius, as a fraction of the box of the shape.", "description": "Radio, en fracción de la caja de la forma." },
+    "stops": { "type": "stops", "default": [{ "offset": 0, "color": "#ffffff" }, { "offset": 1, "color": "#000000" }], "group": "Degradado", "help": "Color stops: offset from 0 to 1, color and optional opacity, in offset order.", "description": "Paradas de color: [{ offset de 0 a 1, color, opacity opcional de 0 a 1 }], en orden de offset." }
   }
 }

@@ -129,7 +129,7 @@ export function montarInspector(raiz) {
     const div = document.createElement('div');
     div.className = 'campo';
     div.dataset.prop = '__id';
-    div.innerHTML = `<label title="${tipo.description.replace(/"/g, '&quot;')}">${tipo.name}</label><input type="text" aria-label="Id"><span></span>`;
+    div.innerHTML = `<label title="${tipo.help.replace(/"/g, '&quot;')}">${tipo.name}</label><input type="text" aria-label="Id"><span></span>`;
     const input = div.querySelector('input');
     input.value = obj.id;
     input.addEventListener('change', async () => {
@@ -155,7 +155,7 @@ export function montarInspector(raiz) {
     const label = document.createElement('label');
     label.textContent = etiqueta ?? prop;
     const deDonde = origen === 'estilo' ? `\nFrom style "${datos.style}".` : '';
-    label.title = `${prop}: ${p.description ?? ''}${p.default !== undefined ? `\nDefault: ${JSON.stringify(p.default)}` : ''}${deDonde}${mixto ? `\nMixed values: showing ${objetivo}.` : ''}`;
+    label.title = `${prop}: ${p.help ?? ''}${p.default !== undefined ? `\nDefault: ${JSON.stringify(p.default)}` : ''}${deDonde}${mixto ? `\nMixed values: showing ${objetivo}.` : ''}`;
     const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Reset to default' });
     const nombre = otros.length ? `${objetivos.length} objects` : objetivo;
     restablecer.addEventListener('click', () => ejecutar(objetivos.map((t) => ({ op: 'unset', target: t, props: [prop] })), `${nombre}.${prop} reset`));

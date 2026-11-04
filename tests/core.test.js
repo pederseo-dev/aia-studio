@@ -184,3 +184,12 @@ test('move con keepPosition deja el objeto en el mismo lugar de la pantalla, y s
   assert.deepEqual(aplicar(matrizMundo(op(doc, { op: 'move', target: 'r', parent: 'g' }).doc, esquema, 'r'), 0, 0).map(Math.round), [80, 60]);
   assert.throws(() => op(op(movido, { op: 'create', type: 'skeleton', id: 's' }, { op: 'create', type: 'bone', id: 'b', parent: 's' }).doc, { op: 'move', target: 'b', parent: 'g', keepPosition: true }), /reparent_bone/);
 });
+
+test('cada tipo y propiedad tiene una ayuda en inglés para el editor', () => {
+  const sinAyuda = [];
+  for (const t of [esquema.meta, ...esquema.tipos.values()]) {
+    if (!t.help) sinAyuda.push(t.name);
+    for (const [k, p] of Object.entries(t.properties)) if (!p.help) sinAyuda.push(`${t.name}.${k}`);
+  }
+  assert.deepEqual(sinAyuda, []);
+});

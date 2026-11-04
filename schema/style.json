@@ -2,10 +2,11 @@
   "name": "style",
   "resource": true,
   "description": "Estilo compartido (recurso, no se dibuja). Las formas que lo usan con \"style\" toman de él las propiedades que no tengan propias. Cambiar el estilo cambia todas esas formas a la vez.",
+  "help": "Shared style (an asset, not drawn). Shapes that use it take from it the appearance they do not set themselves.",
   "properties": {
-    "fill": { "type": "color", "default": null, "nullable": true, "group": "Apariencia", "description": "Color de relleno para las formas que usan este estilo." },
-    "fillGradient": { "type": "ref", "refTypes": ["linear_gradient", "radial_gradient"], "default": null, "nullable": true, "group": "Apariencia", "description": "Degradado de relleno; si está, reemplaza a fill." },
-    "stroke": { "type": "color", "default": null, "nullable": true, "group": "Apariencia", "description": "Color del contorno." },
-    "strokeWidth": { "type": "number", "default": 2, "min": 0, "group": "Apariencia", "description": "Grosor del contorno en px." }
+    "fill": { "type": "color", "default": null, "nullable": true, "group": "Apariencia", "help": "Fill color for the shapes that use this style.", "description": "Color de relleno para las formas que usan este estilo." },
+    "fillGradient": { "type": "ref", "refTypes": ["linear_gradient", "radial_gradient"], "default": null, "nullable": true, "group": "Apariencia", "help": "Fill gradient; when set, it replaces fill.", "description": "Degradado de relleno; si está, reemplaza a fill." },
+    "stroke": { "type": "color", "default": null, "nullable": true, "group": "Apariencia", "help": "Stroke color.", "description": "Color del contorno." },
+    "strokeWidth": { "type": "number", "default": 2, "min": 0, "group": "Apariencia", "help": "Stroke width in px.", "description": "Grosor del contorno en px." }
   }
 }

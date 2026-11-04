@@ -1,19 +1,20 @@
 {
   "name": "bone",
   "description": "Hueso del esqueleto. Va dentro de un skeleton (los huesos raíz) o de otro bone del mismo skeleton; nunca en la raíz ni en un group. Nace en x/y (relativo a su hueso padre o, si es raíz, al skeleton) y apunta en la dirección de rotation con largo length (rotation 0 = hacia la derecha, 90 = hacia abajo). Los huesos solo tienen huesos como hijos: el dibujo del skeleton se pega a ellos con la propiedad bone de cada objeto. Estos valores son el montaje (la pose de reposo); para mover el personaje se usan poses.",
+  "help": "Bone of the skeleton. Lives inside a skeleton (root bones) or another bone of the same skeleton; drawings bind to it with \"bone\".",
   "container": true,
   "parentTypes": ["skeleton", "bone"],
   "requiresParent": true,
   "childTypes": ["bone"],
   "properties": {
-    "x": { "type": "number", "default": 0, "animatable": true, "group": "Transformación", "description": "Origen del hueso (su articulación), relativo al hueso padre (o al skeleton, si es un hueso raíz)." },
-    "y": { "type": "number", "default": 0, "animatable": true, "group": "Transformación", "description": "Origen del hueso, relativo al hueso padre o al skeleton (crece hacia abajo)." },
-    "rotation": { "type": "number", "default": 0, "animatable": true, "group": "Transformación", "description": "Dirección del hueso en grados, relativa al padre (hueso o skeleton); positivo = sentido horario." },
-    "scaleX": { "type": "number", "default": 1, "step": 0.01, "animatable": true, "group": "Transformación", "description": "Escala a lo largo del hueso; la heredan los hijos y lo enlazado." },
-    "scaleY": { "type": "number", "default": 1, "step": 0.01, "animatable": true, "group": "Transformación", "description": "Escala a lo ancho del hueso." },
-    "length": { "type": "number", "default": 100, "min": 0, "group": "Hueso", "description": "Largo del hueso en px. Sirve para verlo y para encadenar el siguiente en la punta." },
-    "independentAngle": { "type": "boolean", "default": false, "group": "Hueso", "description": "Si es true, sigue la posición del padre pero no su rotación ni su escala (útil para cabeza o manos que mantienen la orientación)." },
-    "minAngle": { "type": "number", "default": null, "nullable": true, "group": "Límites", "description": "Rotación mínima permitida en las poses (grados, misma referencia que rotation). null = sin límite." },
-    "maxAngle": { "type": "number", "default": null, "nullable": true, "group": "Límites", "description": "Rotación máxima permitida en las poses. null = sin límite." }
+    "x": { "type": "number", "default": 0, "animatable": true, "group": "Transformación", "help": "Origin of the bone (its joint), relative to the parent bone, or to the skeleton for a root bone.", "description": "Origen del hueso (su articulación), relativo al hueso padre (o al skeleton, si es un hueso raíz)." },
+    "y": { "type": "number", "default": 0, "animatable": true, "group": "Transformación", "help": "Origin of the bone, relative to the parent bone or the skeleton (grows downward).", "description": "Origen del hueso, relativo al hueso padre o al skeleton (crece hacia abajo)." },
+    "rotation": { "type": "number", "default": 0, "animatable": true, "group": "Transformación", "help": "Direction of the bone in degrees, relative to its parent; positive = clockwise.", "description": "Dirección del hueso en grados, relativa al padre (hueso o skeleton); positivo = sentido horario." },
+    "scaleX": { "type": "number", "default": 1, "step": 0.01, "animatable": true, "group": "Transformación", "help": "Scale along the bone; its children and what is bound to it inherit it.", "description": "Escala a lo largo del hueso; la heredan los hijos y lo enlazado." },
+    "scaleY": { "type": "number", "default": 1, "step": 0.01, "animatable": true, "group": "Transformación", "help": "Scale across the bone.", "description": "Escala a lo ancho del hueso." },
+    "length": { "type": "number", "default": 100, "min": 0, "group": "Hueso", "help": "Length of the bone in px.", "description": "Largo del hueso en px. Sirve para verlo y para encadenar el siguiente en la punta." },
+    "independentAngle": { "type": "boolean", "default": false, "group": "Hueso", "help": "Follows the parent position but not its rotation or scale (useful for a head or hands that stay level).", "description": "Si es true, sigue la posición del padre pero no su rotación ni su escala (útil para cabeza o manos que mantienen la orientación)." },
+    "minAngle": { "type": "number", "default": null, "nullable": true, "group": "Límites", "help": "Minimum rotation allowed in poses (degrees, same reference as rotation). Empty = no limit.", "description": "Rotación mínima permitida en las poses (grados, misma referencia que rotation). null = sin límite." },
+    "maxAngle": { "type": "number", "default": null, "nullable": true, "group": "Límites", "help": "Maximum rotation allowed in poses. Empty = no limit.", "description": "Rotación máxima permitida en las poses. null = sin límite." }
   }
 }

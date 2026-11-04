@@ -25,6 +25,8 @@ export function crearEsquema(defs) {
     const tipo = {
       name: nombre,
       description: def.description ?? '',
+      // `description` (en español) es para la guía de la IA; `help` (en inglés) es lo que muestra el editor.
+      help: def.help ?? '',
       abstract: !!def.abstract,
       container: def.container ?? base?.container ?? false,
       // Recurso: vive en la raíz, no se dibuja y otros objetos lo usan por referencia (estilos, degradados).

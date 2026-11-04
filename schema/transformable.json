@@ -2,14 +2,15 @@
   "name": "transformable",
   "abstract": true,
   "description": "Todo lo que tiene posición, rotación, escala y opacidad.",
+  "help": "Anything with position, rotation, scale and opacity.",
   "properties": {
-    "x": { "type": "number", "default": 0, "animatable": true, "group": "Transformación", "description": "Posición X del pivote, relativa al padre." },
-    "y": { "type": "number", "default": 0, "animatable": true, "group": "Transformación", "description": "Posición Y del pivote, relativa al padre (crece hacia abajo)." },
-    "rotation": { "type": "number", "default": 0, "animatable": true, "group": "Transformación", "description": "Rotación en grados alrededor del pivote; positivo = sentido horario." },
-    "scaleX": { "type": "number", "default": 1, "step": 0.01, "animatable": true, "group": "Transformación", "description": "Escala horizontal. Negativo espeja." },
-    "scaleY": { "type": "number", "default": 1, "step": 0.01, "animatable": true, "group": "Transformación", "description": "Escala vertical. Negativo espeja." },
-    "opacity": { "type": "number", "default": 1, "min": 0, "max": 1, "step": 0.01, "animatable": true, "group": "Apariencia", "description": "Opacidad de 0 (invisible) a 1; se multiplica con la del padre." },
-    "visible": { "type": "boolean", "default": true, "animatable": true, "group": "Apariencia", "description": "Si es false no se dibuja, ni él ni sus hijos." },
-    "bone": { "type": "ref", "refTypes": ["bone"], "default": null, "nullable": true, "group": "Esqueleto", "description": "Hueso al que está pegado (enlace por capa): en una pose, el objeto y sus hijos siguen al hueso según cuánto se movió respecto del montaje. En el montaje no cambia nada. Solo puede ser un hueso del skeleton que lo contiene (el más cercano). Sin bone, sigue al hueso de su padre; si nadie lo tiene, queda quieto.", "refScope": "skeleton" }
+    "x": { "type": "number", "default": 0, "animatable": true, "group": "Transformación", "help": "X position of the pivot, relative to the parent.", "description": "Posición X del pivote, relativa al padre." },
+    "y": { "type": "number", "default": 0, "animatable": true, "group": "Transformación", "help": "Y position of the pivot, relative to the parent (grows downward).", "description": "Posición Y del pivote, relativa al padre (crece hacia abajo)." },
+    "rotation": { "type": "number", "default": 0, "animatable": true, "group": "Transformación", "help": "Rotation in degrees around the pivot; positive = clockwise.", "description": "Rotación en grados alrededor del pivote; positivo = sentido horario." },
+    "scaleX": { "type": "number", "default": 1, "step": 0.01, "animatable": true, "group": "Transformación", "help": "Horizontal scale. Negative mirrors.", "description": "Escala horizontal. Negativo espeja." },
+    "scaleY": { "type": "number", "default": 1, "step": 0.01, "animatable": true, "group": "Transformación", "help": "Vertical scale. Negative mirrors.", "description": "Escala vertical. Negativo espeja." },
+    "opacity": { "type": "number", "default": 1, "min": 0, "max": 1, "step": 0.01, "animatable": true, "group": "Apariencia", "help": "Opacity from 0 (invisible) to 1; multiplied by the parent one.", "description": "Opacidad de 0 (invisible) a 1; se multiplica con la del padre." },
+    "visible": { "type": "boolean", "default": true, "animatable": true, "group": "Apariencia", "help": "When off, neither it nor its children are drawn.", "description": "Si es false no se dibuja, ni él ni sus hijos." },
+    "bone": { "type": "ref", "refTypes": ["bone"], "default": null, "nullable": true, "group": "Esqueleto", "help": "Bone it is bound to (layer binding): in a pose, it and its children follow the bone. Only bones of its skeleton.", "description": "Hueso al que está pegado (enlace por capa): en una pose, el objeto y sus hijos siguen al hueso según cuánto se movió respecto del montaje. En el montaje no cambia nada. Solo puede ser un hueso del skeleton que lo contiene (el más cercano). Sin bone, sigue al hueso de su padre; si nadie lo tiene, queda quieto.", "refScope": "skeleton" }
   }
 }
