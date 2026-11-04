@@ -2,13 +2,13 @@
 // Arrastrar una fila cambia el orden o el padre; doble clic renombra; el ojo muestra u oculta.
 // Ctrl + clic agrega o quita de la selección; Shift + clic selecciona el tramo de filas desde la anterior.
 
+import { ICONO_DE_TIPO, ICONOS } from './iconos.js';
 import { buscar, hijos, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { aplicarOperaciones } from '../core/operaciones.js';
 import { alternarEnlace, elegirVariante, varianteDe, variantesAMostrar } from './huesos.js';
 import { alternarSeleccion, ejecutar, esquema, estado, mantenerPosicion, seleccionRaices, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 
-const ICONOS = { group: '▣', switch: '⇄', rect: '▭', ellipse: '◯', path: '✒', bone: '⟋', style: '◆', linear_gradient: '▤', radial_gradient: '◍', pose: '♟', param: '◐', driver: '⤳' };
 const esRecurso = (o) => esquema.tipos.get(o.type)?.resource;
 
 /** Árbol de objetos en `raiz` y lista de recursos (estilos, degradados) en `raizRecursos`. */
@@ -30,7 +30,7 @@ export function montarArbol(raiz, raizRecursos) {
     else raiz.innerHTML = '<li class="vacio">Empty. Draw with the tools or ask the AI.</li>';
     const recursos = doc.objects.filter(esRecurso).map((o) => {
       const li = document.createElement('li');
-      li.innerHTML = `<div class="fila${claseSeleccion(o.id)}" data-id="${o.id}" style="padding-left:8px"><span class="tipo" title="${o.type}">${ICONOS[o.type] ?? '•'}</span><span class="nombre"></span></div>`;
+      li.innerHTML = `<div class="fila${claseSeleccion(o.id)}" data-id="${o.id}" style="padding-left:8px"><span class="tipo" title="${o.type}">${ICONO_DE_TIPO[o.type] ?? '•'}</span><span class="nombre"></span></div>`;
       li.querySelector('.nombre').textContent = o.id;
       return li;
     });
@@ -65,7 +65,7 @@ export function montarArbol(raiz, raizRecursos) {
         const tieneHijos = hijos(doc, o.id).length > 0;
         const plegado = plegadosDe().has(o.id);
         fila.innerHTML = `<button type="button" class="plegar${tieneHijos ? '' : ' vacio'}" title="${plegado ? 'Expand' : 'Collapse'}" tabindex="-1">${plegado ? '▸' : '▾'}</button>
-          <span class="tipo" title="${o.type}">${ICONOS[o.type] ?? '•'}</span><span class="nombre"></span>${o.bone ? '<span class="enlace">⟋</span>' : ''}
+          <span class="tipo" title="${o.type}">${ICONO_DE_TIPO[o.type] ?? '•'}</span><span class="nombre"></span>${o.bone ? `<span class="enlace">${ICONOS.hueso}</span>` : ''}
           ${o.type === 'switch' ? '<span class="desplegable variante-switch"><button type="button" class="variante" title="Variant shown (in a pose, saved to the pose)"></button><div class="menu" role="menu" hidden></div></span>' : ''}
           ${conOjo ? `<button type="button" class="ojo${visible ? '' : ' oculto'}" title="${visible ? 'Hide' : 'Show'}">${visible ? '◉' : '○'}</button>` : ''}`;
         fila.querySelector('.nombre').textContent = o.id;

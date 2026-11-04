@@ -10,6 +10,7 @@ import { alternarSeleccion, ejecutar, esquema, estado, previsualizar, seleccionR
 const redondear = (v, d = 10) => Math.round(v * d) / d;
 const GRADOS = 180 / Math.PI;
 const RADIANES = Math.PI / 180;
+const FORMAS = 'path, rect, ellipse, circle, line, polyline, polygon';
 
 export function crearTransformar(ctx) {
   // ---------- Cajas en pantalla ----------
@@ -18,10 +19,34 @@ export function crearTransformar(ctx) {
   function esquinasDe(el) {
     if (!el || el.closest('[display="none"]')) return null;
     const m = el.getCTM();
-    const caja = el.getBBox();
-    if (!m || (!caja.width && !caja.height)) return null;
+    const caja = cajaConContorno(el, m);
+    if (!m || !caja) return null;
     const punto = (x, y) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f];
-    return [punto(caja.x, caja.y), punto(caja.x + caja.width, caja.y), punto(caja.x + caja.width, caja.y + caja.height), punto(caja.x, caja.y + caja.height)];
+    return [punto(caja.x0, caja.y0), punto(caja.x1, caja.y0), punto(caja.x1, caja.y1), punto(caja.x0, caja.y1)];
+  }
+
+  /**
+   * Caja de `el` en sus coordenadas locales contando el grosor del contorno de cada forma (getBBox no lo cuenta,
+   * y en grupos con contornos gruesos la selección quedaba cortada). Las variantes ocultas de un switch no cuentan.
+   */
+  function cajaConContorno(el, m) {
+    const formas = el.matches(FORMAS) ? [el] : [...el.querySelectorAll(FORMAS)];
+    const inversa = m?.inverse();
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const f of formas) {
+      if (f.closest('[display="none"]')) continue;
+      const b = f.getBBox();
+      if (!b.width && !b.height) continue;
+      const estilo = getComputedStyle(f);
+      const medio = estilo.stroke && estilo.stroke !== 'none' ? (parseFloat(estilo.strokeWidth) || 0) / 2 : 0;
+      // De la forma a las coordenadas de `el`.
+      const a = f === el ? null : inversa.multiply(f.getCTM());
+      for (const [x, y] of [[b.x - medio, b.y - medio], [b.x + b.width + medio, b.y - medio], [b.x + b.width + medio, b.y + b.height + medio], [b.x - medio, b.y + b.height + medio]]) {
+        const [px, py] = a ? [a.a * x + a.c * y + a.e, a.b * x + a.d * y + a.f] : [x, y];
+        x0 = Math.min(x0, px); y0 = Math.min(y0, py); x1 = Math.max(x1, px); y1 = Math.max(y1, py);
+      }
+    }
+    return x0 === Infinity ? null : { x0, y0, x1, y1 };
   }
 
   /** Caja alineada a la pantalla que envuelve varias listas de esquinas. */

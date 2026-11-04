@@ -21,6 +21,17 @@ export const ICONOS = {
   estilo: trazo('<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor"/>'),
   degradado: trazo('<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M8 4v16M12 4v16M16 4v16" stroke-dasharray="2 2"/>'),
   agregar: trazo('<path d="M12 6v12M6 12h12"/>'),
+  radial: trazo('<rect x="4" y="4" width="16" height="16" rx="1.5"/><circle cx="12" cy="12" r="2.5"/><circle cx="12" cy="12" r="5.5" stroke-dasharray="2 2"/>'),
+  pose: trazo('<circle cx="12" cy="5" r="2"/><path d="M12 7.5v6.5M7 10.5l5-2 5 2M9 20l3-6 3 6"/>'),
+  param: trazo('<path d="M4 12h16"/><circle cx="14" cy="12" r="2.5" fill="currentColor"/>'),
+  driver: trazo('<path d="M4 17c4 0 4-10 8-10s4 10 8 10"/><circle cx="12" cy="7" r="1.3" fill="currentColor"/>'),
+};
+
+// Ícono de cada tipo de objeto, para la jerarquía y los recursos.
+export const ICONO_DE_TIPO = {
+  group: ICONOS.group, switch: ICONOS.switch, rect: ICONOS.rect, ellipse: ICONOS.ellipse, path: ICONOS.path,
+  bone: ICONOS.hueso, style: ICONOS.estilo, linear_gradient: ICONOS.degradado, radial_gradient: ICONOS.radial,
+  pose: ICONOS.pose, param: ICONOS.param, driver: ICONOS.driver,
 };
 
 export const FLECHA = `<svg class="ico-flecha" viewBox="0 0 10 10" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5"/></svg>`;
