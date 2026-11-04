@@ -167,9 +167,10 @@ del documento resultó confuso. Se pasó al modelo de Moho:
   piezas más grandes posibles: un grupo sin nada enlazado adentro va entero; si ya tiene algo enlazado, se baja a sus
   hijos. Elegimos la caja (y no el pivote) porque el pivote de los grupos suele estar en la articulación, que cae
   justo entre dos huesos.
-- En la jerarquía, el skeleton tiene un subnodo plegable «Bones (N)» con el árbol de huesos; el dibujo no se mezcla
-  con ellos. La herramienta Bone crea en el skeleton seleccionado (o el de la selección) y, si no hay ninguno, crea
-  uno y avisa. Sacar un dibujo del skeleton de su hueso suelta el enlace y avisa.
+- En Layers solo hay capas, como en Moho: los huesos no son filas (probamos un subnodo «Bones (N)» y se quitó; en
+  Moho la jerarquía de huesos se ve en el lienzo). Dos herramientas, como en Moho: **Add Bone** (B) solo crea (en el
+  skeleton seleccionado o el de la selección; si no hay ninguno, crea uno y avisa) y **Manipulate Bones** (M) solo
+  ajusta (girar, mover el origen, dirección y largo). Antes una sola herramienta hacía todo y resultaba tosca. Sacar un dibujo del skeleton de su hueso suelta el enlace y avisa.
 - Migración determinista (`npm run migrar`, `src/core/migracion.js`): si todo el dibujo enlazado está en un grupo
   de la raíz (`cat` en los gatos), ese grupo pasa a ser el skeleton y los huesos se llevan a su marco (también en
   las poses); si no, se crea un skeleton nuevo con el tramo de la raíz que tiene el dibujo enlazado. Deja una entrada

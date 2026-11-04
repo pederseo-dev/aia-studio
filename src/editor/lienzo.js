@@ -204,6 +204,7 @@ export function montarLienzo(contenedor) {
       return seleccionar(g && documentoG.contains(g) ? g.dataset.id : null);
     }
     if (estado.herramienta === 'hueso') return huesos.pointerdown(e);
+    if (estado.herramienta === 'manipular') return huesos.pointerdownManipular(e);
     if (estado.herramienta === 'path') return pluma.pointerdown(e);
     if (estado.herramienta === 'rotar' || estado.herramienta === 'escalar') return transformar.conHerramienta(e, estado.herramienta);
     if (estado.herramienta === 'rect' || estado.herramienta === 'ellipse') return crearForma(e, estado.herramienta);

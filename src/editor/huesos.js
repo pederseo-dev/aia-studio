@@ -1,11 +1,14 @@
-// Huesos en el lienzo: se dibujan en la superposición (no son parte del personaje) y se manejan con la herramienta
-// Hueso (B) en el montaje, o con cualquier herramienta cuando hay una pose activa.
+// Huesos en el lienzo: se dibujan en la superposición (no son parte del personaje ni filas de Layers) y se manejan con
+// dos herramientas, como en Moho:
 //
-// Los huesos viven en un skeleton (la capa de huesos de Moho). Montaje, herramienta Hueso: arrastrar en vacío crea un
-// hueso (hijo del seleccionado o, si no hay hueso seleccionado, raíz del skeleton seleccionado o del que contiene la
-// selección; sin ninguno, se crea un skeleton); arrastrar desde la punta del seleccionado encadena uno nuevo; arrastrar un hueso lo gira; la manija del origen lo mueve y Alt + la punta cambia
-// dirección y largo. Con Mover, el hueso seleccionado muestra las mismas manijas y la punta ajusta sin Alt.
-// Pose: arrastrar un hueso (o el dibujo enlazado a él) lo gira dentro de la pose; el origen lo desplaza.
+// - Add Bone (B): solo crea. Arrastrar en vacío crea un hueso (hijo del seleccionado o, si no hay hueso seleccionado,
+//   raíz del skeleton seleccionado o del que contiene la selección; sin ninguno, se crea un skeleton). Arrastrar desde
+//   la punta del hueso seleccionado encadena uno nuevo. Un clic en un hueso lo elige (para colgarle hijos).
+// - Manipulate Bones (M): solo ajusta. Arrastrar un hueso lo gira; la manija del origen lo mueve y la de la punta
+//   cambia dirección y largo.
+//
+// En el montaje esos ajustes cambian el reposo. Con una pose activa, cualquier herramienta posa: arrastrar un hueso (o
+// el dibujo enlazado a él) lo gira dentro de la pose y el origen lo desplaza.
 
 import { buscar, esqueletoDe } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
@@ -98,7 +101,7 @@ export function enlazarPorCercania(esqueletoId) {
   try {
     enlaces = enlacesPorCercania(estado.doc, esquema, esqueletoId);
   } catch {
-    return avisar(`Skeleton ${esqueletoId} has no bones yet: create them with the Bone tool (B)`, true);
+    return avisar(`Skeleton ${esqueletoId} has no bones yet: create them with Add Bone (B)`, true);
   }
   if (!enlaces.length) return avisar(`All the drawing in ${esqueletoId} already follows a bone`);
   ejecutar(
@@ -125,7 +128,8 @@ export function avisarSueltos(ops) {
 }
 
 export function crearHuesos(ctx) {
-  const activos = () => estado.herramienta === 'hueso' || !!estado.pose;
+  const activos = () => estado.herramienta === 'hueso' || estado.herramienta === 'manipular' || !!estado.pose;
+  const ajustando = () => estado.herramienta === 'manipular' || !!estado.pose;
   const esHueso = (id) => buscar(estado.doc, id)?.type === 'bone';
 
   // ---------- Dibujo ----------
@@ -177,15 +181,16 @@ export function crearHuesos(ctx) {
       }
     }
 
-    // Manijas del hueso principal seleccionado (también con Mover, para ajustarlo).
-    const conManijas = activos() || estado.herramienta === 'seleccionar';
-    const sel = conManijas && estado.seleccion && buscar(doc, estado.seleccion);
+    // Manijas del hueso principal seleccionado: con Manipulate (o en una pose), origen y punta para ajustarlo; con Add
+    // Bone, solo la punta, para encadenar.
+    const sel = activos() && estado.seleccion && buscar(doc, estado.seleccion);
     if (sel?.type === 'bone') {
       const m = multiplicar(camara, posado.get(sel.id));
       const [ox, oy] = aplicar(m, 0, 0);
       const [tx, ty] = aplicar(m, leer(esquema, sel, 'length'), 0);
-      ctx.superposicion.append(ctx.crear('circle', { class: 'manija', 'data-manija': 'hueso-origen', cx: ox, cy: oy, r: 5 }, estado.pose ? 'Offset the bone in the pose' : 'Move the bone origin'));
-      ctx.superposicion.append(ctx.crear('circle', { class: 'manija', 'data-manija': 'hueso-punta', cx: tx, cy: ty, r: 5 }, estado.pose ? 'Rotate the bone' : estado.herramienta === 'hueso' ? 'Drag: chain a new bone · Alt: direction and length' : 'Direction and length (Shift: 15° steps)'));
+      if (ajustando()) ctx.superposicion.append(ctx.crear('circle', { class: 'manija', 'data-manija': 'hueso-origen', cx: ox, cy: oy, r: 5 }, estado.pose ? 'Offset the bone in the pose' : 'Move the bone origin'));
+      const titulo = estado.pose ? 'Rotate the bone' : ajustando() ? 'Direction and length (Shift: 15° steps)' : 'Drag: chain a new bone from this tip';
+      ctx.superposicion.append(ctx.crear('circle', { class: `manija${ajustando() ? '' : ' manija-encadenar'}`, 'data-manija': 'hueso-punta', cx: tx, cy: ty, r: 5 }, titulo));
     }
   }
 
@@ -269,9 +274,9 @@ export function crearHuesos(ctx) {
     }
 
     if (tipo === 'hueso-punta') {
-      // En la pose, la punta solo gira. Con la herramienta Hueso encadena uno nuevo (Alt: ajustar este).
+      // En la pose, la punta solo gira. Con Add Bone encadena uno nuevo; con Manipulate cambia dirección y largo.
       if (estado.pose) return rotar(e, id);
-      if (estado.herramienta === 'hueso' && !e.altKey) return crear(e);
+      if (!ajustando()) return crear(e);
       const inversa = invertir(giro);
       const origen = aplicar(inversa, ...aplicar(propio, 0, 0));
       return ctx.arrastrar(
@@ -290,14 +295,19 @@ export function crearHuesos(ctx) {
     }
   }
 
-  /** Herramienta Hueso en el montaje. */
+  /** Add Bone en el montaje: un clic en un hueso lo elige; arrastrar en vacío crea uno. */
   function pointerdown(e) {
     const id = e.target.closest('[data-hueso]')?.dataset.hueso;
-    if (id) {
-      seleccionar(id);
-      return rotar(e, id);
-    }
+    if (id) return seleccionar(id);
     crear(e);
+  }
+
+  /** Manipulate Bones en el montaje: arrastrar un hueso lo gira; un clic en vacío suelta la selección. */
+  function pointerdownManipular(e) {
+    const id = e.target.closest('[data-hueso]')?.dataset.hueso;
+    if (!id) return seleccionar(null);
+    seleccionar(id);
+    rotar(e, id);
   }
 
   /** Con una pose activa: se gira el hueso tocado, o el hueso del dibujo tocado. */
@@ -396,5 +406,5 @@ export function crearHuesos(ctx) {
     alternarEnlace(elegido, estado.enlazando);
   }
 
-  return { dibujar, manija, pointerdown, pointerdownPose, alEnlazar };
+  return { dibujar, manija, pointerdown, pointerdownManipular, pointerdownPose, alEnlazar };
 }

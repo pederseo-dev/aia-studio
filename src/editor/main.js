@@ -141,7 +141,10 @@ const GRUPOS = {
     { id: 'rect', nombre: 'Rectangle', atajo: 'R' },
     { id: 'ellipse', nombre: 'Ellipse', atajo: 'E' },
   ],
-  esqueleto: [{ id: 'hueso', nombre: 'Bone', atajo: 'B' }],
+  esqueleto: [
+    { id: 'hueso', nombre: 'Add Bone', atajo: 'B', icono: 'agregarHueso' },
+    { id: 'manipular', nombre: 'Manipulate Bones', atajo: 'M' },
+  ],
 };
 const ultimaDelGrupo = { transformar: 'seleccionar', crear: 'path', esqueleto: 'hueso' };
 const ATAJOS = Object.fromEntries(Object.values(GRUPOS).flat().map((h) => [h.atajo.toLowerCase(), h.id]));
@@ -153,14 +156,14 @@ function dibujarGrupos() {
     if (activa) ultimaDelGrupo[grupo] = activa.id;
     const visible = herramientas.find((h) => h.id === ultimaDelGrupo[grupo]);
     caja.classList.toggle('activo', !!activa);
-    caja.innerHTML = `<button type="button" class="principal" title="${visible.nombre} (${visible.atajo})" aria-label="${visible.nombre}">${ICONOS[visible.id]}</button><button type="button" class="elegir" aria-haspopup="menu" title="More tools">${FLECHA}</button><div class="menu" role="menu" hidden></div>`;
+    caja.innerHTML = `<button type="button" class="principal" title="${visible.nombre} (${visible.atajo})" aria-label="${visible.nombre}">${ICONOS[visible.icono ?? visible.id]}</button><button type="button" class="elegir" aria-haspopup="menu" title="More tools">${FLECHA}</button><div class="menu" role="menu" hidden></div>`;
     const menu = caja.querySelector('.menu');
     for (const h of herramientas) {
       const b = document.createElement('button');
       b.type = 'button';
       b.setAttribute('role', 'menuitem');
       b.className = h.id === estado.herramienta ? 'marcado' : '';
-      b.innerHTML = `<span class="con-icono">${ICONOS[h.id]}${h.nombre}</span><kbd>${h.atajo}</kbd>`;
+      b.innerHTML = `<span class="con-icono">${ICONOS[h.icono ?? h.id]}${h.nombre}</span><kbd>${h.atajo}</kbd>`;
       b.addEventListener('click', () => {
         cerrarMenus();
         fijar({ herramienta: h.id });
@@ -297,7 +300,7 @@ function nuevoEsqueleto() {
   const dibujo = seleccionRaices().filter((id) => !esquema.tipos.get(buscar(estado.doc, id).type).resource && buscar(estado.doc, id).type !== 'bone');
   if (dibujo.length) agruparSeleccion('skeleton');
   else nuevoGrupo('skeleton');
-  avisar('Skeleton: draw its bones with the Bone tool (B), then bind the drawing inside it (Ctrl+B or “Bind all by proximity”)');
+  avisar('Skeleton: draw its bones with Add Bone (B), then bind the drawing inside it (Ctrl+B or “Bind all by proximity”)');
 }
 
 /**

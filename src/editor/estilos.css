@@ -211,8 +211,6 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 .fila:hover .ojo, .fila .ojo.oculto { opacity: 1; }
 .fila.oculta .nombre { color: var(--tenue); }
 .fila.apagada .nombre { color: var(--tenue); font-style: italic; }
-.fila.nodo-huesos .nombre { color: var(--suave); }
-.fila.nodo-huesos .tipo { color: #ff3d7f; }
 .fila .variante { border: 1px solid var(--borde); background: var(--panel-2); color: var(--suave); font-size: 11px; padding: 0 6px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fila .variante:hover { color: var(--texto); border-color: var(--acento); }
 .fila.soltar-antes { border-top-color: var(--acento); }
@@ -235,6 +233,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 .seleccion.secundaria { stroke-dasharray: 3 3; opacity: 0.8; }
 .borrador { fill: #8b9cff22; stroke: var(--acento); stroke-dasharray: 4 3; }
 #lienzo.herramienta-path, #lienzo.herramienta-hueso { cursor: crosshair; }
+.manija.manija-encadenar { fill: var(--acento); }
 #lienzo.modo-pose { box-shadow: inset 0 0 0 2px var(--pose); cursor: default; }
 .huesos { opacity: 0.45; }
 .huesos.activos { opacity: 1; }

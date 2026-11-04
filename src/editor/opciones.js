@@ -83,15 +83,20 @@ export function montarOpciones(raiz, acciones) {
     switch (estado.herramienta) {
       case 'hueso': {
         const esqueleto = esqueletoActivo(doc);
-        if (!esqueleto) return [texto('Bone: bones live in a skeleton (a bone layer). Pick one in Layers, or just drag on the canvas and a new skeleton is created for the bone.')];
+        if (!esqueleto) return [texto('Add Bone: bones live in a skeleton (a bone layer). Pick one in Layers, or just drag on the canvas and a new skeleton is created for the bone.')];
         return [
           texto(
             huesosDe(doc, esqueleto).length
-              ? `Bone, in skeleton ${codigo(esqueleto)}: drag on empty space to create a root bone, or pick a bone and drag from its tip to chain one. Drag a bone to rotate it.`
-              : `Bone, in skeleton ${codigo(esqueleto)}: drag on the canvas to create its first bone (from the joint toward the tip).`,
+              ? `Add Bone, in skeleton ${codigo(esqueleto)}: drag on empty space to create a root bone, or click a bone and drag from its tip to chain a child.`
+              : `Add Bone, in skeleton ${codigo(esqueleto)}: drag on the canvas to create its first bone (from the joint toward the tip).`,
           ),
         ];
       }
+      case 'manipular':
+        return [
+          texto(huesos.length ? 'Manipulate Bones: drag a bone to rotate it; select one to move its origin or change its direction and length with the handles.' : 'Manipulate Bones: there are no bones yet. Create them with Add Bone (B).'),
+          ...(huesos.length ? [] : [boton('Add Bone', 'Create bones (B)', () => fijar({ herramienta: 'hueso' }), 'principal')]),
+        ];
       case 'path':
         return [texto('Pen: click = straight point, click and drag = curved, click the first point = close, <kbd>Enter</kbd> = finish open.')];
       case 'rect':
@@ -144,7 +149,7 @@ export function montarOpciones(raiz, acciones) {
           partes.push(texto(`Doesn’t follow any bone of ${codigo(esqueleto)}: it stays still in poses. Select a bone and use “Bind drawing…” (or Ctrl+B).`));
           partes.push(boton('Bind all by proximity', `Bind every unbound drawing of ${esqueleto} to its nearest bone`, () => acciones.enlazarTodo(esqueleto)));
         } else if (esqueleto) {
-          partes.push(texto(`In skeleton ${codigo(esqueleto)}, which has no bones yet: draw them with the Bone tool (B).`));
+          partes.push(texto(`In skeleton ${codigo(esqueleto)}, which has no bones yet: draw them with Add Bone (B).`));
         } else if (huesos.length) {
           partes.push(texto('Not in a skeleton, so it can’t follow bones: drag it into one in Layers.'));
         }
@@ -152,7 +157,7 @@ export function montarOpciones(raiz, acciones) {
       return partes;
     }
 
-    return [texto(huesos.length ? 'Click to select; drag on empty space for a marquee. Pick bones with the Bone tool (B) or in Layers.' : 'Click to select; drag on empty space to marquee-select.')];
+    return [texto(huesos.length ? 'Click to select; drag on empty space for a marquee. Bones are picked on the canvas with Add Bone (B) or Manipulate Bones (M).' : 'Click to select; drag on empty space to marquee-select.')];
   }
 
   /**
@@ -256,8 +261,8 @@ export function montarOpciones(raiz, acciones) {
     const huesos = huesosDe(doc, esqueleto.id);
     if (!huesos.length) {
       return [
-        texto(`Skeleton ${codigo(esqueleto.id)} has no bones yet: draw them with the Bone tool, from the joint toward the tip. The drawing inside it stays still until it’s bound.`),
-        boton('＋ Bone', 'Bone tool: drag on the canvas to create a root bone in this skeleton (B)', () => fijar({ herramienta: 'hueso' }), 'principal'),
+        texto(`Skeleton ${codigo(esqueleto.id)} has no bones yet: draw them with Add Bone, from the joint toward the tip. The drawing inside it stays still until it’s bound.`),
+        boton('＋ Bone', 'Add Bone: drag on the canvas to create a root bone in this skeleton (B)', () => fijar({ herramienta: 'hueso' }), 'principal'),
       ];
     }
     const pendientes = enlacesPorCercania(doc, esquema, esqueleto.id);
@@ -268,17 +273,21 @@ export function montarOpciones(raiz, acciones) {
       ),
     ];
     if (pendientes.length) partes.push(boton('Bind all by proximity', `Each unbound piece goes to its nearest bone: ${pendientes.map((e) => `${e.id} → ${e.bone}`).join(', ')}`, () => acciones.enlazarTodo(esqueleto.id), 'principal'));
-    partes.push(boton('＋ Bone', 'Bone tool: drag on the canvas to create a root bone in this skeleton (B)', () => fijar({ herramienta: 'hueso' })));
-    partes.push(boton('Select bones', 'Select all the bones of this skeleton', () => seleccionarVarios(huesos.map((h) => h.id))));
+    partes.push(boton('＋ Bone', 'Add Bone: drag on the canvas to create a root bone in this skeleton (B)', () => fijar({ herramienta: 'hueso' })));
+    partes.push(boton('Manipulate', 'Manipulate Bones: rotate, move and resize its bones (M)', () => fijar({ herramienta: 'manipular' })));
     return partes;
   }
 
   function opcionesDeHueso(doc, hueso) {
     const enlazados = doc.objects.filter((o) => o.bone === hueso.id);
     const poses = doc.objects.filter((o) => o.type === 'pose');
-    const resumen = enlazados.length
-      ? `Setup: ${codigo(hueso.id)} moves ${enlazados.length} object${enlazados.length === 1 ? '' : 's'}, but only in poses; here you position it over the drawing.`
-      : `Setup: position ${codigo(hueso.id)} over the drawing and bind the parts it should move.`;
+    const enlace = enlazados.length ? `It moves ${enlazados.length} object${enlazados.length === 1 ? '' : 's'}, only in poses.` : 'Nothing is bound to it yet: use “Bind drawing…”.';
+    const resumen =
+      estado.herramienta === 'hueso'
+        ? `Add Bone: drag from the tip of ${codigo(hueso.id)} to chain a child, or on empty space for another one. ${enlace}`
+        : estado.herramienta === 'manipular'
+          ? `Manipulate, Setup: drag ${codigo(hueso.id)} to rotate it; its origin dot moves it, its tip changes direction and length. ${enlace}`
+          : `Setup, bone ${codigo(hueso.id)}. ${enlace}`;
     const partes = [
       texto(resumen),
       boton('Bind drawing…', 'Click to choose which parts follow this bone', () => fijar({ enlazando: hueso.id }), enlazados.length ? '' : 'principal'),
@@ -288,7 +297,8 @@ export function montarOpciones(raiz, acciones) {
     if (esqueleto && enlacesPorCercania(doc, esquema, esqueleto).length) {
       partes.push(boton('Bind all by proximity', `Bind every unbound drawing of ${esqueleto} to its nearest bone`, () => acciones.enlazarTodo(esqueleto)));
     }
-    partes.push(boton('＋ Child bone', 'Bone tool: drag from this bone’s tip to chain another (B)', () => fijar({ herramienta: 'hueso' })));
+    if (estado.herramienta !== 'hueso') partes.push(boton('＋ Child bone', 'Add Bone: drag from this bone’s tip to chain another (B)', () => fijar({ herramienta: 'hueso' })));
+    if (estado.herramienta !== 'manipular') partes.push(boton('Adjust', 'Manipulate Bones: rotate it, move its origin, change its length (M)', () => fijar({ herramienta: 'manipular' })));
     partes.push(
       boton(
         poses.length ? `Try in pose ${poses[0].id}` : 'Try in a pose',

@@ -12,6 +12,9 @@ export const ICONOS = {
   ellipse: trazo('<ellipse cx="12" cy="12" rx="8" ry="6.5"/>'),
   // Hueso clásico en diagonal (dos nudos en cada punta) para que no se confunda con un pincel.
   hueso: trazo('<path transform="rotate(-45 12 12)" d="M8 10.2h8a2.4 2.4 0 1 1 3.2 1.8 2.4 2.4 0 1 1-3.2 1.8H8a2.4 2.4 0 1 1-3.2-1.8A2.4 2.4 0 1 1 8 10.2z"/>'),
+  // Herramientas de huesos: crear (hueso con un +) y manipular (hueso con una flecha de giro).
+  agregarHueso: trazo('<path transform="rotate(-45 11 13)" d="M7 11.2h8a2.4 2.4 0 1 1 3.2 1.8 2.4 2.4 0 1 1-3.2 1.8H7a2.4 2.4 0 1 1-3.2-1.8A2.4 2.4 0 1 1 7 11.2z"/><path d="M19 2.5v5M16.5 5h5"/>'),
+  manipular: trazo('<path d="M4.5 19.5 14 10"/><circle cx="4.5" cy="19.5" r="1.8"/><circle cx="14" cy="10" r="1.3"/><path d="M11 3.8a8 8 0 0 1 9.2 9.2"/><path d="m20.2 9.5 0 3.5-3.5 0"/>'),
   deshacer: trazo('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
   rehacer: trazo('<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>'),
   group: trazo('<path d="M3.5 7.5V18a1 1 0 0 0 1 1h15a1 1 0 0 0 1-1V9.5a1 1 0 0 0-1-1h-8l-2-3h-5a1 1 0 0 0-1 1z"/>'),
