@@ -3,6 +3,7 @@
 
 import { buscar, esqueletoDe, huesosDe } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
+import { nombreDeControl, opsDeControl } from '../core/controles.js';
 import { enlacesPorCercania, huesoDe, repartirEntreHuesos } from '../core/esqueleto.js';
 import { avisar, ejecutar, esquema, estado, fijar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 import { colorDeHueso, elegirVariante, esqueletoActivo, opsDePose, planDeReparentar, varianteDe, variantesAMostrar } from './huesos.js';
@@ -217,32 +218,25 @@ export function montarOpciones(raiz, acciones) {
     ];
     const partes = [selectorDeVariante(doc, sw), texto(`${variantes.length} variant${variantes.length === 1 ? '' : 's'}: to add more, drag drawings into it or draw with the switch selected.`)];
     if (controles.length) partes.push(texto(`Chosen by control ${controles.map(codigo).join(', ')} (below, in Parameters).`));
-    else partes.push(boton('Create control', 'A parameter with one option per variant (listed below, in Parameters): creates one pose per variant plus its drivers', () => crearControl(doc, sw, variantes), 'principal'));
+    else partes.push(boton('Create control', 'A parameter with one option per variant (listed below, in Parameters): creates one pose per variant plus its drivers', () => crearControl(doc, sw), 'principal'));
     return partes;
   }
 
   /**
    * Arma lo que se necesita para elegir la variante desde un control: un param enum con una opción por hijo, una pose
-   * por opción (que pone ese hijo en active) y un driver con equals para cada una.
+   * por opción (que pone ese hijo en active) y un driver con equals para cada una (ver opsDeControl en el núcleo).
    */
-  function crearControl(doc, sw, variantes) {
-    const base = prompt('Control name (e.g. viseme, mouth_shape):', `${sw.id}_choice`)?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
-    if (!base) return;
-    const param = /^[a-z]/.test(base) ? base : `param_${base}`;
-    // Opciones cortas: sin el prefijo del switch si todas lo tienen (mouth_a → a).
-    const prefijo = `${sw.id}_`;
-    const corto = variantes.every((v) => v.id.startsWith(prefijo) && v.id.length > prefijo.length);
-    const opciones = variantes.map((v) => (corto ? v.id.slice(prefijo.length) : v.id));
-    const ops = [{ op: 'create', type: 'param', id: param, props: { kind: 'enum', options: opciones, initial: opciones[variantes.findIndex((v) => v.id === varianteDe(doc, sw))] ?? opciones[0] } }];
-    variantes.forEach((v, i) => {
-      const pose = `${param}_${opciones[i]}`;
-      ops.push({ op: 'create', type: 'pose', id: pose, props: { values: { [sw.id]: { active: v.id } } } });
-      ops.push({ op: 'create', type: 'driver', id: `${pose}_driver`, props: { param, pose, equals: opciones[i] } });
-    });
-    const repetido = ops.find((o) => buscar(doc, o.id));
-    if (repetido) return avisar(`"${repetido.id}" already exists; choose another name for the control`, true);
-    ejecutar(ops, `control ${param} for ${sw.id} (${opciones.length} options)`);
-    avisar(`Done: control ${param} is below, in Parameters`);
+  function crearControl(doc, sw) {
+    const nombre = prompt('Control name (e.g. viseme, mouth_shape):', `${sw.id}_choice`);
+    if (!nombreDeControl(nombre)) return;
+    let lote;
+    try {
+      lote = opsDeControl(doc, sw.id, nombre);
+    } catch (e) {
+      return avisar(e.message, true);
+    }
+    ejecutar(lote.ops, `control ${lote.param} for ${sw.id} (${lote.opciones.length} options)`);
+    avisar(`Done: control ${lote.param} is below, in Parameters`);
   }
 
   /** «X muestra [lista]»: en una pose cambia la pose; si no, el montaje. */

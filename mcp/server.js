@@ -6,10 +6,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { buscar, hijos, huesosDe } from '../src/core/documento.js';
-import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, opsParaReparentar, puntaDe, repartirEntreHuesos } from '../src/core/esqueleto.js';
-import { aplicar } from '../src/core/geometria.js';
-import { leer, leerMeta, sugerir } from '../src/core/esquema.js';
+import { buscar } from '../src/core/documento.js';
+import { leerMeta, sugerir } from '../src/core/esquema.js';
 import { pesoDeDriver, valoresDeParams } from '../src/core/mezcla.js';
 import { guiaParaIA } from '../src/core/guia.js';
 import { resumirOperaciones } from '../src/core/operaciones.js';
@@ -17,6 +15,7 @@ import { svgDocumento } from '../src/render/svg.js';
 import { crearAlmacen } from '../servidor/almacen.js';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { svgAPng } from '../servidor/png.js';
+import { esquemaDelArbol as arbol, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, planSwitchControl, recortesDePose } from './herramientas.js';
 
 const esquema = cargarEsquema();
 const almacen = crearAlmacen({ esquema });
@@ -32,6 +31,8 @@ const servidor = new McpServer(
   },
 );
 
+const esquemaDelArbol = (doc) => arbol(doc, esquema);
+
 const texto = (t) => ({ content: [{ type: 'text', text: typeof t === 'string' ? t : JSON.stringify(t, null, 2) }] });
 
 // Los errores vuelven como resultado y no como excepción, para que la IA los lea y corrija el lote.
@@ -42,40 +43,6 @@ const seguro = (fn) => async (args) => {
     return { isError: true, content: [{ type: 'text', text: e.message }] };
   }
 };
-
-/** Árbol legible del documento: una línea por objeto, indentado por jerarquía, del fondo al frente. */
-function esquemaDelArbol(doc) {
-  const lineas = [];
-  const { reposo } = evaluarEsqueleto(doc, esquema);
-  const r = (v) => Math.round(v);
-  const recorrer = (padre, nivel) => {
-    for (const o of hijos(doc, padre)) {
-      let detalle = '';
-      if (o.bone) detalle = ` → hueso ${o.bone}`;
-      // Dibujo de un skeleton que no sigue a ningún hueso: en las poses queda quieto.
-      else if (buscar(doc, o.parent)?.type === 'skeleton' && o.type !== 'bone' && !huesoDe(doc, o.id) && !o.vertices?.some((v) => v.bone)) detalle = ' (sin hueso: queda quieto en las poses)';
-      if (o.type === 'skeleton') detalle += ` [${huesosDe(doc, o.id).length} huesos]`;
-      if (o.type === 'pose') detalle = ` [${Object.keys(o.values ?? {}).join(', ') || 'vacía'}]`;
-      if (o.type === 'switch') detalle = ` (muestra ${o.active ?? 'el primero'})`;
-      if (o.type === 'param') {
-        const tipo = leer(esquema, o, 'kind');
-        detalle = tipo === 'enum' ? ` enum [${leer(esquema, o, 'options').join(', ')}]` : tipo === 'boolean' ? ' boolean' : ` ${leer(esquema, o, 'min')}…${leer(esquema, o, 'max')}`;
-      }
-      if (o.type === 'driver') detalle = ` ${o.param ?? '?'} → ${o.pose ?? '?'}${o.equals != null ? ` cuando = "${o.equals}"` : ` (${leer(esquema, o, 'inMin')}…${leer(esquema, o, 'inMax')})`}`;
-      if (o.type === 'bone') {
-        // Dónde queda en el documento: con ángulos relativos encadenados, esto ahorra cuentas.
-        const m = reposo.get(o.id);
-        const [ox, oy] = aplicar(m, 0, 0);
-        const [px, py] = puntaDe(esquema, o, m);
-        detalle = ` de (${r(ox)}, ${r(oy)}) a (${r(px)}, ${r(py)}), ${r((Math.atan2(m[1], m[0]) * 180) / Math.PI)}° en pantalla`;
-      }
-      lineas.push(`${'  '.repeat(nivel)}- ${o.id} (${o.type})${detalle}`);
-      recorrer(o.id, nivel + 1);
-    }
-  };
-  recorrer(null, 0);
-  return lineas.length ? lineas.join('\n') : '(vacío)';
-}
 
 /** Valor con el que quedó cada propiedad que un lote fijó con set (los largos, resumidos). */
 function valoresFinales(ops) {
@@ -110,6 +77,7 @@ const operacion = z.discriminatedUnion('op', [
     target: z.string(),
     parent: z.string().nullable().optional().describe('nuevo padre; omitido = el mismo; null = raíz'),
     index: z.number().int().optional().describe('posición entre hermanos: 0 = al fondo; omitido = al frente'),
+    keepPosition: z.boolean().optional().describe('true = recalcula x/y para que quede en el mismo lugar de la pantalla con el padre nuevo (no sirve para huesos: usa reparent_bone)'),
   }),
   z.object({ op: z.literal('rename'), target: z.string(), id: z.string().describe('id nuevo') }),
   z.object({
@@ -168,8 +136,8 @@ servidor.registerTool(
   'apply_ops',
   {
     description:
-      'Aplica un lote atómico de operaciones (create, set, unset, delete, move, rename). Si algo falla no se ' +
-      'aplica nada y se devuelven los errores. Cada lote es un paso de deshacer.',
+      'Aplica un lote atómico de operaciones (create, set, unset, delete, move, rename, duplicate). Si algo falla ' +
+      'no se aplica nada y se devuelven los errores. Cada lote es un paso de deshacer.',
     inputSchema: {
       id,
       ops: z.array(operacion).min(1),
@@ -196,13 +164,18 @@ const revertir = (tipo) =>
 
 servidor.registerTool(
   'undo',
-  { description: 'Deshace tu último lote (solo los de la IA; nunca los retoques del usuario) y dice cuál deshizo.', inputSchema: { id } },
+  {
+    description:
+      'Deshace tu último lote (solo los de la IA; nunca los retoques del usuario) y dice cuál deshizo. Si el usuario ' +
+      'cambió después alguna de las mismas propiedades, se niega y dice cuáles y en qué lote: deshacer pisaría su retoque.',
+    inputSchema: { id },
+  },
   revertir('deshacer'),
 );
 
 servidor.registerTool(
   'redo',
-  { description: 'Rehace el último lote tuyo que deshiciste y dice cuál rehizo.', inputSchema: { id } },
+  { description: 'Rehace el último lote tuyo que deshiciste y dice cuál rehizo. Como undo, se niega si el usuario cambió después lo mismo.', inputSchema: { id } },
   revertir('rehacer'),
 );
 
@@ -303,13 +276,8 @@ servidor.registerTool(
     },
   },
   seguro(async ({ id, path, bones, note }) => {
-    const actual = await almacen.leer(id);
-    if (buscar(actual, path)?.type !== 'path') throw new Error(`"${path}" no es un path`);
-    const vertices = repartirEntreHuesos(actual, esquema, path, bones);
-    await almacen.operar(id, [{ op: 'set', target: path, props: { vertices } }], { origen: ORIGEN, nota: note ?? `repartir ${path} entre huesos` });
-    const cuenta = {};
-    vertices.forEach((v, i) => (cuenta[v.bone] ??= []).push(i));
-    const reparto = Object.entries(cuenta).map(([h, indices]) => `${h} [${indices.join(', ')}]`).join('; ');
+    const { ops, reparto } = planBindPoints(await almacen.leer(id), esquema, path, bones);
+    await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `distribute ${path} among bones` });
     return texto(`Vértices de ${path} por hueso: ${reparto}. Míralo con render_preview y una pose.`);
   }),
 );
@@ -330,14 +298,9 @@ servidor.registerTool(
     },
   },
   seguro(async ({ id, skeleton, note }) => {
-    const actual = await almacen.leer(id);
-    const enlaces = enlacesPorCercania(actual, esquema, skeleton);
-    if (!enlaces.length) return texto(`Todo el dibujo de ${skeleton} ya sigue a un hueso; no hubo nada que enlazar.`);
-    const ops = enlaces.map(({ id: objeto, bone }) => ({ op: 'set', target: objeto, props: { bone } }));
+    const { ops, enlaces, reparto } = planBindByProximity(await almacen.leer(id), esquema, skeleton);
+    if (!ops.length) return texto(`Todo el dibujo de ${skeleton} ya sigue a un hueso; no hubo nada que enlazar.`);
     await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `bind all by proximity in ${skeleton}` });
-    const porHueso = {};
-    for (const e of enlaces) (porHueso[e.bone] ??= []).push(e.id);
-    const reparto = Object.entries(porHueso).map(([h, ids]) => `${h} ← ${ids.join(', ')}`).join('; ');
     return texto(`Enlazados ${enlaces.length}: ${reparto}. Míralo con render_preview y una pose (bones: true).`);
   }),
 );
@@ -346,23 +309,27 @@ servidor.registerTool(
   'reparent_bone',
   {
     description:
-      'Cambia el padre de un hueso sin moverlo en pantalla: sus x, y, rotation (y escala y límites) se recalculan en ' +
-      'el marco del padre nuevo, y también sus valores en las poses. El padre puede ser otro hueso del mismo skeleton ' +
-      'o el propio skeleton (para dejarlo como hueso raíz). Sus hijos lo siguen como siempre. Usa esto en vez de ' +
-      'move, que conserva los valores relativos y por eso corre el hueso de lugar.',
+      'Cambia el padre de un hueso sin moverlo en el montaje: sus x, y, rotation (y escala y límites) se recalculan ' +
+      'en el marco del padre nuevo, y también los valores que las poses le fijan. El padre puede ser otro hueso del ' +
+      'mismo skeleton o el propio skeleton (para dejarlo como hueso raíz). Sus hijos lo siguen como siempre. Usa esto ' +
+      'en vez de move, que conserva los valores relativos y por eso corre el hueso de lugar. Ojo: en una pose que ' +
+      'mueve al padre viejo (o a un ancestro que el nuevo no comparte) o al padre nuevo, el hueso sí cambia de lugar, ' +
+      'porque ahora sigue a otro; la respuesta lista esas poses. Con keep_in_poses: true, también se ajustan esas ' +
+      'poses para que quede donde estaba.',
     inputSchema: {
       id,
       bone: z.string().describe('id del hueso que cambia de padre'),
       parent: z.string().describe('id del hueso padre nuevo, o del skeleton para dejarlo como raíz'),
+      keep_in_poses: z.boolean().optional().describe('true = fija en las poses afectadas los valores que lo dejan donde estaba (por defecto, solo avisa)'),
       note: z.string().optional().describe('qué hace, para el historial'),
     },
   },
-  seguro(async ({ id, bone, parent, note }) => {
-    const ops = opsParaReparentar(await almacen.leer(id), esquema, bone, parent);
-    if (!ops.length) return texto(`${bone} ya cuelga de ${parent}; no hubo cambios.`);
-    const { doc } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `reparent ${bone} to ${parent}` });
+  seguro(async ({ id, bone, parent, keep_in_poses, note }) => {
+    const plan = planReparentBone(await almacen.leer(id), esquema, bone, parent, keep_in_poses);
+    if (!plan.ops.length) return texto(plan.texto);
+    const { doc } = await almacen.operar(id, plan.ops, { origen: ORIGEN, nota: note ?? `reparent ${bone} to ${parent}` });
     const h = buscar(doc, bone);
-    return texto(`${bone} ahora cuelga de ${parent} (x ${h.x}, y ${h.y}, rotation ${h.rotation}); en pantalla quedó donde estaba.`);
+    return texto(`${plan.texto} (x ${h.x}, y ${h.y}, rotation ${h.rotation})`);
   }),
 );
 
@@ -386,27 +353,51 @@ servidor.registerTool(
     },
   },
   seguro(async ({ id, pose, values, replace, note, width, show_bones }) => {
-    const existente = buscar(await almacen.leer(id), pose);
-    if (existente && existente.type !== 'pose') throw new Error(`"${pose}" ya existe y es un ${existente.type}; elige otro id para la pose`);
-    const valores = replace ? {} : structuredClone(existente?.values ?? {});
-    for (const [objeto, campos] of Object.entries(values)) {
-      // Un "d" nuevo reemplaza a los vértices que la pose ya tenía para ese path.
-      const previos = campos.d !== undefined ? (({ vertices, ...resto }) => resto)(valores[objeto] ?? {}) : valores[objeto];
-      if (Object.keys(campos).length) valores[objeto] = { ...previos, ...campos };
-      else delete valores[objeto];
-    }
-    const ops = existente ? [{ op: 'set', target: pose, props: { values: valores } }] : [{ op: 'create', type: 'pose', id: pose, props: { values: valores } }];
+    const ops = opsDeSetPose(await almacen.leer(id), pose, values, replace);
     const { doc, avisos } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `pose ${pose}` });
     const guardada = buscar(doc, pose).values;
     const lista = Object.entries(guardada).map(([h, c]) => `${h} ${JSON.stringify(c, (k, v) => (k === 'vertices' ? `(${v.length} vértices)` : v))}`).join(', ') || 'vacía';
-    // Lo que recortan los límites del hueso se avisa: la pose guarda el valor pedido, pero se ve el recortado.
-    const recortes = Object.entries(guardada).flatMap(([h, c]) => {
-      const hueso = buscar(doc, h);
-      const visto = hueso?.type === 'bone' && c.rotation !== undefined ? limitarAngulo(esquema, hueso, c.rotation) : c.rotation;
-      return visto !== c.rotation ? [`${h}.rotation ${c.rotation} queda en ${visto} por minAngle/maxAngle`] : [];
-    });
-    const notas = [...avisos, ...recortes];
+    const notas = [...avisos, ...recortesDePose(doc, esquema, guardada)];
     return vistaPrevia(doc, { width, pose, bones: show_bones }, `Pose "${pose}": ${lista}.${notas.length ? `\nAvisos: ${notas.join('; ')}` : ''}`);
+  }),
+);
+
+servidor.registerTool(
+  'create_switch_control',
+  {
+    description:
+      'Create control de un switch (como el botón del editor): crea un param enum con una opción por variante (el id ' +
+      'de cada hijo, sin el prefijo del switch si todos lo tienen: mouth_a → a), una pose por opción que pone esa ' +
+      'variante en active y un driver con equals para cada una. La opción inicial es la que muestra el switch.',
+    inputSchema: {
+      id,
+      switch: z.string().describe('id del switch'),
+      name: z.string().optional().describe('id del param, por ejemplo "viseme" (por defecto <switch>_choice)'),
+      note: z.string().optional().describe('qué hace, para el historial'),
+    },
+  },
+  seguro(async ({ id, switch: sw, name, note }) => {
+    const plan = planSwitchControl(await almacen.leer(id), sw, name);
+    await almacen.operar(id, plan.ops, { origen: ORIGEN, nota: note ?? `control ${plan.param} for ${sw} (${plan.opciones.length} options)` });
+    return texto(plan.texto);
+  }),
+);
+
+servidor.registerTool(
+  'delete_document',
+  {
+    description:
+      'Borra un documento y su historial. NO se puede deshacer. Úsalo solo si el usuario lo pidió (por ejemplo, para ' +
+      'limpiar documentos de prueba); repite el id en confirm.',
+    inputSchema: {
+      id,
+      confirm: z.string().describe('el mismo id del documento, para confirmar'),
+    },
+  },
+  seguro(async ({ id, confirm }) => {
+    if (confirm !== id) throw new Error(`confirm tiene que ser "${id}" para borrar el documento`);
+    await almacen.eliminar(id);
+    return texto(`Documento "${id}" borrado (con su historial).`);
   }),
 );
 

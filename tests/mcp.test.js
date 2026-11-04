@@ -1,0 +1,119 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { cargarEsquema } from '../servidor/esquema.js';
+import { buscar, crearDocumento, validar } from '../src/core/documento.js';
+import { evaluarEnPose, puntaDe } from '../src/core/esqueleto.js';
+import { guiaParaIA } from '../src/core/guia.js';
+import { mezclarPoses } from '../src/core/mezcla.js';
+import { aplicarOperaciones } from '../src/core/operaciones.js';
+import { fusionarPose, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, planSwitchControl, recortesDePose } from '../mcp/herramientas.js';
+
+const esquema = cargarEsquema();
+const op = (doc, ...ops) => aplicarOperaciones(doc, ops, esquema).doc;
+
+test('cada bloque JSON de la guía se aplica sin errores', () => {
+  const bloques = [...guiaParaIA(esquema).matchAll(/```json\n([\s\S]*?)```/g)].map((m) => JSON.parse(m[1]));
+  assert.ok(bloques.length >= 4);
+  // Lo que los ejemplos dan por hecho que ya existe en el personaje.
+  const base = op(
+    crearDocumento({}),
+    { op: 'create', type: 'group', id: 'body' },
+    { op: 'create', type: 'group', id: 'head' },
+    { op: 'create', type: 'group', id: 'arm_l' },
+    { op: 'create', type: 'path', id: 'mouth_line', props: { d: 'M-20 0 L20 0', closed: false } },
+    { op: 'create', type: 'rect', id: 'brow_l' },
+    { op: 'create', type: 'switch', id: 'mouth' },
+    { op: 'create', type: 'rect', id: 'mouth_o', parent: 'mouth' },
+  );
+  for (const [i, bloque] of bloques.entries()) {
+    if (bloque.format) {
+      // El ejemplo de documento completo.
+      assert.deepEqual(validar(bloque, esquema).errores, [], `bloque ${i}`);
+      continue;
+    }
+    const ops = Array.isArray(bloque) ? bloque : [bloque];
+    assert.doesNotThrow(() => op(base, ...ops), `bloque ${i}`);
+  }
+});
+
+test('set_pose suma a lo que había, saca objetos con {} y un d reemplaza los vértices', () => {
+  const previos = { head_bone: { rotation: 10 }, mouth: { active: 'a' }, smile: { vertices: [{ x: 0, y: 0 }], opacity: 0.5 } };
+  assert.deepEqual(fusionarPose(previos, { head_bone: { x: 5 }, mouth: {}, smile: { d: 'M0 0 L1 1' } }), {
+    head_bone: { rotation: 10, x: 5 },
+    smile: { opacity: 0.5, d: 'M0 0 L1 1' },
+  });
+  assert.deepEqual(fusionarPose(previos, { head_bone: { x: 5 } }, true), { head_bone: { x: 5 } });
+  // El lote: create si no existe, set si existe; y no pisa un objeto que no es pose.
+  const doc = op(crearDocumento({}), { op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'path', id: 'smile', props: { d: 'M0 0 L10 0' } });
+  assert.equal(opsDeSetPose(doc, 'happy', { r: { x: 1 } })[0].op, 'create');
+  assert.throws(() => opsDeSetPose(doc, 'r', {}), /ya existe y es un rect/);
+  const conPose = op(doc, ...opsDeSetPose(doc, 'happy', { smile: { d: 'M0 5 L10 5' } }));
+  assert.deepEqual(buscar(conPose, 'happy').values.smile.vertices.map((v) => v.y), [5, 5]);
+});
+
+test('set_pose avisa lo que recortan minAngle y maxAngle', () => {
+  const doc = op(crearDocumento({}), { op: 'create', type: 'skeleton', id: 'rig' }, { op: 'create', type: 'bone', id: 'b', parent: 'rig', props: { minAngle: -20, maxAngle: 20 } });
+  assert.deepEqual(recortesDePose(doc, esquema, { b: { rotation: 45 } }), ['b.rotation 45 queda en 20 por minAngle/maxAngle']);
+  assert.deepEqual(recortesDePose(doc, esquema, { b: { rotation: 10 } }), []);
+});
+
+function rig() {
+  return op(
+    crearDocumento({}),
+    { op: 'create', type: 'skeleton', id: 'rig' },
+    { op: 'create', type: 'bone', id: 'a', parent: 'rig', props: { from: [0, 0], to: [100, 0] } },
+    { op: 'create', type: 'bone', id: 'b', parent: 'a', props: { from: [100, 0], to: [200, 0] } },
+    { op: 'create', type: 'rect', id: 'near_a', parent: 'rig', props: { x: 40, y: 5, width: 10, height: 10 } },
+    { op: 'create', type: 'rect', id: 'near_b', parent: 'rig', props: { x: 160, y: 5, width: 10, height: 10 } },
+    { op: 'create', type: 'path', id: 'tail', parent: 'rig', props: { d: 'M0 0 L90 0 L190 0', closed: false } },
+  );
+}
+
+test('bind_points y bind_by_proximity reparten por cercanía', () => {
+  const doc = rig();
+  const puntos = planBindPoints(doc, esquema, 'tail');
+  assert.equal(puntos.reparto, 'a [0, 1]; b [2]');
+  assert.throws(() => planBindPoints(doc, esquema, 'near_a'), /no es un path/);
+  assert.equal(planBindByProximity(doc, esquema, 'rig').reparto, 'a ← near_a, tail; b ← near_b');
+  // Un path enlazado por punto no se toca; después de enlazar, no queda nada.
+  const porPunto = op(doc, ...puntos.ops);
+  const cerca = planBindByProximity(porPunto, esquema, 'rig');
+  assert.equal(cerca.reparto, 'a ← near_a; b ← near_b');
+  const enlazado = op(porPunto, ...cerca.ops);
+  assert.equal(planBindByProximity(enlazado, esquema, 'rig').ops.length, 0);
+});
+
+test('reparent_bone avisa en qué poses el hueso cambia de lugar y, si se pide, las compensa', () => {
+  const doc = op(rig(), { op: 'create', type: 'pose', id: 'up', props: { values: { a: { rotation: -90 } } } }, { op: 'create', type: 'pose', id: 'bend', props: { values: { b: { rotation: 30 } } } });
+  const punta = (d, pose) => puntaDe(esquema, buscar(d, 'b'), evaluarEnPose(d, esquema, buscar(d, pose)).posado.get('b')).map(Math.round);
+  assert.deepEqual(punta(doc, 'up'), [0, -200]);
+  // Sin compensar: en "up" (que gira al padre viejo) el hueso queda en otro lugar, y la respuesta lo dice.
+  const aviso = planReparentBone(doc, esquema, 'b', 'rig');
+  assert.deepEqual(aviso.movidas, ['up']);
+  assert.match(aviso.texto, /en las poses up ahora queda en otro lugar/);
+  assert.deepEqual(punta(op(doc, ...aviso.ops), 'bend'), punta(doc, 'bend'));
+  // Compensando: queda donde estaba en todas las poses.
+  const quieto = planReparentBone(doc, esquema, 'b', 'rig', true);
+  assert.deepEqual(quieto.movidas, []);
+  const despues = op(doc, ...quieto.ops);
+  assert.deepEqual(punta(despues, 'up'), [0, -200]);
+  assert.deepEqual(punta(despues, 'bend'), punta(doc, 'bend'));
+  assert.equal(planReparentBone(doc, esquema, 'b', 'a').ops.length, 0);
+});
+
+test('create_switch_control crea el param, una pose y un driver por variante', () => {
+  const doc = op(
+    crearDocumento({}),
+    { op: 'create', type: 'switch', id: 'mouth', props: { active: 'mouth_o' } },
+    { op: 'create', type: 'rect', id: 'mouth_rest', parent: 'mouth' },
+    { op: 'create', type: 'rect', id: 'mouth_o', parent: 'mouth' },
+  );
+  const plan = planSwitchControl(doc, 'mouth', 'Viseme');
+  assert.equal(plan.param, 'viseme');
+  assert.deepEqual(plan.opciones, ['rest', 'o']);
+  const conControl = op(doc, ...plan.ops);
+  assert.equal(buscar(conControl, 'viseme').initial, 'o');
+  assert.deepEqual(mezclarPoses(conControl, esquema, { viseme: 'rest' }).values, { mouth: { active: 'mouth_rest' } });
+  assert.throws(() => planSwitchControl(conControl, 'mouth', 'viseme'), /already exists/);
+  assert.throws(() => planSwitchControl(doc, 'mouth_o'), /is not a switch/);
+});

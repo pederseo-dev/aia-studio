@@ -55,7 +55,7 @@ aia-studio es un editor de personajes 2D. Un documento es JSON; tú lo modificas
 
 - \`objects\` es una **lista plana**: la jerarquía se arma con \`parent\` (null = raíz).
 - \`id\`: minúsculas, números y \`_\`, empezando con letra. Único en el documento. Usa nombres que digan qué es
-  (\`eye_l\`, \`arm_r\`, \`head\`).
+  (\`eye_l\`, \`arm_r\`, \`head\`). \`meta\` está reservado (es el \`target\` de las propiedades del documento).
 - **Izquierda y derecha son las del personaje**, como en cualquier rig: en un personaje de frente, \`arm_l\` es el
   brazo que el espectador ve a su derecha. Usa los sufijos \`_l\` y \`_r\`.
 - Las propiedades que no aparecen usan su valor por defecto. Solo se guarda lo que cambia.
@@ -71,12 +71,14 @@ corregir y reintentar.
 | \`set\` | \`{ "op": "set", "target": "eye_l", "props": { "x": 10, "fill": "#ffffff" } }\` | Cambia propiedades. \`target: "meta"\` cambia el documento. |
 | \`unset\` | \`{ "op": "unset", "target": "eye_l", "props": ["x"] }\` | Vuelve propiedades a su valor por defecto. |
 | \`delete\` | \`{ "op": "delete", "target": "head" }\` | Borra el objeto **y todos sus hijos**. |
-| \`move\` | \`{ "op": "move", "target": "eye_l", "parent": "face", "index": 0 }\` | Cambia de padre y/o de orden. Sin \`parent\` conserva el actual; \`null\` = raíz. |
+| \`move\` | \`{ "op": "move", "target": "eye_l", "parent": "face", "index": 0, "keepPosition": true }\` | Cambia de padre y/o de orden. Sin \`parent\` conserva el actual; \`null\` = raíz. Con \`keepPosition\`, recalcula \`x\`/\`y\` para que quede en el mismo lugar de la pantalla. |
 | \`rename\` | \`{ "op": "rename", "target": "eye_l", "id": "left_eye" }\` | Cambia el id y actualiza las referencias. |
 | \`duplicate\` | \`{ "op": "duplicate", "target": "arm_l", "id": "arm_r", "suffix": "r", "props": { "x": 110, "scaleX": -1 } }\` | Copia el objeto con todos sus hijos. Los hijos copiados se llaman \`<id>_<suffix>\`. La copia queda justo delante del original. |
 
 \`index\` es la posición entre los hermanos en orden de dibujo: \`0\` = al fondo; sin \`index\` = al frente.
-\`move\` no cambia \`x\`/\`y\`: si cambias de padre, recalcula la posición si quieres que el objeto quede en el mismo lugar.
+Sin \`keepPosition\`, \`move\` no cambia \`x\`/\`y\` (los valores son relativos al padre, así que el objeto se corre si
+el padre nuevo está en otro lugar). Con \`keepPosition: true\` queda donde se veía, como al arrastrarlo en Layers en
+el editor (se conserva la posición, no el giro ni la escala). Para huesos usa \`reparent_bone\`.
 Para copiar un documento entero, usa \`create_document\` con \`copy_from\`.
 
 ## Formas libres (\`path\`)
@@ -152,8 +154,10 @@ grupo), así el orden de dibujo queda libre (un brazo puede ir detrás del torso
   \`x\`/\`y\` son **relativos al padre**: el ángulo en pantalla es la suma de la cadena (y del giro del skeleton). Las
   poses usan estos valores relativos. \`get_document\` muestra dónde queda cada hueso en el documento.
 - **Cambiar el padre de un hueso:** usa \`reparent_bone\`, no \`move\` (que conserva los valores relativos y corre el
-  hueso de lugar): recalcula sus valores para que quede donde estaba, también en las poses. Con el skeleton como
-  padre, queda como hueso raíz.
+  hueso de lugar): recalcula sus valores para que quede donde estaba en el montaje, y los que le fijan las poses. Con
+  el skeleton como padre, queda como hueso raíz. Ojo con las poses que mueven al padre viejo (o a un ancestro que el
+  nuevo no comparte) o al padre nuevo: ahí el hueso sí cambia de lugar, porque ahora sigue a otro. La respuesta
+  lista esas poses; con \`keep_in_poses: true\` también se ajustan para que quede donde estaba.
 - **Montaje:** los valores guardados en los huesos son la pose de reposo. Ubica los huesos sobre el dibujo tal como
   está. **Enlazar no mueve nada**: un objeto con \`"bone": "forearm_l_bone"\` (y todos sus hijos) acompaña a ese hueso
   solo cuando una pose lo mueve. Mover, girar o escalar el skeleton mueve el dibujo y los huesos juntos.
@@ -164,6 +168,10 @@ grupo), así el orden de dibujo queda libre (un brazo puede ir detrás del torso
   pose, se mueve con sus tangentes según ese hueso. \`bind_points\` reparte los vértices entre los huesos más cercanos
   de su skeleton (o de una lista). Los vértices sin \`bone\` siguen al hueso de la forma (o de su grupo). Pon
   vértices cerca de cada articulación para que la curva se doble bien.
+- **El enlace por punto es del montaje**, como en Moho: una pose que cambia la forma de un path (\`vertices\` o
+  \`d\`) no guarda \`bone\` en sus vértices; al aplicarla, el vértice i sigue al hueso del vértice i del montaje. Por
+  eso conviene que la pose tenga los mismos vértices, en el mismo orden. Para cambiar a qué hueso sigue un punto,
+  cambia el montaje.
 - **Poses:** una \`pose\` es un recurso con nombre que fija valores (absolutos, como en el montaje) sin cambiar el
   montaje: en \`values\`, \`{ id_de_objeto: { propiedad: valor } }\`. Se crea con \`set_pose\` (o con \`apply_ops\`) y
   se mira con \`render_preview\` pasando \`pose\`. \`minAngle\`/\`maxAngle\` de un hueso limitan la rotación en las
@@ -211,7 +219,13 @@ Así se controla al personaje desde afuera (la app, otra IA): con **params** de 
    ≥ 0.5.
 
 **Switch**: un grupo que muestra un solo hijo, el de \`active\` (o el primero). Para bocas o visemas con dibujos
-distintos, mete cada variante en un switch y que cada pose elija una con \`active\`.
+distintos, mete cada variante en un switch y que cada pose elija una con \`active\`. **\`create_switch_control\`**
+arma todo de una vez, como «Create control» en el editor: un param enum con una opción por variante, una pose por
+opción y su driver con \`equals\`. Si sacas del switch una variante que una pose elige, el lote falla: quita esa
+variante de la pose (\`set_pose\` con \`{ "mouth": {} }\`) o déjala dentro del switch.
+
+El \`initial\` de un param enum y el \`equals\` de sus drivers tienen que ser opciones de \`options\`; en un param
+numérico, \`min\` no puede ser mayor que \`max\`.
 
 \`\`\`json
 [
@@ -247,7 +261,11 @@ ${tipos}
    cuello, pon el grupo \`head\` en el cuello y dibuja la cara con \`y\` negativa dentro del grupo.
 3. **Mira el resultado** con \`render_preview\` después de cada cambio importante.
 4. **Prefiere pocos lotes grandes** con una nota clara (\`note\`): cada lote es un paso de deshacer para el usuario.
-5. Si te equivocas, \`undo\` deshace tu último lote (solo los tuyos, nunca los del usuario).
+5. Si te equivocas, \`undo\` deshace tu último lote (solo los tuyos, nunca los del usuario). Si el usuario cambió
+   después alguna de las mismas propiedades, \`undo\` se niega y dice cuáles: corrígelas con un lote nuevo, sin
+   pisar su retoque. A él le pasa lo mismo con lo tuyo.
 6. Para revisar un detalle chico, \`render_preview\` acepta \`region\` (un recorte del documento) además de \`pose\`.
+7. \`delete_document\` borra un documento entero y no se puede deshacer: úsalo solo si el usuario lo pide.
+8. No hay importador de SVG para la IA: pasa cada forma como \`d\` de un \`path\` (un path por subtrazado).
 `;
 }
