@@ -20,9 +20,9 @@
 
 import { buscar, esqueletoDe, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
-import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, opsParaReparentar, soltarEnlacesAjenos, valoresDeHueso } from '../core/esqueleto.js';
+import { enlacesPorCercania, evaluarEnPose, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, reparentarHueso, soltarEnlacesAjenos, valoresDeHueso } from '../core/esqueleto.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
-import { mezclarPoses } from '../core/mezcla.js';
+import { aplicarPose, mezclarPoses } from '../core/mezcla.js';
 import { alternarSeleccion, avisar, docVisible, ejecutar, esquema, estado, idLibre, previsualizar, seleccionar } from './estado.js';
 import { aplicarOperaciones } from '../core/operaciones.js';
 
@@ -54,17 +54,20 @@ export function planDeReparentar(doc = estado.doc) {
   const elegidos = estado.seleccionados.map((id) => buscar(doc, id)).filter((o) => o?.type === 'bone');
   const padre = elegidos.find((h) => h.id === estado.seleccion) ?? null;
   const hijos = elegidos.filter((h) => h !== padre);
-  // Se arma paso a paso: cada hueso se cuelga sobre el documento como quedó con el anterior.
-  const encadenar = (pasos) => {
+  // Se arma paso a paso: cada hueso se cuelga sobre el documento como quedó con el anterior. `movidas`: poses en las
+  // que algún hueso queda en otro lugar (ahora sigue a otro padre); con `conservar`, esas poses se compensan.
+  const encadenar = (pasos, conservar = false) => {
     let actual = doc;
     const ops = [];
+    const movidas = new Set();
     for (const [hijo, destino] of pasos) {
-      const lote = opsParaReparentar(actual, esquema, hijo, destino);
+      const { ops: lote, movidas: suyas } = reparentarHueso(actual, esquema, hijo, destino, { conservarEnPoses: conservar });
       if (!lote.length) continue;
       actual = aplicarOperaciones(actual, lote, esquema).doc;
       ops.push(...lote);
+      suyas.forEach((p) => movidas.add(p));
     }
-    return ops;
+    return Object.assign(ops, { movidas: [...movidas] });
   };
   let problema = null;
   if (padre) {
@@ -74,21 +77,25 @@ export function planDeReparentar(doc = estado.doc) {
     }
   }
   let ops = [];
+  let opsConservando = () => [];
   if (padre && hijos.length && !problema) {
     try {
       ops = encadenar(hijos.map((h) => [h.id, padre.id]));
+      opsConservando = () => encadenar(hijos.map((h) => [h.id, padre.id]), true);
     } catch {
       problema = `can’t hang them from ${padre.id} without distorting them`;
     }
   }
   const sueltos = elegidos.filter((h) => buscar(doc, h.parent)?.type === 'bone');
   let opsSoltar = [];
+  const pasosSoltar = sueltos.map((h) => [h.id, esqueletoDe(doc, h.id)]);
+  const opsSoltarConservando = () => encadenar(pasosSoltar, true);
   try {
-    opsSoltar = encadenar(sueltos.map((h) => [h.id, esqueletoDe(doc, h.id)]));
+    opsSoltar = encadenar(pasosSoltar);
   } catch {
     opsSoltar = [];
   }
-  return { padre, hijos, ops, problema, sueltos, opsSoltar };
+  return { padre, hijos, ops, opsConservando, problema, sueltos, opsSoltar, opsSoltarConservando };
 }
 
 /** El hueso al que enlaza Bind Layer: el elegido, con esa herramienta activa (y fuera de una pose). */
@@ -215,7 +222,7 @@ export function crearHuesos(ctx) {
     const doc = docVisible();
     const huesos = doc.objects.filter((o) => o.type === 'bone');
     if (!huesos.length) return;
-    const { posado } = evaluarEsqueleto(doc, esquema, poseVista(doc));
+    const { posado } = evaluarEnPose(doc, esquema, poseVista(doc));
     const camara = ctx.matrizCamara();
     const capa = ctx.crear('g', { class: `huesos${activos() ? ' activos' : ''}` });
     const elegido = huesoElegido(doc);
@@ -312,13 +319,15 @@ export function crearHuesos(ctx) {
   function marcos(id) {
     const doc = estado.doc;
     const pose = poseActiva(doc);
-    const ev = evaluarEsqueleto(doc, esquema, pose);
+    // Lo que se ve: con la pose aplicada también al skeleton y a sus grupos de arriba.
+    const visto = pose ? aplicarPose(doc, esquema, pose) : doc;
+    const ev = evaluarEsqueleto(visto, esquema, pose);
     const mundo = pose ? ev.posado : ev.reposo;
     const h = buscar(doc, id);
     const camara = ctx.matrizCamara();
     // El marco del padre: el hueso padre o, para un hueso raíz, su skeleton.
     const deHueso = buscar(doc, h.parent)?.type === 'bone';
-    const padre = multiplicar(camara, deHueso ? mundo.get(h.parent) : marcoDeHijos(doc, esquema, h.parent));
+    const padre = multiplicar(camara, deHueso ? mundo.get(h.parent) : marcoDeHijos(visto, esquema, h.parent));
     // El giro se mide contra el padre, salvo con ángulo independiente (solo hereda la posición del hueso padre).
     const giro = !deHueso || !leer(esquema, h, 'independentAngle') ? padre : camara;
     return { doc, pose, h, valores: valoresDeHueso(esquema, h, pose), propio: multiplicar(camara, mundo.get(id)), padre, giro };
@@ -530,7 +539,7 @@ export function crearHuesos(ctx) {
     const path = buscar(estado.doc, pathId);
     const ids = [...new Set((path?.vertices ?? []).map((v) => v.bone).filter(Boolean))];
     if (!ids.length) return null;
-    const { posado } = evaluarEsqueleto(estado.doc, esquema, poseActiva());
+    const { posado } = evaluarEnPose(estado.doc, esquema, poseActiva());
     const camara = ctx.matrizCamara();
     let mejor = null;
     for (const id of ids) {

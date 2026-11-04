@@ -312,16 +312,23 @@ export function montarOpciones(raiz, acciones) {
     } else if (plan.problema) {
       partes.push(texto(`Parent: ${codigo(plan.padre.id)} (picked last). Can’t do it: ${plan.problema}.`));
     } else {
-      partes.push(texto(`${nombres(plan.hijos)} will hang from ${codigo(plan.padre.id)} (picked last, dashed). Nothing moves on screen.`));
+      partes.push(texto(`${nombres(plan.hijos)} will hang from ${codigo(plan.padre.id)} (picked last, dashed). Nothing moves in the setup.`));
     }
+    const enPoses = (lista) => `In pose${lista.length === 1 ? '' : 's'} ${lista.join(', ')} the bones move: they follow a different parent now.`;
     if (plan.hijos.length && !plan.problema) {
       const yaEstan = !plan.ops.length;
-      const b = boton(`Parent to ${plan.padre.id}`, yaEstan ? 'They already hang from it' : `Make ${plan.padre.id} the parent of ${plan.hijos.map((x) => x.id).join(', ')}`, () => ejecutar(plan.ops, `parent ${plan.hijos.map((x) => x.id).join(', ')} to ${plan.padre.id}`), 'principal');
+      const cuales = plan.hijos.map((x) => x.id).join(', ');
+      if (plan.ops.movidas?.length) partes.push(texto(`${enPoses(plan.ops.movidas)} “Keep poses” adds values to those poses so the bones stay where they were.`));
+      const b = boton(`Parent to ${plan.padre.id}`, yaEstan ? 'They already hang from it' : `Make ${plan.padre.id} the parent of ${cuales}`, () => ejecutar(plan.ops, `parent ${cuales} to ${plan.padre.id}`), 'principal');
       b.disabled = yaEstan;
       partes.push(b);
+      if (plan.ops.movidas?.length) partes.push(boton('Keep poses', `Make ${plan.padre.id} the parent and fix ${plan.ops.movidas.join(', ')} so the bones don’t move in them`, () => ejecutar(plan.opsConservando(), `parent ${cuales} to ${plan.padre.id}, keeping poses`)));
     }
     if (plan.sueltos.length) {
-      partes.push(boton('Clear parent', `Make ${plan.sueltos.map((x) => x.id).join(', ')} root bone${plan.sueltos.length === 1 ? '' : 's'} of the skeleton, without moving them`, () => ejecutar(plan.opsSoltar, `clear parent of ${plan.sueltos.map((x) => x.id).join(', ')}`)));
+      if (plan.opsSoltar.movidas?.length) partes.push(texto(`Clear parent: ${enPoses(plan.opsSoltar.movidas)}`));
+      const cuales = plan.sueltos.map((x) => x.id).join(', ');
+      partes.push(boton('Clear parent', `Make ${cuales} root bone${plan.sueltos.length === 1 ? '' : 's'} of the skeleton, without moving them in the setup`, () => ejecutar(plan.opsSoltar, `clear parent of ${cuales}`)));
+      if (plan.opsSoltar.movidas?.length) partes.push(boton('Clear parent, keep poses', `Also fix ${plan.opsSoltar.movidas.join(', ')} so the bones don’t move in them`, () => ejecutar(plan.opsSoltarConservando(), `clear parent of ${cuales}, keeping poses`)));
     }
     partes.push(boton('Deselect', 'Clear the selection (or click empty space)', () => seleccionar(null)));
     return partes;

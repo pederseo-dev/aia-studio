@@ -12,6 +12,9 @@
 import { buscar, esqueletoDe, hijos, huesosDe } from './documento.js';
 import { leer } from './esquema.js';
 import { IDENTIDAD, aplicar, invertir, matrizMundo, multiplicar } from './geometria.js';
+import { aplicarPose } from './mezcla.js';
+// operaciones.js también importa este archivo: el ciclo es seguro porque solo se usan funciones, al llamarlas.
+import { aplicarOperaciones } from './operaciones.js';
 import { tangentes } from './trazado.js';
 
 export const CAMPOS_DE_POSE = ['x', 'y', 'rotation', 'scaleX', 'scaleY'];
@@ -86,6 +89,14 @@ export function evaluarEsqueleto(doc, esquema, pose = null) {
   if (pose) calcular(posado, true);
   const delta = new Map(huesos.map((h) => [h.id, pose ? multiplicar(posado.get(h.id), invertir(reposo.get(h.id))) : IDENTIDAD]));
   return { reposo, posado, delta, pose };
+}
+
+/**
+ * Como evaluarEsqueleto, pero con los valores de la pose aplicados también a lo que no es hueso (el skeleton o sus
+ * grupos de arriba que la pose mueva): es lo que se ve. `reposo` queda en el marco posado del skeleton.
+ */
+export function evaluarEnPose(doc, esquema, pose = null) {
+  return evaluarEsqueleto(pose ? aplicarPose(doc, esquema, pose) : doc, esquema, pose);
 }
 
 /** Hueso que mueve a un objeto: el suyo o, si no tiene, el de su padre más cercano que tenga uno. */
@@ -269,8 +280,11 @@ function valoresDeMundo(mundo, marco, independiente) {
 
 /**
  * Lote para cambiar el padre de un hueso (otro hueso del mismo skeleton, o el skeleton para dejarlo como raíz) sin
- * que se mueva en pantalla: sus valores del montaje se recalculan en el marco nuevo, y los de las poses también (con
- * el mismo cambio de marco). Sus hijos lo siguen como siempre.
+ * que se mueva en el montaje: sus valores se recalculan en el marco nuevo, y los que fijan las poses también (con el
+ * mismo cambio de marco del montaje). Sus hijos lo siguen como siempre.
+ *
+ * En una pose que mueve al padre viejo (o a un ancestro que el padre nuevo no comparte), o al padre nuevo, el hueso
+ * sí cambia de lugar: ahora sigue a otro. `reparentarHueso` dice en qué poses pasa y puede compensarlas.
  */
 export function opsParaReparentar(doc, esquema, huesoId, padreId) {
   const hueso = buscar(doc, huesoId);
@@ -349,4 +363,45 @@ export function expandirDesdeHasta(doc, esquema, padreId, props, actual = {}) {
     salida.length = r1(Math.hypot(dx, dy) / (valores.scaleX ?? 1));
   }
   return salida;
+}
+
+const casiIgual = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-3);
+
+/**
+ * Cambia el padre de un hueso como opsParaReparentar y además revisa las poses. Devuelve { ops, movidas }:
+ * `movidas` son las poses en las que, después del lote, el hueso (y lo que lo sigue) queda en otro lugar que antes.
+ * Con `conservarEnPoses`, el lote también fija en esas poses los valores del hueso que lo dejan donde estaba (como
+ * en Moho, que conserva la animación al cambiar el padre); `movidas` queda con las que no se pudieron compensar (por
+ * minAngle/maxAngle o por un marco que deforma).
+ */
+export function reparentarHueso(doc, esquema, huesoId, padreId, { conservarEnPoses = false } = {}) {
+  const ops = opsParaReparentar(doc, esquema, huesoId, padreId);
+  if (!ops.length) return { ops, movidas: [] };
+  const despues = (lote) => aplicarOperaciones(doc, lote, esquema).doc;
+  const poses = doc.objects.filter((o) => o.type === 'pose');
+  const mundoEn = (d, pose) => evaluarEnPose(d, esquema, pose).posado.get(huesoId);
+  const antes = new Map(poses.map((p) => [p.id, mundoEn(doc, p)]));
+  const queSeMueven = (d) => poses.filter((p) => !casiIgual(antes.get(p.id), mundoEn(d, buscar(d, p.id)))).map((p) => p.id);
+
+  let final = despues(ops);
+  let movidas = queSeMueven(final);
+  if (!conservarEnPoses || !movidas.length) return { ops, movidas };
+
+  const independiente = leer(esquema, buscar(final, huesoId), 'independentAngle') && buscar(final, padreId).type === 'bone';
+  const compensar = [];
+  for (const poseId of movidas) {
+    const pose = buscar(final, poseId);
+    const posado = evaluarEnPose(final, esquema, pose).posado;
+    const hueso = buscar(final, huesoId);
+    // Marco del padre nuevo en la pose: el hueso padre o, para un hueso raíz, el del skeleton (mundo · local⁻¹).
+    const marco = buscar(final, padreId).type === 'bone' ? posado.get(padreId) : multiplicar(posado.get(huesoId), invertir(matriz(valoresDeHueso(esquema, hueso, pose))));
+    const valores = valoresDeMundo(antes.get(poseId), marco, independiente);
+    if (!valores) continue;
+    const campos = { ...pose.values?.[huesoId], x: valores.x, y: valores.y, rotation: valores.rotation };
+    for (const k of ['scaleX', 'scaleY']) if (campos[k] !== undefined || Math.abs(valores[k] - leer(esquema, hueso, k)) > 1e-4) campos[k] = valores[k];
+    compensar.push({ op: 'set', target: poseId, props: { values: { ...pose.values, [huesoId]: campos } } });
+  }
+  if (!compensar.length) return { ops, movidas };
+  final = despues([...ops, ...compensar]);
+  return { ops: [...ops, ...compensar], movidas: queSeMueven(final) };
 }

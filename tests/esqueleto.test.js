@@ -300,7 +300,7 @@ test('migración: dibujo enlazado suelto en la raíz va a un skeleton nuevo sin 
   assert.equal(svgDocumento(doc, esquema), svgDocumento(viejo, esquema).replace('<g data-id="a">', '<g data-id="skeleton"><g data-id="a">').replace('<g data-id="frente">', '</g><g data-id="frente">'));
 });
 
-test('reparentar un hueso no lo mueve, ni en el montaje ni en las poses, y respeta su skeleton', () => {
+test('reparentar un hueso no lo mueve en el montaje ni en las poses que lo fijan, y respeta su skeleton', () => {
   let doc = op(
     brazo(),
     { op: 'create', type: 'bone', id: 'finger', parent: 'lower', props: { from: [190, 100], to: [190, 130] } },
@@ -331,4 +331,16 @@ test('reparentar un hueso no lo mueve, ni en el montaje ni en las poses, y respe
   assert.throws(() => opsParaReparentar(otro, esquema, 'finger', 'x_bone'), /es de otro skeleton \(otro\)/);
   assert.throws(() => opsParaReparentar(doc, esquema, 'hand', 'upper'), /no es un hueso/);
   assert.deepEqual(opsParaReparentar(doc, esquema, 'finger', 'rig'), []);
+});
+
+test('los huesos dibujados encima siguen al skeleton cuando una pose lo mueve', () => {
+  const doc = op(
+    crearDocumento({}),
+    { op: 'create', type: 'skeleton', id: 'rig' },
+    { op: 'create', type: 'bone', id: 'b', parent: 'rig', props: { x: 10, y: 10, length: 50 } },
+    { op: 'create', type: 'pose', id: 'mv', props: { values: { rig: { x: 200 } } } },
+  );
+  const svg = svgDocumento(doc, esquema, { pose: 'mv', huesos: true });
+  assert.match(svg, /data-id="rig" transform="translate\(200 0\)"/);
+  assert.match(svg, /<circle cx="210" cy="10"/);
 });

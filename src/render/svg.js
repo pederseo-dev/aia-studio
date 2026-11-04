@@ -3,7 +3,7 @@
 import { buscar, hijos } from '../core/documento.js';
 import { leerMeta } from '../core/esquema.js';
 import { valorEfectivo } from '../core/estilos.js';
-import { evaluarEsqueleto } from '../core/esqueleto.js';
+import { evaluarEnPose, evaluarEsqueleto } from '../core/esqueleto.js';
 import { aplicarPose, mezclarPoses } from '../core/mezcla.js';
 import { IDENTIDAD, invertir, matrizLocal, matrizMundo, multiplicar } from '../core/geometria.js';
 import { transformarVertices, verticesAD } from '../core/trazado.js';
@@ -162,7 +162,8 @@ export function contenidoSvg(montaje, esquema, { pose, params, mostrar } = {}) {
 function svgHuesos(doc, esquema, pose, params) {
   const huesos = doc.objects.filter((o) => o.type === 'bone');
   if (!huesos.length) return '';
-  const { posado } = evaluarEsqueleto(doc, esquema, resolverPose(doc, esquema, pose, params));
+  // Sobre lo que se ve: si la pose mueve el skeleton (o un grupo de arriba), los huesos van con él.
+  const { posado } = evaluarEnPose(doc, esquema, resolverPose(doc, esquema, pose, params));
   const partes = huesos.map((h) => {
     const m = posado.get(h.id);
     const largo = valorEfectivo(esquema, doc, h, 'length');
