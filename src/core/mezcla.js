@@ -7,7 +7,8 @@
 
 import { buscar } from './documento.js';
 import { leer } from './esquema.js';
-import { conHueso, tangentes, verticeDesdeTangentes } from './trazado.js';
+import { valorEfectivo } from './estilos.js';
+import { tangentes, verticeDesdeTangentes } from './trazado.js';
 
 /** Valor de cada param: el pedido o, si no, su valor inicial. Los enum valen un texto; los demás, un número. */
 export function valoresDeParams(doc, esquema, pedidos = {}) {
@@ -45,6 +46,16 @@ export function pesoDeDriver(doc, esquema, driver, valor) {
 
 // ---------- Interpolación por tipo de propiedad ----------
 
+const sinHueso = (vertices) => vertices.map(({ bone, ...v }) => v);
+
+/**
+ * Vértices de una pose con el enlace por punto del montaje: el vértice i toma el `bone` del vértice i del montaje (y
+ * los que sobran, ninguno). Lo que una pose vieja haya guardado en `bone` se ignora.
+ */
+export function conEnlaceDelMontaje(vertices, montaje) {
+  return vertices.map(({ bone, ...v }, i) => (montaje?.[i]?.bone ? { ...v, bone: montaje[i].bone } : v));
+}
+
 function aRgba(color) {
   let h = color.slice(1);
   if (h.length === 3) h = [...h].map((d) => d + d).join('');
@@ -59,16 +70,19 @@ function mezclarColor(a, b, w) {
   return `#${hex.slice(0, 3).join('')}${c[3] === 255 ? '' : hex[3]}`;
 }
 
-/** Morph entre dos listas de vértices con la misma cantidad: anclas y tangentes se interpolan. */
+/**
+ * Morph entre dos listas de vértices con la misma cantidad: anclas y tangentes se interpolan. El resultado no trae
+ * `bone`: el enlace por punto es del montaje (lo pone `aplicarPose`), como en Moho.
+ */
 export function mezclarVertices(a, b, w) {
-  if (a.length !== b.length) return w >= 0.5 ? b : a;
+  if (a.length !== b.length) return sinHueso(w >= 0.5 ? b : a);
   const lerp = (p, q) => [p[0] + (q[0] - p[0]) * w, p[1] + (q[1] - p[1]) * w];
   return a.map((va, i) => {
     const vb = b[i];
     const [ta, tb] = [tangentes(va), tangentes(vb)];
     const [x, y] = lerp([va.x, va.y], [vb.x, vb.y]);
     const radio = (va.radius ?? 0) + ((vb.radius ?? 0) - (va.radius ?? 0)) * w;
-    return conHueso(w >= 0.5 ? vb : va, verticeDesdeTangentes(x, y, lerp(ta.entrada, tb.entrada), lerp(ta.salida, tb.salida), radio ? { radius: Math.round(radio * 100) / 100 } : {}));
+    return verticeDesdeTangentes(x, y, lerp(ta.entrada, tb.entrada), lerp(ta.salida, tb.salida), radio ? { radius: Math.round(radio * 100) / 100 } : {});
   });
 }
 
@@ -92,7 +106,9 @@ export function mezclarPoses(doc, esquema, pedidos = {}) {
         const p = definiciones[prop];
         if (!p) continue;
         const clave = `${id}\u0000${prop}`;
-        if (!acumulado.has(clave)) acumulado.set(clave, { id, prop, tipo: p.type, base: leer(esquema, obj, prop), suma: 0, valor: leer(esquema, obj, prop) });
+        // El valor del montaje es el que se ve: el propio, el del estilo o el por defecto.
+        const base = valorEfectivo(esquema, doc, obj, prop);
+        if (!acumulado.has(clave)) acumulado.set(clave, { id, prop, tipo: p.type, base, suma: 0, valor: base });
         const a = acumulado.get(clave);
         if (p.type === 'number') a.suma += w * (objetivo - a.base);
         else if (p.type === 'color') a.valor = mezclarColor(a.valor, objetivo, w);
@@ -110,7 +126,8 @@ export function mezclarPoses(doc, esquema, pedidos = {}) {
 
 /**
  * El documento con los valores de una pose aplicados a los objetos que no son huesos (los huesos se mueven por el
- * esqueleto, con su delta). Sirve para dibujar y para que el editor lea lo que se ve.
+ * esqueleto, con su delta). Sirve para dibujar y para que el editor lea lo que se ve. Los vértices de la pose
+ * conservan el enlace por punto del montaje.
  */
 export function aplicarPose(doc, esquema, pose) {
   if (!pose?.values || !Object.keys(pose.values).length) return doc;
@@ -118,7 +135,12 @@ export function aplicarPose(doc, esquema, pose) {
     ...doc,
     objects: doc.objects.map((o) => {
       const campos = pose.values[o.id];
-      return campos && o.type !== 'bone' ? { ...o, ...campos } : o;
+      if (!campos || o.type === 'bone') return o;
+      const posado = { ...o, ...campos };
+      for (const [prop, p] of Object.entries(esquema.tipos.get(o.type)?.properties ?? {})) {
+        if (p.type === 'vertices' && Array.isArray(campos[prop])) posado[prop] = conEnlaceDelMontaje(campos[prop], o[prop]);
+      }
+      return posado;
     }),
   };
 }

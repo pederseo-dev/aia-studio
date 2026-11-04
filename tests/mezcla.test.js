@@ -71,3 +71,50 @@ test('renombrar y borrar actualizan las poses, también los ids que son valores'
   doc = op(doc, { op: 'delete', target: 'happiness' });
   assert.equal(buscar(doc, 'd_happy').param, undefined);
 });
+
+// Una cola: un path de 3 puntos enlazados por punto a b1, b1 y b2, y una pose que dobla b2 y cambia la forma.
+function cola() {
+  let doc = op(
+    crearDocumento({}),
+    { op: 'create', type: 'skeleton', id: 'rig' },
+    { op: 'create', type: 'bone', id: 'b1', parent: 'rig', props: { x: 0, y: 100, length: 100 } },
+    { op: 'create', type: 'bone', id: 'b2', parent: 'b1', props: { x: 100, length: 100 } },
+    { op: 'create', type: 'path', id: 'tail', parent: 'rig', props: { d: 'M0 100 L100 100 L200 100', closed: false } },
+  );
+  const vertices = buscar(doc, 'tail').vertices.map((v, i) => ({ ...v, bone: i < 2 ? 'b1' : 'b2' }));
+  return op(doc, { op: 'set', target: 'tail', props: { vertices } }, { op: 'create', type: 'pose', id: 'bend', props: { values: { b2: { rotation: 90 }, tail: { d: 'M0 100 L100 110 L200 100' } } } });
+}
+
+test('una pose que cambia la forma conserva el enlace por punto del montaje', () => {
+  const doc = cola();
+  // La pose no guarda bone en sus vértices.
+  assert.ok(buscar(doc, 'bend').values.tail.vertices.every((v) => v.bone === undefined));
+  // El tercer punto sigue a b2, que gira 90° en (100, 100): (200, 100) → (100, 200).
+  assert.match(svgDocumento(doc, esquema, { pose: 'bend' }), /data-id="tail"><path d="M0 100L100 110L100 200"/);
+  // También en la mezcla, a mitad de camino.
+  const conParam = op(doc, { op: 'create', type: 'param', id: 'p' }, { op: 'create', type: 'driver', id: 'd', props: { param: 'p', pose: 'bend' } });
+  assert.match(svgDocumento(conParam, esquema, { params: { p: 1 } }), /data-id="tail"><path d="M0 100L100 110L100 200"/);
+});
+
+test('el bone que una pose vieja guardó en sus vértices se ignora', () => {
+  const doc = cola();
+  // Simula un documento de antes: la pose guarda un bone viejo (o que ya no existe) en cada vértice.
+  const viejo = structuredClone(doc);
+  buscar(viejo, 'bend').values.tail.vertices = buscar(viejo, 'bend').values.tail.vertices.map((v) => ({ ...v, bone: 'nope' }));
+  assert.match(svgDocumento(viejo, esquema, { pose: 'bend' }), /data-id="tail"><path d="M0 100L100 110L100 200"/);
+  // Al guardarla de nuevo, se limpia.
+  const limpio = op(viejo, { op: 'set', target: 'bend', props: { values: buscar(viejo, 'bend').values } });
+  assert.ok(buscar(limpio, 'bend').values.tail.vertices.every((v) => v.bone === undefined));
+});
+
+test('la mezcla parte del valor que se ve, con el estilo', () => {
+  const doc = op(
+    crearDocumento({}),
+    { op: 'create', type: 'style', id: 'skin', props: { fill: '#ff0000', strokeWidth: 10, stroke: '#000000' } },
+    { op: 'create', type: 'rect', id: 'face', props: { style: 'skin', width: 10, height: 10 } },
+    { op: 'create', type: 'pose', id: 'pale', props: { values: { face: { fill: '#ff0000', strokeWidth: 10 } } } },
+    { op: 'create', type: 'param', id: 'p' },
+    { op: 'create', type: 'driver', id: 'd', props: { param: 'p', pose: 'pale' } },
+  );
+  assert.deepEqual(mezclarPoses(doc, esquema, { p: 0.5 }).values, { face: { fill: '#ff0000', strokeWidth: 10 } });
+});

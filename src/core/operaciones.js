@@ -125,18 +125,28 @@ function mapearPose(doc, esquema, valores, cambiar) {
   return resultado;
 }
 
-/** Azúcar para la IA: dentro de una pose, un path también acepta `d` (se guarda como vértices, para el morph). */
+/**
+ * Azúcar para la IA: dentro de una pose, un path también acepta `d` (se guarda como vértices, para el morph). Los
+ * vértices de una pose no guardan `bone`: el enlace por punto es del montaje, como en Moho (ver aplicarPose).
+ */
 function expandirPose(doc, esquema, tipo, props) {
-  if (tipo !== 'pose' || !props?.values || typeof props.values !== 'object') return props;
+  if (tipo !== 'pose' || !props?.values || typeof props.values !== 'object' || Array.isArray(props.values)) return props;
   const values = {};
   for (const [id, campos] of Object.entries(props.values)) {
     const destino = buscar(doc, id);
-    if (campos?.d === undefined || !destino) {
+    const tipoDestino = destino && esquema.tipos.get(destino.type);
+    if (!tipoDestino || !campos || typeof campos !== 'object') {
       values[id] = campos;
       continue;
     }
-    const { d, ...resto } = expandirD(esquema.tipos.get(destino.type), campos);
-    delete resto.closed; // si es cerrado o abierto lo decide el montaje
+    let resto = campos;
+    if (campos.d !== undefined) {
+      const { d, closed, ...sinD } = expandirD(tipoDestino, campos);
+      resto = sinD; // si es cerrado o abierto lo decide el montaje
+    }
+    for (const [k, p] of Object.entries(tipoDestino.properties)) {
+      if (p.type === 'vertices' && Array.isArray(resto[k]) && resto[k].some((v) => v?.bone !== undefined)) resto = { ...resto, [k]: resto[k].map(({ bone, ...v }) => v) };
+    }
     values[id] = resto;
   }
   return { ...props, values };
