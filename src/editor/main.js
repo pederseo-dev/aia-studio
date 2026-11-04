@@ -39,7 +39,14 @@ function alternarMenu(menu, boton) {
   if (!abrirlo) return;
   menu.hidden = false;
   boton?.setAttribute('aria-expanded', 'true');
+  // Posición fija junto al desplegable: así un panel con overflow (la jerarquía) no recorta el menú.
+  const caja = (menu.closest('.desplegable') ?? boton).getBoundingClientRect();
+  const ancho = menu.offsetWidth;
+  const izquierda = menu.classList.contains('derecha') ? caja.right - ancho : caja.left;
+  menu.style.left = `${Math.max(4, Math.min(izquierda, innerWidth - ancho - 4))}px`;
+  menu.style.top = `${caja.bottom + 4}px`;
 }
+addEventListener('resize', cerrarMenus);
 
 function cerrarMenus() {
   document.querySelectorAll('.menu').forEach((m) => (m.hidden = true));

@@ -116,12 +116,11 @@ kbd { font: 11px ui-monospace, monospace; color: var(--suave); border: 1px solid
 /* Menús desplegables */
 .desplegable { position: relative; }
 .menu {
-  position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; min-width: 220px;
+  position: fixed; z-index: 20; min-width: 220px; /* main.js la ubica junto a su botón */
   display: flex; flex-direction: column; padding: 4px; gap: 1px;
   background: var(--panel-2); border: 1px solid var(--borde); border-radius: 6px; box-shadow: 0 8px 24px #0008;
 }
 .menu[hidden] { display: none; }
-.menu.derecha { left: auto; right: 0; }
 .menu button { display: flex; justify-content: space-between; gap: 16px; align-items: center; border: none; background: none; text-align: left; padding: 5px 8px; border-radius: 4px; }
 .menu button:hover:not(:disabled) { background: var(--acento); color: #111; }
 .menu button:hover kbd { color: #111; border-color: #1114; }
