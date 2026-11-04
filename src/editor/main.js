@@ -22,7 +22,7 @@ montarArbol($('#arbol'), $('#recursos'));
 montarInspector($('#inspector'));
 montarHistorial($('#entradas'), $('#deshacer'), $('#rehacer'));
 const lienzo = montarLienzo($('#lienzo'));
-montarOpciones($('#opciones'), { agrupar: () => agruparSeleccion(), enlazar: () => enlazarSeleccion() });
+montarOpciones($('#opciones'), { agrupar: () => agruparSeleccion(), switch: () => nuevoSwitch(), enlazar: () => enlazarSeleccion() });
 montarParametros($('#parametros'), $('#nuevo-param'));
 
 // ---------- Menús desplegables (menú principal, zoom, grupos de herramientas) ----------
@@ -190,6 +190,7 @@ $('#deshacer').addEventListener('click', deshacer);
 $('#rehacer').addEventListener('click', rehacer);
 $('#borrar').addEventListener('click', borrarSeleccion);
 $('#nuevo-grupo').addEventListener('click', () => (estado.seleccionados.length > 1 ? agruparSeleccion() : nuevoGrupo()));
+$('#nuevo-switch').addEventListener('click', nuevoSwitch);
 $('#duplicar').addEventListener('click', duplicarSeleccion);
 $('#nuevo-estilo').addEventListener('click', () => nuevoRecurso('style', 'style', { fill: '#c8c2d4', stroke: '#2b2135' }));
 $('#nuevo-degradado').addEventListener('click', () => nuevoRecurso('linear_gradient', 'gradient'));
@@ -238,33 +239,42 @@ function borrarSeleccion() {
   ejecutar(raices.map((id) => ({ op: 'delete', target: id })), `borrar ${nombreDe(raices)}`);
 }
 
-function nuevoGrupo() {
+function nuevoGrupo(tipo = 'group') {
   if (!estado.doc) return;
-  const id = idLibre('group');
-  ejecutar([{ op: 'create', type: 'group', id, parent: padreParaNuevo() }], `crear ${id}`);
+  const id = idLibre(tipo);
+  ejecutar([{ op: 'create', type: tipo, id, parent: padreParaNuevo() }], `crear ${id}`);
   seleccionar(id);
+}
+
+/**
+ * Switch (Shift+G): mete la selección en un switch nuevo (cada objeto es una variante; se ve el primero) o, sin
+ * selección, crea uno vacío. Después se le agregan variantes arrastrándolas adentro o dibujando con él seleccionado.
+ */
+function nuevoSwitch() {
+  const dibujo = seleccionRaices().filter((id) => !esquema.tipos.get(buscar(estado.doc, id).type).resource);
+  return dibujo.length ? agruparSeleccion('switch') : nuevoGrupo('switch');
 }
 
 /**
  * Mete la selección en un grupo nuevo (Ctrl+G). Si todos tienen el mismo padre, el grupo queda ahí, en el lugar del
  * que estaba más al frente; si no, va a la raíz. Los objetos no se mueven de lugar en pantalla.
  */
-function agruparSeleccion() {
+function agruparSeleccion(tipo = 'group') {
   const raices = seleccionRaices().filter((id) => !esquema.tipos.get(buscar(estado.doc, id).type).resource);
   if (!raices.length) return;
   const padres = new Set(raices.map((id) => buscar(estado.doc, id).parent ?? null));
   const padre = padres.size === 1 ? [...padres][0] : null;
   const hermanos = hijos(estado.doc, padre);
   const frente = Math.max(...raices.map((id) => hermanos.findIndex((o) => o.id === id)));
-  const grupo = idLibre('group');
-  const ops = [{ op: 'create', type: 'group', id: grupo, parent: padre, ...(frente >= 0 ? { index: frente + 1 } : {}) }];
+  const grupo = idLibre(tipo);
+  const ops = [{ op: 'create', type: tipo, id: grupo, parent: padre, ...(frente >= 0 ? { index: frente + 1 } : {}) }];
   let doc = aplicarOperaciones(estado.doc, ops, esquema).doc;
   for (const id of raices) {
     const lote = [{ op: 'move', target: id, parent: grupo }, ...mantenerPosicion(doc, id, grupo)];
     doc = aplicarOperaciones(doc, lote, esquema).doc;
     ops.push(...lote);
   }
-  ejecutar(ops, `agrupar ${nombreDe(raices)} en ${grupo}`);
+  ejecutar(ops, `${tipo === 'switch' ? 'switch con' : 'agrupar'} ${nombreDe(raices)} en ${grupo}`);
   seleccionar(grupo);
 }
 
@@ -389,7 +399,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (mod) return;
   if (ATAJOS[tecla]) return fijar({ herramienta: ATAJOS[tecla] });
-  if (tecla === 'g') return nuevoGrupo();
+  if (tecla === 'g') return e.shiftKey ? nuevoSwitch() : nuevoGrupo();
   if (tecla === 'f') return lienzo.ajustar();
   if (tecla === '1') return lienzo.fijarZoom(1);
 

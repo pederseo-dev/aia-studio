@@ -94,11 +94,17 @@ export function montarOpciones(raiz, acciones) {
 
     if (varios) {
       const ids = estado.seleccionados;
-      const partes = [texto(`${ids.length} objetos: arrastra para moverlos; las manijas giran y escalan el conjunto.`), boton('Agrupar', 'Meterlos en un grupo nuevo (Ctrl+G)', acciones.agrupar)];
+      const partes = [
+        texto(`${ids.length} objetos: arrastra para moverlos; las manijas giran y escalan el conjunto.`),
+        boton('Agrupar', 'Meterlos en un grupo nuevo (Ctrl+G)', acciones.agrupar),
+        boton('Switch', 'Meterlos en un switch: cada uno es una variante y se ve una a la vez (Shift+G)', acciones.switch),
+      ];
       const hueso = ids.map((id) => buscar(doc, id)).filter((o) => o?.type === 'bone');
       if (hueso.length === 1) partes.push(boton(`Enlazar a ${hueso[0].id}`, 'Pegar el dibujo seleccionado a este hueso (Ctrl+B)', acciones.enlazar));
       return partes;
     }
+
+    if (sel?.type === 'switch') return opcionesDeSwitch(doc, sel);
 
     if (sel && !esquema.tipos.get(sel.type).resource) {
       const partes = [texto('Arrastra para mover. Manijas: círculo de arriba = rotar, esquinas = escalar, punto = pivote (moverlo no mueve el dibujo).')];
@@ -151,6 +157,25 @@ export function montarOpciones(raiz, acciones) {
     );
     if (vertices.some((v) => v.bone)) partes.push(boton('Quitar huesos', 'Los puntos vuelven a seguir al hueso de la forma', () => guardar(vertices.map(({ bone, ...v }) => v), 'puntos sin hueso')));
     return partes;
+  }
+
+  /** Switch: qué variante se ve (en el montaje) y cómo agregarle más. */
+  function opcionesDeSwitch(doc, sw) {
+    const variantes = doc.objects.filter((o) => o.parent === sw.id);
+    if (!variantes.length) {
+      return [texto(`Switch ${codigo(sw.id)} vacío: arrastra dibujos adentro en la jerarquía, o dibuja con él seleccionado. Cada hijo es una variante y se ve una a la vez.`)];
+    }
+    const visible = variantes.find((o) => o.id === sw.active) ?? variantes[0];
+    const etiqueta = Object.assign(document.createElement('label'), { className: 'texto', textContent: `Switch ${sw.id} muestra ` });
+    const select = document.createElement('select');
+    select.append(...variantes.map((o) => new Option(o.id, o.id, false, o.id === visible.id)));
+    select.title = 'La variante que se ve en el montaje. Para cambiarla según un control, crea una pose por variante (active) y conéctalas con drivers.';
+    select.addEventListener('change', () => ejecutar([{ op: 'set', target: sw.id, props: { active: select.value } }], `${sw.id} muestra ${select.value}`));
+    etiqueta.append(select);
+    return [
+      etiqueta,
+      texto(`${variantes.length} variante${variantes.length === 1 ? '' : 's'}. Para agregar: arrastra dibujos adentro o dibuja con el switch seleccionado. Para un control (visemas): una pose por variante que cambie <b>active</b>, y drivers con <b>equals</b>.`),
+    ];
   }
 
   function opcionesDeHueso(doc, hueso) {

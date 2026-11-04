@@ -188,6 +188,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 .fila .ojo { border: none; background: none; padding: 0 2px; color: var(--suave); opacity: 0; }
 .fila:hover .ojo, .fila .ojo.oculto { opacity: 1; }
 .fila.oculta .nombre { color: var(--tenue); }
+.fila.apagada .nombre { color: var(--tenue); font-style: italic; }
 .fila.soltar-antes { border-top-color: var(--acento); }
 .fila.soltar-despues { border-bottom-color: var(--acento); }
 .fila.soltar-dentro { background: #33395f; outline: 1px solid var(--acento); }

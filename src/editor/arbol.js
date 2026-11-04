@@ -52,7 +52,11 @@ export function montarArbol(raiz, raizRecursos) {
         const conOjo = 'visible' in esquema.tipos.get(o.type).properties;
         const visible = !conOjo || leer(esquema, o, 'visible');
         const fila = document.createElement('div');
-        fila.className = `fila${claseSeleccion(o.id)}${visible ? '' : ' oculta'}`;
+        // En un switch, las variantes que no se ven quedan atenuadas.
+        const padre = o.parent && buscar(doc, o.parent);
+        const apagada = padre?.type === 'switch' && o.id !== (padre.active ?? hijos(doc, padre.id)[0]?.id);
+        fila.className = `fila${claseSeleccion(o.id)}${visible ? '' : ' oculta'}${apagada ? ' apagada' : ''}`;
+        if (apagada) fila.title = `No se ve: el switch ${padre.id} muestra ${padre.active ?? hijos(doc, padre.id)[0]?.id}`;
         fila.dataset.id = o.id;
         fila.draggable = true;
         fila.style.paddingLeft = `${4 + nivel * 14}px`;
