@@ -77,8 +77,25 @@ kbd { font: 11px ui-monospace, monospace; color: var(--suave); border: 1px solid
 #aviso { flex: 1; align-self: center; margin-bottom: 6px; text-align: right; color: var(--ia); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #aviso.error { color: var(--error); }
 
-/* Fila de herramientas */
-#barra { display: flex; align-items: center; gap: 6px; padding: 5px 8px; }
+/* Fila de herramientas: íconos de línea sin borde, la flecha chica al lado elige otra del grupo;
+   la herramienta activa se marca con el color de acento, como en Rive. */
+#barra { display: flex; align-items: center; gap: 4px; padding: 4px 8px; }
+#barra button.icono, #barra .grupo-herramientas button {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: none; color: var(--suave); height: 30px; border-radius: 5px;
+}
+#barra button.icono { width: 30px; min-width: 0; padding: 0; }
+#barra button.icono:hover:not(:disabled), #barra .grupo-herramientas button:hover { background: var(--panel-2); color: var(--texto); }
+#barra .grupo-herramientas { margin-right: 6px; }
+#barra .grupo-herramientas .principal { width: 32px; min-width: 0; padding: 0; border-radius: 5px; }
+#barra .grupo-herramientas .elegir { width: 14px; padding: 0; margin-left: -1px; color: var(--tenue); }
+#barra .grupo-herramientas.activo .principal, #barra .grupo-herramientas.activo .elegir { background: none; color: var(--acento); }
+#barra .grupo-herramientas.activo .principal:hover { background: var(--panel-2); }
+#barra .grupo-herramientas .elegir[aria-expanded="true"] { color: var(--texto); }
+#barra .separador { margin: 6px 4px; }
+.ico { display: block; flex: none; }
+.menu .con-icono { display: inline-flex; align-items: center; gap: 8px; }
+.menu .con-icono .ico { width: 16px; height: 16px; }
 .separador { width: 1px; align-self: stretch; background: var(--borde); }
 #modo { display: flex; align-items: center; gap: 6px; color: var(--suave); }
 #modo select { max-width: 180px; }

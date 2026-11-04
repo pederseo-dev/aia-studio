@@ -5,6 +5,7 @@ import { aplicarOperaciones } from '../core/operaciones.js';
 import { leer } from '../core/esquema.js';
 import { montarArbol } from './arbol.js';
 import { montarHistorial } from './historial.js';
+import { FLECHA, ICONOS } from './iconos.js';
 import { operacionesDeImportar } from './importar.js';
 import { montarInspector } from './inspector.js';
 import { montarLienzo } from './lienzo.js';
@@ -17,6 +18,8 @@ import {
 } from './estado.js';
 
 const $ = (s) => document.querySelector(s);
+$('#deshacer').innerHTML = ICONOS.deshacer;
+$('#rehacer').innerHTML = ICONOS.rehacer;
 
 montarArbol($('#arbol'), $('#recursos'));
 montarInspector($('#inspector'));
@@ -118,16 +121,16 @@ function dibujarPestanas() {
 
 const GRUPOS = {
   transformar: [
-    { id: 'seleccionar', icono: '↖', nombre: 'Mover', atajo: 'V' },
-    { id: 'rotar', icono: '⟳', nombre: 'Rotar', atajo: 'T' },
-    { id: 'escalar', icono: '⤡', nombre: 'Escalar', atajo: 'S' },
+    { id: 'seleccionar', nombre: 'Mover', atajo: 'V' },
+    { id: 'rotar', nombre: 'Rotar', atajo: 'T' },
+    { id: 'escalar', nombre: 'Escalar', atajo: 'S' },
   ],
   crear: [
-    { id: 'path', icono: '✒', nombre: 'Pluma', atajo: 'P' },
-    { id: 'rect', icono: '▭', nombre: 'Rectángulo', atajo: 'R' },
-    { id: 'ellipse', icono: '◯', nombre: 'Elipse', atajo: 'E' },
+    { id: 'path', nombre: 'Pluma', atajo: 'P' },
+    { id: 'rect', nombre: 'Rectángulo', atajo: 'R' },
+    { id: 'ellipse', nombre: 'Elipse', atajo: 'E' },
   ],
-  esqueleto: [{ id: 'hueso', icono: '⟋', nombre: 'Hueso', atajo: 'B' }],
+  esqueleto: [{ id: 'hueso', nombre: 'Hueso', atajo: 'B' }],
 };
 const ultimaDelGrupo = { transformar: 'seleccionar', crear: 'path', esqueleto: 'hueso' };
 const ATAJOS = Object.fromEntries(Object.values(GRUPOS).flat().map((h) => [h.atajo.toLowerCase(), h.id]));
@@ -139,14 +142,14 @@ function dibujarGrupos() {
     if (activa) ultimaDelGrupo[grupo] = activa.id;
     const visible = herramientas.find((h) => h.id === ultimaDelGrupo[grupo]);
     caja.classList.toggle('activo', !!activa);
-    caja.innerHTML = `<button type="button" class="principal" title="${visible.nombre} (${visible.atajo})">${visible.icono} ${visible.nombre}</button><button type="button" class="elegir" aria-haspopup="menu" title="Más herramientas">▾</button><div class="menu" role="menu" hidden></div>`;
+    caja.innerHTML = `<button type="button" class="principal" title="${visible.nombre} (${visible.atajo})" aria-label="${visible.nombre}">${ICONOS[visible.id]}</button><button type="button" class="elegir" aria-haspopup="menu" title="Más herramientas">${FLECHA}</button><div class="menu" role="menu" hidden></div>`;
     const menu = caja.querySelector('.menu');
     for (const h of herramientas) {
       const b = document.createElement('button');
       b.type = 'button';
       b.setAttribute('role', 'menuitem');
       b.className = h.id === estado.herramienta ? 'marcado' : '';
-      b.innerHTML = `<span>${h.icono} ${h.nombre}</span><kbd>${h.atajo}</kbd>`;
+      b.innerHTML = `<span class="con-icono">${ICONOS[h.id]}${h.nombre}</span><kbd>${h.atajo}</kbd>`;
       b.addEventListener('click', () => {
         cerrarMenus();
         fijar({ herramienta: h.id });
