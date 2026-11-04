@@ -3,8 +3,7 @@
 
 import { erroresDeVertice } from './trazado.js';
 
-const TIPOS_DE_PROPIEDAD = new Set(['number', 'string', 'boolean', 'color', 'enum', 'ref', 'vertices', 'stops', 'pose']);
-const CAMPOS_DE_POSE = ['x', 'y', 'rotation', 'scaleX', 'scaleY'];
+const TIPOS_DE_PROPIEDAD = new Set(['number', 'string', 'strings', 'boolean', 'color', 'enum', 'ref', 'vertices', 'stops', 'pose']);
 const ID_DE_POSE = /^[a-z][a-z0-9_]*$/;
 const COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
@@ -82,15 +81,14 @@ export function validarValor(p, valor) {
       }
       return null;
     }
+    case 'strings':
+      return Array.isArray(valor) && valor.every((v) => typeof v === 'string' && v) ? null : 'debe ser una lista de textos ["a", "b"]';
     case 'pose': {
-      if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return 'debe ser un objeto { id_de_hueso: { rotation, x, y, scaleX, scaleY } }';
+      // Solo la forma: qué objetos y propiedades valen lo revisa el documento, que conoce los tipos.
+      if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return 'debe ser un objeto { id_de_objeto: { propiedad: valor } }';
       for (const [id, campos] of Object.entries(valor)) {
-        if (!ID_DE_POSE.test(id)) return `"${id}" no es un id de hueso válido`;
-        if (!campos || typeof campos !== 'object' || Array.isArray(campos)) return `${id} debe ser un objeto { rotation?, x?, y?, scaleX?, scaleY? }`;
-        for (const [k, v] of Object.entries(campos)) {
-          if (!CAMPOS_DE_POSE.includes(k)) return `${id}.${k}: en una pose solo van ${CAMPOS_DE_POSE.join(', ')}.${sugerir(k, CAMPOS_DE_POSE)}`;
-          if (typeof v !== 'number' || !Number.isFinite(v)) return `${id}.${k} debe ser un número`;
-        }
+        if (!ID_DE_POSE.test(id)) return `"${id}" no es un id válido`;
+        if (!campos || typeof campos !== 'object' || Array.isArray(campos)) return `${id} debe ser un objeto { propiedad: valor }`;
       }
       return null;
     }

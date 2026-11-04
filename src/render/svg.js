@@ -4,6 +4,7 @@ import { buscar, hijos } from '../core/documento.js';
 import { leerMeta } from '../core/esquema.js';
 import { valorEfectivo } from '../core/estilos.js';
 import { evaluarEsqueleto } from '../core/esqueleto.js';
+import { aplicarPose, mezclarPoses } from '../core/mezcla.js';
 import { IDENTIDAD, invertir, matrizLocal, matrizMundo, multiplicar } from '../core/geometria.js';
 import { transformarVertices, verticesAD } from '../core/trazado.js';
 
@@ -16,6 +17,7 @@ const idDeRecurso = (id) => `aia-${id}`;
 export const DIBUJAR = {
   bone: null,
   group: () => '',
+  switch: () => '',
   rect: (v) => {
     const w = v('width');
     const h = v('height');
@@ -107,22 +109,34 @@ function nodo(doc, esquema, obj, ctx) {
     v('visible') ? '' : ' display="none"',
   ].join('');
   const sub = { ...ctx, deltaPadre: delta };
-  const contenido = DIBUJAR[obj.type](v) + hijos(doc, obj.id).map((h) => nodo(doc, esquema, h, sub)).join('');
+  let visibles = hijos(doc, obj.id);
+  // Un switch dibuja un solo hijo: el activo, o el primero.
+  if (obj.type === 'switch') visibles = [visibles.find((h) => h.id === v('active')) ?? visibles[0]].filter(Boolean);
+  const contenido = DIBUJAR[obj.type](v) + visibles.map((h) => nodo(doc, esquema, h, sub)).join('');
   return `<g${atributos}>${contenido}</g>`;
 }
 
-/** La pose pedida (por id o como objeto), o null para el montaje. */
-function resolverPose(doc, pose) {
-  if (!pose) return null;
-  const p = typeof pose === 'string' ? buscar(doc, pose) : pose;
-  return p?.type === 'pose' ? p : null;
+/**
+ * Qué se dibuja: una pose sola (por id o como objeto), la mezcla de poses que dan los params (un objeto
+ * { id_de_param: valor }, vacío = sus valores iniciales) o, sin nada, el montaje.
+ */
+export function resolverPose(doc, esquema, pose, params) {
+  if (pose) {
+    const p = typeof pose === 'string' ? buscar(doc, pose) : pose;
+    return p?.type === 'pose' ? p : null;
+  }
+  return params ? mezclarPoses(doc, esquema, params) : null;
 }
 
 /**
  * Contenido del SVG (definiciones + fondo + objetos), para insertar dentro de otro <svg> o <g>.
- * `pose`: id de una pose del documento (o el objeto) para dibujar al personaje posado; sin ella, el montaje.
+ * `pose`: id de una pose (o el objeto) para dibujarla sola; `params`: valores de params para dibujar la mezcla de
+ * poses que dan los drivers; sin ninguno de los dos, el montaje.
  */
-export function contenidoSvg(doc, esquema, { pose } = {}) {
+export function contenidoSvg(montaje, esquema, { pose, params } = {}) {
+  const poseActiva = resolverPose(montaje, esquema, pose, params);
+  // Lo que no es hueso toma los valores de la pose; los huesos se mueven por el esqueleto (con su delta).
+  const doc = aplicarPose(montaje, esquema, poseActiva);
   const fondo = leerMeta(esquema, doc, 'background');
   const w = leerMeta(esquema, doc, 'width');
   const h = leerMeta(esquema, doc, 'height');
@@ -130,7 +144,6 @@ export function contenidoSvg(doc, esquema, { pose } = {}) {
   const definiciones = raiz.filter((o) => DEFINIR[o.type]).map((o) => DEFINIR[o.type](o, lector(doc, esquema, o)));
   const defs = definiciones.length ? `<defs>${definiciones.join('')}</defs>` : '';
   const rect = fondo == null ? '' : `<rect data-fondo="" width="${w}" height="${h}" fill="${atributo(fondo)}"/>`;
-  const poseActiva = resolverPose(doc, pose);
   const ctx = { esqueleto: poseActiva ? evaluarEsqueleto(doc, esquema, poseActiva) : null, deltaPadre: IDENTIDAD };
   const objetos = raiz.filter((o) => DIBUJAR[o.type]).map((o) => nodo(doc, esquema, o, ctx));
   return defs + rect + objetos.join('');
@@ -140,10 +153,10 @@ export function contenidoSvg(doc, esquema, { pose } = {}) {
  * El esqueleto dibujado encima, con el id de cada hueso: para revisar dónde quedaron (en el editor se ven en su
  * superposición; esto es para las vistas previas de la IA).
  */
-function svgHuesos(doc, esquema, pose) {
+function svgHuesos(doc, esquema, pose, params) {
   const huesos = doc.objects.filter((o) => o.type === 'bone');
   if (!huesos.length) return '';
-  const { posado } = evaluarEsqueleto(doc, esquema, resolverPose(doc, pose));
+  const { posado } = evaluarEsqueleto(doc, esquema, resolverPose(doc, esquema, pose, params));
   const partes = huesos.map((h) => {
     const m = posado.get(h.id);
     const largo = valorEfectivo(esquema, doc, h, 'length');
@@ -163,6 +176,6 @@ function svgHuesos(doc, esquema, pose) {
  */
 export function svgDocumento(doc, esquema, { region, huesos, ...opciones } = {}) {
   const r = region ?? { x: 0, y: 0, width: leerMeta(esquema, doc, 'width'), height: leerMeta(esquema, doc, 'height') };
-  const encima = huesos ? svgHuesos(doc, esquema, opciones.pose) : '';
+  const encima = huesos ? svgHuesos(doc, esquema, opciones.pose, opciones.params) : '';
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${n(r.x)} ${n(r.y)} ${n(r.width)} ${n(r.height)}" width="${n(r.width)}" height="${n(r.height)}">${contenidoSvg(doc, esquema, opciones)}${encima}</svg>`;
 }

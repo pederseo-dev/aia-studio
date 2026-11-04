@@ -7,9 +7,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { buscar, hijos } from '../src/core/documento.js';
-import { CAMPOS_DE_POSE, evaluarEsqueleto, limitarAngulo, puntaDe, repartirEntreHuesos } from '../src/core/esqueleto.js';
+import { evaluarEsqueleto, limitarAngulo, puntaDe, repartirEntreHuesos } from '../src/core/esqueleto.js';
 import { aplicar } from '../src/core/geometria.js';
-import { leerMeta } from '../src/core/esquema.js';
+import { leer, leerMeta, sugerir } from '../src/core/esquema.js';
+import { pesoDeDriver, valoresDeParams } from '../src/core/mezcla.js';
 import { guiaParaIA } from '../src/core/guia.js';
 import { resumirOperaciones } from '../src/core/operaciones.js';
 import { svgDocumento } from '../src/render/svg.js';
@@ -51,7 +52,13 @@ function esquemaDelArbol(doc) {
     for (const o of hijos(doc, padre)) {
       let detalle = '';
       if (o.bone) detalle = ` → hueso ${o.bone}`;
-      if (o.type === 'pose') detalle = ` [${Object.keys(o.bones ?? {}).join(', ') || 'vacía'}]`;
+      if (o.type === 'pose') detalle = ` [${Object.keys(o.values ?? {}).join(', ') || 'vacía'}]`;
+      if (o.type === 'switch') detalle = ` (muestra ${o.active ?? 'el primero'})`;
+      if (o.type === 'param') {
+        const tipo = leer(esquema, o, 'kind');
+        detalle = tipo === 'enum' ? ` enum [${leer(esquema, o, 'options').join(', ')}]` : tipo === 'boolean' ? ' boolean' : ` ${leer(esquema, o, 'min')}…${leer(esquema, o, 'max')}`;
+      }
+      if (o.type === 'driver') detalle = ` ${o.param ?? '?'} → ${o.pose ?? '?'}${o.equals != null ? ` cuando = "${o.equals}"` : ` (${leer(esquema, o, 'inMin')}…${leer(esquema, o, 'inMax')})`}`;
       if (o.type === 'bone') {
         // Dónde queda en el documento: con ángulos relativos encadenados, esto ahorra cuentas.
         const m = reposo.get(o.id);
@@ -223,14 +230,31 @@ const region = z
   .describe('recorte del documento, en sus coordenadas (para ver un detalle de cerca)');
 
 /** PNG del documento (opcionalmente posado y recortado) como resultado de herramienta. */
-function vistaPrevia(doc, { width, pose, region, bones }, encabezado) {
+function vistaPrevia(doc, { width, pose, region, bones, params }, encabezado) {
   if (pose && buscar(doc, pose)?.type !== 'pose') {
     const poses = doc.objects.filter((o) => o.type === 'pose').map((o) => o.id);
     throw new Error(`no existe la pose "${pose}". Poses: ${poses.join(', ') || 'ninguna'}`);
   }
-  const png = svgAPng(svgDocumento(doc, esquema, { pose, region, huesos: bones }), width ?? 600);
+  if (params) {
+    const ids = doc.objects.filter((o) => o.type === 'param').map((o) => o.id);
+    const raros = Object.keys(params).filter((k) => !ids.includes(k));
+    if (raros.length) throw new Error(`no existe el param "${raros[0]}".${sugerir(raros[0], ids)} Params: ${ids.join(', ') || 'ninguno'}`);
+  }
+  const png = svgAPng(svgDocumento(doc, esquema, { pose, params, region, huesos: bones }), width ?? 600);
   const tamaño = region ? `recorte de ${region.width}×${region.height} en (${region.x}, ${region.y})` : `${leerMeta(esquema, doc, 'width')}×${leerMeta(esquema, doc, 'height')} px`;
-  const resumen = `${tamaño}, ${doc.objects.length} objetos, ${pose ? `en la pose "${pose}"` : 'en el montaje'}.`;
+  let vista = 'en el montaje';
+  if (pose) vista = `en la pose "${pose}"`;
+  else if (params) {
+    // Qué quedó activo: ayuda a ver si los drivers hacen lo que se esperaba.
+    const valores = valoresDeParams(doc, esquema, params);
+    const pesos = doc.objects
+      .filter((o) => o.type === 'driver' && o.pose && o.param in valores)
+      .map((o) => [o.pose, pesoDeDriver(doc, esquema, o, valores[o.param])])
+      .filter(([, w]) => w > 0)
+      .map(([p, w]) => `${p} ${Math.round(w * 100)}%`);
+    vista = `con params ${JSON.stringify(valores)} (poses: ${pesos.join(', ') || 'ninguna'})`;
+  }
+  const resumen = `${tamaño}, ${doc.objects.length} objetos, ${vista}.`;
   return {
     content: [
       { type: 'image', data: Buffer.from(png).toString('base64'), mimeType: 'image/png' },
@@ -244,22 +268,22 @@ servidor.registerTool(
   {
     description:
       'Devuelve una imagen PNG del documento tal como lo ve el usuario. Úsala para revisar tus cambios. Con pose, ' +
-      'muestra al personaje en esa pose; con region, un recorte para ver un detalle; con bones, el esqueleto encima.',
+      'muestra esa pose sola; con params, la mezcla de poses que dan los drivers con esos valores; con region, un ' +
+      'recorte para ver un detalle; con bones, el esqueleto encima.',
     inputSchema: {
       id,
       width: z.number().int().min(64).max(2048).optional().describe('ancho de la imagen en px (por defecto 600)'),
       pose: z.string().optional().describe('id de una pose del documento; omitida = el montaje'),
+      params: z
+        .record(z.string(), z.union([z.number(), z.boolean(), z.string()]))
+        .optional()
+        .describe('{ id_de_param: valor } para ver la mezcla (los que falten van con su valor inicial; {} = todos iniciales)'),
       region: region.optional(),
       bones: z.boolean().optional().describe('true = dibujar los huesos encima, con su id (en el editor siempre se ven)'),
     },
   },
   seguro(async ({ id, ...opciones }) => vistaPrevia(await almacen.leer(id), opciones)),
 );
-
-const camposDeHueso = z
-  .object(Object.fromEntries(CAMPOS_DE_POSE.map((k) => [k, z.number().optional()])))
-  .strict()
-  .describe('valores absolutos del hueso en la pose, relativos a su hueso padre como en el montaje');
 
 servidor.registerTool(
   'bind_points',
@@ -291,33 +315,39 @@ servidor.registerTool(
   'set_pose',
   {
     description:
-      'Crea o actualiza una pose con nombre (recurso pose) sin tocar el montaje, y devuelve cómo se ve. Por defecto ' +
-      'se suma a lo que la pose ya tenía; un hueso con {} vuelve al montaje dentro de la pose.',
+      'Crea o actualiza una pose con nombre (recurso pose) sin tocar el montaje, y devuelve cómo se ve. Una pose fija ' +
+      'propiedades animables de cualquier objeto: huesos, vértices de una boca (también con "d"), colores, opacidad, ' +
+      'el hijo activo de un switch... Por defecto se suma a lo que la pose ya tenía; un objeto con {} sale de la pose.',
     inputSchema: {
       id,
-      pose: z.string().describe('id de la pose, por ejemplo "wave" o "look_up"'),
-      bones: z.record(z.string(), camposDeHueso).describe('{ id_de_hueso: { rotation?, x?, y?, scaleX?, scaleY? } }'),
-      replace: z.boolean().optional().describe('true = la pose queda solo con estos huesos'),
+      pose: z.string().describe('id de la pose, por ejemplo "happy", "look_up" o "viseme_o"'),
+      values: z
+        .record(z.string(), z.record(z.string(), z.any()))
+        .describe('{ id_de_objeto: { propiedad: valor } }, por ejemplo { "head_bone": { "rotation": -10 }, "mouth": { "active": "mouth_o" } }'),
+      replace: z.boolean().optional().describe('true = la pose queda solo con estos valores'),
       note: z.string().optional().describe('qué hace, para el historial'),
       width: z.number().int().min(64).max(2048).optional().describe('ancho de la vista previa'),
       show_bones: z.boolean().optional().describe('true = la vista previa muestra el esqueleto'),
     },
   },
-  seguro(async ({ id, pose, bones, replace, note, width, show_bones }) => {
+  seguro(async ({ id, pose, values, replace, note, width, show_bones }) => {
     const existente = buscar(await almacen.leer(id), pose);
     if (existente && existente.type !== 'pose') throw new Error(`"${pose}" ya existe y es un ${existente.type}; elige otro id para la pose`);
-    const valores = replace ? {} : structuredClone(existente?.bones ?? {});
-    for (const [hueso, campos] of Object.entries(bones)) {
-      if (Object.keys(campos).length) valores[hueso] = { ...valores[hueso], ...campos };
-      else delete valores[hueso];
+    const valores = replace ? {} : structuredClone(existente?.values ?? {});
+    for (const [objeto, campos] of Object.entries(values)) {
+      // Un "d" nuevo reemplaza a los vértices que la pose ya tenía para ese path.
+      const previos = campos.d !== undefined ? (({ vertices, ...resto }) => resto)(valores[objeto] ?? {}) : valores[objeto];
+      if (Object.keys(campos).length) valores[objeto] = { ...previos, ...campos };
+      else delete valores[objeto];
     }
-    const ops = existente ? [{ op: 'set', target: pose, props: { bones: valores } }] : [{ op: 'create', type: 'pose', id: pose, props: { bones: valores } }];
+    const ops = existente ? [{ op: 'set', target: pose, props: { values: valores } }] : [{ op: 'create', type: 'pose', id: pose, props: { values: valores } }];
     const { doc, avisos } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `pose ${pose}` });
-    const lista = Object.entries(valores).map(([h, c]) => `${h} ${JSON.stringify(c)}`).join(', ') || 'vacía';
+    const guardada = buscar(doc, pose).values;
+    const lista = Object.entries(guardada).map(([h, c]) => `${h} ${JSON.stringify(c, (k, v) => (k === 'vertices' ? `(${v.length} vértices)` : v))}`).join(', ') || 'vacía';
     // Lo que recortan los límites del hueso se avisa: la pose guarda el valor pedido, pero se ve el recortado.
-    const recortes = Object.entries(valores).flatMap(([h, c]) => {
+    const recortes = Object.entries(guardada).flatMap(([h, c]) => {
       const hueso = buscar(doc, h);
-      const visto = hueso && c.rotation !== undefined ? limitarAngulo(esquema, hueso, c.rotation) : c.rotation;
+      const visto = hueso?.type === 'bone' && c.rotation !== undefined ? limitarAngulo(esquema, hueso, c.rotation) : c.rotation;
       return visto !== c.rotation ? [`${h}.rotation ${c.rotation} queda en ${visto} por minAngle/maxAngle`] : [];
     });
     const notas = [...avisos, ...recortes];

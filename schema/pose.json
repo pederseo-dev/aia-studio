@@ -1,8 +1,8 @@
 {
   "name": "pose",
   "resource": true,
-  "description": "Pose con nombre: valores de huesos que reemplazan a los del montaje mientras la pose está activa (\"saludando\", \"mirando arriba\"). No cambia el montaje. Cada hueso puede fijar rotation, x, y, scaleX y scaleY; lo que no se indica queda como en el montaje.",
+  "description": "Pose o acción con nombre (\"feliz\", \"mirando_arriba\", \"visema_o\"): valores que reemplazan a los del montaje mientras la pose está activa o la mezcla un driver. No cambia el montaje. Puede fijar cualquier propiedad animable de cualquier objeto: rotación de huesos, vértices de una boca (con la misma cantidad de puntos se interpolan), colores, opacidad, el hijo activo de un switch...",
   "properties": {
-    "bones": { "type": "pose", "default": {}, "group": "Pose", "description": "{ id_de_hueso: { rotation?, x?, y?, scaleX?, scaleY? } }. Valores absolutos (como en el montaje), no sumas." }
+    "values": { "type": "pose", "default": {}, "group": "Pose", "description": "{ id_de_objeto: { propiedad: valor } }. Valores absolutos, como en el montaje. Solo propiedades animables (en los huesos: x, y, rotation, scaleX, scaleY)." }
   }
 }

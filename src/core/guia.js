@@ -149,9 +149,10 @@ dibujo queda libre (un brazo puede ir detrás del torso aunque su hueso sea hijo
   con sus tangentes según ese hueso. \`bind_points\` reparte los vértices entre los huesos más cercanos de una lista.
   Los vértices sin \`bone\` siguen al hueso de la forma (o de su grupo). Pon vértices cerca de cada articulación para
   que la curva se doble bien.
-- **Poses:** una \`pose\` es un recurso con nombre que fija valores de algunos huesos (absolutos, como en el
-  montaje) sin cambiar el montaje. Se crea con \`set_pose\` (o con \`apply_ops\`) y se mira con
-  \`render_preview\` pasando \`pose\`. \`minAngle\`/\`maxAngle\` de un hueso limitan la rotación en las poses.
+- **Poses:** una \`pose\` es un recurso con nombre que fija valores (absolutos, como en el montaje) sin cambiar el
+  montaje: en \`values\`, \`{ id_de_objeto: { propiedad: valor } }\`. Se crea con \`set_pose\` (o con \`apply_ops\`) y
+  se mira con \`render_preview\` pasando \`pose\`. \`minAngle\`/\`maxAngle\` de un hueso limitan la rotación en las
+  poses. Una pose no se limita a huesos: ver la sección siguiente.
 - Los huesos no salen en la imagen del personaje: para revisar dónde quedaron, usa \`render_preview\` con
   \`bones: true\` (y \`pose\`, para verlos posados).
 
@@ -170,6 +171,44 @@ Con \`from\`/\`to\`, \`spine_bone\` queda en \`x: 300, y: 420, rotation: -90, le
 \`upper_arm_l_bone\` en \`x: 100, y: 50, rotation: 180\`: relativo a \`spine_bone\`, que ya está girado -90°, así que
 en pantalla cuelga hacia abajo (-90 + 180 = 90°). En la pose \`wave\` queda en -90 + 45 = -45°: levantado hacia
 arriba y afuera.
+
+## Expresiones: poses, params, drivers y switch
+
+Así se controla al personaje desde afuera (la app, otra IA): con **params** de alto nivel (\`happiness\`,
+\`head_turn\`, \`viseme\`) en vez de mover piezas sueltas. Como los smart bones de Moho, pero explícito:
+
+1. **Pose**: lo que cambia en una expresión. Puede fijar **cualquier propiedad animable** de cualquier objeto:
+   rotación de huesos, \`vertices\` de una boca o una ceja (también acepta \`d\`), \`fill\`, \`opacity\`, \`visible\`, el
+   \`active\` de un switch... Para que una forma se **interpole** (morph) entre el montaje y la pose, la pose tiene
+   que tener **la misma cantidad de vértices** que el montaje: redibuja la misma línea moviendo los puntos.
+2. **Param**: el control. \`kind\` \`number\` (entre \`min\` y \`max\`), \`boolean\` o \`enum\` (\`options\`). Su valor no
+   se guarda: lo pone quien usa el personaje.
+3. **Driver**: conecta un param con una pose. El tramo \`inMin\`…\`inMax\` del param se vuelve peso \`outMin\`…\`outMax\`
+   (0 = nada, 1 = la pose completa). Con un enum, \`equals\` dice con qué opción va la pose.
+4. Varias poses activas se **suman** sobre el montaje: los números suman sus diferencias (cabeza girada + feliz),
+   colores y vértices se interpolan, y lo que no se interpola (el \`active\` de un switch) lo toma la pose con peso
+   ≥ 0.5.
+
+**Switch**: un grupo que muestra un solo hijo, el de \`active\` (o el primero). Para bocas o visemas con dibujos
+distintos, mete cada variante en un switch y que cada pose elija una con \`active\`.
+
+\`\`\`json
+[
+  { "op": "create", "type": "param", "id": "happiness", "props": { "min": -1, "max": 1 } },
+  { "op": "create", "type": "pose", "id": "happy", "props": { "values": { "mouth_line": { "d": "M-20 0 Q0 14 20 0" }, "brow_l": { "rotation": -8 } } } },
+  { "op": "create", "type": "pose", "id": "sad", "props": { "values": { "mouth_line": { "d": "M-20 6 Q0 -8 20 6" }, "brow_l": { "rotation": 12 } } } },
+  { "op": "create", "type": "driver", "id": "happiness_happy", "props": { "param": "happiness", "pose": "happy", "inMin": 0, "inMax": 1 } },
+  { "op": "create", "type": "driver", "id": "happiness_sad", "props": { "param": "happiness", "pose": "sad", "inMin": 0, "inMax": -1 } },
+  { "op": "create", "type": "param", "id": "viseme", "props": { "kind": "enum", "options": ["rest", "a", "o", "m"] } },
+  { "op": "create", "type": "pose", "id": "viseme_o", "props": { "values": { "mouth": { "active": "mouth_o" } } } },
+  { "op": "create", "type": "driver", "id": "viseme_o_driver", "props": { "param": "viseme", "pose": "viseme_o", "equals": "o" } }
+]
+\`\`\`
+
+Aquí \`happiness\` va de -1 (triste) a 1 (feliz): de 0 a 1 entra \`happy\` y de 0 a -1 entra \`sad\`. \`mouth_line\`
+tiene en el montaje los mismos 2 vértices que en las poses, así que la boca se curva de a poco. Revisa la mezcla con
+\`render_preview\` y \`params\` (por ejemplo \`{ "happiness": 0.5, "viseme": "o" }\`); el texto dice qué poses quedaron
+activas y con qué peso.
 
 ## Tipos
 

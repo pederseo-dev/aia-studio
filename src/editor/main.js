@@ -9,6 +9,7 @@ import { operacionesDeImportar } from './importar.js';
 import { montarInspector } from './inspector.js';
 import { montarLienzo } from './lienzo.js';
 import { montarOpciones } from './opciones.js';
+import { montarParametros } from './parametros.js';
 import {
   abrir, agregarPestana, api, avisar, cargarDocumentos, cerrarPestana, deshacer, ejecutar, eliminarDocumento,
   enviarPendiente, esquema, estado, fijar, hayPendiente, idLibre, mantenerPosicion, padreParaNuevo,
@@ -22,6 +23,7 @@ montarInspector($('#inspector'));
 montarHistorial($('#entradas'), $('#deshacer'), $('#rehacer'));
 const lienzo = montarLienzo($('#lienzo'));
 montarOpciones($('#opciones'), { agrupar: () => agruparSeleccion(), enlazar: () => enlazarSeleccion() });
+montarParametros($('#parametros'), $('#nuevo-param'));
 
 // ---------- Menús desplegables (menú principal, zoom, grupos de herramientas) ----------
 
@@ -285,18 +287,29 @@ function enlazarSeleccion() {
 // ---------- Montaje y poses ----------
 
 const NUEVA_POSE = '__nueva';
+const PARAMETROS = '__params';
 
 function dibujarPoses() {
   const select = $('#pose');
-  const poses = estado.doc ? estado.doc.objects.filter((o) => o.type === 'pose') : [];
-  select.replaceChildren(new Option('Montaje', ''), ...poses.map((p) => new Option(`Pose: ${p.id}`, p.id)), new Option('＋ Nueva pose…', NUEVA_POSE));
-  select.value = estado.pose ?? '';
+  const objetos = estado.doc?.objects ?? [];
+  const poses = objetos.filter((o) => o.type === 'pose');
+  const conParams = objetos.some((o) => o.type === 'param');
+  select.replaceChildren(
+    new Option('Montaje', ''),
+    ...(conParams ? [new Option('Parámetros (mezcla)', PARAMETROS)] : []),
+    ...poses.map((p) => new Option(`Pose: ${p.id}`, p.id)),
+    new Option('＋ Nueva pose…', NUEVA_POSE),
+  );
+  select.value = estado.pose ?? (estado.params && conParams ? PARAMETROS : '');
   $('#modo').classList.toggle('en-pose', !!estado.pose);
+  $('#modo').classList.toggle('en-params', !estado.pose && !!estado.params);
 }
 
 $('#pose').addEventListener('change', (e) => {
   const valor = e.target.value;
-  if (valor !== NUEVA_POSE) return fijar({ pose: valor || null });
+  if (valor === PARAMETROS) return fijar({ pose: null, params: estado.params ?? {} });
+  // Montaje deja de mezclar; una pose se ve sola (los valores de los params quedan para cuando se vuelva).
+  if (valor !== NUEVA_POSE) return fijar(valor ? { pose: valor } : { pose: null, params: null });
   const base = prompt('Nombre de la pose (por ejemplo wave, look_up):', '')?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
   if (!base) return dibujarPoses();
   const id = /^[a-z]/.test(base) ? base : `pose_${base}`;
@@ -309,7 +322,7 @@ $('#pose').addEventListener('change', (e) => {
 });
 
 suscribir((c) => {
-  if ('doc' in c || 'pose' in c || 'id' in c) {
+  if ('doc' in c || 'pose' in c || 'params' in c || 'id' in c) {
     // Si la pose activa desapareció (deshacer, la IA la borró), se vuelve al montaje.
     if (estado.pose && buscar(estado.doc ?? { objects: [] }, estado.pose)?.type !== 'pose') return fijar({ pose: null });
     dibujarPoses();

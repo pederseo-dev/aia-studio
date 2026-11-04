@@ -84,9 +84,7 @@ export function validar(doc, esquema) {
     revisarPropiedades(o.id, o, propiedadesGuardadas(o), tipo, errores, avisos);
     for (const [prop, p] of Object.entries(tipo.properties)) {
       if (p.type !== 'ref' || o[prop] == null) continue;
-      const referido = buscar(doc, o[prop]);
-      if (!referido) errores.push(`${o.id}.${prop}: el objeto "${o[prop]}" no existe.${sugerir(o[prop], ids)}`);
-      else if (p.refTypes && !p.refTypes.includes(referido.type)) errores.push(`${o.id}.${prop}: "${o[prop]}" es un ${referido.type}; se esperaba ${p.refTypes.join(' o ')}`);
+      errores.push(...erroresDeReferencia(doc, o, prop, p, o[prop], o.id));
     }
     // Los vértices enlazados a un hueso (enlace por punto) nombran huesos que tienen que existir.
     for (const [prop, p] of Object.entries(tipo.properties)) {
@@ -98,12 +96,26 @@ export function validar(doc, esquema) {
         else if (hueso.type !== 'bone') errores.push(`${o.id}.${prop}[${i}].bone: "${v.bone}" es un ${hueso.type}, no un hueso`);
       });
     }
-    // Las poses nombran huesos que tienen que existir.
+    // Las poses nombran objetos que existen y propiedades animables suyas, con valores válidos.
     for (const [prop, p] of Object.entries(tipo.properties)) {
-      if (p.type !== 'pose' || !o[prop] || typeof o[prop] !== 'object') continue;
-      const huesos = doc.objects.filter((h) => h.type === 'bone').map((h) => h.id);
-      for (const id of Object.keys(o[prop])) {
-        if (!huesos.includes(id)) errores.push(`${o.id}.${prop}: no existe el hueso "${id}".${sugerir(id, huesos)}`);
+      if (p.type !== 'pose' || !o[prop] || typeof o[prop] !== 'object' || Array.isArray(o[prop])) continue;
+      for (const [id, campos] of Object.entries(o[prop])) {
+        const destino = buscar(doc, id);
+        if (!destino) {
+          errores.push(`${o.id}.${prop}: no existe el objeto "${id}".${sugerir(id, ids)}`);
+          continue;
+        }
+        const props = esquema.tipos.get(destino.type)?.properties ?? {};
+        const animables = Object.keys(props).filter((k) => props[k].animatable);
+        for (const [k, v] of Object.entries(campos ?? {})) {
+          if (!props[k]?.animatable) {
+            errores.push(`${o.id}.${prop}.${id}.${k}: ${destino.type} no tiene "${k}" animable. Animables: ${animables.join(', ')}.${sugerir(k, animables)}`);
+            continue;
+          }
+          const error = validarValor(props[k], v);
+          if (error) errores.push(`${o.id}.${prop}.${id}.${k} ${error}`);
+          else if (props[k].type === 'ref') errores.push(...erroresDeReferencia(doc, destino, k, props[k], v, `${o.id}.${prop}.${id}`));
+        }
       }
     }
   }
@@ -120,6 +132,19 @@ export function validar(doc, esquema) {
     }
   }
   return { errores, avisos };
+}
+
+/** Errores de una referencia: que exista, que sea del tipo pedido y, con refScope "children", que sea un hijo. */
+function erroresDeReferencia(doc, o, prop, p, valor, dueño) {
+  if (valor == null) return [];
+  const referido = buscar(doc, valor);
+  if (!referido) return [`${dueño}.${prop}: el objeto "${valor}" no existe.${sugerir(valor, doc.objects.map((x) => x.id))}`];
+  if (p.refTypes && !p.refTypes.includes(referido.type)) return [`${dueño}.${prop}: "${valor}" es un ${referido.type}; se esperaba ${p.refTypes.join(' o ')}`];
+  if (p.refScope === 'children' && referido.parent !== o.id) {
+    const hijos = doc.objects.filter((x) => x.parent === o.id).map((x) => x.id);
+    return [`${dueño}.${prop}: "${valor}" no es hijo de ${o.id}. Hijos: ${hijos.join(', ') || 'ninguno'}.${sugerir(valor, hijos)}`];
+  }
+  return [];
 }
 
 function revisarPropiedades(dueño, obj, props, tipo, errores, avisos) {

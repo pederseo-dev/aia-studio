@@ -10,6 +10,7 @@
   --ia: #f2b35b;
   --error: #ff7a7a;
   --lienzo: #2a2631;
+  --params: #f2b35b; /* vista Parámetros: la mezcla de poses que dan los controles */
   --pose: #5fd3a0; /* modo pose: el lienzo se enmarca en este color, como la línea de tiempo de Moho en una acción */
   color-scheme: dark;
   font: 13px/1.4 system-ui, sans-serif;
@@ -129,7 +130,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
   min-height: 0;
   display: grid;
   grid-template-columns: 240px 1fr 290px;
-  grid-template-rows: 1fr 90px;
+  grid-template-rows: 1fr auto;
   grid-template-areas: "objetos lienzo derecho" "tiempo tiempo tiempo";
 }
 .panel { background: var(--panel); overflow-y: auto; }
@@ -139,7 +140,23 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 .cabecera-recursos { border-top: 1px solid var(--borde); }
 #recursos { flex: 0 0 auto; max-height: 35%; overflow-y: auto; }
 #panel-derecho { grid-area: derecho; border-left: 1px solid var(--borde); display: flex; flex-direction: column; }
-#linea-de-tiempo { grid-area: tiempo; border-top: 1px solid var(--borde); padding: 8px 12px; }
+#linea-de-tiempo { grid-area: tiempo; border-top: 1px solid var(--borde); min-height: 90px; max-height: 220px; overflow-y: auto; }
+#linea-de-tiempo .cabecera .ayuda { flex: 1; margin: 0; }
+#linea-de-tiempo .cabecera h2 { flex: 0 0 auto; }
+#parametros { padding: 4px 10px 8px; display: flex; flex-direction: column; gap: 4px; }
+#parametros > .ayuda { margin: 4px 0; }
+.param { display: grid; grid-template-columns: 140px 260px 1fr; gap: 10px; align-items: center; }
+.param .nombre { text-align: left; border-color: transparent; background: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.param.seleccionado .nombre { color: var(--texto); border-color: var(--acento); }
+.param .deslizador { display: flex; align-items: center; gap: 8px; }
+.param .deslizador input { flex: 1; accent-color: var(--params); }
+.param .valor { width: 40px; text-align: right; color: var(--suave); font-variant-numeric: tabular-nums; }
+.param .drivers { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.param .driver { font-size: 12px; padding: 1px 8px; background: linear-gradient(90deg, #f2b35b44 var(--peso), transparent var(--peso)); }
+.param .driver.seleccionado { border-color: var(--params); }
+.param .drivers select { font-size: 12px; max-width: 120px; }
+#lienzo.modo-params { box-shadow: inset 0 0 0 2px var(--params); }
+#modo.en-params select { border-color: var(--params); color: var(--params); }
 
 .cabecera { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--borde); }
 .cabecera h2 { flex: 1; }

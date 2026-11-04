@@ -27,7 +27,7 @@ npm test        # pruebas del núcleo
 npm run mcp     # servidor MCP por stdio (normalmente lo arranca el cliente de IA)
 ```
 
-> Estado: **fase 3 terminada** del [plan](docs/plan.md) (huesos y poses): dibujo con paths, estilos y degradados, sobre el editor y el MCP de
+> Estado: **fase 4** del [plan](docs/plan.md) (expresiones: poses, params, drivers y switch): dibujo con paths, estilos y degradados, sobre el editor y el MCP de
 > la fase 1. El prototipo que probó la idea quedó en la etiqueta de git `prototipo-0`.
 
 ### Editor
@@ -52,6 +52,7 @@ muestra las demás herramientas.
 | Enlazar al esqueleto | Con un hueso seleccionado, «Enlazar dibujo…» en la barra de opciones y clic en las partes (Alt = su grupo). También: dibujo + hueso seleccionados y `Ctrl+B`, soltar el dibujo sobre el hueso en la jerarquía, o `bone` en el inspector. Enlazar no mueve nada: el dibujo sigue al hueso en las poses. |
 | Barra de opciones | Arriba del lienzo: qué se puede hacer con la herramienta y lo seleccionado, con botones para las acciones (por ejemplo, con un hueso: enlazar, ver lo enlazado, hueso hijo, probar en una pose). |
 | Doblar con varios huesos | Editando los puntos de un path: «Repartir entre huesos» (o el hueso de cada punto) en la barra de opciones. En las poses, el path se dobla siguiendo la cadena. |
+| Expresiones | Una pose puede cambiar cualquier cosa animable: en la pose, el inspector muestra arriba lo de la pose y Enter edita los puntos de la boca (morph). Abajo, «＋ Parámetro» crea un control y «＋ pose…» lo conecta a una pose; mover el control muestra la mezcla («Ver: Parámetros»). Un switch muestra un solo hijo (`active`). |
 | Poses | «Ver» en la barra: Montaje o una pose (o «＋ Nueva pose…»). En una pose, arrastrar un hueso o el dibujo enlazado lo gira sin tocar el montaje. |
 | Grupos | `G` crea un grupo; arrastrar filas en la jerarquía para reordenar o meter dentro de un grupo; ▾/▸ pliega. |
 | Duplicar | `Ctrl+D` duplica la selección con sus hijos; ☰ → «Hacer una copia…» copia el documento. |
@@ -86,7 +87,7 @@ queda en el historial para que la IA lo respete.
 Herramientas: `get_guide` (la guía del formato, generada desde el esquema), `list_documents`, `get_document`,
 `create_document`, `apply_ops`, `undo`, `redo`, `get_history`, `set_pose` (crea o ajusta una pose con nombre),
 `bind_points` (reparte los puntos de un path entre huesos) y
-`render_preview` (devuelve un PNG para que la IA vea lo que hizo; con `pose`, `region` o `bones`).
+`render_preview` (devuelve un PNG para que la IA vea lo que hizo; con `pose`, `params`, `region` o `bones`).
 
 ## Estructura
 

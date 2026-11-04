@@ -18,7 +18,7 @@ function brazo() {
     { op: 'create', type: 'bone', id: 'upper', props: { x: 100, y: 100, length: 50 } },
     { op: 'create', type: 'bone', id: 'lower', parent: 'upper', props: { x: 50, length: 40 } },
     { op: 'create', type: 'rect', id: 'hand', props: { x: 190, y: 100, width: 10, height: 10, bone: 'lower' } },
-    { op: 'create', type: 'pose', id: 'up', props: { bones: { upper: { rotation: -90 } } } },
+    { op: 'create', type: 'pose', id: 'up', props: { values: { upper: { rotation: -90 } } } },
   );
 }
 
@@ -58,19 +58,19 @@ test('ángulo independiente y límites', () => {
 test('los huesos solo tienen huesos como hijos', () => {
   assert.throws(() => op(brazo(), { op: 'create', type: 'rect', id: 'x', parent: 'upper' }), /propiedad bone/);
   assert.throws(() => op(brazo(), { op: 'create', type: 'group', id: 'g' }, { op: 'create', type: 'bone', id: 'b', parent: 'g' }), /solo puede estar en la raíz o dentro de bone/);
-  assert.throws(() => op(brazo(), { op: 'set', target: 'up', props: { bones: { uper: { rotation: 1 } } } }), /¿Quisiste decir "upper"\?/);
-  assert.throws(() => op(brazo(), { op: 'set', target: 'up', props: { bones: { upper: { angle: 1 } } } }), /solo van/);
+  assert.throws(() => op(brazo(), { op: 'set', target: 'up', props: { values: { uper: { rotation: 1 } } } }), /¿Quisiste decir "upper"\?/);
+  assert.throws(() => op(brazo(), { op: 'set', target: 'up', props: { values: { upper: { angle: 1 } } } }), /no tiene "angle" animable/);
 });
 
 test('renombrar y borrar un hueso actualiza enlaces y poses, y deshacer los recupera', () => {
   let doc = op(brazo(), { op: 'rename', target: 'upper', id: 'arm' });
-  assert.deepEqual(buscar(doc, 'up').bones, { arm: { rotation: -90 } });
+  assert.deepEqual(buscar(doc, 'up').values, { arm: { rotation: -90 } });
   const { doc: sin, inversas } = aplicarOperaciones(doc, [{ op: 'delete', target: 'arm' }], esquema);
   assert.equal(buscar(sin, 'hand').bone, undefined);
-  assert.deepEqual(buscar(sin, 'up').bones, {});
+  assert.deepEqual(buscar(sin, 'up').values, {});
   doc = aplicarOperaciones(sin, inversas, esquema).doc;
   assert.equal(buscar(doc, 'hand').bone, 'lower');
-  assert.deepEqual(buscar(doc, 'up').bones, { arm: { rotation: -90 } });
+  assert.deepEqual(buscar(doc, 'up').values, { arm: { rotation: -90 } });
 });
 
 test('la vista previa puede dibujar el esqueleto encima, posado', () => {
@@ -90,7 +90,7 @@ test('enlace por punto: un path se dobla con varios huesos y sigue siendo uno so
     id: 'tira',
     props: { closed: false, vertices: [{ x: 100, y: 100, bone: 'upper' }, { x: 150, y: 100, bone: 'upper' }, { x: 190, y: 100, bone: 'lower' }] },
   });
-  doc = op(doc, { op: 'set', target: 'up', props: { bones: { upper: { rotation: -90 }, lower: { rotation: 90 } } } });
+  doc = op(doc, { op: 'set', target: 'up', props: { values: { upper: { rotation: -90 }, lower: { rotation: 90 } } } });
   const d = svgDocumento(doc, esquema, { pose: 'up' }).match(/data-id="tira"><path d="([^"]+)"/)[1];
   // El hombro apunta hacia arriba y el antebrazo vuelve a la derecha: el codo queda en (100, 50), la punta en (140, 50).
   assert.equal(d, 'M100 100L100 50L140 50');

@@ -105,6 +105,43 @@ function expandirD(tipo, props) {
   return { closed: subtrazados[0].closed, ...resto, vertices: subtrazados[0].vertices };
 }
 
+/**
+ * Rehace los valores de una pose cambiando ids: los de los objetos (claves) y los que son referencias (el hijo
+ * activo de un switch). `cambiar(id)` devuelve el id nuevo, o null para quitarlo.
+ */
+function mapearPose(doc, esquema, valores, cambiar) {
+  const resultado = {};
+  for (const [id, campos] of Object.entries(valores)) {
+    const nuevo = cambiar(id);
+    if (nuevo == null) continue;
+    const tipo = esquema.tipos.get(buscar(doc, nuevo)?.type ?? buscar(doc, id)?.type);
+    const limpios = {};
+    for (const [k, v] of Object.entries(campos)) {
+      if (tipo?.properties[k]?.type !== 'ref' || v == null) limpios[k] = v;
+      else if (cambiar(v) != null) limpios[k] = cambiar(v);
+    }
+    if (Object.keys(limpios).length) resultado[nuevo] = limpios;
+  }
+  return resultado;
+}
+
+/** Azúcar para la IA: dentro de una pose, un path también acepta `d` (se guarda como vértices, para el morph). */
+function expandirPose(doc, esquema, tipo, props) {
+  if (tipo !== 'pose' || !props?.values || typeof props.values !== 'object') return props;
+  const values = {};
+  for (const [id, campos] of Object.entries(props.values)) {
+    const destino = buscar(doc, id);
+    if (campos?.d === undefined || !destino) {
+      values[id] = campos;
+      continue;
+    }
+    const { d, ...resto } = expandirD(esquema.tipos.get(destino.type), campos);
+    delete resto.closed; // si es cerrado o abierto lo decide el montaje
+    values[id] = resto;
+  }
+  return { ...props, values };
+}
+
 /** Azúcar para la IA: un bone acepta `from` y `to` ([x, y] en el documento) en vez de x, y, rotation y length. */
 function expandirHueso(doc, esquema, tipo, padre, props, actual) {
   if (props?.from === undefined && props?.to === undefined) return props;
@@ -134,7 +171,7 @@ function aplicarUna(doc, op, esquema) {
       }
       const padre = contenedor(doc, op.parent, esquema);
       if (op.props !== undefined) comprobarProps(op.props);
-      const props = expandirHueso(doc, esquema, op.type, padre, expandirD(tipo, op.props)) ?? {};
+      const props = expandirPose(doc, esquema, op.type, expandirHueso(doc, esquema, op.type, padre, expandirD(tipo, op.props))) ?? {};
       insertar(doc, { id: op.id, type: op.type, parent: padre, ...structuredClone(props) }, padre, op.index);
       return [{ op: 'delete', target: op.id }];
     }
@@ -142,7 +179,7 @@ function aplicarUna(doc, op, esquema) {
     case 'set': {
       comprobarProps(op.props);
       const obj = op.target === 'meta' ? doc.meta : objetivo(doc, op.target);
-      const props = op.target === 'meta' ? op.props : expandirHueso(doc, esquema, obj.type, obj.parent ?? null, expandirD(esquema.tipos.get(obj.type), op.props), obj);
+      const props = op.target === 'meta' ? op.props : expandirPose(doc, esquema, obj.type, expandirHueso(doc, esquema, obj.type, obj.parent ?? null, expandirD(esquema.tipos.get(obj.type), op.props), obj));
       const anteriores = {};
       const nuevas = [];
       for (const [k, v] of Object.entries(props)) {
@@ -187,9 +224,12 @@ function aplicarUna(doc, op, esquema) {
           } else if (p.type === 'vertices' && o[prop]?.some((v) => ids.has(v.bone))) {
             anteriores[prop] = structuredClone(o[prop]);
             o[prop] = o[prop].map(({ bone, ...v }) => (bone === undefined || ids.has(bone) ? v : { ...v, bone }));
-          } else if (p.type === 'pose' && o[prop] && Object.keys(o[prop]).some((id) => ids.has(id))) {
-            anteriores[prop] = structuredClone(o[prop]);
-            o[prop] = Object.fromEntries(Object.entries(o[prop]).filter(([id]) => !ids.has(id)));
+          } else if (p.type === 'pose' && o[prop]) {
+            const limpia = mapearPose(doc, esquema, o[prop], (id) => (ids.has(id) ? null : id));
+            if (JSON.stringify(limpia) !== JSON.stringify(o[prop])) {
+              anteriores[prop] = structuredClone(o[prop]);
+              o[prop] = limpia;
+            }
           }
         }
         if (Object.keys(anteriores).length) reenlazar.push({ op: 'set', target: o.id, props: anteriores });
@@ -237,7 +277,7 @@ function aplicarUna(doc, op, esquema) {
         const tipo = esquema.tipos.get(o.type);
         for (const [prop, p] of Object.entries(tipo?.properties ?? {})) {
           if (p.type === 'ref' && o[prop] === anterior) o[prop] = op.id;
-          if (p.type === 'pose' && o[prop]?.[anterior]) o[prop] = Object.fromEntries(Object.entries(o[prop]).map(([id, v]) => [id === anterior ? op.id : id, v]));
+          if (p.type === 'pose' && o[prop]) o[prop] = mapearPose(doc, esquema, o[prop], (id) => (id === anterior ? op.id : id));
           if (p.type === 'vertices' && o[prop]?.some((v) => v.bone === anterior)) o[prop] = o[prop].map((v) => (v.bone === anterior ? { ...v, bone: op.id } : v));
         }
       }

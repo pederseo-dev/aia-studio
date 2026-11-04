@@ -31,9 +31,9 @@ export function limitarAngulo(esquema, hueso, rotacion) {
 /** Valores de un hueso: los del montaje, con lo que fije la pose encima (la rotación, dentro de sus límites). */
 export function valoresDeHueso(esquema, hueso, pose) {
   const v = Object.fromEntries(CAMPOS_DE_POSE.map((k) => [k, leer(esquema, hueso, k)]));
-  const fijados = pose?.bones?.[hueso.id];
+  const fijados = pose?.values?.[hueso.id];
   if (fijados) {
-    Object.assign(v, fijados);
+    for (const k of CAMPOS_DE_POSE) if (fijados[k] !== undefined) v[k] = fijados[k];
     v.rotation = limitarAngulo(esquema, hueso, v.rotation);
   }
   return v;

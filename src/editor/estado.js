@@ -21,6 +21,7 @@ export const estado = {
   vertice: null, // índice del vértice seleccionado en la edición de puntos
   herramienta: 'seleccionar',
   pose: null, // id de la pose que se ve y se edita en el lienzo; null = el montaje
+  params: null, // valores de los params en la vista Parámetros (null = no se mezcla nada)
   enlazando: null, // id del hueso al que se pega el dibujo con clics («Enlazar dibujo…»)
   historial: { entradas: [], user: { deshacer: false, rehacer: false } },
 };
@@ -109,7 +110,7 @@ export async function abrir(id) {
   const doc = await api.leer(id);
   agregarPestana(id);
   history.replaceState(null, '', `?doc=${encodeURIComponent(id)}`);
-  fijar({ id, doc, previa: null, seleccion: null, seleccionados: [], edicion: null, vertice: null, pose: null, enlazando: null });
+  fijar({ id, doc, previa: null, seleccion: null, seleccionados: [], edicion: null, vertice: null, pose: null, params: null, enlazando: null });
   await refrescarHistorial();
 }
 
@@ -124,7 +125,7 @@ export async function cerrarPestana(id) {
   if (vecina) return abrir(vecina);
   await enviarPendiente();
   history.replaceState(null, '', location.pathname);
-  fijar({ id: null, doc: null, previa: null, seleccion: null, seleccionados: [], edicion: null, vertice: null, pose: null, enlazando: null, historial: { entradas: [], user: { deshacer: false, rehacer: false } } });
+  fijar({ id: null, doc: null, previa: null, seleccion: null, seleccionados: [], edicion: null, vertice: null, pose: null, params: null, enlazando: null, historial: { entradas: [], user: { deshacer: false, rehacer: false } } });
 }
 
 /** Borra el documento del disco (con su historial) y cierra su pestaña. */

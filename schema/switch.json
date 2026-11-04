@@ -1,0 +1,9 @@
+{
+  "name": "switch",
+  "extends": "transformable",
+  "container": true,
+  "description": "Grupo que muestra un solo hijo a la vez (como el switch layer de Moho): el que dice active, o el primero si active es null. Sirve para bocas, visemas, ojos o manos que cambian de dibujo. Las poses y los params eligen el hijo cambiando active.",
+  "properties": {
+    "active": { "type": "ref", "refScope": "children", "default": null, "nullable": true, "animatable": true, "group": "Switch", "description": "id del hijo visible. null = el primero (el del fondo)." }
+  }
+}

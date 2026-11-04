@@ -22,7 +22,7 @@ function robot() {
 }
 
 test('el esquema resuelve la herencia y solo expone tipos concretos', () => {
-  assert.deepEqual([...esquema.tipos.keys()].sort(), ['bone', 'ellipse', 'group', 'linear_gradient', 'path', 'pose', 'radial_gradient', 'rect', 'style']);
+  assert.deepEqual([...esquema.tipos.keys()].sort(), ['bone', 'driver', 'ellipse', 'group', 'linear_gradient', 'param', 'path', 'pose', 'radial_gradient', 'rect', 'style', 'switch']);
   assert.equal(esquema.tipos.get('style').resource, true);
   assert.equal(esquema.tipos.get('path').resource, false);
   const rect = esquema.tipos.get('rect');

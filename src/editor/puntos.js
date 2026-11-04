@@ -5,15 +5,26 @@
 import { buscar } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
+import { aplicarPose } from '../core/mezcla.js';
 import { conHueso, dividirTramo, manijas, muestrearTramo, tangentes, verticeDesdeTangentes } from '../core/trazado.js';
 import { docVisible, ejecutar, esquema, estado, fijar, previsualizar } from './estado.js';
+import { opsDePose, poseActiva } from './huesos.js';
 
 const CERCA_DEL_CONTORNO = 8; // px
 
 export function crearPuntos(ctx) {
-  const path = () => buscar(docVisible(), estado.edicion);
-  const matriz = () => multiplicar(ctx.matrizCamara(), matrizMundo(docVisible(), esquema, estado.edicion));
-  const guardar = (vertices, nota) => ejecutar([{ op: 'set', target: estado.edicion, props: { vertices } }], `${nota} en ${estado.edicion}`);
+  // Con una pose activa se editan los vértices de la pose (el morph); sin pose, los del montaje.
+  const path = () => buscar(aplicarPose(docVisible(), esquema, poseActiva(docVisible())), estado.edicion);
+  // La matriz del dibujo en pantalla tal como se ve (con huesos y pose incluidos).
+  const matriz = () => {
+    const m = ctx.elemento(estado.edicion)?.getCTM();
+    return m ? [m.a, m.b, m.c, m.d, m.e, m.f] : multiplicar(ctx.matrizCamara(), matrizMundo(docVisible(), esquema, estado.edicion));
+  };
+  const opsDeVertices = (vertices) => {
+    const pose = poseActiva();
+    return pose ? opsDePose(estado.doc, pose.id, estado.edicion, { vertices }) : [{ op: 'set', target: estado.edicion, props: { vertices } }];
+  };
+  const guardar = (vertices, nota) => ejecutar(opsDeVertices(vertices), `${estado.pose ? `pose ${estado.pose}: ` : ''}${nota} en ${estado.edicion}`);
 
   function dibujar() {
     const obj = path();
@@ -73,7 +84,7 @@ export function crearPuntos(ctx) {
           nuevos[i] = conHueso(v, verticeDesdeTangentes(v.x, v.y, t.entrada, t.salida));
         }
         cambio = nuevos;
-        previsualizar([{ op: 'set', target: estado.edicion, props: { vertices: nuevos } }]);
+        previsualizar(opsDeVertices(nuevos));
       },
       () => (cambio ? guardar(cambio, cual === 'ancla' ? 'mover vértice' : 'ajustar curva') : previsualizar(null)),
     );

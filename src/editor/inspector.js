@@ -37,7 +37,7 @@ export function montarInspector(raiz) {
     raiz.replaceChildren(otros.length ? tituloVarios(obj, otros) : obj ? titulo(obj, tipo) : Object.assign(document.createElement('h2'), { textContent: 'Documento' }));
     if (otros.length && !propiedades.length) raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'No tienen propiedades en común.' }));
     const pose = poseActiva();
-    if (pose && obj?.type === 'bone' && !otros.length) seccionDePose(obj, pose);
+    if (pose && obj && !otros.length && !tipo.resource) seccionDePose(obj, tipo, pose);
 
     const grupos = Map.groupBy(propiedades, ([, p]) => p.group ?? 'Otros');
     const nombres = [...grupos.keys()].sort((a, b) => (ORDEN_DE_GRUPOS.indexOf(a) + 1 || 99) - (ORDEN_DE_GRUPOS.indexOf(b) + 1 || 99));
@@ -64,36 +64,48 @@ export function montarInspector(raiz) {
     if (enFoco) raiz.querySelector(`[data-prop="${enFoco}"] input, [data-prop="${enFoco}"] select`)?.focus();
   }
 
-  /** Con una pose activa, los valores del hueso en esa pose (lo que no fija la pose se ve como en el montaje). */
-  function seccionDePose(hueso, pose) {
+  /**
+   * Con una pose activa, lo animable del objeto en esa pose: lo que la pose fija se ve normal y lo demás (que sigue
+   * como en el montaje), atenuado. Cambiar un campo lo agrega a la pose; ↺ lo quita.
+   */
+  function seccionDePose(obj, tipo, pose) {
+    const animables = Object.entries(tipo.properties).filter(([, p]) => p.animatable);
+    if (!animables.length) return;
     raiz.append(Object.assign(document.createElement('h3'), { className: 'en-pose', textContent: `Pose «${pose.id}»` }));
-    const fijados = pose.bones?.[hueso.id] ?? {};
-    const valores = valoresDeHueso(esquema, hueso, pose);
-    const definiciones = esquema.tipos.get('bone').properties;
-    const fila = (campos) => {
-      const div = document.createElement('div');
-      div.className = campos.length > 1 ? 'par' : '';
-      for (const k of campos) div.append(campoDePose(hueso, pose, k, definiciones[k], valores[k], k in fijados));
-      return div;
-    };
-    raiz.append(fila(['x', 'y']), fila(['rotation']), fila(['scaleX', 'scaleY']));
+    const fijados = pose.values?.[obj.id] ?? {};
+    const deHueso = obj.type === 'bone' ? valoresDeHueso(esquema, obj, pose) : null;
+    const valor = (k) => (deHueso ? deHueso[k] : (fijados[k] ?? valorEfectivo(esquema, estado.doc, obj, k)));
+    const enPar = new Set();
+    for (const [k, p] of animables) {
+      if (enPar.has(k)) continue;
+      const pareja = PARES[k] && animables.find(([q]) => q === PARES[k]);
+      if (pareja) {
+        enPar.add(pareja[0]);
+        const fila = document.createElement('div');
+        fila.className = 'par';
+        fila.append(campoDePose(obj, pose, k, p, valor(k), k in fijados), campoDePose(obj, pose, pareja[0], pareja[1], valor(pareja[0]), pareja[0] in fijados));
+        raiz.append(fila);
+      } else {
+        raiz.append(campoDePose(obj, pose, k, p, valor(k), k in fijados));
+      }
+    }
     raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'Lo que sigue es el montaje (la pose de reposo).' }));
   }
 
-  function campoDePose(hueso, pose, k, p, valor, fijado) {
+  function campoDePose(obj, pose, k, p, valor, fijado) {
     const div = document.createElement('div');
     div.className = `campo${fijado ? '' : ' por-defecto'}`;
     div.dataset.prop = `pose.${k}`;
     const label = Object.assign(document.createElement('label'), { textContent: ETIQUETAS[k] ?? k });
-    label.title = `${k} del hueso en la pose${fijado ? '' : ' (no la fija: es la del montaje)'}`;
-    const cambio = (v) => opsDePose(estado.doc, pose.id, hueso.id, { [k]: v });
+    label.title = `${k} en la pose${fijado ? '' : ' (no la fija: es la del montaje)'}`;
+    const cambio = (v) => opsDePose(estado.doc, pose.id, obj.id, { [k]: v });
     const confirmar = (v) => {
       if (Object.is(v, valor) && fijado) return previsualizar(null);
-      ejecutar(cambio(v), `pose ${pose.id}: ${hueso.id}.${k}`, { agrupar: `pose:${pose.id}.${hueso.id}.${k}` });
+      ejecutar(cambio(v), `pose ${pose.id}: ${obj.id}.${k}`, { agrupar: `pose:${pose.id}.${obj.id}.${k}` });
     };
-    const control = CONTROLES.number({ p, valor, previsualizar: (v) => previsualizar(cambio(v)), confirmar, div, label });
+    const control = CONTROLES[p.type]({ p, valor, previsualizar: (v) => previsualizar(cambio(v)), confirmar, div, label, objetivo: obj.id });
     const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Quitar de la pose (vuelve al montaje)' });
-    restablecer.addEventListener('click', () => ejecutar(opsDePose(estado.doc, pose.id, hueso.id, { [k]: undefined }), `pose ${pose.id}: ${hueso.id}.${k} del montaje`));
+    restablecer.addEventListener('click', () => ejecutar(opsDePose(estado.doc, pose.id, obj.id, { [k]: undefined }), `pose ${pose.id}: ${obj.id}.${k} del montaje`));
     div.append(label, control, restablecer);
     return div;
   }
@@ -337,7 +349,9 @@ const CONTROLES = {
     const select = document.createElement('select');
     if (p.nullable) select.append(new Option('(ninguno)', ''));
     for (const o of estado.doc.objects) {
-      if (o.id !== objetivo && (!p.refTypes || p.refTypes.includes(o.type))) select.append(new Option(o.id, o.id, false, o.id === valor));
+      // refScope "children": solo los hijos (el hijo activo de un switch).
+      const enAlcance = p.refScope === 'children' ? o.parent === objetivo : o.id !== objetivo;
+      if (enAlcance && (!p.refTypes || p.refTypes.includes(o.type))) select.append(new Option(o.id, o.id, false, o.id === valor));
     }
     select.addEventListener('change', () => confirmar(select.value || null));
     return select;

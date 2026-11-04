@@ -8,7 +8,7 @@ import { aplicarOperaciones } from '../core/operaciones.js';
 import { alternarEnlace } from './huesos.js';
 import { alternarSeleccion, ejecutar, esquema, estado, mantenerPosicion, seleccionRaices, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 
-const ICONOS = { group: '▣', rect: '▭', ellipse: '◯', path: '✒', bone: '⟋', style: '◆', linear_gradient: '▤', radial_gradient: '◍', pose: '♟' };
+const ICONOS = { group: '▣', switch: '⇄', rect: '▭', ellipse: '◯', path: '✒', bone: '⟋', style: '◆', linear_gradient: '▤', radial_gradient: '◍', pose: '♟', param: '◐', driver: '⤳' };
 const esRecurso = (o) => esquema.tipos.get(o.type)?.resource;
 
 /** Árbol de objetos en `raiz` y lista de recursos (estilos, degradados) en `raizRecursos`. */

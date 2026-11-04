@@ -10,24 +10,30 @@ import { buscar } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { evaluarEsqueleto, huesoDe, limitarAngulo, valoresDeHueso } from '../core/esqueleto.js';
 import { IDENTIDAD, aplicar, invertir, multiplicar } from '../core/geometria.js';
+import { mezclarPoses } from '../core/mezcla.js';
 import { docVisible, ejecutar, esquema, estado, idLibre, previsualizar, seleccionar } from './estado.js';
 
 const redondear = (v, d = 10) => Math.round(v * d) / d;
 const GRADOS = 180 / Math.PI;
 
-/** La pose activa del documento indicado, o null (montaje). */
+/** La pose que se está editando en el documento indicado, o null. */
 export function poseActiva(doc = estado.doc) {
   const p = estado.pose && buscar(doc, estado.pose);
   return p?.type === 'pose' ? p : null;
 }
 
-/** Lote que fija campos de un hueso dentro de una pose (conserva lo demás que la pose ya tenía). */
-export function opsDePose(doc, poseId, hueso, campos) {
-  const bones = structuredClone(buscar(doc, poseId).bones ?? {});
-  bones[hueso] = { ...bones[hueso], ...campos };
-  for (const [k, v] of Object.entries(bones[hueso])) if (v === undefined) delete bones[hueso][k];
-  if (!Object.keys(bones[hueso]).length) delete bones[hueso];
-  return [{ op: 'set', target: poseId, props: { bones } }];
+/** Lo que se ve: la pose que se edita, la mezcla de los params (vista Parámetros) o null (el montaje). */
+export function poseVista(doc = estado.doc) {
+  return poseActiva(doc) ?? (estado.params ? mezclarPoses(doc, esquema, estado.params) : null);
+}
+
+/** Lote que fija propiedades de un objeto dentro de una pose (conserva lo demás; undefined quita la propiedad). */
+export function opsDePose(doc, poseId, id, campos) {
+  const values = structuredClone(buscar(doc, poseId).values ?? {});
+  values[id] = { ...values[id], ...campos };
+  for (const [k, v] of Object.entries(values[id])) if (v === undefined) delete values[id][k];
+  if (!Object.keys(values[id]).length) delete values[id];
+  return [{ op: 'set', target: poseId, props: { values } }];
 }
 
 /** Pega un objeto al hueso o, si ya estaba pegado a ese, lo suelta. */
@@ -48,7 +54,7 @@ export function crearHuesos(ctx) {
     const doc = docVisible();
     const huesos = doc.objects.filter((o) => o.type === 'bone');
     if (!huesos.length) return;
-    const { posado } = evaluarEsqueleto(doc, esquema, poseActiva(doc));
+    const { posado } = evaluarEsqueleto(doc, esquema, poseVista(doc));
     const camara = ctx.matrizCamara();
     const capa = ctx.crear('g', { class: `huesos${activos() ? ' activos' : ''}` });
     for (const h of huesos) {

@@ -12,7 +12,7 @@ import { opsDePose } from './huesos.js';
  */
 export function montarOpciones(raiz, acciones) {
   suscribir((c) => {
-    if (['doc', 'seleccion', 'herramienta', 'pose', 'edicion', 'vertice', 'enlazando', 'id'].some((k) => k in c)) dibujar();
+    if (['doc', 'seleccion', 'herramienta', 'pose', 'params', 'edicion', 'vertice', 'enlazando', 'id'].some((k) => k in c)) dibujar();
   });
 
   const boton = (texto, titulo, alHacerClic, clase = '') => {
@@ -47,13 +47,27 @@ export function montarOpciones(raiz, acciones) {
     }
 
     if (estado.pose) {
-      const partes = [texto(`Pose ${codigo(estado.pose)}: arrastra un hueso o el dibujo enlazado para girarlo; el círculo del origen lo desplaza. El montaje no cambia.`)];
       const pose = buscar(doc, estado.pose);
-      if (sel?.type === 'bone' && pose?.bones?.[sel.id]) {
-        partes.push(boton(`Quitar ${sel.id} de la pose`, 'El hueso vuelve a como está en el montaje, solo en esta pose', () => ejecutar(opsDePose(doc, pose.id, sel.id, Object.fromEntries(Object.keys(pose.bones[sel.id]).map((k) => [k, undefined]))), `pose ${pose.id}: ${sel.id} del montaje`)));
+      const partes = [
+        texto(
+          estado.edicion
+            ? `Pose ${codigo(estado.pose)}: los puntos que muevas quedan en la pose (con la misma cantidad de puntos, los params la interpolan). El montaje no cambia.`
+            : `Pose ${codigo(estado.pose)}: arrastra un hueso o el dibujo enlazado para girarlo. Lo demás (boca, colores, switch...) se cambia en el inspector, que muestra arriba lo de la pose; <kbd>Enter</kbd> edita los puntos de un path en la pose.`,
+        ),
+      ];
+      if (sel && pose?.values?.[sel.id]) {
+        partes.push(boton(`Quitar ${sel.id} de la pose`, 'Vuelve a como está en el montaje, solo en esta pose', () => ejecutar(opsDePose(doc, pose.id, sel.id, Object.fromEntries(Object.keys(pose.values[sel.id]).map((k) => [k, undefined]))), `pose ${pose.id}: ${sel.id} del montaje`)));
       }
-      partes.push(boton('Volver al montaje', 'Para editar el dibujo y el esqueleto en reposo', () => fijar({ pose: null }), 'principal'));
+      if (estado.edicion) partes.push(boton('Terminar puntos', 'Salir de la edición de puntos (Enter)', () => fijar({ edicion: null, vertice: null })));
+      partes.push(boton('Volver al montaje', 'Para editar el dibujo y el esqueleto en reposo', () => fijar({ pose: null, edicion: null, vertice: null }), 'principal'));
       return partes;
+    }
+
+    if (estado.params) {
+      return [
+        texto('Parámetros: el personaje se ve con la mezcla de poses que dan los controles de abajo. Aquí no se edita; para cambiar una pose, elígela en «Ver».'),
+        boton('Volver al montaje', 'Dejar de ver la mezcla', () => fijar({ params: null }), 'principal'),
+      ];
     }
 
     if (estado.edicion) {

@@ -1,6 +1,6 @@
 # Plan de construcción
 
-> Estado: **fase 3 terminada** (2026-11-03); sigue la fase 4. Se basa en [sintesis.md](sintesis.md) y en la investigación de
+> Estado: **fase 4 construida; falta su prueba con IA** (2026-11-04). Se basa en [sintesis.md](sintesis.md) y en la investigación de
 > [Moho](investigacion/moho-lua.md) y [Rive](investigacion/rive-runtime.md).
 
 ## Cómo trabajamos
@@ -184,7 +184,23 @@ Notas de lo construido:
 
 **Prueba con IA:** riggear el personaje de la fase 2; posarlo ("saludando", "mirando hacia arriba").
 
-## Fase 4: switch, params, drivers y acciones
+## Fase 4: switch, params, drivers y acciones 🔶 construida, falta la prueba con IA
+
+Notas de lo construido:
+- **Las poses son las acciones.** En vez de un tipo nuevo, la `pose` de la fase 3 se generalizó: `values` fija
+  cualquier propiedad animable de cualquier objeto (huesos, vértices de una boca, colores, opacidad, el hijo de un
+  switch). Con la misma cantidad de vértices que el montaje, una forma se interpola (morph). Las animaciones cortas
+  con tiempo quedan para la fase 5. Los documentos con `bones` en las poses se migraron a `values`.
+- **`switch`**: un grupo que muestra un solo hijo (`active`, una referencia limitada a sus hijos con `refScope`).
+- **`param`** (`number`, `boolean`, `enum`) y **`driver`** (param → pose, tramo `inMin…inMax` → peso
+  `outMin…outMax`, o `equals` para un enum). Las poses activas se suman sobre el montaje: los números por
+  diferencias, colores y vértices interpolados, y lo discreto con peso ≥ 0.5. El trigger queda para la fase 6.
+- Editor: «Ver» suma «Parámetros (mezcla)» (lienzo en naranja). El panel de abajo tiene un control por param, los
+  drivers con su peso en vivo y «＋ pose…» para conectar. En una pose, el inspector muestra arriba todo lo animable
+  del objeto (lo cambiado va a la pose) y la edición de puntos guarda el morph en la pose.
+- MCP: `set_pose` con `values` (acepta `d`), `render_preview` con `params` (dice qué poses quedaron activas y con
+  qué peso) y el árbol muestra params, drivers y switches.
+
 
 - **Switch** (Moho switch layer ≈ Rive Solo): un hijo visible, elegido por un valor de texto.
 - **Acciones**: poses o animaciones cortas con nombre *(de Moho)*.

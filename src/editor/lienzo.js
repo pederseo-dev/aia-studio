@@ -49,7 +49,8 @@ export function montarLienzo(contenedor) {
 
   suscribir((c) => {
     if ('pose' in c) contenedor.classList.toggle('modo-pose', !!estado.pose);
-    if ('doc' in c || 'previa' in c || 'pose' in c) dibujarDocumento();
+    if ('params' in c) contenedor.classList.toggle('modo-params', !!estado.params && !estado.pose);
+    if ('doc' in c || 'previa' in c || 'pose' in c || 'params' in c) dibujarDocumento();
     else if ('seleccion' in c || 'edicion' in c || 'vertice' in c || 'enlazando' in c) dibujarSuperposicion();
     if ('enlazando' in c) contenedor.classList.toggle('enlazando', !!estado.enlazando);
     if ('herramienta' in c) {
@@ -74,7 +75,9 @@ export function montarLienzo(contenedor) {
     if (!doc) return documentoG.replaceChildren();
     const w = leerMeta(esquema, doc, 'width');
     const h = leerMeta(esquema, doc, 'height');
-    documentoG.innerHTML = `${contenidoSvg(doc, esquema, { pose: estado.pose })}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
+    // Lo que se ve: la pose que se edita, la mezcla de los params (vista Parámetros) o el montaje.
+    const vista = estado.pose ? { pose: estado.pose } : estado.params ? { params: estado.params } : {};
+    documentoG.innerHTML = `${contenidoSvg(doc, esquema, vista)}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
     dibujarSuperposicion();
   }
 
@@ -190,6 +193,11 @@ export function montarLienzo(contenedor) {
     if (manija) return estado.edicion ? puntos.manija(e, manija) : transformar.manija(e, manija);
     // Con una pose activa, el lienzo posa: se giran huesos (o el dibujo a través de su hueso).
     if (estado.pose) return huesos.pointerdownPose(e);
+    // En la vista Parámetros se mira la mezcla: un clic solo selecciona.
+    if (estado.params) {
+      const g = e.target.closest('[data-id]');
+      return seleccionar(g && documentoG.contains(g) ? g.dataset.id : null);
+    }
     if (estado.herramienta === 'hueso') return huesos.pointerdown(e);
     if (estado.herramienta === 'path') return pluma.pointerdown(e);
     if (estado.herramienta === 'rotar' || estado.herramienta === 'escalar') return transformar.conHerramienta(e, estado.herramienta);
