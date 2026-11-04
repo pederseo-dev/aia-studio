@@ -58,7 +58,7 @@ La prueba con IA salió 8/8 sin rechazos ([resultados](pruebas-ia/fase-1.md)). A
 - El editor junta los cambios seguidos sobre lo mismo (flechas, campos numéricos) en un solo lote: una entrada de
   historial y un paso de deshacer.
 - Operación `duplicate` (objeto con sus hijos) y `create_document` con `copy_from` y `background`. En el editor:
-  `Ctrl+D` y el botón «Copiar» del documento.
+  `Ctrl+D` y ☰ → «Make a copy…» del documento.
 - `apply_ops`, `undo` y `redo` devuelven el árbol resultante y dicen qué lote tocaron; `get_history` es un resumen
   por defecto (qué propiedades tocó cada lote) y se puede filtrar por origen.
 - La guía fija que izquierda y derecha son las del personaje (`_l`, `_r`).
@@ -106,7 +106,7 @@ Después de la prueba (pedido del usuario):
   (desde el centro del conjunto, proporcional), duplicar, borrar y arrastrar en la jerarquía actúan sobre todos.
   `Ctrl+G` agrupa la selección y `Ctrl+A` selecciona todo. El inspector muestra lo que tienen en común y marca los
   valores distintos.
-- Recursos va en la parte de abajo del panel izquierdo, separado de la jerarquía.
+- Assets va en la parte de abajo del panel izquierdo, separado de Layers.
 
 Notas de lo construido:
 - `path` con vértices en polares (straight con `radius`, mirrored, asymmetric, detached). La IA puede pasar `d` de
@@ -144,7 +144,7 @@ finales en `get_history` y avisos de `set_pose` al recortar ángulos.
 Ajustes hechos con lo que encontró:
 - **Enlace por punto** (el manual de Moho): cada vértice de un path acepta `bone` y, en una pose, se mueve con sus
   tangentes según ese hueso. Un solo path se dobla con una cadena de huesos, sin partir el dibujo. En el editor, al
-  editar puntos, la barra de opciones elige el hueso del punto o «Repartir entre huesos» (el más cercano); por MCP,
+  editar puntos, la barra de opciones elige el hueso del punto o «Distribute among bones» (el más cercano); por MCP,
   `bind_points`. En una pose, arrastrar ese path gira el hueso más cercano al clic. Los pesos entre varios huesos
   por punto siguen para más adelante.
 - Huesos con `from`/`to` en coordenadas del documento (se convierten a `x`, `y`, `rotation` y `length`).
@@ -195,11 +195,11 @@ Notas de lo construido (antes del cambio a la capa de huesos):
   absolutos). Es el puente hacia las acciones de la fase 4: una pose es una acción de un solo cuadro.
 - Borrar un hueso suelta lo enlazado y lo quita de las poses (deshacer lo devuelve); renombrarlo actualiza todo.
 - Editor: herramienta Hueso (B) para crear arrastrando (hijo del seleccionado; desde su punta, encadenado), girar,
-  mover el origen y ajustar la punta (Alt, o con Mover). `Ctrl+B` y soltar en la jerarquía enlazan. Selector
-  «Ver: Montaje / Pose» en la barra; en una pose el lienzo se enmarca en verde, arrastrar un hueso (o el dibujo
+  mover el origen y ajustar la punta (Alt, o con Mover). `Ctrl+B` y soltar en Layers enlazan. Selector
+  «View: Setup / Pose» en la barra; en una pose el lienzo se enmarca en verde, arrastrar un hueso (o el dibujo
   enlazado) lo gira en la pose y el inspector muestra los valores de la pose arriba de los del montaje.
 - Ajustes tras probarlo a mano: una **barra de opciones** sobre el lienzo explica qué se puede hacer según la
-  herramienta y la selección, con botones (con un hueso: «Enlazar dibujo…» por clics, ver lo enlazado, hueso hijo,
+  herramienta y la selección, con botones (con un hueso: «Bind Layer» por clics, ver lo enlazado, hueso hijo,
   probar en una pose). Rectángulos y elipses tienen pivote movible (`originX`/`originY`, como en Rive).
 - MCP: `set_pose` (suma a la pose y devuelve la imagen), `render_preview` con `pose`, `region` (recorte, que pidió la
   IA en la fase 2) y `bones` (el esqueleto encima, con nombres). `get_document` muestra dónde queda cada hueso en el
@@ -227,11 +227,25 @@ Notas de lo construido:
 - **`param`** (`number`, `boolean`, `enum`) y **`driver`** (param → pose, tramo `inMin…inMax` → peso
   `outMin…outMax`, o `equals` para un enum). Las poses activas se suman sobre el montaje: los números por
   diferencias, colores y vértices interpolados, y lo discreto con peso ≥ 0.5. El trigger queda para la fase 6.
-- Editor: «Ver» suma «Parámetros (mezcla)» (lienzo en naranja). El panel de abajo tiene un control por param, los
-  drivers con su peso en vivo y «＋ pose…» para conectar. En una pose, el inspector muestra arriba todo lo animable
+- Editor: «View» suma «Parameters (blend)» (lienzo en naranja). El panel de abajo tiene un control por param, los
+  drivers con su peso en vivo y «＋ Pose…» para conectar. En una pose, el inspector muestra arriba todo lo animable
   del objeto (lo cambiado va a la pose) y la edición de puntos guarda el morph en la pose.
 - MCP: `set_pose` con `values` (acepta `d`), `render_preview` con `params` (dice qué poses quedaron activas y con
   qué peso) y el árbol muestra params, drivers y switches.
+- Primera auditoría (agente `auditor`): el enlace por punto es del montaje (una pose no guarda `bone` en sus vértices
+  y, al aplicarla o mezclarla, cada vértice toma el del montaje con el mismo índice; lo viejo se ignora al leer y se
+  limpia al guardar la pose); la mezcla parte del valor que se ve (con el estilo); deshacer y rehacer se niegan si
+  un lote posterior del otro origen tocó las mismas propiedades; `reparent_bone` avisa en qué poses el hueso cambia
+  de lugar y con `keep_in_poses` las compensa (en el editor, «Keep poses»); los huesos dibujados encima siguen a una
+  pose que mueve el skeleton; `meta` es un id reservado; se validan `initial`/`equals` contra `options` y
+  `min ≤ max`. Herramientas nuevas para la IA: `move` con `keepPosition`, `create_switch_control` (la lógica de
+  «Create control», ahora en `src/core/controles.js`) y `delete_document`. La lógica de las herramientas del MCP
+  vive en `mcp/herramientas.js`, con pruebas.
+- Pendiente: **importar SVG desde el MCP.** El importador del editor (`src/editor/importar.js`) monta el SVG en la
+  página para que el navegador resuelva transformaciones, viewBox, estilos CSS y unidades: lee la matriz de cada
+  forma con `getScreenCTM` y los colores con `getComputedStyle`. En Node no hay DOM: habría que sumar un parser (por
+  ejemplo `linkedom`) y reimplementar a mano la cascada de estilos y la composición de transform y viewBox. Mientras tanto, la IA puede pasar cada forma como `d` en un `path`.
+- Pendiente: traducir al inglés los mensajes de error viejos del núcleo y del servidor (ver `CLAUDE.md`).
 
 
 - **Switch** (Moho switch layer ≈ Rive Solo): un hijo visible, elegido por un valor de texto.
