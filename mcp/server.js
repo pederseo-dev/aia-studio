@@ -7,7 +7,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { buscar, hijos, huesosDe } from '../src/core/documento.js';
-import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, puntaDe, repartirEntreHuesos } from '../src/core/esqueleto.js';
+import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, opsParaReparentar, puntaDe, repartirEntreHuesos } from '../src/core/esqueleto.js';
 import { aplicar } from '../src/core/geometria.js';
 import { leer, leerMeta, sugerir } from '../src/core/esquema.js';
 import { pesoDeDriver, valoresDeParams } from '../src/core/mezcla.js';
@@ -339,6 +339,30 @@ servidor.registerTool(
     for (const e of enlaces) (porHueso[e.bone] ??= []).push(e.id);
     const reparto = Object.entries(porHueso).map(([h, ids]) => `${h} ← ${ids.join(', ')}`).join('; ');
     return texto(`Enlazados ${enlaces.length}: ${reparto}. Míralo con render_preview y una pose (bones: true).`);
+  }),
+);
+
+servidor.registerTool(
+  'reparent_bone',
+  {
+    description:
+      'Cambia el padre de un hueso sin moverlo en pantalla: sus x, y, rotation (y escala y límites) se recalculan en ' +
+      'el marco del padre nuevo, y también sus valores en las poses. El padre puede ser otro hueso del mismo skeleton ' +
+      'o el propio skeleton (para dejarlo como hueso raíz). Sus hijos lo siguen como siempre. Usa esto en vez de ' +
+      'move, que conserva los valores relativos y por eso corre el hueso de lugar.',
+    inputSchema: {
+      id,
+      bone: z.string().describe('id del hueso que cambia de padre'),
+      parent: z.string().describe('id del hueso padre nuevo, o del skeleton para dejarlo como raíz'),
+      note: z.string().optional().describe('qué hace, para el historial'),
+    },
+  },
+  seguro(async ({ id, bone, parent, note }) => {
+    const ops = opsParaReparentar(await almacen.leer(id), esquema, bone, parent);
+    if (!ops.length) return texto(`${bone} ya cuelga de ${parent}; no hubo cambios.`);
+    const { doc } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `reparent ${bone} to ${parent}` });
+    const h = buscar(doc, bone);
+    return texto(`${bone} ahora cuelga de ${parent} (x ${h.x}, y ${h.y}, rotation ${h.rotation}); en pantalla quedó donde estaba.`);
   }),
 );
 

@@ -151,6 +151,9 @@ grupo), así el orden de dibujo queda libre (un brazo puede ir detrás del torso
   skeleton) y apunta según \`rotation\` (0 = derecha, 90 = abajo, -90 = arriba) con largo \`length\`. \`rotation\` y
   \`x\`/\`y\` son **relativos al padre**: el ángulo en pantalla es la suma de la cadena (y del giro del skeleton). Las
   poses usan estos valores relativos. \`get_document\` muestra dónde queda cada hueso en el documento.
+- **Cambiar el padre de un hueso:** usa \`reparent_bone\`, no \`move\` (que conserva los valores relativos y corre el
+  hueso de lugar): recalcula sus valores para que quede donde estaba, también en las poses. Con el skeleton como
+  padre, queda como hueso raíz.
 - **Montaje:** los valores guardados en los huesos son la pose de reposo. Ubica los huesos sobre el dibujo tal como
   está. **Enlazar no mueve nada**: un objeto con \`"bone": "forearm_l_bone"\` (y todos sus hijos) acompaña a ese hueso
   solo cuando una pose lo mueve. Mover, girar o escalar el skeleton mueve el dibujo y los huesos juntos.

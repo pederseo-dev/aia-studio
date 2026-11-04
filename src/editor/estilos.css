@@ -245,6 +245,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 /* Padre e hijos del hueso elegido. */
 .hueso.padre { stroke-width: 2.4; stroke-dasharray: 5 2; }
 .hueso.hijo { stroke-width: 1.8; fill: color-mix(in srgb, var(--c, #ffffff) 30%, transparent); }
+.hueso.padre-nuevo { stroke-width: 2.6; stroke-dasharray: 6 3; stroke: #ffffff; }
 .linea-padre { stroke: #ffffffaa; stroke-width: 1.2; stroke-dasharray: 2 3; }
 .punto-hueso { pointer-events: all; cursor: copy; fill: var(--c); stroke: #1b1b22; stroke-width: 1.2; }
 .punto-hueso.libre { fill: #ffffff; stroke: #888; }

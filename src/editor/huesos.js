@@ -6,8 +6,10 @@
 //   la punta del hueso seleccionado encadena uno nuevo. Un clic en un hueso lo elige (para colgarle hijos).
 // - Manipulate Bones (M): solo ajusta. Arrastrar un hueso lo gira; la manija del origen lo mueve y la de la punta
 //   cambia dirección y largo.
-// - Reparent Bone: con un hueso elegido, clic en otro lo hace su padre; clic en vacío lo deja como raíz de su skeleton
-//   (Alt + clic elige otro hueso). No se mueve en pantalla. Mientras está activa se dibuja la jerarquía.
+// - Reparent Bone: nada pasa solo al hacer clic. Clic elige un hueso, Shift/Ctrl + clic suma más, clic en vacío
+//   suelta la selección. Los botones de la barra hacen el cambio: «Parent to …» cuelga los elegidos del último que
+//   se eligió, y «Clear parent» los deja como raíz. No se mueven en pantalla. Mientras está activa se dibuja la
+//   jerarquía.
 // - Bind Layer (L): clic en un hueso y después en el dibujo (o su fila de Layers) para que lo siga entero; otro clic lo
 //   suelta. Alt + clic toma el grupo que lo contiene.
 // - Bind Points: clic en un hueso y después en puntos de los paths de su skeleton (o un recuadro alrededor) para que
@@ -21,7 +23,8 @@ import { leer } from '../core/esquema.js';
 import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, opsParaReparentar, soltarEnlacesAjenos, valoresDeHueso } from '../core/esqueleto.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
 import { mezclarPoses } from '../core/mezcla.js';
-import { avisar, docVisible, ejecutar, esquema, estado, idLibre, previsualizar, seleccionar } from './estado.js';
+import { alternarSeleccion, avisar, docVisible, ejecutar, esquema, estado, idLibre, previsualizar, seleccionar } from './estado.js';
+import { aplicarOperaciones } from '../core/operaciones.js';
 
 const redondear = (v, d = 10) => Math.round(v * d) / d;
 
@@ -41,6 +44,52 @@ const huesoElegido = (doc = estado.doc) => {
   const sel = estado.seleccion && buscar(doc, estado.seleccion);
   return sel?.type === 'bone' ? sel : null;
 };
+
+/**
+ * Reparent Bone: lo que harían los botones con la selección actual. Los hijos son los huesos elegidos menos el
+ * principal (el último elegido), que es el padre. Devuelve { padre, hijos, ops, problema } para «Parent to…» y
+ * { sueltos, ops } para «Clear parent» (los elegidos que no son raíz).
+ */
+export function planDeReparentar(doc = estado.doc) {
+  const elegidos = estado.seleccionados.map((id) => buscar(doc, id)).filter((o) => o?.type === 'bone');
+  const padre = elegidos.find((h) => h.id === estado.seleccion) ?? null;
+  const hijos = elegidos.filter((h) => h !== padre);
+  // Se arma paso a paso: cada hueso se cuelga sobre el documento como quedó con el anterior.
+  const encadenar = (pasos) => {
+    let actual = doc;
+    const ops = [];
+    for (const [hijo, destino] of pasos) {
+      const lote = opsParaReparentar(actual, esquema, hijo, destino);
+      if (!lote.length) continue;
+      actual = aplicarOperaciones(actual, lote, esquema).doc;
+      ops.push(...lote);
+    }
+    return ops;
+  };
+  let problema = null;
+  if (padre) {
+    for (const h of hijos) {
+      if (esqueletoDe(doc, h.id) !== esqueletoDe(doc, padre.id)) problema = `${h.id} is in another skeleton than ${padre.id}`;
+      else if (subarbol(doc, h.id).includes(padre.id)) problema = `${padre.id} hangs from ${h.id}: pick a parent outside its chain`;
+    }
+  }
+  let ops = [];
+  if (padre && hijos.length && !problema) {
+    try {
+      ops = encadenar(hijos.map((h) => [h.id, padre.id]));
+    } catch {
+      problema = `can’t hang them from ${padre.id} without distorting them`;
+    }
+  }
+  const sueltos = elegidos.filter((h) => buscar(doc, h.parent)?.type === 'bone');
+  let opsSoltar = [];
+  try {
+    opsSoltar = encadenar(sueltos.map((h) => [h.id, esqueletoDe(doc, h.id)]));
+  } catch {
+    opsSoltar = [];
+  }
+  return { padre, hijos, ops, problema, sueltos, opsSoltar };
+}
 
 /** El hueso al que enlaza Bind Layer: el elegido, con esa herramienta activa (y fuera de una pose). */
 export function huesoParaEnlazar(doc = estado.doc) {
@@ -176,7 +225,9 @@ export function crearHuesos(ctx) {
       const t = aplicar(m, leer(esquema, h, 'length'), 0);
       const largo = Math.hypot(t[0] - o[0], t[1] - o[1]);
       // El padre y los hijos del hueso elegido, marcados para ver la cadena.
-      const parentesco = elegido && h.id === elegido.parent ? ' padre' : elegido && h.parent === elegido.id ? ' hijo' : '';
+      // Con Reparent Bone y varios elegidos, el principal es el padre que se va a usar: se marca distinto.
+      const reparentando = estado.herramienta === 'reparentar' && estado.seleccionados.length > 1;
+      const parentesco = reparentando ? (h.id === estado.seleccion ? ' padre-nuevo' : '') : elegido && h.id === elegido.parent ? ' padre' : elegido && h.parent === elegido.id ? ' hijo' : '';
       const clase = `hueso${estado.seleccionados.includes(h.id) ? ' seleccionado' : ''}${h.id === estado.seleccion ? ' principal' : ''}${parentesco}`;
       const color = { style: `--c: ${colorDeHueso(doc, h.id)}` };
       // Unión punteada cuando el hueso no nace en la punta de su padre.
@@ -374,27 +425,13 @@ export function crearHuesos(ctx) {
   const huesoTocado = (e) => e.target.closest('[data-hueso]')?.dataset.hueso ?? null;
 
   /**
-   * Reparent Bone: sin hueso elegido (o con Alt), el clic elige uno. Con uno elegido, clic en otro hueso lo hace su
-   * padre; clic en vacío lo deja como raíz de su skeleton.
+   * Reparent Bone: el clic solo selecciona (Shift/Ctrl + clic suma o quita; clic en vacío suelta todo). El cambio lo
+   * hacen los botones de la barra de opciones (ver planDeReparentar).
    */
   function pointerdownReparentar(e) {
-    const doc = estado.doc;
     const tocado = huesoTocado(e);
-    const hijo = huesoElegido(doc);
-    if (!hijo || e.altKey) return seleccionar(tocado);
-    if (tocado === hijo.id) return;
-    const esqueleto = esqueletoDe(doc, hijo.id);
-    const padre = tocado ?? esqueleto;
-    if (padre === hijo.parent) return avisar(tocado ? `${tocado} is already the parent of ${hijo.id}` : `${hijo.id} is already a root bone of ${esqueleto}`);
-    if (tocado && esqueletoDe(doc, tocado) !== esqueleto) return avisar(`${tocado} is in another skeleton; ${hijo.id} can only hang from bones of ${esqueleto}`, true);
-    if (tocado && subarbol(doc, hijo.id).includes(tocado)) return avisar(`${tocado} hangs from ${hijo.id}: pick a bone outside its chain`, true);
-    let ops;
-    try {
-      ops = opsParaReparentar(doc, esquema, hijo.id, padre);
-    } catch {
-      return avisar(`${hijo.id} can’t hang from ${padre} without distorting it`, true);
-    }
-    ejecutar(ops, tocado ? `reparent ${hijo.id} to ${tocado}` : `make ${hijo.id} a root bone`);
+    if (tocado && (e.shiftKey || e.ctrlKey || e.metaKey)) return alternarSeleccion(tocado);
+    seleccionar(tocado);
   }
 
   /** Bind Layer: clic en un hueso lo elige; clic en el dibujo lo enlaza a él (o lo suelta). Alt: su grupo. */

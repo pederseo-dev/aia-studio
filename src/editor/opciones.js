@@ -5,7 +5,7 @@ import { buscar, esqueletoDe, huesosDe } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { enlacesPorCercania, huesoDe, repartirEntreHuesos } from '../core/esqueleto.js';
 import { avisar, ejecutar, esquema, estado, fijar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
-import { colorDeHueso, elegirVariante, esqueletoActivo, opsDePose, varianteDe, variantesAMostrar } from './huesos.js';
+import { colorDeHueso, elegirVariante, esqueletoActivo, opsDePose, planDeReparentar, varianteDe, variantesAMostrar } from './huesos.js';
 
 /**
  * `acciones`: lo que vive en main.js y la barra también ofrece (agrupar, enlazar la selección, enlazar todo por
@@ -297,14 +297,41 @@ export function montarOpciones(raiz, acciones) {
     return caja;
   }
 
+  /**
+   * Reparent Bone, como en Blender: se eligen los hijos y al final el padre (Shift + clic), y un botón hace el cambio.
+   * Nada cambia con solo hacer clic.
+   */
+  function opcionesDeReparentar(doc, hueso) {
+    const plan = planDeReparentar(doc);
+    const nombres = (lista) => lista.map((x) => codigo(x.id)).join(', ');
+    if (!hueso) return [texto('Reparent Bone: click the bone(s) to move, then Shift + click the new parent last. Then use the buttons here. Click empty space to deselect. The lines show each bone’s parent.')];
+    const partes = [];
+    if (!plan.hijos.length) {
+      partes.push(texto(`${codigo(hueso.id)} selected. Shift + click the bone it should hang from (the last one you pick is the parent), or clear its parent to make it a root bone.`));
+      partes.push(parentesco(doc, hueso));
+    } else if (plan.problema) {
+      partes.push(texto(`Parent: ${codigo(plan.padre.id)} (picked last). Can’t do it: ${plan.problema}.`));
+    } else {
+      partes.push(texto(`${nombres(plan.hijos)} will hang from ${codigo(plan.padre.id)} (picked last, dashed). Nothing moves on screen.`));
+    }
+    if (plan.hijos.length && !plan.problema) {
+      const yaEstan = !plan.ops.length;
+      const b = boton(`Parent to ${plan.padre.id}`, yaEstan ? 'They already hang from it' : `Make ${plan.padre.id} the parent of ${plan.hijos.map((x) => x.id).join(', ')}`, () => ejecutar(plan.ops, `parent ${plan.hijos.map((x) => x.id).join(', ')} to ${plan.padre.id}`), 'principal');
+      b.disabled = yaEstan;
+      partes.push(b);
+    }
+    if (plan.sueltos.length) {
+      partes.push(boton('Clear parent', `Make ${plan.sueltos.map((x) => x.id).join(', ')} root bone${plan.sueltos.length === 1 ? '' : 's'} of the skeleton, without moving them`, () => ejecutar(plan.opsSoltar, `clear parent of ${plan.sueltos.map((x) => x.id).join(', ')}`)));
+    }
+    partes.push(boton('Deselect', 'Clear the selection (or click empty space)', () => seleccionar(null)));
+    return partes;
+  }
+
   /** Reparent Bone, Bind Layer y Bind Points: qué hacer según haya o no un hueso elegido. */
   function opcionesDeEnlace(doc, hueso) {
     const h = hueso && codigo(hueso.id);
     const esqueleto = hueso && esqueletoDe(doc, hueso.id);
-    if (estado.herramienta === 'reparentar') {
-      if (!hueso) return [texto('Reparent Bone: click the bone that should hang from another one. The lines show each bone’s parent.')];
-      return [texto(`Reparent Bone: click the new parent of ${h}, or empty space to make it a root bone of ${codigo(esqueleto)}. It stays where it is on screen. Alt + click picks another bone.`), parentesco(doc, hueso)];
-    }
+    if (estado.herramienta === 'reparentar') return opcionesDeReparentar(doc, hueso);
     if (estado.herramienta === 'enlazarCapa') {
       if (!hueso) return [texto('Bind Layer: click a bone, then click the drawing that should follow it whole (or its row in Layers). Click again to unbind; Alt + click picks its group.')];
       const n = doc.objects.filter((o) => o.bone === hueso.id).length;
