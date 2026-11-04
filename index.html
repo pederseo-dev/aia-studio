@@ -104,21 +104,21 @@
         <div class="cabecera">
           <h2>Jerarquía</h2>
           <div id="crear-grupo" class="grupo-herramientas desplegable">
-            <button id="nuevo-grupo" type="button" class="principal icono">▣+</button>
-            <button type="button" class="elegir" aria-haspopup="menu" title="Grupo o switch">▾</button>
+            <button id="nuevo-grupo" type="button" class="principal icono"></button>
+            <button type="button" class="elegir" aria-haspopup="menu" title="Grupo o switch" data-flecha></button>
             <div class="menu" role="menu" hidden>
-              <button type="button" role="menuitem" data-tipo="group" title="Contenedor: sus hijos se mueven juntos. Con varios seleccionados, los agrupa"><span>▣ Grupo</span><kbd>G</kbd></button>
-              <button type="button" role="menuitem" data-tipo="switch" title="Grupo que muestra un solo hijo a la vez (bocas, visemas). Con algo seleccionado, lo mete como variantes"><span>⇄ Switch</span><kbd>Shift+G</kbd></button>
+              <button type="button" role="menuitem" data-tipo="group" title="Contenedor: sus hijos se mueven juntos. Con varios seleccionados, los agrupa"><span class="con-icono" data-icono="group">Grupo</span><kbd>G</kbd></button>
+              <button type="button" role="menuitem" data-tipo="switch" title="Grupo que muestra un solo hijo a la vez (bocas, visemas). Con algo seleccionado, lo mete como variantes"><span class="con-icono" data-icono="switch">Switch</span><kbd>Shift+G</kbd></button>
             </div>
           </div>
-          <button id="duplicar" type="button" class="icono" title="Duplicar selección con sus hijos (Ctrl+D)">⧉</button>
-          <button id="borrar" type="button" class="icono" title="Borrar selección (Supr)">✕</button>
+          <button id="duplicar" type="button" class="icono" title="Duplicar selección con sus hijos (Ctrl+D)" data-icono="duplicar"></button>
+          <button id="borrar" type="button" class="icono" title="Borrar selección (Supr)" data-icono="borrar"></button>
         </div>
         <ul id="arbol" class="arbol" role="tree" aria-multiselectable="true"></ul>
         <div class="cabecera cabecera-recursos">
           <h2>Recursos</h2>
-          <button id="nuevo-estilo" type="button" class="icono" title="Nuevo estilo compartido: varias formas toman de él su relleno y contorno">◆+</button>
-          <button id="nuevo-degradado" type="button" class="icono" title="Nuevo degradado lineal para usar en fillGradient">▤+</button>
+          <button id="nuevo-estilo" type="button" class="icono" title="Nuevo estilo compartido: varias formas toman de él su relleno y contorno" data-icono="estilo"></button>
+          <button id="nuevo-degradado" type="button" class="icono" title="Nuevo degradado lineal para usar en fillGradient" data-icono="degradado"></button>
         </div>
         <ul id="recursos" class="arbol"></ul>
       </aside>

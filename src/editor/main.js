@@ -20,6 +20,9 @@ import {
 const $ = (s) => document.querySelector(s);
 $('#deshacer').innerHTML = ICONOS.deshacer;
 $('#rehacer').innerHTML = ICONOS.rehacer;
+// Íconos fijos del HTML: data-icono los pone al principio del elemento y data-flecha es la flecha de un desplegable.
+for (const el of document.querySelectorAll('[data-icono]')) el.insertAdjacentHTML('afterbegin', ICONOS[el.dataset.icono]);
+for (const el of document.querySelectorAll('[data-flecha]')) el.innerHTML = FLECHA;
 
 montarArbol($('#arbol'), $('#recursos'));
 montarInspector($('#inspector'));
@@ -194,13 +197,13 @@ $('#rehacer').addEventListener('click', rehacer);
 $('#borrar').addEventListener('click', borrarSeleccion);
 // Grupo y switch comparten botón, como la pluma y las formas: el principal crea el último tipo elegido.
 const CONTENEDORES = {
-  group: { icono: '▣+', titulo: 'Nuevo grupo (G) · con varios seleccionados, los agrupa (Ctrl+G)', crear: () => (estado.seleccionados.length > 1 ? agruparSeleccion() : nuevoGrupo()) },
-  switch: { icono: '⇄+', titulo: 'Nuevo switch (Shift+G): muestra un solo hijo a la vez · con algo seleccionado, lo mete como variantes', crear: () => nuevoSwitch() },
+  group: { titulo: 'Nuevo grupo (G) · con varios seleccionados, los agrupa (Ctrl+G)', crear: () => (estado.seleccionados.length > 1 ? agruparSeleccion() : nuevoGrupo()) },
+  switch: { titulo: 'Nuevo switch (Shift+G): muestra un solo hijo a la vez · con algo seleccionado, lo mete como variantes', crear: () => nuevoSwitch() },
 };
 let ultimoContenedor = 'group';
 function fijarContenedor(tipo) {
   ultimoContenedor = tipo;
-  Object.assign($('#nuevo-grupo'), { textContent: CONTENEDORES[tipo].icono, title: CONTENEDORES[tipo].titulo });
+  Object.assign($('#nuevo-grupo'), { innerHTML: ICONOS[tipo], title: CONTENEDORES[tipo].titulo });
 }
 fijarContenedor('group');
 $('#nuevo-grupo').addEventListener('click', () => CONTENEDORES[ultimoContenedor].crear());
