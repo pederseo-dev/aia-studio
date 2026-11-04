@@ -237,15 +237,20 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 #lienzo.modo-pose { box-shadow: inset 0 0 0 2px var(--pose); cursor: default; }
 .huesos { opacity: 0.45; }
 .huesos.activos { opacity: 1; }
-.hueso { fill: #ffffff22; stroke: #ffffffaa; stroke-width: 1.2; }
+/* Cada hueso con su color (--c), como en Rive; los puntos que lo siguen se pintan igual. */
+.hueso { fill: color-mix(in srgb, var(--c, #ffffff) 14%, transparent); stroke: var(--c, #ffffffaa); stroke-width: 1.2; }
 .huesos.activos .hueso { pointer-events: all; cursor: grab; }
-.hueso.seleccionado { fill: #8b9cff55; stroke: var(--acento); }
-.hueso.principal { stroke-width: 2; }
-.modo-pose .hueso { stroke: var(--pose); fill: #5fd3a022; }
-.modo-pose .hueso.seleccionado { fill: #5fd3a066; }
+.hueso.seleccionado { fill: color-mix(in srgb, var(--c, #8b9cff) 50%, transparent); stroke: #ffffff; }
+.hueso.principal { stroke-width: 2.2; }
+/* Padre e hijos del hueso elegido. */
+.hueso.padre { stroke-width: 2.4; stroke-dasharray: 5 2; }
+.hueso.hijo { stroke-width: 1.8; fill: color-mix(in srgb, var(--c, #ffffff) 30%, transparent); }
+.linea-padre { stroke: #ffffffaa; stroke-width: 1.2; stroke-dasharray: 2 3; }
+.punto-hueso { pointer-events: all; cursor: copy; fill: var(--c); stroke: #1b1b22; stroke-width: 1.2; }
+.punto-hueso.libre { fill: #ffffff; stroke: #888; }
 .enlazado { fill: #5fd3a014; stroke: var(--pose); stroke-width: 1.2; stroke-dasharray: 4 2; }
-#lienzo.enlazando { cursor: copy; }
-#lienzo.enlazando #vista * { cursor: copy; }
+#lienzo.herramienta-enlazarCapa #vista *, #lienzo.herramienta-enlazarPuntos #vista * { cursor: copy; }
+#lienzo.herramienta-reparentar .hueso { cursor: alias; }
 .opciones {
   position: absolute;
   left: 10px;
@@ -336,3 +341,4 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 #entradas .hora { color: var(--tenue); font-variant-numeric: tabular-nums; }
 #entradas .nota { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #entradas .revertida .nota { text-decoration: line-through; color: var(--tenue); }
+.parentesco .enlace-hueso { border: none; background: none; padding: 0 2px; font-weight: 600; text-decoration: underline dotted; cursor: pointer; }

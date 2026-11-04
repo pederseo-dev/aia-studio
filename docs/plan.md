@@ -170,7 +170,12 @@ del documento resultó confuso. Se pasó al modelo de Moho:
 - En Layers solo hay capas, como en Moho: los huesos no son filas (probamos un subnodo «Bones (N)» y se quitó; en
   Moho la jerarquía de huesos se ve en el lienzo). Dos herramientas, como en Moho: **Add Bone** (B) solo crea (en el
   skeleton seleccionado o el de la selección; si no hay ninguno, crea uno y avisa) y **Manipulate Bones** (M) solo
-  ajusta (girar, mover el origen, dirección y largo). Antes una sola herramienta hacía todo y resultaba tosca. Sacar un dibujo del skeleton de su hueso suelta el enlace y avisa.
+  ajusta (girar, mover el origen, dirección y largo). Antes una sola herramienta hacía todo y resultaba tosca.
+- Enlazar y emparentar también son herramientas, como en Moho: **Reparent Bone** (cambia el padre sin mover el
+  hueso; `opsParaReparentar` recalcula sus valores en el marco nuevo, también los de las poses), **Bind Layer** (L,
+  reemplaza al modo «Bind drawing…») y **Bind Points** (clic o recuadro sobre los puntos, sin entrar a editar el
+  path). De Rive tomamos los colores por hueso, que también pintan los puntos enlazados, para ver qué sigue a qué.
+  Los pesos por punto de Rive (un punto con varios huesos) quedan para más adelante. Sacar un dibujo del skeleton de su hueso suelta el enlace y avisa.
 - Migración determinista (`npm run migrar`, `src/core/migracion.js`): si todo el dibujo enlazado está en un grupo
   de la raíz (`cat` en los gatos), ese grupo pasa a ser el skeleton y los huesos se llevan a su marco (también en
   las poses); si no, se crea un skeleton nuevo con el tramo de la raíz que tiene el dibujo enlazado. Deja una entrada

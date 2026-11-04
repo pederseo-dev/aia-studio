@@ -144,10 +144,13 @@ const GRUPOS = {
   esqueleto: [
     { id: 'hueso', nombre: 'Add Bone', atajo: 'B', icono: 'agregarHueso' },
     { id: 'manipular', nombre: 'Manipulate Bones', atajo: 'M' },
+    { id: 'reparentar', nombre: 'Reparent Bone', icono: 'reparentar' },
+    { id: 'enlazarCapa', nombre: 'Bind Layer', atajo: 'L' },
+    { id: 'enlazarPuntos', nombre: 'Bind Points' },
   ],
 };
 const ultimaDelGrupo = { transformar: 'seleccionar', crear: 'path', esqueleto: 'hueso' };
-const ATAJOS = Object.fromEntries(Object.values(GRUPOS).flat().map((h) => [h.atajo.toLowerCase(), h.id]));
+const ATAJOS = Object.fromEntries(Object.values(GRUPOS).flat().filter((h) => h.atajo).map((h) => [h.atajo.toLowerCase(), h.id]));
 
 function dibujarGrupos() {
   for (const [grupo, herramientas] of Object.entries(GRUPOS)) {
@@ -156,14 +159,14 @@ function dibujarGrupos() {
     if (activa) ultimaDelGrupo[grupo] = activa.id;
     const visible = herramientas.find((h) => h.id === ultimaDelGrupo[grupo]);
     caja.classList.toggle('activo', !!activa);
-    caja.innerHTML = `<button type="button" class="principal" title="${visible.nombre} (${visible.atajo})" aria-label="${visible.nombre}">${ICONOS[visible.icono ?? visible.id]}</button><button type="button" class="elegir" aria-haspopup="menu" title="More tools">${FLECHA}</button><div class="menu" role="menu" hidden></div>`;
+    caja.innerHTML = `<button type="button" class="principal" title="${visible.nombre}${visible.atajo ? ` (${visible.atajo})` : ''}" aria-label="${visible.nombre}">${ICONOS[visible.icono ?? visible.id]}</button><button type="button" class="elegir" aria-haspopup="menu" title="More tools">${FLECHA}</button><div class="menu" role="menu" hidden></div>`;
     const menu = caja.querySelector('.menu');
     for (const h of herramientas) {
       const b = document.createElement('button');
       b.type = 'button';
       b.setAttribute('role', 'menuitem');
       b.className = h.id === estado.herramienta ? 'marcado' : '';
-      b.innerHTML = `<span class="con-icono">${ICONOS[h.icono ?? h.id]}${h.nombre}</span><kbd>${h.atajo}</kbd>`;
+      b.innerHTML = `<span class="con-icono">${ICONOS[h.icono ?? h.id]}${h.nombre}</span>${h.atajo ? `<kbd>${h.atajo}</kbd>` : ''}`;
       b.addEventListener('click', () => {
         cerrarMenus();
         fijar({ herramienta: h.id });
@@ -474,7 +477,6 @@ window.addEventListener('keydown', (e) => {
     if (sel?.type === 'path') return lienzo.editarPuntos(sel.id);
   }
   if (e.key === 'Escape') {
-    if (estado.enlazando) return fijar({ enlazando: null });
     if (estado.edicion) return salirDeEdicion();
     return estado.herramienta !== 'seleccionar' ? fijar({ herramienta: 'seleccionar' }) : seleccionar(null);
   }

@@ -15,6 +15,10 @@ export const ICONOS = {
   // Herramientas de huesos: crear (hueso con un +) y manipular (hueso con una flecha de giro).
   agregarHueso: trazo('<path transform="rotate(-45 11 13)" d="M7 11.2h8a2.4 2.4 0 1 1 3.2 1.8 2.4 2.4 0 1 1-3.2 1.8H7a2.4 2.4 0 1 1-3.2-1.8A2.4 2.4 0 1 1 7 11.2z"/><path d="M19 2.5v5M16.5 5h5"/>'),
   manipular: trazo('<path d="M4.5 19.5 14 10"/><circle cx="4.5" cy="19.5" r="1.8"/><circle cx="14" cy="10" r="1.3"/><path d="M11 3.8a8 8 0 0 1 9.2 9.2"/><path d="m20.2 9.5 0 3.5-3.5 0"/>'),
+  // Reparent Bone, Bind Layer y Bind Points.
+  reparentar: trazo('<path d="M5 19 12 12"/><circle cx="12" cy="12" r="1.3"/><path d="M12 12l6-6"/><path d="M8 7.5c0-2 1.5-3.5 3.5-3.5"/><path d="m10 2.5 1.5 1.5L10 5.5"/><circle cx="5" cy="19" r="1.6"/>'),
+  enlazarCapa: trazo('<rect x="3.5" y="12" width="9" height="8" rx="1"/><path d="M14 13 20 5"/><circle cx="20" cy="5" r="1.4"/><path d="M8 12V9.5a2 2 0 0 1 4 0"/>'),
+  enlazarPuntos: trazo('<path d="M14 13 20 5"/><circle cx="20" cy="5" r="1.4"/><circle cx="5" cy="17" r="1.6" fill="currentColor"/><circle cx="10" cy="20" r="1.6" fill="currentColor"/><circle cx="6" cy="10.5" r="1.6"/><path d="M7 16.5 12 13"/>'),
   deshacer: trazo('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
   rehacer: trazo('<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>'),
   group: trazo('<path d="M3.5 7.5V18a1 1 0 0 0 1 1h15a1 1 0 0 0 1-1V9.5a1 1 0 0 0-1-1h-8l-2-3h-5a1 1 0 0 0-1 1z"/>'),

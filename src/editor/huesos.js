@@ -6,18 +6,46 @@
 //   la punta del hueso seleccionado encadena uno nuevo. Un clic en un hueso lo elige (para colgarle hijos).
 // - Manipulate Bones (M): solo ajusta. Arrastrar un hueso lo gira; la manija del origen lo mueve y la de la punta
 //   cambia dirección y largo.
+// - Reparent Bone: con un hueso elegido, clic en otro lo hace su padre; clic en vacío lo deja como raíz de su skeleton
+//   (Alt + clic elige otro hueso). No se mueve en pantalla. Mientras está activa se dibuja la jerarquía.
+// - Bind Layer (L): clic en un hueso y después en el dibujo (o su fila de Layers) para que lo siga entero; otro clic lo
+//   suelta. Alt + clic toma el grupo que lo contiene.
+// - Bind Points: clic en un hueso y después en puntos de los paths de su skeleton (o un recuadro alrededor) para que
+//   sigan a ese hueso; Alt suelta. Cada hueso tiene un color y sus puntos se pintan con él.
 //
 // En el montaje esos ajustes cambian el reposo. Con una pose activa, cualquier herramienta posa: arrastrar un hueso (o
 // el dibujo enlazado a él) lo gira dentro de la pose y el origen lo desplaza.
 
-import { buscar, esqueletoDe } from '../core/documento.js';
+import { buscar, esqueletoDe, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
-import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, soltarEnlacesAjenos, valoresDeHueso } from '../core/esqueleto.js';
-import { aplicar, invertir, multiplicar } from '../core/geometria.js';
+import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, opsParaReparentar, soltarEnlacesAjenos, valoresDeHueso } from '../core/esqueleto.js';
+import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
 import { mezclarPoses } from '../core/mezcla.js';
 import { avisar, docVisible, ejecutar, esquema, estado, idLibre, previsualizar, seleccionar } from './estado.js';
 
 const redondear = (v, d = 10) => Math.round(v * d) / d;
+
+/** Herramientas del grupo de huesos (con cualquiera de ellas, los huesos se pueden tocar en el lienzo). */
+export const HERRAMIENTAS_DE_HUESO = ['hueso', 'manipular', 'reparentar', 'enlazarCapa', 'enlazarPuntos'];
+
+// Un color por hueso (como en Rive), para ver qué puntos y qué dibujo siguen a cuál.
+const COLORES = ['#ff6b6b', '#ffa94d', '#e9d94a', '#69db7c', '#3bc9db', '#5c9dff', '#b197fc', '#f783ac'];
+
+export function colorDeHueso(doc, id) {
+  const i = doc.objects.filter((o) => o.type === 'bone').findIndex((h) => h.id === id);
+  return i < 0 ? '#ffffffaa' : COLORES[i % COLORES.length];
+}
+
+/** El hueso elegido, si lo hay. */
+const huesoElegido = (doc = estado.doc) => {
+  const sel = estado.seleccion && buscar(doc, estado.seleccion);
+  return sel?.type === 'bone' ? sel : null;
+};
+
+/** El hueso al que enlaza Bind Layer: el elegido, con esa herramienta activa (y fuera de una pose). */
+export function huesoParaEnlazar(doc = estado.doc) {
+  return estado.herramienta === 'enlazarCapa' && !estado.pose ? (huesoElegido(doc)?.id ?? null) : null;
+}
 const GRADOS = 180 / Math.PI;
 
 /** La pose que se está editando en el documento indicado, o null. */
@@ -128,7 +156,7 @@ export function avisarSueltos(ops) {
 }
 
 export function crearHuesos(ctx) {
-  const activos = () => estado.herramienta === 'hueso' || estado.herramienta === 'manipular' || !!estado.pose;
+  const activos = () => HERRAMIENTAS_DE_HUESO.includes(estado.herramienta) || !!estado.pose;
   const ajustando = () => estado.herramienta === 'manipular' || !!estado.pose;
   const esHueso = (id) => buscar(estado.doc, id)?.type === 'bone';
 
@@ -141,12 +169,16 @@ export function crearHuesos(ctx) {
     const { posado } = evaluarEsqueleto(doc, esquema, poseVista(doc));
     const camara = ctx.matrizCamara();
     const capa = ctx.crear('g', { class: `huesos${activos() ? ' activos' : ''}` });
+    const elegido = huesoElegido(doc);
     for (const h of huesos) {
       const m = multiplicar(camara, posado.get(h.id));
       const o = aplicar(m, 0, 0);
       const t = aplicar(m, leer(esquema, h, 'length'), 0);
       const largo = Math.hypot(t[0] - o[0], t[1] - o[1]);
-      const clase = `hueso${estado.seleccionados.includes(h.id) ? ' seleccionado' : ''}${h.id === estado.seleccion ? ' principal' : ''}`;
+      // El padre y los hijos del hueso elegido, marcados para ver la cadena.
+      const parentesco = elegido && h.id === elegido.parent ? ' padre' : elegido && h.parent === elegido.id ? ' hijo' : '';
+      const clase = `hueso${estado.seleccionados.includes(h.id) ? ' seleccionado' : ''}${h.id === estado.seleccion ? ' principal' : ''}${parentesco}`;
+      const color = { style: `--c: ${colorDeHueso(doc, h.id)}` };
       // Unión punteada cuando el hueso no nace en la punta de su padre.
       const padre = h.parent && buscar(doc, h.parent);
       if (padre?.type === 'bone') {
@@ -155,7 +187,7 @@ export function crearHuesos(ctx) {
         if (Math.hypot(punta[0] - o[0], punta[1] - o[1]) > 2) capa.append(ctx.crear('line', { class: 'union-hueso', x1: punta[0], y1: punta[1], x2: o[0], y2: o[1] }));
       }
       if (largo < 4) {
-        capa.append(ctx.crear('circle', { class: clase, 'data-hueso': h.id, cx: o[0], cy: o[1], r: 4 }, h.id));
+        capa.append(ctx.crear('circle', { class: clase, 'data-hueso': h.id, cx: o[0], cy: o[1], r: 4, ...color }, h.id));
         continue;
       }
       // Forma de rombo alargado, como en Moho: ancho cerca del origen, en punta hacia el final.
@@ -163,12 +195,23 @@ export function crearHuesos(ctx) {
       const ancho = Math.min(9, Math.max(3, largo * 0.12));
       const q = [o[0] + dx * largo * 0.2, o[1] + dy * largo * 0.2];
       const puntos = [o, [q[0] - dy * ancho, q[1] + dx * ancho], t, [q[0] + dy * ancho, q[1] - dx * ancho]];
-      capa.append(ctx.crear('polygon', { class: clase, 'data-hueso': h.id, points: puntos.map((p) => p.join(',')).join(' ') }, h.id));
+      capa.append(ctx.crear('polygon', { class: clase, 'data-hueso': h.id, points: puntos.map((p) => p.join(',')).join(' '), ...color }, h.id));
+    }
+    // Reparent Bone: la jerarquía entera, una línea de cada hueso a la mitad de su padre.
+    if (estado.herramienta === 'reparentar' && !estado.pose) {
+      for (const h of huesos) {
+        const padre = buscar(doc, h.parent);
+        if (padre?.type !== 'bone') continue;
+        const o = aplicar(multiplicar(camara, posado.get(h.id)), 0, 0);
+        const p = aplicar(multiplicar(camara, posado.get(padre.id)), leer(esquema, padre, 'length') / 2, 0);
+        capa.prepend(ctx.crear('line', { class: 'linea-padre', x1: o[0], y1: o[1], x2: p[0], y2: p[1] }, `${h.id} hangs from ${padre.id}`));
+      }
     }
     ctx.superposicion.append(capa);
+    if (estado.herramienta === 'enlazarPuntos' && !estado.pose) dibujarPuntos(doc);
 
-    // Lo que mueve el hueso elegido (o el que se está enlazando), marcado en el dibujo.
-    const marcado = estado.enlazando ?? (estado.seleccion && buscar(doc, estado.seleccion)?.type === 'bone' ? estado.seleccion : null);
+    // Lo que mueve el hueso elegido, marcado en el dibujo.
+    const marcado = elegido?.id;
     if (marcado) {
       for (const o of doc.objects.filter((x) => x.bone === marcado)) {
         const el = ctx.elemento(o.id);
@@ -190,8 +233,26 @@ export function crearHuesos(ctx) {
       const [tx, ty] = aplicar(m, leer(esquema, sel, 'length'), 0);
       if (ajustando()) ctx.superposicion.append(ctx.crear('circle', { class: 'manija', 'data-manija': 'hueso-origen', cx: ox, cy: oy, r: 5 }, estado.pose ? 'Offset the bone in the pose' : 'Move the bone origin'));
       const titulo = estado.pose ? 'Rotate the bone' : ajustando() ? 'Direction and length (Shift: 15° steps)' : 'Drag: chain a new bone from this tip';
-      ctx.superposicion.append(ctx.crear('circle', { class: `manija${ajustando() ? '' : ' manija-encadenar'}`, 'data-manija': 'hueso-punta', cx: tx, cy: ty, r: 5 }, titulo));
+      if (ajustando() || estado.herramienta === 'hueso') ctx.superposicion.append(ctx.crear('circle', { class: `manija${ajustando() ? '' : ' manija-encadenar'}`, 'data-manija': 'hueso-punta', cx: tx, cy: ty, r: 5 }, titulo));
     }
+  }
+
+  /** Bind Points: los puntos de los paths del skeleton activo, con el color del hueso que siguen. */
+  function dibujarPuntos(doc) {
+    const esqueleto = esqueletoActivo(doc);
+    if (!esqueleto) return;
+    const camara = ctx.matrizCamara();
+    const capa = ctx.crear('g', { class: 'puntos-hueso' });
+    for (const path of doc.objects.filter((o) => o.type === 'path' && esqueletoDe(doc, o.id) === esqueleto)) {
+      const m = multiplicar(camara, matrizMundo(doc, esquema, path.id));
+      leer(esquema, path, 'vertices').forEach((v, i) => {
+        const [x, y] = aplicar(m, v.x, v.y);
+        const atributos = { class: `punto-hueso${v.bone ? '' : ' libre'}`, 'data-punto': `${path.id}:${i}`, cx: x, cy: y, r: 4 };
+        if (v.bone) atributos.style = `--c: ${colorDeHueso(doc, v.bone)}`;
+        capa.append(ctx.crear('circle', atributos, `${path.id} point ${i}${v.bone ? ` → ${v.bone}` : ' (follows the shape)'}`));
+      });
+    }
+    ctx.superposicion.append(capa);
   }
 
   // ---------- Matrices de trabajo ----------
@@ -310,6 +371,110 @@ export function crearHuesos(ctx) {
     rotar(e, id);
   }
 
+  const huesoTocado = (e) => e.target.closest('[data-hueso]')?.dataset.hueso ?? null;
+
+  /**
+   * Reparent Bone: sin hueso elegido (o con Alt), el clic elige uno. Con uno elegido, clic en otro hueso lo hace su
+   * padre; clic en vacío lo deja como raíz de su skeleton.
+   */
+  function pointerdownReparentar(e) {
+    const doc = estado.doc;
+    const tocado = huesoTocado(e);
+    const hijo = huesoElegido(doc);
+    if (!hijo || e.altKey) return seleccionar(tocado);
+    if (tocado === hijo.id) return;
+    const esqueleto = esqueletoDe(doc, hijo.id);
+    const padre = tocado ?? esqueleto;
+    if (padre === hijo.parent) return avisar(tocado ? `${tocado} is already the parent of ${hijo.id}` : `${hijo.id} is already a root bone of ${esqueleto}`);
+    if (tocado && esqueletoDe(doc, tocado) !== esqueleto) return avisar(`${tocado} is in another skeleton; ${hijo.id} can only hang from bones of ${esqueleto}`, true);
+    if (tocado && subarbol(doc, hijo.id).includes(tocado)) return avisar(`${tocado} hangs from ${hijo.id}: pick a bone outside its chain`, true);
+    let ops;
+    try {
+      ops = opsParaReparentar(doc, esquema, hijo.id, padre);
+    } catch {
+      return avisar(`${hijo.id} can’t hang from ${padre} without distorting it`, true);
+    }
+    ejecutar(ops, tocado ? `reparent ${hijo.id} to ${tocado}` : `make ${hijo.id} a root bone`);
+  }
+
+  /** Bind Layer: clic en un hueso lo elige; clic en el dibujo lo enlaza a él (o lo suelta). Alt: su grupo. */
+  function pointerdownEnlazarCapa(e) {
+    const tocado = huesoTocado(e);
+    if (tocado) return seleccionar(tocado);
+    const g = e.target.closest('[data-id]');
+    if (!g || !ctx.documentoG.contains(g)) return;
+    const hueso = huesoParaEnlazar();
+    if (!hueso) return avisar('Bind Layer: first click the bone the drawing should follow', true);
+    const obj = buscar(estado.doc, g.dataset.id);
+    alternarEnlace(e.altKey && obj.parent && buscar(estado.doc, obj.parent)?.type !== 'skeleton' ? obj.parent : obj.id, hueso);
+  }
+
+  /**
+   * Bind Points: clic en un hueso lo elige; clic en un punto lo enlaza a ese hueso (o lo suelta si ya era suyo);
+   * arrastrar hace un recuadro y enlaza todos los puntos de adentro (con Alt, los suelta).
+   */
+  function pointerdownEnlazarPuntos(e) {
+    const doc = estado.doc;
+    const tocado = huesoTocado(e);
+    const punto = e.target.closest('[data-punto]')?.dataset.punto;
+    if (tocado && !punto) return seleccionar(tocado);
+    const hueso = huesoElegido(doc);
+    if (!hueso) return avisar('Bind Points: first click the bone the points should follow', true);
+    if (punto) {
+      const [pathId, i] = [punto.slice(0, punto.lastIndexOf(':')), Number(punto.slice(punto.lastIndexOf(':') + 1))];
+      const v = leer(esquema, buscar(doc, pathId), 'vertices')[i];
+      return guardarPuntos(new Map([[pathId, new Map([[i, e.altKey || v.bone === hueso.id ? null : hueso.id]])]]), hueso.id);
+    }
+    // Recuadro.
+    const s0 = ctx.puntoPantalla(e);
+    const caja = ctx.crear('rect', { class: 'recuadro', x: s0[0], y: s0[1], width: 0, height: 0 });
+    ctx.superposicion.append(caja);
+    let s1 = s0;
+    ctx.arrastrar(
+      e,
+      (ev) => {
+        s1 = ctx.puntoPantalla(ev);
+        Object.entries({ x: Math.min(s0[0], s1[0]), y: Math.min(s0[1], s1[1]), width: Math.abs(s1[0] - s0[0]), height: Math.abs(s1[1] - s0[1]) }).forEach(([k, v]) => caja.setAttribute(k, v));
+        ctx.superposicion.append(caja);
+      },
+      (ev) => {
+        caja.remove();
+        if (Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) < 4) return;
+        const [x0, x1] = [Math.min(s0[0], s1[0]), Math.max(s0[0], s1[0])];
+        const [y0, y1] = [Math.min(s0[1], s1[1]), Math.max(s0[1], s1[1])];
+        const camara = ctx.matrizCamara();
+        const esqueleto = esqueletoDe(doc, hueso.id);
+        const cambios = new Map();
+        for (const path of doc.objects.filter((o) => o.type === 'path' && esqueletoDe(doc, o.id) === esqueleto)) {
+          const m = multiplicar(camara, matrizMundo(doc, esquema, path.id));
+          leer(esquema, path, 'vertices').forEach((v, i) => {
+            const [x, y] = aplicar(m, v.x, v.y);
+            if (x < x0 || x > x1 || y < y0 || y > y1) return;
+            (cambios.get(path.id) ?? cambios.set(path.id, new Map()).get(path.id)).set(i, ev.altKey || e.altKey ? null : hueso.id);
+          });
+        }
+        if (cambios.size) guardarPuntos(cambios, hueso.id);
+      },
+    );
+  }
+
+  /** Lote con los vértices nuevos de cada path: cambios = Map(pathId → Map(índice → hueso o null)). */
+  function guardarPuntos(cambios, hueso) {
+    const ops = [];
+    let n = 0;
+    for (const [pathId, porIndice] of cambios) {
+      const vertices = leer(esquema, buscar(estado.doc, pathId), 'vertices').map((v, i) => {
+        if (!porIndice.has(i)) return v;
+        n++;
+        const { bone, ...resto } = v;
+        return porIndice.get(i) ? { ...resto, bone: porIndice.get(i) } : resto;
+      });
+      ops.push({ op: 'set', target: pathId, props: { vertices } });
+    }
+    const suelta = [...cambios.values()].every((m) => [...m.values()].every((b) => b === null));
+    ejecutar(ops, suelta ? `unbind ${n} point${n === 1 ? '' : 's'}` : `bind ${n} point${n === 1 ? '' : 's'} to ${hueso}`);
+  }
+
   /** Con una pose activa: se gira el hueso tocado, o el hueso del dibujo tocado. */
   function pointerdownPose(e) {
     let id = e.target.closest('[data-hueso]')?.dataset.hueso;
@@ -397,14 +562,5 @@ export function crearHuesos(ctx) {
     );
   }
 
-  /** «Enlazar dibujo…»: cada clic en el dibujo lo pega al hueso o lo suelta (Alt: el grupo que lo contiene). */
-  function alEnlazar(e) {
-    const g = e.target.closest('[data-id]');
-    if (!g || !ctx.documentoG.contains(g)) return;
-    const obj = buscar(estado.doc, g.dataset.id);
-    const elegido = e.altKey && obj.parent ? obj.parent : obj.id;
-    alternarEnlace(elegido, estado.enlazando);
-  }
-
-  return { dibujar, manija, pointerdown, pointerdownManipular, pointerdownPose, alEnlazar };
+  return { dibujar, manija, pointerdown, pointerdownManipular, pointerdownPose, pointerdownReparentar, pointerdownEnlazarCapa, pointerdownEnlazarPuntos };
 }

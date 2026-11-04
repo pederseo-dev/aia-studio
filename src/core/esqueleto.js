@@ -246,6 +246,75 @@ export function soltarEnlacesAjenos(doc, esquema) {
   return ops;
 }
 
+const r4 = (v) => Math.round(v * 1e4) / 1e4 || 0;
+
+/** Matriz de mundo de un hueso con estos valores, colgado de `marco` (con ángulo independiente, solo la posición). */
+function mundoDeValores(v, marco, independiente) {
+  const local = matriz(v);
+  if (!independiente) return multiplicar(marco, local);
+  const [x, y] = aplicar(marco, v.x, v.y);
+  return [...local.slice(0, 4), x, y];
+}
+
+/** Valores (x, y, rotation, scaleX, scaleY) que dejan al hueso con esa matriz de mundo, colgado de `marco`. */
+function valoresDeMundo(mundo, marco, independiente) {
+  const [x, y] = aplicar(invertir(marco), mundo[4], mundo[5]);
+  const [a, b, c, d] = independiente ? mundo : multiplicar(invertir([...marco.slice(0, 4), 0, 0]), [...mundo.slice(0, 4), 0, 0]);
+  const scaleX = Math.hypot(a, b);
+  const scaleY = (a * d - b * c) / (scaleX || 1);
+  // Con un marco que deforma (escala desigual y giro), el hueso no se puede expresar sin torcerlo.
+  if (Math.abs(a * c + b * d) > 1e-6 * Math.max(1, scaleX * Math.abs(scaleY))) return null;
+  return { x: r4(x), y: r4(y), rotation: r4((Math.atan2(b, a) * 180) / Math.PI), scaleX: r4(scaleX), scaleY: r4(scaleY) };
+}
+
+/**
+ * Lote para cambiar el padre de un hueso (otro hueso del mismo skeleton, o el skeleton para dejarlo como raíz) sin
+ * que se mueva en pantalla: sus valores del montaje se recalculan en el marco nuevo, y los de las poses también (con
+ * el mismo cambio de marco). Sus hijos lo siguen como siempre.
+ */
+export function opsParaReparentar(doc, esquema, huesoId, padreId) {
+  const hueso = buscar(doc, huesoId);
+  if (hueso?.type !== 'bone') throw new Error(`"${huesoId}" no es un hueso`);
+  const padre = buscar(doc, padreId);
+  if (padre?.type !== 'bone' && padre?.type !== 'skeleton') throw new Error(`"${padreId}" no es un hueso ni un skeleton`);
+  const esqueleto = esqueletoDe(doc, huesoId);
+  const destino = padre.type === 'skeleton' ? padre.id : esqueletoDe(doc, padre.id);
+  if (destino !== esqueleto) throw new Error(`"${padreId}" es de otro skeleton (${destino}); un hueso solo cambia de padre dentro de "${esqueleto}"`);
+  if (padre.type === 'bone' && dentroDe(doc, padreId, huesoId)) throw new Error(`"${padreId}" cuelga de "${huesoId}": un hueso no puede ser hijo de su descendiente`);
+  if (padreId === huesoId) throw new Error('un hueso no puede ser su propio padre');
+  if ((hueso.parent ?? null) === padreId) return [];
+
+  const { reposo } = evaluarEsqueleto(doc, esquema);
+  const marcoDe = (id) => (buscar(doc, id)?.type === 'bone' ? reposo.get(id) : marcoDeHijos(doc, esquema, id));
+  const independiente = leer(esquema, hueso, 'independentAngle');
+  const marcoViejo = marcoDe(hueso.parent);
+  const marcoNuevo = marcoDe(padreId);
+  const indepViejo = independiente && buscar(doc, hueso.parent)?.type === 'bone';
+  const indepNuevo = independiente && padre.type === 'bone';
+  const montaje = valoresDeHueso(esquema, hueso, null);
+  const convertir = (valores) => {
+    const nuevos = valoresDeMundo(mundoDeValores(valores, marcoViejo, indepViejo), marcoNuevo, indepNuevo);
+    if (!nuevos) throw new Error(`no se puede colgar "${huesoId}" de "${padreId}" sin deformarlo (su marco tiene escala desigual con giro)`);
+    return nuevos;
+  };
+  const nuevos = convertir(montaje);
+  const props = { x: nuevos.x, y: nuevos.y, rotation: nuevos.rotation };
+  for (const k of ['scaleX', 'scaleY']) if (hueso[k] !== undefined || Math.abs(nuevos[k] - 1) > 1e-4) props[k] = nuevos[k];
+  // Los límites de ángulo usan la misma referencia que rotation.
+  const giro = nuevos.rotation - montaje.rotation;
+  for (const k of ['minAngle', 'maxAngle']) if (hueso[k] != null && giro) props[k] = r4(hueso[k] + giro);
+  const ops = [{ op: 'move', target: huesoId, parent: padreId }, { op: 'set', target: huesoId, props }];
+  for (const pose of doc.objects.filter((p) => p.type === 'pose' && p.values?.[huesoId])) {
+    const fijados = pose.values[huesoId];
+    const enPose = convertir({ ...montaje, ...Object.fromEntries(CAMPOS_DE_POSE.filter((k) => fijados[k] !== undefined).map((k) => [k, fijados[k]])) });
+    const campos = { ...fijados };
+    if (fijados.x !== undefined || fijados.y !== undefined) [campos.x, campos.y] = [enPose.x, enPose.y];
+    for (const k of ['rotation', 'scaleX', 'scaleY']) if (fijados[k] !== undefined) campos[k] = enPose[k];
+    ops.push({ op: 'set', target: pose.id, props: { values: { ...pose.values, [huesoId]: campos } } });
+  }
+  return ops;
+}
+
 /**
  * Azúcar para crear o mover huesos con coordenadas del documento: `from` (origen) y `to` (punta), como [x, y].
  * Devuelve las props con x, y, rotation y length calculados en el marco del padre (el hueso padre o, para un hueso

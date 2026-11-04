@@ -5,7 +5,7 @@ import { buscar, esqueletoDe, huesosDe } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { enlacesPorCercania, huesoDe, repartirEntreHuesos } from '../core/esqueleto.js';
 import { avisar, ejecutar, esquema, estado, fijar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
-import { elegirVariante, esqueletoActivo, opsDePose, varianteDe, variantesAMostrar } from './huesos.js';
+import { colorDeHueso, elegirVariante, esqueletoActivo, opsDePose, varianteDe, variantesAMostrar } from './huesos.js';
 
 /**
  * `acciones`: lo que vive en main.js y la barra también ofrece (agrupar, enlazar la selección, enlazar todo por
@@ -13,7 +13,7 @@ import { elegirVariante, esqueletoActivo, opsDePose, varianteDe, variantesAMostr
  */
 export function montarOpciones(raiz, acciones) {
   suscribir((c) => {
-    if (['doc', 'seleccion', 'herramienta', 'pose', 'params', 'edicion', 'vertice', 'enlazando', 'id'].some((k) => k in c)) dibujar();
+    if (['doc', 'seleccion', 'herramienta', 'pose', 'params', 'edicion', 'vertice', 'id'].some((k) => k in c)) dibujar();
   });
 
   const boton = (texto, titulo, alHacerClic, clase = '') => {
@@ -30,7 +30,7 @@ export function montarOpciones(raiz, acciones) {
     if (!doc) return;
     raiz.replaceChildren(...contenido(doc));
     raiz.classList.toggle('en-pose', !!estado.pose);
-    raiz.classList.toggle('enlazando', !!estado.enlazando);
+    raiz.classList.toggle('enlazando', ['enlazarCapa', 'enlazarPuntos'].includes(estado.herramienta) && !estado.pose);
   }
 
   function contenido(doc) {
@@ -38,14 +38,8 @@ export function montarOpciones(raiz, acciones) {
     const varios = estado.seleccionados.length > 1;
     const huesos = doc.objects.filter((o) => o.type === 'bone');
 
-    // Enlazar con clic: el modo más específico, va primero.
-    if (estado.enlazando) {
-      const n = doc.objects.filter((o) => o.bone === estado.enlazando).length;
-      return [
-        texto(`Click a drawing of skeleton ${codigo(esqueletoDe(doc, estado.enlazando))} (or its row in Layers) to bind it to ${codigo(estado.enlazando)}; click again to unbind. Alt + click picks its parent group. ${n} bound.`),
-        boton('Done', 'Finish binding (Esc)', () => fijar({ enlazando: null }), 'principal'),
-      ];
-    }
+    // Reparent Bone, Bind Layer y Bind Points trabajan sobre el hueso elegido: dicen qué hacer con él.
+    if (!estado.pose && !estado.params && ['reparentar', 'enlazarCapa', 'enlazarPuntos'].includes(estado.herramienta)) return opcionesDeEnlace(doc, sel?.type === 'bone' ? sel : null);
 
     if (estado.pose) {
       const pose = buscar(doc, estado.pose);
@@ -142,11 +136,18 @@ export function montarOpciones(raiz, acciones) {
       } else if (hueso) {
         partes.push(texto(`Follows ${codigo(hueso)} through its group.`));
       } else if (sel.vertices?.some((v) => v.bone)) {
-        partes.push(texto('Its points follow bones (point binding): <kbd>Enter</kbd> edits them.'));
+        // Enlace por punto: cuántos puntos sigue cada hueso, con su color.
+        const cuenta = {};
+        for (const v of sel.vertices) if (v.bone) cuenta[v.bone] = (cuenta[v.bone] ?? 0) + 1;
+        const lista = Object.entries(cuenta).map(([h, n]) => `<b style="color:${colorDeHueso(doc, h)}">${h}</b> ${n}`).join(', ');
+        partes.push(texto(`Its points follow bones: ${lista}.`));
+        partes.push(boton('Bind Points', 'Bind Points tool: pick a bone, then click or box the points', () => fijar({ herramienta: 'enlazarPuntos' })));
+        partes.push(boton('Unbind points', 'Points go back to following the shape', () => ejecutar([{ op: 'set', target: sel.id, props: { vertices: sel.vertices.map(({ bone, ...v }) => v) } }], `unbind points of ${sel.id}`)));
       } else {
         const esqueleto = esqueletoDe(doc, sel.id);
         if (esqueleto && huesosDe(doc, esqueleto).length) {
-          partes.push(texto(`Doesn’t follow any bone of ${codigo(esqueleto)}: it stays still in poses. Select a bone and use “Bind drawing…” (or Ctrl+B).`));
+          partes.push(texto(`Doesn’t follow any bone of ${codigo(esqueleto)}: it stays still in poses. Bind it with Bind Layer (L), or its points with Bind Points.`));
+          partes.push(boton('Bind Layer', 'Bind Layer tool: click a bone, then this drawing (L)', () => fijar({ herramienta: 'enlazarCapa' })));
           partes.push(boton('Bind all by proximity', `Bind every unbound drawing of ${esqueleto} to its nearest bone`, () => acciones.enlazarTodo(esqueleto)));
         } else if (esqueleto) {
           partes.push(texto(`In skeleton ${codigo(esqueleto)}, which has no bones yet: draw them with Add Bone (B).`));
@@ -278,10 +279,50 @@ export function montarOpciones(raiz, acciones) {
     return partes;
   }
 
+  /** «Parent: x · Children: a, b»: nombres que se tocan para ir a ese hueso (o al skeleton). */
+  function parentesco(doc, hueso) {
+    const caja = Object.assign(document.createElement('span'), { className: 'texto parentesco' });
+    const ir = (id) => {
+      const b = boton(id, `Select ${id}`, () => seleccionar(id), 'enlace-hueso');
+      if (buscar(doc, id)?.type === 'bone') b.style.color = colorDeHueso(doc, id);
+      return b;
+    };
+    const padre = buscar(doc, hueso.parent);
+    caja.append(padre?.type === 'bone' ? 'Parent: ' : 'Root bone of ', ir(hueso.parent));
+    const hijos = doc.objects.filter((o) => o.type === 'bone' && o.parent === hueso.id);
+    if (hijos.length) {
+      caja.append(' · Children: ');
+      hijos.forEach((h, i) => caja.append(...(i ? [', '] : []), ir(h.id)));
+    }
+    return caja;
+  }
+
+  /** Reparent Bone, Bind Layer y Bind Points: qué hacer según haya o no un hueso elegido. */
+  function opcionesDeEnlace(doc, hueso) {
+    const h = hueso && codigo(hueso.id);
+    const esqueleto = hueso && esqueletoDe(doc, hueso.id);
+    if (estado.herramienta === 'reparentar') {
+      if (!hueso) return [texto('Reparent Bone: click the bone that should hang from another one. The lines show each bone’s parent.')];
+      return [texto(`Reparent Bone: click the new parent of ${h}, or empty space to make it a root bone of ${codigo(esqueleto)}. It stays where it is on screen. Alt + click picks another bone.`), parentesco(doc, hueso)];
+    }
+    if (estado.herramienta === 'enlazarCapa') {
+      if (!hueso) return [texto('Bind Layer: click a bone, then click the drawing that should follow it whole (or its row in Layers). Click again to unbind; Alt + click picks its group.')];
+      const n = doc.objects.filter((o) => o.bone === hueso.id).length;
+      const partes = [texto(`Bind Layer → ${h}: click drawing of ${codigo(esqueleto)} (or its row in Layers) to bind or unbind it; Alt + click picks its group. ${n} bound.`)];
+      if (enlacesPorCercania(doc, esquema, esqueleto).length) partes.push(boton('Bind all by proximity', `Bind every unbound drawing of ${esqueleto} to its nearest bone`, () => acciones.enlazarTodo(esqueleto)));
+      return partes;
+    }
+    if (!hueso) return [texto('Bind Points: click a bone, then click points of its skeleton’s paths, or drag a box around them. They take the bone’s color. Alt unbinds.')];
+    const n = doc.objects.reduce((t, o) => t + (o.type === 'path' ? (o.vertices ?? []).filter((v) => v.bone === hueso.id).length : 0), 0);
+    return [texto(`Bind Points → <b style="color:${colorDeHueso(doc, hueso.id)}">${hueso.id}</b>: click a point to bind or unbind it, or drag a box to bind all inside (Alt + box: unbind). ${n} point${n === 1 ? '' : 's'} follow it; white points follow their shape.`)];
+  }
+
   function opcionesDeHueso(doc, hueso) {
     const enlazados = doc.objects.filter((o) => o.bone === hueso.id);
     const poses = doc.objects.filter((o) => o.type === 'pose');
-    const enlace = enlazados.length ? `It moves ${enlazados.length} object${enlazados.length === 1 ? '' : 's'}, only in poses.` : 'Nothing is bound to it yet: use “Bind drawing…”.';
+    const puntos = doc.objects.reduce((t, o) => t + (o.type === 'path' ? (o.vertices ?? []).filter((v) => v.bone === hueso.id).length : 0), 0);
+    const movidos = [enlazados.length && `${enlazados.length} object${enlazados.length === 1 ? '' : 's'}`, puntos && `${puntos} point${puntos === 1 ? '' : 's'}`].filter(Boolean);
+    const enlace = movidos.length ? `It moves ${movidos.join(' and ')}, only in poses.` : 'Nothing is bound to it yet.';
     const resumen =
       estado.herramienta === 'hueso'
         ? `Add Bone: drag from the tip of ${codigo(hueso.id)} to chain a child, or on empty space for another one. ${enlace}`
@@ -290,15 +331,14 @@ export function montarOpciones(raiz, acciones) {
           : `Setup, bone ${codigo(hueso.id)}. ${enlace}`;
     const partes = [
       texto(resumen),
-      boton('Bind drawing…', 'Click to choose which parts follow this bone', () => fijar({ enlazando: hueso.id }), enlazados.length ? '' : 'principal'),
+      parentesco(doc, hueso),
+      boton('Bind Layer', 'Bind Layer tool: click drawing to make it follow this bone (L)', () => fijar({ herramienta: 'enlazarCapa' }), enlazados.length ? '' : 'principal'),
+      boton('Bind Points', 'Bind Points tool: click or box points of a path to make them follow this bone', () => fijar({ herramienta: 'enlazarPuntos' })),
     ];
-    if (enlazados.length) partes.push(boton(`Show bound (${enlazados.length})`, 'Select the parts bound to this bone', () => seleccionarVarios(enlazados.map((o) => o.id))));
     const esqueleto = esqueletoDe(doc, hueso.id);
     if (esqueleto && enlacesPorCercania(doc, esquema, esqueleto).length) {
       partes.push(boton('Bind all by proximity', `Bind every unbound drawing of ${esqueleto} to its nearest bone`, () => acciones.enlazarTodo(esqueleto)));
     }
-    if (estado.herramienta !== 'hueso') partes.push(boton('＋ Child bone', 'Add Bone: drag from this bone’s tip to chain another (B)', () => fijar({ herramienta: 'hueso' })));
-    if (estado.herramienta !== 'manipular') partes.push(boton('Adjust', 'Manipulate Bones: rotate it, move its origin, change its length (M)', () => fijar({ herramienta: 'manipular' })));
     partes.push(
       boton(
         poses.length ? `Try in pose ${poses[0].id}` : 'Try in a pose',

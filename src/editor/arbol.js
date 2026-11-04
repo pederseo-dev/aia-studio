@@ -7,7 +7,7 @@ import { ICONO_DE_TIPO, ICONOS } from './iconos.js';
 import { buscar, hijos, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { aplicarOperaciones } from '../core/operaciones.js';
-import { alternarEnlace, avisarSueltos, elegirVariante, soltarAlMover, varianteDe, variantesAMostrar } from './huesos.js';
+import { alternarEnlace, avisarSueltos, elegirVariante, huesoParaEnlazar, soltarAlMover, varianteDe, variantesAMostrar } from './huesos.js';
 import { alternarSeleccion, ejecutar, esquema, estado, mantenerPosicion, seleccionRaices, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 
 const esRecurso = (o) => esquema.tipos.get(o.type)?.resource;
@@ -111,8 +111,9 @@ export function montarArbol(raiz, raizRecursos) {
       ejecutar([visible ? { op: 'set', target: id, props: { visible: false } } : { op: 'unset', target: id, props: ['visible'] }], `${visible ? 'hide' : 'show'} ${id}`);
       return;
     }
-    // «Enlazar dibujo…»: la fila se pega al hueso (o se suelta) en vez de seleccionarse.
-    if (estado.enlazando) return alternarEnlace(id, estado.enlazando);
+    // Bind Layer con un hueso elegido: la fila se pega a ese hueso (o se suelta) en vez de seleccionarse.
+    const hueso = huesoParaEnlazar();
+    if (hueso) return alternarEnlace(id, hueso);
     if (e.ctrlKey || e.metaKey) return alternarSeleccion(id);
     if (e.shiftKey && estado.seleccion) return seleccionarTramo(fila);
     seleccionar(id);

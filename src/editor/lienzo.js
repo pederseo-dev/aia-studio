@@ -54,10 +54,9 @@ export function montarLienzo(contenedor) {
     if ('doc' in c || 'previa' in c || 'pose' in c || 'params' in c) dibujarDocumento();
     // Seleccionar una variante oculta de un switch la muestra (solo en la vista): hay que redibujar el documento.
     else if ('seleccion' in c && JSON.stringify(variantesAMostrar()) !== mostrando) dibujarDocumento();
-    else if ('seleccion' in c || 'edicion' in c || 'vertice' in c || 'enlazando' in c) dibujarSuperposicion();
-    if ('enlazando' in c) contenedor.classList.toggle('enlazando', !!estado.enlazando);
+    else if ('seleccion' in c || 'edicion' in c || 'vertice' in c) dibujarSuperposicion();
     if ('herramienta' in c) {
-      contenedor.className = `herramienta-${estado.herramienta}${estado.pose ? ' modo-pose' : ''}${estado.enlazando ? ' enlazando' : ''}`;
+      contenedor.className = `herramienta-${estado.herramienta}${estado.pose ? ' modo-pose' : ''}`;
       if (estado.herramienta !== 'path' && pluma.activa()) pluma.terminar(false);
       if (estado.herramienta !== 'seleccionar' && estado.edicion) fijar({ edicion: null, vertice: null });
       dibujarSuperposicion();
@@ -192,7 +191,6 @@ export function montarLienzo(contenedor) {
     if (!estado.doc) return;
     if (e.button === 1 || (e.button === 0 && espacio)) return panear(e);
     if (e.button !== 0) return;
-    if (estado.enlazando) return huesos.alEnlazar(e);
     const manija = e.target.closest('[data-manija]')?.dataset.manija;
     if (manija?.startsWith('hueso-')) return huesos.manija(e, manija);
     if (manija) return estado.edicion ? puntos.manija(e, manija) : transformar.manija(e, manija);
@@ -205,6 +203,9 @@ export function montarLienzo(contenedor) {
     }
     if (estado.herramienta === 'hueso') return huesos.pointerdown(e);
     if (estado.herramienta === 'manipular') return huesos.pointerdownManipular(e);
+    if (estado.herramienta === 'reparentar') return huesos.pointerdownReparentar(e);
+    if (estado.herramienta === 'enlazarCapa') return huesos.pointerdownEnlazarCapa(e);
+    if (estado.herramienta === 'enlazarPuntos') return huesos.pointerdownEnlazarPuntos(e);
     if (estado.herramienta === 'path') return pluma.pointerdown(e);
     if (estado.herramienta === 'rotar' || estado.herramienta === 'escalar') return transformar.conHerramienta(e, estado.herramienta);
     if (estado.herramienta === 'rect' || estado.herramienta === 'ellipse') return crearForma(e, estado.herramienta);

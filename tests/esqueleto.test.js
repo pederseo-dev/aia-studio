@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { buscar, crearDocumento, esqueletoDe, validar } from '../src/core/documento.js';
-import { deltaDe, enlacesPorCercania, evaluarEsqueleto, puntaDe, repartirEntreHuesos, soltarEnlacesAjenos } from '../src/core/esqueleto.js';
+import { deltaDe, enlacesPorCercania, evaluarEsqueleto, opsParaReparentar, puntaDe, repartirEntreHuesos, soltarEnlacesAjenos } from '../src/core/esqueleto.js';
 import { aplicar, multiplicar } from '../src/core/geometria.js';
 import { migrarAEsqueletos } from '../src/core/migracion.js';
 import { aplicarOperaciones } from '../src/core/operaciones.js';
@@ -298,4 +298,37 @@ test('migración: dibujo enlazado suelto en la raíz va a un skeleton nuevo sin 
   assert.deepEqual(doc.objects.filter((o) => o.parent === 'skeleton').map((o) => o.id), ['a', 'medio', 'c', 'b1', 'b3']);
   assert.equal(buscar(doc, 'b1').x, 10);
   assert.equal(svgDocumento(doc, esquema), svgDocumento(viejo, esquema).replace('<g data-id="a">', '<g data-id="skeleton"><g data-id="a">').replace('<g data-id="frente">', '</g><g data-id="frente">'));
+});
+
+test('reparentar un hueso no lo mueve, ni en el montaje ni en las poses, y respeta su skeleton', () => {
+  let doc = op(
+    brazo(),
+    { op: 'create', type: 'bone', id: 'finger', parent: 'lower', props: { from: [190, 100], to: [190, 130] } },
+    { op: 'set', target: 'up', props: { values: { upper: { rotation: -90 }, finger: { rotation: 45 } } } },
+  );
+  const antes = evaluarEsqueleto(doc, esquema);
+  const igual = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-3);
+  // Pasa a colgar del hombro: en pantalla queda donde estaba.
+  doc = op(doc, ...opsParaReparentar(doc, esquema, 'finger', 'upper'));
+  assert.equal(buscar(doc, 'finger').parent, 'upper');
+  assert.ok(igual(evaluarEsqueleto(doc, esquema).reposo.get('finger'), antes.reposo.get('finger')));
+  // Su rotación en la pose se llevó al marco nuevo (mismo giro respecto del montaje).
+  assert.equal(buscar(doc, 'up').values.finger.rotation, 45);
+  // Como raíz del skeleton.
+  doc = op(doc, ...opsParaReparentar(doc, esquema, 'finger', 'rig'));
+  assert.equal(buscar(doc, 'finger').parent, 'rig');
+  assert.ok(igual(evaluarEsqueleto(doc, esquema).reposo.get('finger'), antes.reposo.get('finger')));
+  assert.deepEqual([buscar(doc, 'finger').x, buscar(doc, 'finger').y, buscar(doc, 'finger').rotation], [190, 100, 90]);
+  assert.equal(buscar(doc, 'up').values.finger.rotation, 45);
+  // Con un padre girado, la rotación del montaje y la de la pose se compensan igual.
+  const girado = op(doc, { op: 'create', type: 'bone', id: 'tilt', parent: 'rig', props: { x: 0, y: 0, rotation: 30 } });
+  const listo = op(girado, ...opsParaReparentar(girado, esquema, 'finger', 'tilt'));
+  assert.ok(igual(evaluarEsqueleto(listo, esquema).reposo.get('finger'), antes.reposo.get('finger')));
+  assert.deepEqual([buscar(listo, 'finger').rotation, buscar(listo, 'up').values.finger.rotation], [60, 15]);
+  // Errores claros: un descendiente, otro skeleton, algo que no es hueso.
+  assert.throws(() => opsParaReparentar(doc, esquema, 'upper', 'lower'), /cuelga de "upper"/);
+  const otro = op(doc, { op: 'create', type: 'skeleton', id: 'otro' }, { op: 'create', type: 'bone', id: 'x_bone', parent: 'otro' });
+  assert.throws(() => opsParaReparentar(otro, esquema, 'finger', 'x_bone'), /es de otro skeleton \(otro\)/);
+  assert.throws(() => opsParaReparentar(doc, esquema, 'hand', 'upper'), /no es un hueso/);
+  assert.deepEqual(opsParaReparentar(doc, esquema, 'finger', 'rig'), []);
 });
