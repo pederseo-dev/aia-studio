@@ -24,7 +24,7 @@ export function crearPuntos(ctx) {
     const pose = poseActiva();
     return pose ? opsDePose(estado.doc, pose.id, estado.edicion, { vertices }) : [{ op: 'set', target: estado.edicion, props: { vertices } }];
   };
-  const guardar = (vertices, nota) => ejecutar(opsDeVertices(vertices), `${estado.pose ? `pose ${estado.pose}: ` : ''}${nota} en ${estado.edicion}`);
+  const guardar = (vertices, nota) => ejecutar(opsDeVertices(vertices), `${estado.pose ? `pose ${estado.pose}: ` : ''}${nota} in ${estado.edicion}`);
 
   function dibujar() {
     const obj = path();
@@ -38,13 +38,13 @@ export function crearPuntos(ctx) {
         if (!punto) continue;
         const t = pantalla(punto);
         ctx.superposicion.append(ctx.crear('line', { class: 'tangente', x1: a[0], y1: a[1], x2: t[0], y2: t[1] }));
-        ctx.superposicion.append(ctx.crear('circle', { class: 'manija tangente-punto', 'data-manija': `${cual}-${i}`, cx: t[0], cy: t[1], r: 4 }, 'Tangente (Alt: separar)'));
+        ctx.superposicion.append(ctx.crear('circle', { class: 'manija tangente-punto', 'data-manija': `${cual}-${i}`, cx: t[0], cy: t[1], r: 4 }, 'Tangent (Alt: break)'));
       }
       ctx.superposicion.append(
         ctx.crear(
           'rect',
           { class: `manija ancla${i === estado.vertice ? ' activa' : ''}${vertices[i].bone ? ' con-hueso' : ''}`, 'data-manija': `ancla-${i}`, x: a[0] - 4.5, y: a[1] - 4.5, width: 9, height: 9 },
-          `Vértice ${i}${vertices[i].bone ? `, sigue a ${vertices[i].bone}` : ''} (doble clic: recto/curvo)`,
+          `Vertex ${i}${vertices[i].bone ? `, follows ${vertices[i].bone}` : ''} (double-click: straight/curved)`,
         ),
       );
     });
@@ -86,7 +86,7 @@ export function crearPuntos(ctx) {
         cambio = nuevos;
         previsualizar(opsDeVertices(nuevos));
       },
-      () => (cambio ? guardar(cambio, cual === 'ancla' ? 'mover vértice' : 'ajustar curva') : previsualizar(null)),
+      () => (cambio ? guardar(cambio, cual === 'ancla' ? 'move vertex' : 'adjust curve') : previsualizar(null)),
     );
   }
 
@@ -107,7 +107,7 @@ export function crearPuntos(ctx) {
       }
     }
     if (!mejor || mejor.d > CERCA_DEL_CONTORNO || mejor.t < 0.02 || mejor.t > 0.98) return false;
-    guardar(dividirTramo(vertices, mejor.i, mejor.t), 'agregar vértice');
+    guardar(dividirTramo(vertices, mejor.i, mejor.t), 'add vertex');
     fijar({ vertice: mejor.i + 1 });
     return true;
   }
@@ -129,14 +129,14 @@ export function crearPuntos(ctx) {
       const dist = Math.round((Math.hypot(dx, dy) / 6) * 100) / 100 || 20;
       nuevos[i] = conHueso(v, { x: v.x, y: v.y, mode: 'mirrored', angle: Math.round((Math.atan2(dy, dx) * 180) / Math.PI * 100) / 100, dist });
     }
-    guardar(nuevos, 'alternar vértice');
+    guardar(nuevos, 'toggle vertex');
   }
 
   function borrarVertice() {
     const obj = path();
     const vertices = leer(esquema, obj, 'vertices');
     if (estado.vertice == null || vertices.length <= 2) return false;
-    guardar(vertices.filter((_, i) => i !== estado.vertice), 'borrar vértice');
+    guardar(vertices.filter((_, i) => i !== estado.vertice), 'delete vertex');
     fijar({ vertice: null });
     return true;
   }

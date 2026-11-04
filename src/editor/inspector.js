@@ -11,8 +11,10 @@ import { opsDePose, poseActiva } from './huesos.js';
 import { ejecutar, esquema, estado, fijar, previsualizar, seleccionar, suscribir } from './estado.js';
 
 const ORDEN_DE_GRUPOS = ['General', 'Forma', 'Transformación', 'Apariencia', 'Degradado', 'Lienzo', 'Tiempo'];
+// Nombres de grupo del esquema, como se muestran (el esquema sigue en español).
+const NOMBRES_DE_GRUPO = { General: 'General', Forma: 'Shape', Transformación: 'Transform', Apariencia: 'Appearance', Degradado: 'Gradient', Lienzo: 'Canvas', Tiempo: 'Time', Driver: 'Driver', Esqueleto: 'Skeleton', Hueso: 'Bone', Límites: 'Limits', Parámetro: 'Parameter', Pose: 'Pose', Switch: 'Switch', Tramo: 'Range', Otros: 'Other' };
 const PARES = { x: 'y', scaleX: 'scaleY', width: 'height', originX: 'originY', x1: 'y1', x2: 'y2', cx: 'cy' };
-const ETIQUETAS = { x: 'X', y: 'Y', scaleX: 'Esc X', scaleY: 'Esc Y', width: 'Ancho', height: 'Alto', originX: 'Piv X', originY: 'Piv Y', x1: 'X1', y1: 'Y1', x2: 'X2', y2: 'Y2', cx: 'CX', cy: 'CY' };
+const ETIQUETAS = { x: 'X', y: 'Y', scaleX: 'SX', scaleY: 'SY', width: 'W', height: 'H', originX: 'PX', originY: 'PY', x1: 'X1', y1: 'Y1', x2: 'X2', y2: 'Y2', cx: 'CX', cy: 'CY' };
 
 export function montarInspector(raiz) {
   suscribir((c) => {
@@ -34,15 +36,15 @@ export function montarInspector(raiz) {
     const propiedades = Object.entries(tipo.properties).filter(comun);
     contexto = { otros };
 
-    raiz.replaceChildren(otros.length ? tituloVarios(obj, otros) : obj ? titulo(obj, tipo) : Object.assign(document.createElement('h2'), { textContent: 'Documento' }));
-    if (otros.length && !propiedades.length) raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'No tienen propiedades en común.' }));
+    raiz.replaceChildren(otros.length ? tituloVarios(obj, otros) : obj ? titulo(obj, tipo) : Object.assign(document.createElement('h2'), { textContent: 'Document' }));
+    if (otros.length && !propiedades.length) raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'No properties in common.' }));
     const pose = poseActiva();
     if (pose && obj && !otros.length && !tipo.resource) seccionDePose(obj, tipo, pose);
 
     const grupos = Map.groupBy(propiedades, ([, p]) => p.group ?? 'Otros');
     const nombres = [...grupos.keys()].sort((a, b) => (ORDEN_DE_GRUPOS.indexOf(a) + 1 || 99) - (ORDEN_DE_GRUPOS.indexOf(b) + 1 || 99));
     for (const nombre of nombres) {
-      raiz.append(Object.assign(document.createElement('h3'), { textContent: nombre }));
+      raiz.append(Object.assign(document.createElement('h3'), { textContent: NOMBRES_DE_GRUPO[nombre] ?? nombre }));
       const props = grupos.get(nombre);
       const enPar = new Set();
       for (const [prop, p] of props) {
@@ -71,7 +73,7 @@ export function montarInspector(raiz) {
   function seccionDePose(obj, tipo, pose) {
     const animables = Object.entries(tipo.properties).filter(([, p]) => p.animatable);
     if (!animables.length) return;
-    raiz.append(Object.assign(document.createElement('h3'), { className: 'en-pose', textContent: `Pose «${pose.id}»` }));
+    raiz.append(Object.assign(document.createElement('h3'), { className: 'en-pose', textContent: `Pose “${pose.id}”` }));
     const fijados = pose.values?.[obj.id] ?? {};
     const deHueso = obj.type === 'bone' ? valoresDeHueso(esquema, obj, pose) : null;
     const valor = (k) => (deHueso ? deHueso[k] : (fijados[k] ?? valorEfectivo(esquema, estado.doc, obj, k)));
@@ -89,7 +91,7 @@ export function montarInspector(raiz) {
         raiz.append(campoDePose(obj, pose, k, p, valor(k), k in fijados));
       }
     }
-    raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'Lo que sigue es el montaje (la pose de reposo).' }));
+    raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'Below is the setup (the rest pose).' }));
   }
 
   function campoDePose(obj, pose, k, p, valor, fijado) {
@@ -97,15 +99,15 @@ export function montarInspector(raiz) {
     div.className = `campo${fijado ? '' : ' por-defecto'}`;
     div.dataset.prop = `pose.${k}`;
     const label = Object.assign(document.createElement('label'), { textContent: ETIQUETAS[k] ?? k });
-    label.title = `${k} en la pose${fijado ? '' : ' (no la fija: es la del montaje)'}`;
+    label.title = `${k} in the pose${fijado ? '' : ' (not set by the pose: uses the setup value)'}`;
     const cambio = (v) => opsDePose(estado.doc, pose.id, obj.id, { [k]: v });
     const confirmar = (v) => {
       if (Object.is(v, valor) && fijado) return previsualizar(null);
       ejecutar(cambio(v), `pose ${pose.id}: ${obj.id}.${k}`, { agrupar: `pose:${pose.id}.${obj.id}.${k}` });
     };
     const control = CONTROLES[p.type]({ p, valor, previsualizar: (v) => previsualizar(cambio(v)), confirmar, div, label, objetivo: obj.id });
-    const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Quitar de la pose (vuelve al montaje)' });
-    restablecer.addEventListener('click', () => ejecutar(opsDePose(estado.doc, pose.id, obj.id, { [k]: undefined }), `pose ${pose.id}: ${obj.id}.${k} del montaje`));
+    const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Remove from pose (back to setup)' });
+    restablecer.addEventListener('click', () => ejecutar(opsDePose(estado.doc, pose.id, obj.id, { [k]: undefined }), `pose ${pose.id}: ${obj.id}.${k} from setup`));
     div.append(label, control, restablecer);
     return div;
   }
@@ -117,9 +119,9 @@ export function montarInspector(raiz) {
     const div = document.createElement('div');
     div.className = 'titulo-varios';
     const nombres = [obj, ...otros].map((o) => o.id);
-    div.innerHTML = `<h2>${nombres.length} objetos</h2><p class="ayuda"></p>`;
+    div.innerHTML = `<h2>${nombres.length} objects</h2><p class="ayuda"></p>`;
     div.querySelector('p').textContent = nombres.join(', ');
-    div.title = `Principal: ${obj.id}. Los cambios se aplican a todos.`;
+    div.title = `Primary: ${obj.id}. Changes apply to all.`;
     return div;
   }
 
@@ -134,7 +136,7 @@ export function montarInspector(raiz) {
       const nuevo = input.value.trim();
       if (!nuevo || nuevo === obj.id) return (input.value = obj.id);
       const anterior = obj.id;
-      await ejecutar([{ op: 'rename', target: anterior, id: nuevo }], `renombrar ${anterior} → ${nuevo}`);
+      await ejecutar([{ op: 'rename', target: anterior, id: nuevo }], `rename ${anterior} → ${nuevo}`);
       if (buscar(estado.doc, nuevo)) seleccionar(nuevo);
     });
     return div;
@@ -152,11 +154,11 @@ export function montarInspector(raiz) {
     div.dataset.prop = prop;
     const label = document.createElement('label');
     label.textContent = etiqueta ?? prop;
-    const deDonde = origen === 'estilo' ? `\nViene del estilo "${datos.style}".` : '';
-    label.title = `${prop}: ${p.description ?? ''}${p.default !== undefined ? `\nPor defecto: ${JSON.stringify(p.default)}` : ''}${deDonde}${mixto ? `\nValores distintos: se muestra el de ${objetivo}.` : ''}`;
-    const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Volver al valor por defecto' });
-    const nombre = otros.length ? `${objetivos.length} objetos` : objetivo;
-    restablecer.addEventListener('click', () => ejecutar(objetivos.map((t) => ({ op: 'unset', target: t, props: [prop] })), `${nombre}.${prop} por defecto`));
+    const deDonde = origen === 'estilo' ? `\nFrom style "${datos.style}".` : '';
+    label.title = `${prop}: ${p.description ?? ''}${p.default !== undefined ? `\nDefault: ${JSON.stringify(p.default)}` : ''}${deDonde}${mixto ? `\nMixed values: showing ${objetivo}.` : ''}`;
+    const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Reset to default' });
+    const nombre = otros.length ? `${objetivos.length} objects` : objetivo;
+    restablecer.addEventListener('click', () => ejecutar(objetivos.map((t) => ({ op: 'unset', target: t, props: [prop] })), `${nombre}.${prop} reset`));
 
     const cambio = (v) => objetivos.map((t) => ({ op: 'set', target: t, props: { [prop]: v } }));
     // Varios cambios seguidos de la misma propiedad (flechitas del campo, escribir y corregir) son un solo paso.
@@ -244,7 +246,7 @@ const CONTROLES = {
     selector.value = valor ? aSeisDigitos(valor) : '#000000';
     selector.disabled = valor == null;
     texto.value = valor ?? '';
-    texto.placeholder = 'ninguno';
+    texto.placeholder = 'none';
     selector.addEventListener('input', () => ver(selector.value));
     selector.addEventListener('change', () => confirmar(selector.value));
     texto.addEventListener('change', () => {
@@ -258,9 +260,9 @@ const CONTROLES = {
     caja.append(selector, texto);
     if (p.nullable) {
       const ninguno = document.createElement('label');
-      const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: valor == null, title: 'Sin color' });
+      const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: valor == null, title: 'No color' });
       check.addEventListener('change', () => confirmar(check.checked ? null : (p.default ?? '#888888')));
-      ninguno.append(check, ' no');
+      ninguno.append(check, ' none');
       caja.append(ninguno);
     }
     return caja;
@@ -275,7 +277,7 @@ const CONTROLES = {
   },
 
   string({ p, valor, confirmar }) {
-    const input = Object.assign(document.createElement('input'), { type: 'text', value: valor ?? '', placeholder: p.nullable ? 'ninguno' : '' });
+    const input = Object.assign(document.createElement('input'), { type: 'text', value: valor ?? '', placeholder: p.nullable ? 'none' : '' });
     // Vacío en una propiedad que admite null = null (por ejemplo, la opción inicial de un param enum).
     input.addEventListener('change', () => confirmar(input.value === '' && p.nullable ? null : input.value));
     return input;
@@ -284,7 +286,7 @@ const CONTROLES = {
   // Lista de textos (las opciones de un param enum): se escribe separada por comas.
   strings({ valor, confirmar }) {
     const input = Object.assign(document.createElement('input'), { type: 'text', value: valor.join(', '), placeholder: 'rest, a, e, o, m' });
-    input.title = 'Separadas por comas';
+    input.title = 'Comma-separated';
     input.addEventListener('change', () => confirmar(input.value.split(',').map((t) => t.trim()).filter(Boolean)));
     return input;
   },
@@ -300,12 +302,12 @@ const CONTROLES = {
   vertices({ valor, objetivo }) {
     const caja = document.createElement('div');
     caja.className = 'color';
-    const boton = Object.assign(document.createElement('button'), { type: 'button', textContent: estado.edicion === objetivo ? 'Terminar' : 'Editar puntos' });
-    boton.title = 'También con doble clic en el path o Enter';
+    const boton = Object.assign(document.createElement('button'), { type: 'button', textContent: estado.edicion === objetivo ? 'Done' : 'Edit points' });
+    boton.title = 'Or double-click the path, or press Enter';
     boton.addEventListener('click', () => fijar(estado.edicion === objetivo ? { edicion: null, vertice: null } : { edicion: objetivo, seleccion: objetivo, seleccionados: [objetivo], vertice: null, herramienta: 'seleccionar' }));
     const resumen = document.createElement('span');
     const curvos = valor.filter((v) => (v.mode ?? 'straight') !== 'straight').length;
-    resumen.textContent = `${valor.length} puntos${curvos ? `, ${curvos} curvos` : ''}`;
+    resumen.textContent = `${valor.length} points${curvos ? `, ${curvos} curved` : ''}`;
     caja.append(resumen, boton);
     return caja;
   },
@@ -320,9 +322,9 @@ const CONTROLES = {
       li.textContent = `${hueso}: ${Object.entries(campos).map(([k, v]) => `${k} ${v}`).join(', ')}`;
       lista.append(li);
     }
-    if (!lista.children.length) lista.innerHTML = '<li>Todavía no mueve ningún hueso.</li>';
+    if (!lista.children.length) lista.innerHTML = '<li>Doesn’t move any bones yet.</li>';
     const activa = estado.pose === objetivo;
-    const boton = Object.assign(document.createElement('button'), { type: 'button', textContent: activa ? 'Volver al montaje' : 'Ver y editar en el lienzo' });
+    const boton = Object.assign(document.createElement('button'), { type: 'button', textContent: activa ? 'Back to setup' : 'View and edit on canvas' });
     boton.addEventListener('click', () => fijar({ pose: activa ? null : objetivo }));
     caja.append(lista, boton);
     return caja;
@@ -338,17 +340,17 @@ const CONTROLES = {
       fila.className = 'parada';
       const color = Object.assign(document.createElement('input'), { type: 'color', value: s.color.length === 4 ? '#' + [...s.color.slice(1)].map((d) => d + d).join('') : s.color.slice(0, 7) });
       color.addEventListener('change', () => cambiar(i, { color: color.value }));
-      const offset = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 1, step: 0.05, value: s.offset, title: 'Posición, de 0 a 1' });
+      const offset = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 1, step: 0.05, value: s.offset, title: 'Position, 0 to 1' });
       offset.addEventListener('change', () => cambiar(i, { offset: Math.min(1, Math.max(0, Number(offset.value) || 0)) }));
-      const opacidad = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 1, step: 0.1, value: s.opacity ?? 1, title: 'Opacidad' });
+      const opacidad = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 1, step: 0.1, value: s.opacity ?? 1, title: 'Opacity' });
       opacidad.addEventListener('change', () => cambiar(i, { opacity: Math.min(1, Math.max(0, Number(opacidad.value))) }));
-      const quitar = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '×', title: 'Quitar parada' });
+      const quitar = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '×', title: 'Remove stop' });
       quitar.style.visibility = valor.length > 1 ? 'visible' : 'hidden';
       quitar.addEventListener('click', () => confirmar(valor.filter((_, j) => j !== i)));
       fila.append(color, offset, opacidad, quitar);
       lista.append(fila);
     });
-    const agregar = Object.assign(document.createElement('button'), { type: 'button', textContent: '+ Parada' });
+    const agregar = Object.assign(document.createElement('button'), { type: 'button', textContent: '+ Stop' });
     agregar.addEventListener('click', () => confirmar([...valor, { offset: 1, color: valor.at(-1)?.color ?? '#ffffff' }].sort((a, b) => a.offset - b.offset)));
     lista.append(agregar);
     return lista;
@@ -356,7 +358,7 @@ const CONTROLES = {
 
   ref({ p, valor, confirmar, objetivo }) {
     const select = document.createElement('select');
-    if (p.nullable) select.append(new Option('(ninguno)', ''));
+    if (p.nullable) select.append(new Option('(none)', ''));
     for (const o of estado.doc.objects) {
       // refScope "children": solo los hijos (el hijo activo de un switch).
       const enAlcance = p.refScope === 'children' ? o.parent === objetivo : o.id !== objetivo;

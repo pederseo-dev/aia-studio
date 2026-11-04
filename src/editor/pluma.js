@@ -77,7 +77,7 @@ export function crearPluma(ctx) {
     const props = { x: ox, y: oy, vertices, closed: cerrado };
     if (!cerrado) Object.assign(props, { fill: null, stroke: '#2b2135', strokeWidth: 3 });
     const id = idLibre('path');
-    ejecutar([{ op: 'create', type: 'path', id, parent: padre, props }], `dibujar ${id}`);
+    ejecutar([{ op: 'create', type: 'path', id, parent: padre, props }], `draw ${id}`);
     fijar({ herramienta: 'seleccionar' });
     seleccionar(id);
   }

@@ -60,10 +60,10 @@ const ACCIONES = {
   cerrar: () => cerrarPestana(estado.id),
   eliminar: async () => {
     const d = estado.documentos.find((x) => x.id === estado.id);
-    if (!confirm(`¿Eliminar «${d?.name ?? estado.id}» y todo su historial? No se puede deshacer.`)) return;
+    if (!confirm(`Delete “${d?.name ?? estado.id}” and all its history? This can’t be undone.`)) return;
     try {
       await eliminarDocumento(estado.id);
-      avisar(`Se eliminó «${d?.name ?? estado.id}»`);
+      avisar(`Deleted “${d?.name ?? estado.id}”`);
     } catch (err) {
       avisar(err.message, true);
     }
@@ -87,7 +87,7 @@ function mostrarAbrir() {
       const li = document.createElement('li');
       li.innerHTML = '<button type="button"><span class="nombre"></span><span class="id"></span></button>';
       li.querySelector('.nombre').textContent = d.name;
-      li.querySelector('.id').textContent = estado.pestanas.includes(d.id) ? `${d.id} · abierto` : d.id;
+      li.querySelector('.id').textContent = estado.pestanas.includes(d.id) ? `${d.id} · open` : d.id;
       li.querySelector('button').addEventListener('click', () => {
         $('#dialogo-abrir').close();
         abrir(d.id);
@@ -95,7 +95,7 @@ function mostrarAbrir() {
       return li;
     }),
   );
-  if (!estado.documentos.length) lista.innerHTML = '<li class="ayuda">No hay personajes todavía.</li>';
+  if (!estado.documentos.length) lista.innerHTML = '<li class="ayuda">No characters yet.</li>';
   $('#dialogo-abrir').showModal();
 }
 
@@ -110,7 +110,7 @@ function dibujarPestanas() {
       pestana.setAttribute('role', 'tab');
       pestana.setAttribute('aria-selected', String(id === estado.id));
       pestana.title = id;
-      pestana.innerHTML = '<span class="titulo"></span><button type="button" class="cerrar" title="Cerrar pestaña (el documento no se borra)">×</button>';
+      pestana.innerHTML = '<span class="titulo"></span><button type="button" class="cerrar" title="Close tab (the document is not deleted)">×</button>';
       pestana.querySelector('.titulo').textContent = d?.name ?? id;
       pestana.addEventListener('click', (e) => (e.target.closest('.cerrar') ? cerrarPestana(id) : id !== estado.id && abrir(id)));
       // Clic con la rueda también cierra, como en el navegador.
@@ -124,16 +124,16 @@ function dibujarPestanas() {
 
 const GRUPOS = {
   transformar: [
-    { id: 'seleccionar', nombre: 'Mover', atajo: 'V' },
-    { id: 'rotar', nombre: 'Rotar', atajo: 'T' },
-    { id: 'escalar', nombre: 'Escalar', atajo: 'S' },
+    { id: 'seleccionar', nombre: 'Move', atajo: 'V' },
+    { id: 'rotar', nombre: 'Rotate', atajo: 'T' },
+    { id: 'escalar', nombre: 'Scale', atajo: 'S' },
   ],
   crear: [
-    { id: 'path', nombre: 'Pluma', atajo: 'P' },
-    { id: 'rect', nombre: 'Rectángulo', atajo: 'R' },
-    { id: 'ellipse', nombre: 'Elipse', atajo: 'E' },
+    { id: 'path', nombre: 'Pen', atajo: 'P' },
+    { id: 'rect', nombre: 'Rectangle', atajo: 'R' },
+    { id: 'ellipse', nombre: 'Ellipse', atajo: 'E' },
   ],
-  esqueleto: [{ id: 'hueso', nombre: 'Hueso', atajo: 'B' }],
+  esqueleto: [{ id: 'hueso', nombre: 'Bone', atajo: 'B' }],
 };
 const ultimaDelGrupo = { transformar: 'seleccionar', crear: 'path', esqueleto: 'hueso' };
 const ATAJOS = Object.fromEntries(Object.values(GRUPOS).flat().map((h) => [h.atajo.toLowerCase(), h.id]));
@@ -145,7 +145,7 @@ function dibujarGrupos() {
     if (activa) ultimaDelGrupo[grupo] = activa.id;
     const visible = herramientas.find((h) => h.id === ultimaDelGrupo[grupo]);
     caja.classList.toggle('activo', !!activa);
-    caja.innerHTML = `<button type="button" class="principal" title="${visible.nombre} (${visible.atajo})" aria-label="${visible.nombre}">${ICONOS[visible.id]}</button><button type="button" class="elegir" aria-haspopup="menu" title="Más herramientas">${FLECHA}</button><div class="menu" role="menu" hidden></div>`;
+    caja.innerHTML = `<button type="button" class="principal" title="${visible.nombre} (${visible.atajo})" aria-label="${visible.nombre}">${ICONOS[visible.id]}</button><button type="button" class="elegir" aria-haspopup="menu" title="More tools">${FLECHA}</button><div class="menu" role="menu" hidden></div>`;
     const menu = caja.querySelector('.menu');
     for (const h of herramientas) {
       const b = document.createElement('button');
@@ -197,8 +197,8 @@ $('#rehacer').addEventListener('click', rehacer);
 $('#borrar').addEventListener('click', borrarSeleccion);
 // Grupo y switch comparten botón, como la pluma y las formas: el principal crea el último tipo elegido.
 const CONTENEDORES = {
-  group: { titulo: 'Nuevo grupo (G) · con varios seleccionados, los agrupa (Ctrl+G)', crear: () => (estado.seleccionados.length > 1 ? agruparSeleccion() : nuevoGrupo()) },
-  switch: { titulo: 'Nuevo switch (Shift+G): muestra un solo hijo a la vez · con algo seleccionado, lo mete como variantes', crear: () => nuevoSwitch() },
+  group: { titulo: 'New group (G) · with several selected, groups them (Ctrl+G)', crear: () => (estado.seleccionados.length > 1 ? agruparSeleccion() : nuevoGrupo()) },
+  switch: { titulo: 'New switch (Shift+G): shows one child at a time · with something selected, wraps it as variants', crear: () => nuevoSwitch() },
 };
 let ultimoContenedor = 'group';
 function fijarContenedor(tipo) {
@@ -225,7 +225,7 @@ $('#archivo-svg').addEventListener('change', async (e) => {
   try {
     const nombre = archivo.name.replace(/\.svg$/i, '');
     const { ops, grupo } = operacionesDeImportar(await archivo.text(), { doc: estado.doc, padre: padreParaNuevo(), nombre });
-    ejecutar(ops, `importar ${archivo.name} (${ops.length - 1} formas)`);
+    ejecutar(ops, `import ${archivo.name} (${ops.length - 1} shapes)`);
     seleccionar(grupo);
   } catch (err) {
     avisar(err.message, true);
@@ -235,11 +235,11 @@ $('#archivo-svg').addEventListener('change', async (e) => {
 function nuevoRecurso(tipo, base, props) {
   if (!estado.doc) return;
   const id = idLibre(base);
-  ejecutar([{ op: 'create', type: tipo, id, ...(props ? { props } : {}) }], `crear ${id}`);
+  ejecutar([{ op: 'create', type: tipo, id, ...(props ? { props } : {}) }], `create ${id}`);
   seleccionar(id);
 }
 
-const nombreDe = (ids) => (ids.length === 1 ? ids[0] : `${ids.length} objetos`);
+const nombreDe = (ids) => (ids.length === 1 ? ids[0] : `${ids.length} objects`);
 
 /** Duplica la selección con sus hijos, un poco desplazada, y selecciona las copias. */
 function duplicarSeleccion() {
@@ -252,7 +252,7 @@ function duplicarSeleccion() {
     const obj = buscar(estado.doc, id);
     return { op: 'duplicate', target: id, suffix: sufijo, props: { x: leer(esquema, obj, 'x') + 20, y: leer(esquema, obj, 'y') + 20 } };
   });
-  ejecutar(ops, `duplicar ${nombreDe(raices)}`);
+  ejecutar(ops, `duplicate ${nombreDe(raices)}`);
   seleccionarVarios(raices.map((id) => `${id}_${sufijo}`));
 }
 
@@ -260,13 +260,13 @@ function borrarSeleccion() {
   const raices = seleccionRaices();
   if (!raices.length) return;
   seleccionar(null);
-  ejecutar(raices.map((id) => ({ op: 'delete', target: id })), `borrar ${nombreDe(raices)}`);
+  ejecutar(raices.map((id) => ({ op: 'delete', target: id })), `delete ${nombreDe(raices)}`);
 }
 
 function nuevoGrupo(tipo = 'group') {
   if (!estado.doc) return;
   const id = idLibre(tipo);
-  ejecutar([{ op: 'create', type: tipo, id, parent: padreParaNuevo() }], `crear ${id}`);
+  ejecutar([{ op: 'create', type: tipo, id, parent: padreParaNuevo() }], `create ${id}`);
   seleccionar(id);
 }
 
@@ -298,7 +298,7 @@ function agruparSeleccion(tipo = 'group') {
     doc = aplicarOperaciones(doc, lote, esquema).doc;
     ops.push(...lote);
   }
-  ejecutar(ops, `${tipo === 'switch' ? 'switch con' : 'agrupar'} ${nombreDe(raices)} en ${grupo}`);
+  ejecutar(ops, `${tipo === 'switch' ? 'switch with' : 'group'} ${nombreDe(raices)} into ${grupo}`);
   seleccionar(grupo);
 }
 
@@ -310,12 +310,12 @@ function enlazarSeleccion() {
   const ids = estado.seleccionados.filter((id) => buscar(estado.doc, id));
   const huesos = ids.filter((id) => buscar(estado.doc, id).type === 'bone');
   const hueso = huesos.includes(estado.seleccion) ? estado.seleccion : huesos.length === 1 ? huesos[0] : null;
-  if (huesos.length > 1 && !hueso) return avisar('Para enlazar, deja un solo hueso en la selección', true);
+  if (huesos.length > 1 && !hueso) return avisar('To bind, leave only one bone in the selection', true);
   const objetos = ids.filter((id) => 'bone' in esquema.tipos.get(buscar(estado.doc, id).type).properties);
-  if (!objetos.length) return avisar(hueso ? 'Selecciona también el dibujo que quieres pegar al hueso' : 'Selecciona dibujo y un hueso (Ctrl + clic)', true);
+  if (!objetos.length) return avisar(hueso ? 'Also select the artwork to bind to the bone' : 'Select artwork and a bone (Ctrl + click)', true);
   const ops = objetos.map((id) => (hueso ? { op: 'set', target: id, props: { bone: hueso } } : { op: 'unset', target: id, props: ['bone'] }));
-  ejecutar(ops, hueso ? `enlazar ${nombreDe(objetos)} a ${hueso}` : `desenlazar ${nombreDe(objetos)}`);
-  avisar(hueso ? `${nombreDe(objetos)} sigue${objetos.length > 1 ? 'n' : ''} a ${hueso}` : `${nombreDe(objetos)} ya no sigue${objetos.length > 1 ? 'n' : ''} a ningún hueso`);
+  ejecutar(ops, hueso ? `bind ${nombreDe(objetos)} to ${hueso}` : `unbind ${nombreDe(objetos)}`);
+  avisar(hueso ? `${nombreDe(objetos)} follow${objetos.length > 1 ? '' : 's'} ${hueso}` : `${nombreDe(objetos)} no longer follow${objetos.length > 1 ? '' : 's'} any bone`);
 }
 
 // ---------- Montaje y poses ----------
@@ -329,10 +329,10 @@ function dibujarPoses() {
   const poses = objetos.filter((o) => o.type === 'pose');
   const conParams = objetos.some((o) => o.type === 'param');
   select.replaceChildren(
-    new Option('Montaje', ''),
-    ...(conParams ? [new Option('Parámetros (mezcla)', PARAMETROS)] : []),
+    new Option('Setup', ''),
+    ...(conParams ? [new Option('Parameters (blend)', PARAMETROS)] : []),
     ...poses.map((p) => new Option(`Pose: ${p.id}`, p.id)),
-    new Option('＋ Nueva pose…', NUEVA_POSE),
+    new Option('＋ New pose…', NUEVA_POSE),
   );
   select.value = estado.pose ?? (estado.params && conParams ? PARAMETROS : '');
   $('#modo').classList.toggle('en-pose', !!estado.pose);
@@ -344,14 +344,14 @@ $('#pose').addEventListener('change', (e) => {
   if (valor === PARAMETROS) return fijar({ pose: null, params: estado.params ?? {} });
   // Montaje deja de mezclar; una pose se ve sola (los valores de los params quedan para cuando se vuelva).
   if (valor !== NUEVA_POSE) return fijar(valor ? { pose: valor } : { pose: null, params: null });
-  const base = prompt('Nombre de la pose (por ejemplo wave, look_up):', '')?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  const base = prompt('Pose name (e.g. wave, look_up):', '')?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
   if (!base) return dibujarPoses();
   const id = /^[a-z]/.test(base) ? base : `pose_${base}`;
   if (buscar(estado.doc, id)) {
-    avisar(`Ya existe "${id}"`, true);
+    avisar(`"${id}" already exists`, true);
     return dibujarPoses();
   }
-  ejecutar([{ op: 'create', type: 'pose', id }], `crear pose ${id}`);
+  ejecutar([{ op: 'create', type: 'pose', id }], `create pose ${id}`);
   fijar({ pose: id });
 });
 
@@ -366,7 +366,7 @@ suscribir((c) => {
 /** Crea un documento vacío o, con `copiarDe`, una copia del documento indicado. */
 async function nuevoDocumento(copiarDe) {
   const actual = copiarDe && estado.documentos.find((d) => d.id === copiarDe);
-  const nombre = prompt(copiarDe ? 'Nombre de la copia:' : 'Nombre del personaje nuevo:', actual ? `${actual.name} (copia)` : '')?.trim();
+  const nombre = prompt(copiarDe ? 'Name of the copy:' : 'New character name:', actual ? `${actual.name} (copy)` : '')?.trim();
   if (!nombre) return;
   const base = nombre.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   const raiz = /^[a-z]/.test(base) ? base : `doc_${base || 'nuevo'}`;
@@ -456,7 +456,7 @@ window.addEventListener('keydown', (e) => {
       const obj = buscar(estado.doc, id);
       return { op: 'set', target: id, props: { x: leer(esquema, obj, 'x') + dx, y: leer(esquema, obj, 'y') + dy } };
     });
-    ejecutar(ops, `mover ${nombreDe(raices)}`, { agrupar: `flechas:${raices.join()}` });
+    ejecutar(ops, `move ${nombreDe(raices)}`, { agrupar: `flechas:${raices.join()}` });
   }
 });
 
@@ -470,14 +470,14 @@ import.meta.hot?.on('aia:documento', async ({ id }) => {
     await cargarDocumentos();
     agregarPestana(id);
     if (!estado.id) return abrir(id);
-    avisar(`Se creó «${estado.documentos.find((d) => d.id === id)?.name ?? id}» en una pestaña nueva`);
+    avisar(`Created “${estado.documentos.find((d) => d.id === id)?.name ?? id}” in a new tab`);
     return;
   }
   if (id !== estado.id || hayPendiente()) return;
   const doc = await api.leer(id);
   if (JSON.stringify(doc) !== JSON.stringify(estado.doc)) {
     fijar({ doc, previa: null });
-    avisar('El documento cambió desde fuera (IA)');
+    avisar('The document was changed externally (AI)');
   }
 });
 

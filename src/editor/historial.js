@@ -27,10 +27,10 @@ export function montarHistorial(lista, botonDeshacer, botonRehacer) {
         .map((e) => {
           const li = document.createElement('li');
           li.className = `${e.origen}${revertidas.has(e.n) ? ' revertida' : ''}`;
-          li.innerHTML = `<span class="quien">${e.origen === 'ai' ? 'IA' : 'Tú'}</span><span class="hora"></span><span class="nota"></span>`;
+          li.innerHTML = `<span class="quien">${e.origen === 'ai' ? 'AI' : 'You'}</span><span class="hora"></span><span class="nota"></span>`;
           li.querySelector('.hora').textContent = new Date(e.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           li.querySelector('.nota').textContent = e.nota;
-          li.title = `${e.nota}\n${e.ops.length} operaciones`;
+          li.title = `${e.nota}\n${e.ops.length} operations`;
           return li;
         }),
     );

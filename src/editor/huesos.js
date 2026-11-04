@@ -46,8 +46,8 @@ export function varianteDe(doc, sw) {
 /** Elegir qué muestra un switch: en la pose que se edita, si hay una; si no, en el montaje. */
 export function elegirVariante(swId, hijo) {
   const pose = poseActiva();
-  if (pose) return ejecutar(opsDePose(estado.doc, pose.id, swId, { active: hijo }), `pose ${pose.id}: ${swId} muestra ${hijo}`);
-  ejecutar([{ op: 'set', target: swId, props: { active: hijo } }], `${swId} muestra ${hijo}`);
+  if (pose) return ejecutar(opsDePose(estado.doc, pose.id, swId, { active: hijo }), `pose ${pose.id}: ${swId} shows ${hijo}`);
+  ejecutar([{ op: 'set', target: swId, props: { active: hijo } }], `${swId} shows ${hijo}`);
 }
 
 /**
@@ -67,8 +67,8 @@ export function variantesAMostrar(doc = estado.doc) {
 export function alternarEnlace(id, hueso) {
   const obj = buscar(estado.doc, id);
   if (!obj || !('bone' in (esquema.tipos.get(obj.type)?.properties ?? {}))) return;
-  if (obj.bone === hueso) return ejecutar([{ op: 'unset', target: id, props: ['bone'] }], `desenlazar ${id}`);
-  ejecutar([{ op: 'set', target: id, props: { bone: hueso } }], `enlazar ${id} a ${hueso}`);
+  if (obj.bone === hueso) return ejecutar([{ op: 'unset', target: id, props: ['bone'] }], `unbind ${id}`);
+  ejecutar([{ op: 'set', target: id, props: { bone: hueso } }], `bind ${id} to ${hueso}`);
 }
 
 export function crearHuesos(ctx) {
@@ -120,7 +120,7 @@ export function crearHuesos(ctx) {
         if (!m || !caja || (!caja.width && !caja.height)) continue;
         const p = (x, y) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f].join(',');
         const puntos = [p(caja.x, caja.y), p(caja.x + caja.width, caja.y), p(caja.x + caja.width, caja.y + caja.height), p(caja.x, caja.y + caja.height)].join(' ');
-        ctx.superposicion.append(ctx.crear('polygon', { class: 'enlazado', points: puntos }, `${o.id} sigue a ${marcado}`));
+        ctx.superposicion.append(ctx.crear('polygon', { class: 'enlazado', points: puntos }, `${o.id} follows ${marcado}`));
       }
     }
 
@@ -131,8 +131,8 @@ export function crearHuesos(ctx) {
       const m = multiplicar(camara, posado.get(sel.id));
       const [ox, oy] = aplicar(m, 0, 0);
       const [tx, ty] = aplicar(m, leer(esquema, sel, 'length'), 0);
-      ctx.superposicion.append(ctx.crear('circle', { class: 'manija', 'data-manija': 'hueso-origen', cx: ox, cy: oy, r: 5 }, estado.pose ? 'Desplazar el hueso en la pose' : 'Mover el origen del hueso'));
-      ctx.superposicion.append(ctx.crear('circle', { class: 'manija', 'data-manija': 'hueso-punta', cx: tx, cy: ty, r: 5 }, estado.pose ? 'Girar el hueso' : estado.herramienta === 'hueso' ? 'Arrastrar: encadenar un hueso nuevo · Alt: dirección y largo' : 'Dirección y largo (Shift: de a 15°)'));
+      ctx.superposicion.append(ctx.crear('circle', { class: 'manija', 'data-manija': 'hueso-origen', cx: ox, cy: oy, r: 5 }, estado.pose ? 'Offset the bone in the pose' : 'Move the bone origin'));
+      ctx.superposicion.append(ctx.crear('circle', { class: 'manija', 'data-manija': 'hueso-punta', cx: tx, cy: ty, r: 5 }, estado.pose ? 'Rotate the bone' : estado.herramienta === 'hueso' ? 'Drag: chain a new bone · Alt: direction and length' : 'Direction and length (Shift: 15° steps)'));
     }
   }
 
@@ -189,7 +189,7 @@ export function crearHuesos(ctx) {
         ops = cambio(id, { rotation: rot });
         previsualizar(ops);
       },
-      () => (ops ? ejecutar(ops, nota(id, 'girar')) : previsualizar(null)),
+      () => (ops ? ejecutar(ops, nota(id, 'rotate')) : previsualizar(null)),
     );
   }
 
@@ -209,7 +209,7 @@ export function crearHuesos(ctx) {
           ops = cambio(id, { x, y });
           previsualizar(ops);
         },
-        terminar('mover'),
+        terminar('move'),
       );
     }
 
@@ -230,7 +230,7 @@ export function crearHuesos(ctx) {
           ops = cambio(id, { rotation, length });
           previsualizar(ops);
         },
-        terminar('ajustar'),
+        terminar('adjust'),
       );
     }
   }
@@ -315,7 +315,7 @@ export function crearHuesos(ctx) {
         const [dx, dy] = [local1[0] - local0[0], local1[1] - local0[1]];
         const id = idLibre('bone');
         const props = { x: redondear(local0[0]), y: redondear(local0[1]), rotation: redondear(Math.atan2(dy, dx) * GRADOS), length: redondear(Math.hypot(dx, dy)) };
-        ejecutar([{ op: 'create', type: 'bone', id, parent: padre?.id ?? null, props }], `crear ${id}`);
+        ejecutar([{ op: 'create', type: 'bone', id, parent: padre?.id ?? null, props }], `create ${id}`);
         seleccionar(id);
       },
     );

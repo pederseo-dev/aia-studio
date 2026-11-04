@@ -10,7 +10,7 @@ const PELIGROSOS = 'script, foreignObject, iframe, object, embed, image, use, a'
 /** Devuelve las operaciones para crear el grupo importado, o lanza si el archivo no sirve. */
 export function operacionesDeImportar(texto, { doc, padre, nombre }) {
   const svg = new DOMParser().parseFromString(texto, 'image/svg+xml').documentElement;
-  if (svg.nodeName !== 'svg' || svg.querySelector('parsererror')) throw new Error('El archivo no es un SVG válido');
+  if (svg.nodeName !== 'svg' || svg.querySelector('parsererror')) throw new Error('The file is not a valid SVG');
   limpiar(svg);
 
   const contenedor = document.createElement('div');
@@ -77,7 +77,7 @@ function convertir(raiz, { doc, padre, nombre }) {
       ops.push({ op: 'create', type: 'path', id: idLibre(el.id || el.getAttribute('inkscape:label') || el.nodeName), parent: grupo, props });
     }
   }
-  if (ops.length === 1) throw new Error('El SVG no tiene formas que se puedan importar');
+  if (ops.length === 1) throw new Error('The SVG has no shapes that can be imported');
   return { ops, grupo };
 }
 

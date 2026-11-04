@@ -20,18 +20,18 @@ export function montarParametros(raiz, botonNuevo) {
     for (const chip of raiz.querySelectorAll('[data-driver]')) {
       const d = buscar(doc, chip.dataset.driver);
       const peso = d?.pose && buscar(doc, d.pose) ? pesoDeDriver(doc, esquema, d, valores[d.param]) : 0;
-      chip.textContent = `→ ${d?.pose ?? '(sin pose)'} ${Math.round(peso * 100)}%`;
+      chip.textContent = `→ ${d?.pose ?? '(no pose)'} ${Math.round(peso * 100)}%`;
       chip.style.setProperty('--peso', `${Math.round(peso * 100)}%`);
     }
   }
 
   botonNuevo.addEventListener('click', () => {
     if (!estado.doc) return;
-    const base = prompt('Nombre del parámetro (por ejemplo happiness, head_turn, mouth):', '')?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    const base = prompt('Parameter name (e.g. happiness, head_turn, mouth):', '')?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
     if (!base) return;
     const id = /^[a-z]/.test(base) ? base : `param_${base}`;
-    if (buscar(estado.doc, id)) return avisar(`Ya existe "${id}"`, true);
-    ejecutar([{ op: 'create', type: 'param', id }], `crear param ${id}`);
+    if (buscar(estado.doc, id)) return avisar(`"${id}" already exists`, true);
+    ejecutar([{ op: 'create', type: 'param', id }], `create param ${id}`);
     seleccionar(id);
   });
 
@@ -41,7 +41,7 @@ export function montarParametros(raiz, botonNuevo) {
     if (!doc) return raiz.replaceChildren();
     const params = doc.objects.filter((o) => o.type === 'param');
     if (!params.length) {
-      raiz.innerHTML = '<p class="ayuda">Sin parámetros. Un parámetro (feliz, giro de cabeza, boca…) mueve una o varias poses a través de drivers: créalo con «＋ Parámetro» y conéctalo a una pose.</p>';
+      raiz.innerHTML = '<p class="ayuda">No parameters. A parameter (happiness, head turn, mouth…) drives one or more poses through drivers: create one with “＋ Parameter” and connect it to a pose.</p>';
       return;
     }
     const valores = valoresDeParams(doc, esquema, estado.params ?? {});
@@ -54,7 +54,7 @@ export function montarParametros(raiz, botonNuevo) {
   function fila(doc, param, valor) {
     const div = document.createElement('div');
     div.className = `param${param.id === estado.seleccion ? ' seleccionado' : ''}`;
-    const nombre = Object.assign(document.createElement('button'), { type: 'button', className: 'nombre', textContent: param.id, title: 'Elegir el param (en el inspector: tipo, rango, opciones)' });
+    const nombre = Object.assign(document.createElement('button'), { type: 'button', className: 'nombre', textContent: param.id, title: 'Select the parameter (edit kind, range and options in the inspector)' });
     nombre.addEventListener('click', () => seleccionar(param.id));
     div.append(nombre, control(param, valor));
 
@@ -66,23 +66,23 @@ export function montarParametros(raiz, botonNuevo) {
       const peso = d.pose && buscar(doc, d.pose) ? pesoDeDriver(doc, esquema, d, valor) : 0;
       const chip = Object.assign(document.createElement('button'), { type: 'button', className: `driver${d.id === estado.seleccion ? ' seleccionado' : ''}` });
       chip.dataset.driver = d.id;
-      chip.textContent = `→ ${d.pose ?? '(sin pose)'} ${Math.round(peso * 100)}%`;
-      chip.title = `Driver ${d.id}: ${tramo(d)}. Clic para editarlo en el inspector.`;
+      chip.textContent = `→ ${d.pose ?? '(no pose)'} ${Math.round(peso * 100)}%`;
+      chip.title = `Driver ${d.id}: ${tramo(d)}. Click to edit it in the inspector.`;
       chip.style.setProperty('--peso', `${Math.round(peso * 100)}%`);
       chip.addEventListener('click', () => seleccionar(d.id));
       lista.append(chip);
     }
     const poses = doc.objects.filter((o) => o.type === 'pose');
     const conectar = document.createElement('select');
-    conectar.title = 'Conectar este param a una pose (crea un driver)';
-    conectar.append(new Option(poses.length ? '＋ pose…' : '(no hay poses)', ''), ...poses.map((p) => new Option(p.id, p.id)));
+    conectar.title = 'Connect this parameter to a pose (creates a driver)';
+    conectar.append(new Option(poses.length ? '＋ Pose…' : '(no poses)', ''), ...poses.map((p) => new Option(p.id, p.id)));
     conectar.disabled = !poses.length;
     conectar.addEventListener('change', () => {
       if (!conectar.value) return;
       const id = idLibre(`${param.id}_to_${conectar.value}`.slice(0, 40));
       // Con un enum, la pose va con la opción que está elegida ahora.
       const props = { param: param.id, pose: conectar.value, ...(leer(esquema, param, 'kind') === 'enum' ? { equals: valor } : {}) };
-      ejecutar([{ op: 'create', type: 'driver', id, props }], `conectar ${param.id} → ${conectar.value}`);
+      ejecutar([{ op: 'create', type: 'driver', id, props }], `connect ${param.id} → ${conectar.value}`);
       seleccionar(id);
     });
     lista.append(conectar);
@@ -95,7 +95,7 @@ export function montarParametros(raiz, botonNuevo) {
     if (tipo === 'enum') {
       const select = document.createElement('select');
       for (const o of leer(esquema, param, 'options')) select.append(new Option(o, o, false, o === valor));
-      if (!select.options.length) select.append(new Option('(sin opciones)', ''));
+      if (!select.options.length) select.append(new Option('(no options)', ''));
       select.addEventListener('change', () => mover(param.id, select.value));
       return select;
     }
@@ -120,8 +120,8 @@ export function montarParametros(raiz, botonNuevo) {
   }
 
   function tramo(d) {
-    if (d.equals != null) return `pose completa con "${d.equals}"`;
+    if (d.equals != null) return `full pose when "${d.equals}"`;
     const v = (k) => leer(esquema, d, k);
-    return `${v('inMin')}…${v('inMax')} → peso ${v('outMin')}…${v('outMax')}`;
+    return `${v('inMin')}…${v('inMax')} → weight ${v('outMin')}…${v('outMax')}`;
   }
 }

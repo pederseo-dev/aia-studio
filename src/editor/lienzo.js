@@ -279,7 +279,7 @@ export function montarLienzo(contenedor) {
             ? { x: redondear(ax), y: redondear(ay) }
             : { x: redondear((ax + bx) / 2), y: redondear((ay + by) / 2), width: redondear(Math.abs(bx - ax)), height: redondear(Math.abs(by - ay)) };
         const id = idLibre(tipo);
-        ejecutar([{ op: 'create', type: tipo, id, parent: padre, props }], `crear ${id}`);
+        ejecutar([{ op: 'create', type: tipo, id, parent: padre, props }], `create ${id}`);
         fijar({ herramienta: 'seleccionar' });
         seleccionar(id);
       },

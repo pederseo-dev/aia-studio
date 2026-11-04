@@ -27,7 +27,7 @@ export function montarArbol(raiz, raizRecursos) {
     if (!doc) return raiz.replaceChildren(), raizRecursos.replaceChildren();
     const objetos = rama(doc, null, 0);
     if (objetos.length) raiz.replaceChildren(...objetos);
-    else raiz.innerHTML = '<li class="vacio">Vacío. Dibuja con las herramientas o pídeselo a la IA.</li>';
+    else raiz.innerHTML = '<li class="vacio">Empty. Draw with the tools or ask the AI.</li>';
     const recursos = doc.objects.filter(esRecurso).map((o) => {
       const li = document.createElement('li');
       li.innerHTML = `<div class="fila${claseSeleccion(o.id)}" data-id="${o.id}" style="padding-left:8px"><span class="tipo" title="${o.type}">${ICONOS[o.type] ?? '•'}</span><span class="nombre"></span></div>`;
@@ -35,7 +35,7 @@ export function montarArbol(raiz, raizRecursos) {
       return li;
     });
     if (recursos.length) raizRecursos.replaceChildren(...recursos);
-    else raizRecursos.innerHTML = '<li class="vacio">Sin estilos ni degradados.</li>';
+    else raizRecursos.innerHTML = '<li class="vacio">No styles or gradients.</li>';
     raiz.querySelector('.principal')?.scrollIntoView({ block: 'nearest' });
   }
 
@@ -58,19 +58,19 @@ export function montarArbol(raiz, raizRecursos) {
         const apagada = activa != null && o.id !== activa;
         const deVista = apagada && variantesAMostrar(doc)[padre.id] === o.id;
         fila.className = `fila${claseSeleccion(o.id)}${visible ? '' : ' oculta'}${apagada ? ' apagada' : ''}`;
-        if (apagada) fila.title = deVista ? `Se ve mientras está seleccionada; el switch ${padre.id} muestra ${activa}` : `No se ve: el switch ${padre.id} muestra ${activa}`;
+        if (apagada) fila.title = deVista ? `Visible while selected; switch ${padre.id} shows ${activa}` : `Hidden: switch ${padre.id} shows ${activa}`;
         fila.dataset.id = o.id;
         fila.draggable = true;
         fila.style.paddingLeft = `${4 + nivel * 14}px`;
         const tieneHijos = hijos(doc, o.id).length > 0;
         const plegado = plegadosDe().has(o.id);
-        fila.innerHTML = `<button type="button" class="plegar${tieneHijos ? '' : ' vacio'}" title="${plegado ? 'Desplegar' : 'Plegar'}" tabindex="-1">${plegado ? '▸' : '▾'}</button>
+        fila.innerHTML = `<button type="button" class="plegar${tieneHijos ? '' : ' vacio'}" title="${plegado ? 'Expand' : 'Collapse'}" tabindex="-1">${plegado ? '▸' : '▾'}</button>
           <span class="tipo" title="${o.type}">${ICONOS[o.type] ?? '•'}</span><span class="nombre"></span>${o.bone ? '<span class="enlace">⟋</span>' : ''}
-          ${o.type === 'switch' ? '<span class="desplegable variante-switch"><button type="button" class="variante" title="Qué variante muestra (en una pose, se guarda en la pose)"></button><div class="menu" role="menu" hidden></div></span>' : ''}
-          ${conOjo ? `<button type="button" class="ojo${visible ? '' : ' oculto'}" title="${visible ? 'Ocultar' : 'Mostrar'}">${visible ? '◉' : '○'}</button>` : ''}`;
+          ${o.type === 'switch' ? '<span class="desplegable variante-switch"><button type="button" class="variante" title="Variant shown (in a pose, saved to the pose)"></button><div class="menu" role="menu" hidden></div></span>' : ''}
+          ${conOjo ? `<button type="button" class="ojo${visible ? '' : ' oculto'}" title="${visible ? 'Hide' : 'Show'}">${visible ? '◉' : '○'}</button>` : ''}`;
         fila.querySelector('.nombre').textContent = o.id;
-        if (o.bone) fila.querySelector('.enlace').title = `Sigue al hueso ${o.bone}`;
-        if (o.type === 'switch') fila.querySelector('.variante').textContent = `▾ ${varianteDe(doc, o) ?? 'vacío'}`;
+        if (o.bone) fila.querySelector('.enlace').title = `Follows bone ${o.bone}`;
+        if (o.type === 'switch') fila.querySelector('.variante').textContent = `▾ ${varianteDe(doc, o) ?? 'empty'}`;
         li.append(fila);
         const subrama = plegado ? [] : rama(doc, o.id, nivel + 1);
         if (subrama.length) {
@@ -106,7 +106,7 @@ export function montarArbol(raiz, raizRecursos) {
     if (e.target.closest('.variante')) return abrirVariantes(fila, id);
     if (e.target.closest('.ojo')) {
       const visible = leer(esquema, buscar(estado.doc, id), 'visible');
-      ejecutar([visible ? { op: 'set', target: id, props: { visible: false } } : { op: 'unset', target: id, props: ['visible'] }], `${visible ? 'ocultar' : 'mostrar'} ${id}`);
+      ejecutar([visible ? { op: 'set', target: id, props: { visible: false } } : { op: 'unset', target: id, props: ['visible'] }], `${visible ? 'hide' : 'show'} ${id}`);
       return;
     }
     // «Enlazar dibujo…»: la fila se pega al hueso (o se suelta) en vez de seleccionarse.
@@ -140,7 +140,7 @@ export function montarArbol(raiz, raizRecursos) {
             b.dataset.variante = h.id;
             return b;
           })
-        : [Object.assign(document.createElement('span'), { className: 'ayuda', textContent: 'Vacío: arrastra dibujos adentro.' })]),
+        : [Object.assign(document.createElement('span'), { className: 'ayuda', textContent: 'Empty: drag drawings into it.' })]),
     );
     // Fijo en la pantalla: la lista de la jerarquía tiene su propio desplazamiento y lo cortaría.
     const r = boton.getBoundingClientRect();
@@ -163,7 +163,7 @@ export function montarArbol(raiz, raizRecursos) {
       terminado = true;
       const nuevo = input.value.trim();
       if (guardar && nuevo && nuevo !== anterior) {
-        ejecutar([{ op: 'rename', target: anterior, id: nuevo }], `renombrar ${anterior} → ${nuevo}`);
+        ejecutar([{ op: 'rename', target: anterior, id: nuevo }], `rename ${anterior} → ${nuevo}`);
         if (estado.seleccion === anterior && buscar(estado.doc, nuevo)) seleccionarVarios(estado.seleccionados.map((s) => (s === anterior ? nuevo : s)), nuevo);
       } else {
         nombre.textContent = anterior;
@@ -224,7 +224,7 @@ export function montarArbol(raiz, raizRecursos) {
     if (contieneA(ids, fila.dataset.id)) return;
     const destino = buscar(estado.doc, fila.dataset.id);
     const donde = zona(e, fila);
-    const nombre = ids.length === 1 ? ids[0] : `${ids.length} objetos`;
+    const nombre = ids.length === 1 ? ids[0] : `${ids.length} objects`;
     // Se arma el lote paso a paso sobre una copia: cada índice depende de cómo quedó el anterior.
     let doc = estado.doc;
     const ops = [];
@@ -238,11 +238,11 @@ export function montarArbol(raiz, raizRecursos) {
         if (buscar(doc, id).type === 'bone') paso([{ op: 'move', target: id, parent: destino.id }, ...mantenerPosicion(doc, id, destino.id)]);
         else paso([{ op: 'set', target: id, props: { bone: destino.id } }]);
       }
-      return ejecutar(ops, `${nombre} al hueso ${destino.id}`);
+      return ejecutar(ops, `${nombre} to bone ${destino.id}`);
     }
     if (donde === 'dentro') {
       for (const id of ids) paso([{ op: 'move', target: id, parent: destino.id }, ...mantenerPosicion(doc, id, destino.id)]);
-      return ejecutar(ops, `mover ${nombre} dentro de ${destino.id}`);
+      return ejecutar(ops, `move ${nombre} into ${destino.id}`);
     }
     // En el panel, "arriba" es "delante": antes de la fila = un lugar más al frente que el destino.
     // Se insertan de a uno junto al destino, en el orden que conserva cómo estaban entre ellos.
@@ -252,7 +252,7 @@ export function montarArbol(raiz, raizRecursos) {
       const pos = hermanos.findIndex((o) => o.id === destino.id);
       paso([{ op: 'move', target: id, parent: padre, index: donde === 'antes' ? pos + 1 : pos }, ...mantenerPosicion(doc, id, padre)]);
     }
-    ejecutar(ops, `reordenar ${nombre}`);
+    ejecutar(ops, `reorder ${nombre}`);
   });
 
   raiz.addEventListener('dragend', () => {

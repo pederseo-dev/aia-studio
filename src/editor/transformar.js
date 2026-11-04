@@ -49,7 +49,7 @@ export function crearTransformar(ctx) {
     const [px, py] = [m.e, m.f];
     const movible = ['group', 'path', 'rect', 'ellipse'].includes(obj.type);
     ctx.superposicion.append(
-      ctx.crear('circle', { class: movible ? 'pivote manija' : 'pivote', 'data-manija': movible ? 'pivote' : '', cx: px, cy: py, r: 5 }, movible ? 'Mover el pivote sin mover el dibujo' : 'Pivote'),
+      ctx.crear('circle', { class: movible ? 'pivote manija' : 'pivote', 'data-manija': movible ? 'pivote' : '', cx: px, cy: py, r: 5 }, movible ? 'Move the pivot without moving the drawing' : 'Pivot'),
     );
   }
 
@@ -59,7 +59,7 @@ export function crearTransformar(ctx) {
     const caja = envolvente(listas);
     if (!caja) return;
     manijasDeCaja(caja.esquinas);
-    ctx.superposicion.append(ctx.crear('circle', { class: 'pivote', cx: caja.centro[0], cy: caja.centro[1], r: 4 }, `${estado.seleccionados.length} objetos: giran y escalan desde el centro`));
+    ctx.superposicion.append(ctx.crear('circle', { class: 'pivote', cx: caja.centro[0], cy: caja.centro[1], r: 4 }, `${estado.seleccionados.length} objects: rotate and scale from the center`));
   }
 
   function manijasDeCaja(esquinas) {
@@ -70,8 +70,8 @@ export function crearTransformar(ctx) {
     const l = Math.hypot(...lado) || 1;
     const rotar = [arriba[0] + (lado[0] / l) * 26, arriba[1] + (lado[1] / l) * 26];
     ctx.superposicion.append(ctx.crear('line', { class: 'seleccion', x1: arriba[0], y1: arriba[1], x2: rotar[0], y2: rotar[1] }));
-    ctx.superposicion.append(ctx.crear('circle', { class: 'manija', 'data-manija': 'rotar', cx: rotar[0], cy: rotar[1], r: 5 }, 'Rotar (Shift: de a 15°)'));
-    const ayuda = varios() ? 'Escalar el conjunto desde su centro' : 'Escalar desde el pivote (Shift: proporcional)';
+    ctx.superposicion.append(ctx.crear('circle', { class: 'manija', 'data-manija': 'rotar', cx: rotar[0], cy: rotar[1], r: 5 }, 'Rotate (Shift: 15° steps)'));
+    const ayuda = varios() ? 'Scale the set from its center' : 'Scale from the pivot (Shift: proportional)';
     esquinas.forEach(([x, y], i) => {
       ctx.superposicion.append(ctx.crear('rect', { class: 'manija', 'data-manija': `escalar-${i}`, x: x - 4, y: y - 4, width: 8, height: 8 }, ayuda));
     });
@@ -114,14 +114,14 @@ export function crearTransformar(ctx) {
         previsualizar(ops);
       },
       () => {
-        if (ops) return ejecutar(ops, `mover ${nombre(objetos)}`);
+        if (ops) return ejecutar(ops, `move ${nombre(objetos)}`);
         previsualizar(null);
         if (enGrupo) seleccionar(id);
       },
     );
   }
 
-  const nombre = (objetos) => (objetos.length === 1 ? objetos[0].id : `${objetos.length} objetos`);
+  const nombre = (objetos) => (objetos.length === 1 ? objetos[0].id : `${objetos.length} objects`);
 
   /** Arrastrar en un lugar vacío: selecciona las formas que toca el recuadro. Con Ctrl o Shift, las suma. */
   function recuadro(e, sumar) {
@@ -183,7 +183,7 @@ export function crearTransformar(ctx) {
           ops = [{ op: 'set', target: id, props: { rotation: rot } }];
           previsualizar(ops);
         },
-        terminar(`rotar ${id}`),
+        terminar(`rotate ${id}`),
       );
     }
 
@@ -198,7 +198,7 @@ export function crearTransformar(ctx) {
           ops = [{ op: 'set', target: id, props: { scaleX: redondear(sx0 * f, 1000), scaleY: redondear(sy0 * f, 1000) } }];
           previsualizar(ops);
         },
-        terminar(`escalar ${id}`),
+        terminar(`scale ${id}`),
       );
     }
 
@@ -219,7 +219,7 @@ export function crearTransformar(ctx) {
           ops = [{ op: 'set', target: id, props: { scaleX: redondear(sx, 1000), scaleY: redondear(sy, 1000) } }];
           previsualizar(ops);
         },
-        terminar(`escalar ${id}`),
+        terminar(`scale ${id}`),
       );
     }
 
@@ -247,7 +247,7 @@ export function crearTransformar(ctx) {
           }
           previsualizar(ops);
         },
-        terminar(`mover pivote de ${id}`),
+        terminar(`move pivot of ${id}`),
       );
     }
   }
@@ -275,7 +275,7 @@ export function crearTransformar(ctx) {
       return { x: redondear(x), y: redondear(y) };
     };
     let ops = null;
-    const nota = `${tipo === 'rotar' ? 'rotar' : 'escalar'} ${objetos.length} objetos`;
+    const nota = `${tipo === 'rotar' ? 'rotate' : 'scale'} ${objetos.length} objects`;
 
     if (tipo === 'rotar') {
       const angulo = (p) => Math.atan2(p[1] - c[1], p[0] - c[0]) * GRADOS;
