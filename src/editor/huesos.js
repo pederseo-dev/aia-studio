@@ -79,7 +79,7 @@ export function motivoParaNoEnlazar(doc, id, hueso) {
   const propio = esqueletoDe(doc, id);
   const delHueso = esqueletoDe(doc, hueso);
   if (propio === delHueso) return null;
-  return propio ? `${id} is in skeleton ${propio}; it can only follow bones of that skeleton` : `${id} is not in skeleton ${delHueso}: move it inside (Hierarchy) to bind it to its bones`;
+  return propio ? `${id} is in skeleton ${propio}; it can only follow bones of that skeleton` : `${id} is not in skeleton ${delHueso}: move it inside (Layers) to bind it to its bones`;
 }
 
 /** Pega un objeto al hueso o, si ya estaba pegado a ese, lo suelta. */
@@ -382,7 +382,7 @@ export function crearHuesos(ctx) {
         ops.push({ op: 'create', type: 'bone', id, parent: destino, props });
         ejecutar(ops, padre || esqueleto ? `create ${id}` : `create ${destino} with ${id}`);
         seleccionar(id);
-        if (!padre && !esqueleto) avisar(`Bones live in a skeleton, so ${destino} was created. Drag the drawing into it in the Hierarchy, then bind it.`);
+        if (!padre && !esqueleto) avisar(`Bones live in a skeleton, so ${destino} was created. Drag the drawing into it in Layers, then bind it.`);
       },
     );
   }

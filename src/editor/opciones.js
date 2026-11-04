@@ -42,7 +42,7 @@ export function montarOpciones(raiz, acciones) {
     if (estado.enlazando) {
       const n = doc.objects.filter((o) => o.bone === estado.enlazando).length;
       return [
-        texto(`Click a drawing of skeleton ${codigo(esqueletoDe(doc, estado.enlazando))} (or its Hierarchy row) to bind it to ${codigo(estado.enlazando)}; click again to unbind. Alt + click picks its parent group. ${n} bound.`),
+        texto(`Click a drawing of skeleton ${codigo(esqueletoDe(doc, estado.enlazando))} (or its row in Layers) to bind it to ${codigo(estado.enlazando)}; click again to unbind. Alt + click picks its parent group. ${n} bound.`),
         boton('Done', 'Finish binding (Esc)', () => fijar({ enlazando: null }), 'principal'),
       ];
     }
@@ -83,7 +83,7 @@ export function montarOpciones(raiz, acciones) {
     switch (estado.herramienta) {
       case 'hueso': {
         const esqueleto = esqueletoActivo(doc);
-        if (!esqueleto) return [texto('Bone: bones live in a skeleton (a bone layer). Pick one in the Hierarchy, or just drag on the canvas and a new skeleton is created for the bone.')];
+        if (!esqueleto) return [texto('Bone: bones live in a skeleton (a bone layer). Pick one in Layers, or just drag on the canvas and a new skeleton is created for the bone.')];
         return [
           texto(
             huesosDe(doc, esqueleto).length
@@ -146,13 +146,13 @@ export function montarOpciones(raiz, acciones) {
         } else if (esqueleto) {
           partes.push(texto(`In skeleton ${codigo(esqueleto)}, which has no bones yet: draw them with the Bone tool (B).`));
         } else if (huesos.length) {
-          partes.push(texto('Not in a skeleton, so it can’t follow bones: drag it into one in the Hierarchy.'));
+          partes.push(texto('Not in a skeleton, so it can’t follow bones: drag it into one in Layers.'));
         }
       }
       return partes;
     }
 
-    return [texto(huesos.length ? 'Click to select; drag on empty space for a marquee. Pick bones with the Bone tool (B) or in the Hierarchy.' : 'Click to select; drag on empty space to marquee-select.')];
+    return [texto(huesos.length ? 'Click to select; drag on empty space for a marquee. Pick bones with the Bone tool (B) or in Layers.' : 'Click to select; drag on empty space to marquee-select.')];
   }
 
   /**
@@ -198,7 +198,7 @@ export function montarOpciones(raiz, acciones) {
   function opcionesDeSwitch(doc, sw) {
     const variantes = doc.objects.filter((o) => o.parent === sw.id);
     if (!variantes.length) {
-      return [texto(`Switch ${codigo(sw.id)} is empty: drag drawings into it in the Hierarchy, or draw with it selected. Each child is a variant, shown one at a time.`)];
+      return [texto(`Switch ${codigo(sw.id)} is empty: drag drawings into it in Layers, or draw with it selected. Each child is a variant, shown one at a time.`)];
     }
     // ¿Ya lo elige algún param? (un driver cuya pose cambia el active de este switch)
     const controles = [
