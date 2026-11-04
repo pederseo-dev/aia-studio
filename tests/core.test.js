@@ -144,3 +144,43 @@ test('originX/originY corren el pivote dentro de rectángulos y elipses', () => 
   assert.match(svg, /<rect x="-20" y="-20" width="40" height="20"/);
   assert.match(svg, /<ellipse cx="20" rx="20" ry="10"/);
 });
+
+test('meta es un id reservado: no se crea, no se renombra a meta ni se duplica con ese id', () => {
+  const doc = op(crearDocumento({}), { op: 'create', type: 'rect', id: 'r' }).doc;
+  assert.throws(() => op(doc, { op: 'create', type: 'rect', id: 'meta' }), /reserved id/);
+  assert.throws(() => op(doc, { op: 'rename', target: 'r', id: 'meta' }), /reserved id/);
+  assert.throws(() => op(doc, { op: 'duplicate', target: 'r', id: 'meta' }), /reserved id/);
+  assert.match(validar({ ...doc, objects: [{ id: 'meta', type: 'rect' }] }, esquema).errores.join(), /reserved id/);
+});
+
+test('params y drivers: initial y equals tienen que ser opciones, y min no puede pasar a max', () => {
+  const base = op(crearDocumento({}), { op: 'create', type: 'param', id: 'v', props: { kind: 'enum', options: ['a', 'b'] } }, { op: 'create', type: 'pose', id: 'pp' }).doc;
+  assert.throws(() => op(base, { op: 'set', target: 'v', props: { initial: 'zz' } }), /v\.initial "zz" is not one of its options: "a", "b"/);
+  assert.throws(() => op(base, { op: 'create', type: 'driver', id: 'dd', props: { param: 'v', pose: 'pp', equals: 'c' } }), /dd\.equals "c" is not an option of param v\. Options: "a", "b"/);
+  assert.throws(() => op(base, { op: 'create', type: 'param', id: 'n', props: { min: 2, max: 1 } }), /min \(2\) is greater than max \(1\)/);
+  assert.throws(() => op(base, { op: 'create', type: 'param', id: 'n', props: { max: -1 } }), /min \(0\) is greater than max \(-1\)/);
+  // Quitar la opción que usa un driver también avisa.
+  const conDriver = op(base, { op: 'create', type: 'driver', id: 'dd', props: { param: 'v', pose: 'pp', equals: 'b' } }).doc;
+  assert.throws(() => op(conDriver, { op: 'set', target: 'v', props: { options: ['a'] } }), /dd\.equals "b"/);
+});
+
+test('sacar de un switch una variante que usa una pose dice las dos salidas', () => {
+  const doc = op(
+    crearDocumento({}),
+    { op: 'create', type: 'switch', id: 'mouth' },
+    { op: 'create', type: 'rect', id: 'm_a', parent: 'mouth' },
+    { op: 'create', type: 'rect', id: 'm_o', parent: 'mouth' },
+    { op: 'create', type: 'pose', id: 'o', props: { values: { mouth: { active: 'm_o' } } } },
+  ).doc;
+  assert.throws(() => op(doc, { op: 'move', target: 'm_o', parent: null }), /pose "o" makes switch mouth show "m_o".*either keep it inside mouth or remove mouth\.active from pose "o"/);
+});
+
+test('move con keepPosition deja el objeto en el mismo lugar de la pantalla, y se deshace', () => {
+  const doc = op(crearDocumento({}), { op: 'create', type: 'group', id: 'g', props: { x: 100, y: 50, rotation: 90 } }, { op: 'create', type: 'rect', id: 'r', props: { x: 10, y: 20 } }).doc;
+  const { doc: movido, inversas } = op(doc, { op: 'move', target: 'r', parent: 'g', keepPosition: true });
+  assert.deepEqual(aplicar(matrizMundo(movido, esquema, 'r'), 0, 0).map(Math.round), [10, 20]);
+  assert.deepEqual(op(movido, ...inversas).doc, doc);
+  // Sin keepPosition conserva x/y (y se corre).
+  assert.deepEqual(aplicar(matrizMundo(op(doc, { op: 'move', target: 'r', parent: 'g' }).doc, esquema, 'r'), 0, 0).map(Math.round), [80, 60]);
+  assert.throws(() => op(op(movido, { op: 'create', type: 'skeleton', id: 's' }, { op: 'create', type: 'bone', id: 'b', parent: 's' }).doc, { op: 'move', target: 'b', parent: 'g', keepPosition: true }), /reparent_bone/);
+});

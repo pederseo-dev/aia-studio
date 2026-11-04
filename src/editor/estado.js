@@ -1,10 +1,9 @@
 // Estado del editor y acciones. Todo cambio al documento pasa por `ejecutar`, que usa el mismo motor de operaciones
 // que la IA: se aplica al instante en pantalla y se guarda en el servidor con origen "user".
 
-import { crearEsquema, leer } from '../core/esquema.js';
-import { aplicar, invertir, matrizMundo } from '../core/geometria.js';
+import { crearEsquema } from '../core/esquema.js';
 import { buscar, esqueletoDe, subarbol } from '../core/documento.js';
-import { aplicarOperaciones, compactar } from '../core/operaciones.js';
+import { aplicarOperaciones, compactar, posicionConservada } from '../core/operaciones.js';
 
 const defs = import.meta.glob('../../schema/*.json', { eager: true, import: 'default' });
 export const esquema = crearEsquema(Object.values(defs));
@@ -278,7 +277,5 @@ export function padreParaNuevo() {
 export function mantenerPosicion(doc, id, padreNuevo) {
   const obj = buscar(doc, id);
   if ((obj.parent ?? null) === padreNuevo) return [];
-  const mundo = aplicar(matrizMundo(doc, esquema, obj.parent ?? null), leer(esquema, obj, 'x'), leer(esquema, obj, 'y'));
-  const [x, y] = aplicar(invertir(matrizMundo(doc, esquema, padreNuevo)), ...mundo);
-  return [{ op: 'set', target: id, props: { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 } }];
+  return [{ op: 'set', target: id, props: posicionConservada(doc, esquema, obj, padreNuevo) }];
 }

@@ -59,7 +59,7 @@ test('la mezcla suma números, interpola vértices y elige el switch', () => {
 
 test('una pose solo acepta propiedades animables que existan', () => {
   assert.throws(() => op(cara(), { op: 'set', target: 'happy', props: { values: { smile: { width: 3 } } } }), /no tiene "width" animable/);
-  assert.throws(() => op(cara(), { op: 'set', target: 'happy', props: { values: { mouth: { active: 'smile' } } } }), /no es hijo de mouth/);
+  assert.throws(() => op(cara(), { op: 'set', target: 'happy', props: { values: { mouth: { active: 'smile' } } } }), /is not a child of mouth/);
   assert.throws(() => op(cara(), { op: 'set', target: 'mouth', props: { active: 'nada' } }), /no existe/);
 });
 

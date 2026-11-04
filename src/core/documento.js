@@ -2,10 +2,19 @@
 // (los últimos quedan encima).
 
 import { FORMATO } from './formato.js';
-import { sugerir, validarValor } from './esquema.js';
+import { leer, sugerir, validarValor } from './esquema.js';
 
 export const ID = /^[a-z][a-z0-9_]*$/;
+// "meta" nombra las propiedades del documento en set/unset (target: "meta"): ningún objeto puede llamarse así.
+export const IDS_RESERVADOS = new Set(['meta']);
 const ESTRUCTURA = new Set(['id', 'type', 'parent']);
+
+/** Por qué un id nuevo no sirve (null si sirve). */
+export function errorDeId(id) {
+  if (!ID.test(id ?? '')) return `id inválido "${id}": usa minúsculas, números y _, empezando con letra`;
+  if (IDS_RESERVADOS.has(id)) return `"${id}" is a reserved id (target "meta" means the document's properties); choose another one`;
+  return null;
+}
 
 export class ErrorDeValidacion extends Error {
   constructor(errores) {
@@ -87,8 +96,8 @@ export function validar(doc, esquema) {
 
   const ids = new Set();
   for (const o of doc.objects) {
-    if (!ID.test(o?.id ?? '')) {
-      errores.push(`id inválido "${o?.id}": usa minúsculas, números y _, empezando con letra`);
+    if (errorDeId(o?.id)) {
+      errores.push(errorDeId(o?.id));
       continue;
     }
     if (ids.has(o.id)) errores.push(`id repetido "${o.id}"`);
@@ -117,6 +126,7 @@ export function validar(doc, esquema) {
       }
     }
     revisarPropiedades(o.id, o, propiedadesGuardadas(o), tipo, errores, avisos);
+    errores.push(...erroresDeControl(doc, esquema, o));
     for (const [prop, p] of Object.entries(tipo.properties)) {
       if (p.type !== 'ref' || o[prop] == null) continue;
       errores.push(...erroresDeReferencia(doc, o, prop, p, o[prop], o.id));
@@ -148,7 +158,7 @@ export function validar(doc, esquema) {
           }
           const error = validarValor(props[k], v);
           if (error) errores.push(`${o.id}.${prop}.${id}.${k} ${error}`);
-          else if (props[k].type === 'ref') errores.push(...erroresDeReferencia(doc, destino, k, props[k], v, `${o.id}.${prop}.${id}`));
+          else if (props[k].type === 'ref') errores.push(...erroresDeReferencia(doc, destino, k, props[k], v, `${o.id}.${prop}.${id}`, o.id));
         }
       }
     }
@@ -172,7 +182,7 @@ export function validar(doc, esquema) {
  * Errores de una referencia: que exista, que sea del tipo pedido y, con refScope "children", que sea un hijo; con
  * refScope "skeleton", que sea un hueso del skeleton que contiene al objeto.
  */
-function erroresDeReferencia(doc, o, prop, p, valor, dueño) {
+function erroresDeReferencia(doc, o, prop, p, valor, dueño, poseId = null) {
   if (valor == null) return [];
   if (p.refScope === 'skeleton') {
     const error = errorDeEnlace(doc, o.id, valor, `${dueño}.${prop}`);
@@ -183,9 +193,36 @@ function erroresDeReferencia(doc, o, prop, p, valor, dueño) {
   if (p.refTypes && !p.refTypes.includes(referido.type)) return [`${dueño}.${prop}: "${valor}" es un ${referido.type}; se esperaba ${p.refTypes.join(' o ')}`];
   if (p.refScope === 'children' && referido.parent !== o.id) {
     const hijos = doc.objects.filter((x) => x.parent === o.id).map((x) => x.id);
+    // Lo más común: sacar del switch una variante que una pose elige. El mensaje dice cómo seguir.
+    if (poseId) {
+      return [`pose "${poseId}" makes switch ${o.id} show "${valor}" (${prop}), but "${valor}" is not a child of ${o.id}. Children: ${hijos.join(', ') || 'none'}. If you moved it out of the switch, either keep it inside ${o.id} or remove ${o.id}.${prop} from pose "${poseId}" (set_pose with { "${o.id}": {} }); otherwise pick one of its children.${sugerir(valor, hijos)}`];
+    }
     return [`${dueño}.${prop}: "${valor}" no es hijo de ${o.id}. Hijos: ${hijos.join(', ') || 'ninguno'}.${sugerir(valor, hijos)}`];
   }
   return [];
+}
+
+/**
+ * Coherencia de params y drivers: un param enum con initial fuera de sus options, un param numérico con min > max, o
+ * un driver con equals que no es una opción de su param.
+ */
+function erroresDeControl(doc, esquema, o) {
+  const errores = [];
+  const lista = (opciones) => (opciones?.length ? opciones.map((x) => `"${x}"`).join(', ') : 'none yet');
+  if (o.type === 'param') {
+    const [kind, opciones, min, max] = ['kind', 'options', 'min', 'max'].map((k) => leer(esquema, o, k));
+    if (kind === 'enum' && o.initial != null && Array.isArray(opciones) && !opciones.includes(o.initial)) errores.push(`${o.id}.initial "${o.initial}" is not one of its options: ${lista(opciones)}`);
+    if (Array.isArray(opciones) && new Set(opciones).size !== opciones.length) errores.push(`${o.id}.options has repeated options: ${lista(opciones)}`);
+    if (kind !== 'enum' && typeof min === 'number' && typeof max === 'number' && min > max) errores.push(`${o.id}: min (${min}) is greater than max (${max})`);
+  }
+  if (o.type === 'driver' && o.equals != null) {
+    const param = buscar(doc, o.param);
+    const opciones = param?.type === 'param' && leer(esquema, param, 'kind') === 'enum' ? leer(esquema, param, 'options') : null;
+    if (Array.isArray(opciones) && !opciones.includes(o.equals)) {
+      errores.push(`${o.id}.equals "${o.equals}" is not an option of param ${param.id}. Options: ${lista(opciones)}`);
+    }
+  }
+  return errores;
 }
 
 function revisarPropiedades(dueño, obj, props, tipo, errores, avisos) {

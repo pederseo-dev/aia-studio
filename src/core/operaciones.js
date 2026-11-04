@@ -5,7 +5,9 @@
 //   { op: 'unset',  target: 'eye_l' | 'meta', props: ['x'] }            ← vuelve al valor por defecto
 //   { op: 'delete', target: 'head' }                                     ← borra también los hijos y suelta
 //                                                                          las referencias a lo borrado
-//   { op: 'move',   target: 'eye_l', parent?: 'face' | null, index?: 0 } ← reparentar y/o reordenar
+//   { op: 'move',   target: 'eye_l', parent?: 'face' | null, index?: 0, keepPosition?: true }
+//                                                     ← reparentar y/o reordenar; keepPosition deja el x/y que
+//                                                       conserva su lugar en pantalla
 //   { op: 'rename', target: 'eye_l', id: 'left_eye' }                    ← actualiza las referencias (y las poses)
 //   { op: 'duplicate', target: 'arm_l', id?: 'arm_r', suffix?: 'copy', parent?, index?, props? }
 //                                                     ← copia con sus hijos; los hijos reciben el sufijo
@@ -13,9 +15,10 @@
 // `index` es la posición entre los hermanos en orden de dibujo: 0 = al fondo; sin index = al frente.
 
 import { expandirDesdeHasta } from './esqueleto.js';
-import { sugerir } from './esquema.js';
+import { leer, sugerir } from './esquema.js';
+import { aplicar, invertir, matrizMundo } from './geometria.js';
 import { parsearD } from './trazado.js';
-import { ErrorDeValidacion, ID, buscar, hijos, subarbol, validar } from './documento.js';
+import { ErrorDeValidacion, ID, buscar, errorDeId, hijos, subarbol, validar } from './documento.js';
 
 const ESTRUCTURA = new Set(['id', 'type', 'parent']);
 
@@ -81,6 +84,16 @@ function contenedor(doc, id, esquema) {
   const padre = objetivo(doc, id);
   if (!esquema.tipos.get(padre.type)?.container) throw new Error(`"${id}" es un ${padre.type} y no puede tener hijos (usa un group)`);
   return id;
+}
+
+/**
+ * El x/y que deja a un objeto en el mismo lugar de la pantalla al pasar a otro padre (en el montaje). Lo usan
+ * `move` con keepPosition y el editor al arrastrar en Layers.
+ */
+export function posicionConservada(doc, esquema, obj, padreNuevo) {
+  const mundo = aplicar(matrizMundo(doc, esquema, obj.parent ?? null), leer(esquema, obj, 'x'), leer(esquema, obj, 'y'));
+  const [x, y] = aplicar(invertir(matrizMundo(doc, esquema, padreNuevo)), ...mundo);
+  return { x: Math.round(x * 10) / 10 || 0, y: Math.round(y * 10) / 10 || 0 };
 }
 
 /** Inserta obj en la lista plana para que quede en la posición `index` entre los hijos de `padre`. */
@@ -172,7 +185,7 @@ function aplicarUna(doc, op, esquema) {
     case 'create': {
       const tipo = esquema.tipos.get(op.type);
       if (!tipo) throw new Error(`tipo desconocido "${op.type}".${sugerir(op.type, esquema.tipos.keys())} Tipos: ${[...esquema.tipos.keys()].join(', ')}`);
-      if (!ID.test(op.id ?? '')) throw new Error(`id inválido "${op.id}": usa minúsculas, números y _, empezando con letra`);
+      if (errorDeId(op.id)) throw new Error(errorDeId(op.id));
       const repetido = buscar(doc, op.id);
       if (repetido) {
         // Los ids son únicos en todo el documento: dibujo, huesos y recursos comparten el espacio de nombres.
@@ -259,11 +272,24 @@ function aplicarUna(doc, op, esquema) {
       const indexAnterior = hijos(doc, padreAnterior).indexOf(obj);
       const padre = 'parent' in op ? contenedor(doc, op.parent, esquema) : padreAnterior;
       if (padre != null && subarbol(doc, obj.id).includes(padre)) throw new Error(`"${obj.id}" no puede quedar dentro de sí mismo o de un descendiente`);
+      let posicion = null;
+      if (op.keepPosition && padre !== padreAnterior) {
+        if (obj.type === 'bone') throw new Error('keepPosition does not apply to bones: use reparent_bone, which keeps the bone in place');
+        posicion = posicionConservada(doc, esquema, obj, padre);
+      }
       const posAnterior = doc.objects.indexOf(obj);
       doc.objects.splice(posAnterior, 1);
       obj.parent = padre;
       insertar(doc, obj, padre, op.index);
-      return [{ op: '_place', target: obj.id, parent: padreAnterior, pos: posAnterior }];
+      const inversas = [{ op: '_place', target: obj.id, parent: padreAnterior, pos: posAnterior }];
+      if (posicion) {
+        const anteriores = Object.fromEntries(['x', 'y'].filter((k) => k in obj).map((k) => [k, obj[k]]));
+        const nuevas = ['x', 'y'].filter((k) => !(k in obj));
+        Object.assign(obj, posicion);
+        if (nuevas.length) inversas.unshift({ op: 'unset', target: obj.id, props: nuevas });
+        if (Object.keys(anteriores).length) inversas.unshift({ op: 'set', target: obj.id, props: anteriores });
+      }
+      return inversas;
     }
 
     case '_place': {
@@ -278,7 +304,7 @@ function aplicarUna(doc, op, esquema) {
 
     case 'rename': {
       const obj = objetivo(doc, op.target);
-      if (!ID.test(op.id ?? '')) throw new Error(`id inválido "${op.id}": usa minúsculas, números y _, empezando con letra`);
+      if (errorDeId(op.id)) throw new Error(errorDeId(op.id));
       if (buscar(doc, op.id)) throw new Error(`ya existe un objeto "${op.id}"`);
       const anterior = obj.id;
       obj.id = op.id;
@@ -301,7 +327,7 @@ function aplicarUna(doc, op, esquema) {
       const ids = subarbol(doc, original.id);
       const mapa = new Map(ids.map((id) => [id, id === original.id && op.id ? op.id : `${id}_${sufijo}`]));
       for (const nuevo of mapa.values()) {
-        if (!ID.test(nuevo)) throw new Error(`id inválido "${nuevo}": usa minúsculas, números y _, empezando con letra`);
+        if (errorDeId(nuevo)) throw new Error(errorDeId(nuevo));
         if (buscar(doc, nuevo)) throw new Error(`ya existe un objeto "${nuevo}"; elige otro id o suffix`);
       }
       const padreOriginal = original.parent ?? null;
