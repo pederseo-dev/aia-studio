@@ -89,9 +89,11 @@ queda en el historial para que la IA lo respete.
 - **Otros clientes MCP** (Cursor, etc.): el mismo comando, `node <ruta>/mcp/server.js`, por stdio.
 
 Herramientas: `get_guide` (la guía del formato, generada desde el esquema), `list_documents`, `get_document`,
-`create_document`, `apply_ops`, `undo`, `redo`, `get_history`, `set_pose` (crea o ajusta una pose con nombre),
-`bind_points` (reparte los puntos de un path entre los huesos de su skeleton), `reparent_bone` (cambia el padre de un hueso sin moverlo), `bind_by_proximity` (enlaza al hueso
-más cercano todo el dibujo de un skeleton que todavía no sigue a ninguno) y
+`create_document`, `delete_document` (borra un documento con su historial; pide repetir el id en `confirm`),
+`apply_ops`, `undo`, `redo`, `get_history`, `set_pose` (crea o ajusta una pose con nombre; `remove` saca propiedades
+sueltas), `bind_points` (reparte los puntos de un path entre los huesos de su skeleton), `reparent_bone` (cambia el
+padre de un hueso sin moverlo en el montaje; con `keep_in_poses`, tampoco en las poses), `bind_by_proximity` (enlaza
+al hueso más cercano todo el dibujo de un skeleton que todavía no sigue a ninguno) y
 `render_preview` (devuelve un PNG para que la IA vea lo que hizo; con `pose`, `params`, `region` o `bones`).
 
 ## Estructura

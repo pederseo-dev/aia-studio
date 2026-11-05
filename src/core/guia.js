@@ -223,11 +223,15 @@ Moho. Se crea con \`create\` y \`type: "switch"\`, y cada variante es un hijo su
 \`set\` con \`{ "active": "<hijo>" }\`: es lo mismo que hace el usuario con el menú ▾ del switch en Layers o con el
 selector de la barra de opciones. En una pose: \`set_pose\` con \`{ "<switch>": { "active": "<hijo>" } }\`. Si un param
 tiene que elegir la variante (bocas, visemas), arma tú las piezas: un param enum, una pose por opción que fija
-\`active\` y un driver con \`equals\` para cada una, como en el ejemplo de abajo. Si sacas del switch una variante que una pose elige, el lote falla: quita esa
-variante de la pose (\`set_pose\` con \`{ "mouth": {} }\`) o déjala dentro del switch.
+\`active\` y un driver con \`equals\` para cada una, como en el ejemplo de abajo. Si sacas del switch una variante que una pose elige, el lote falla: antes saca
+de la pose solo el \`active\` del switch con \`set_pose\` y \`remove: ["mouth.active"]\` (no con \`{ "mouth": {} }\`, que
+sacaría de la pose todo lo de \`mouth\`, por ejemplo su \`x\`), o deja la variante dentro del switch. \`remove\` sirve
+para sacar cualquier propiedad suelta de una pose.
 
 El \`initial\` de un param enum y el \`equals\` de sus drivers tienen que ser opciones de \`options\`; en un param
-numérico, \`min\` no puede ser mayor que \`max\`.
+numérico, \`min\` no puede ser mayor que \`max\`. Para quitar o renombrar una opción que un driver usa, cambia su
+\`equals\` (o borra el driver) **en el mismo lote** que el \`set\` de \`options\`. \`get_document\` dice en cada switch
+qué params eligen su variante (los que tienen drivers hacia poses que fijan su \`active\`).
 
 \`\`\`json
 [
@@ -265,7 +269,9 @@ ${tipos}
 4. **Prefiere pocos lotes grandes** con una nota clara (\`note\`): cada lote es un paso de deshacer para el usuario.
 5. Si te equivocas, \`undo\` deshace tu último lote (solo los tuyos, nunca los del usuario). Si el usuario cambió
    después alguna de las mismas propiedades, \`undo\` se niega y dice cuáles: corrígelas con un lote nuevo, sin
-   pisar su retoque. A él le pasa lo mismo con lo tuyo.
+   pisar su retoque. A él le pasa lo mismo con lo tuyo. En una pose la unidad es cada objeto y propiedad
+   (\`values.mouth.active\`), no la pose entera: si el usuario retocó otro objeto de la misma pose, tu \`undo\` deshace
+   solo lo tuyo y deja lo suyo.
 6. Para revisar un detalle chico, \`render_preview\` acepta \`region\` (un recorte del documento) además de \`pose\`.
 7. \`delete_document\` borra un documento entero y no se puede deshacer: úsalo solo si el usuario lo pide.
 8. No hay importador de SVG para la IA: pasa cada forma como \`d\` de un \`path\` (un path por subtrazado).
