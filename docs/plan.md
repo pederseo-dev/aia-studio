@@ -216,7 +216,7 @@ Notas de lo construido (antes del cambio a la capa de huesos):
 
 **Prueba con IA:** riggear el personaje de la fase 2; posarlo ("saludando", "mirando hacia arriba").
 
-## Fase 4: switch, params, drivers y acciones 🔶 construida, falta la prueba con IA
+## Fase 4: switch, params, drivers y acciones ✅ (2026-11-05)
 
 Notas de lo construido:
 - **Las poses son las acciones.** En vez de un tipo nuevo, la `pose` de la fase 3 se generalizó: `values` fija
@@ -246,6 +246,9 @@ Notas de lo construido:
   forma con `getScreenCTM` y los colores con `getComputedStyle`. En Node no hay DOM: habría que sumar un parser (por
   ejemplo `linkedom`) y reimplementar a mano la cascada de estilos y la composición de transform y viewBox. Mientras tanto, la IA puede pasar cada forma como `d` en un `path`.
 - Pendiente: traducir al inglés los mensajes de error viejos del núcleo y del servidor (ver `CLAUDE.md`).
+- Prueba con IA: 8/8 (`docs/pruebas-ia/fase-4.md`). Lo que pidió para más adelante: un aviso cuando dos poses
+  activas muestran cosas que se tapan, mostrar u ocultar sin opacidad intermedia, desplazar un hueso en coordenadas
+  del documento dentro de una pose, una cuadrícula de params en `render_preview` y máscaras.
 
 
 - **Switch** (Moho switch layer ≈ Rive Solo): un hijo visible, elegido por un valor de texto.
