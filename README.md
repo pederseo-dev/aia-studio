@@ -1,3 +1,5 @@
+<p align="center"><img src="public/logo.svg" alt="aia-studio" width="96" height="96" /></p>
+
 # aia-studio
 
 Editor y runtime de personajes 2D animables, construido con HTML, CSS, JS y SVG.

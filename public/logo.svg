@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- aia-studio: carita mitad persona (violeta de la interfaz) y mitad robot -->
+  <defs><clipPath id="cara"><circle cx="32" cy="33" r="27"/></clipPath></defs>
+  <path d="M44 8 Q46 2 52 2" fill="none" stroke="#ff6f91" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M49 11 Q55 7 58 10" fill="none" stroke="#5fd3a0" stroke-width="1.8" stroke-linecap="round"/>
+  <circle cx="32" cy="33" r="27" fill="#8b9cff"/>
+  <g clip-path="url(#cara)">
+    <path d="M33 2 L36 9 L31 14 L35 19 L30 25 L34 30 L29 35 L27 41 L31 46 L28 52 L33 64 L64 64 L64 2 Z" fill="#3b4754" stroke="#6574e0" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M40 8 L58 14" stroke="#5d6d7c" stroke-width="2"/>
+    <circle cx="54" cy="44" r="1.6" fill="#5d6d7c"/>
+    <circle cx="50" cy="52" r="1.6" fill="#5d6d7c"/>
+  </g>
+  <!-- ojo del robot y ceño -->
+  <circle cx="44" cy="27" r="7" fill="#161a20"/>
+  <circle cx="44" cy="27" r="5.5" fill="#ff3b4a" opacity=".35"/>
+  <circle cx="44" cy="27" r="3.6" fill="#ff3b4a"/>
+  <circle cx="42.8" cy="25.8" r="1.1" fill="#fff"/>
+  <path d="M35.5 18.5 L52.5 16" stroke="#8797a6" stroke-width="3.4" stroke-linecap="round"/>
+  <!-- dientes del robot -->
+  <rect x="31" y="40" width="14" height="9" rx="2" fill="#161a20"/>
+  <g fill="#e6e9ee">
+    <rect x="32.2" y="41.2" width="2.5" height="3" rx=".6"/><rect x="32.2" y="44.8" width="2.5" height="3" rx=".6"/>
+    <rect x="35.4" y="41.2" width="2.5" height="3" rx=".6"/><rect x="35.4" y="44.8" width="2.5" height="3" rx=".6"/>
+    <rect x="38.6" y="41.2" width="2.5" height="3" rx=".6"/><rect x="38.6" y="44.8" width="2.5" height="3" rx=".6"/>
+    <rect x="41.8" y="41.2" width="2.5" height="3" rx=".6"/><rect x="41.8" y="44.8" width="2.5" height="3" rx=".6"/>
+  </g>
+  <!-- lado humano -->
+  <ellipse cx="21" cy="26" rx="4" ry="6" fill="#161a20"/>
+  <path d="M12 38 Q19 48 29 46" fill="none" stroke="#161a20" stroke-width="3.4" stroke-linecap="round"/>
+</svg>
