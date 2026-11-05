@@ -176,3 +176,14 @@ test('tira de cuadros: un cuadro por tiempo con su rótulo, y se convierte a PNG
   const png = svgAPng(svg, 600);
   assert.ok(png.length > 1000);
 });
+
+test('ponerClave y quitarClave: reemplazan en el mismo t, conservan la curva y no tocan las pistas recibidas', async () => {
+  const { ponerClave, quitarClave } = await import('../src/core/animacion.js');
+  const pistas = { a: { x: [{ t: 0, value: 1 }, { t: 0.5, value: 2, ease: 'step' }] } };
+  const otras = ponerClave(pistas, 'a', 'x', 0.5, 9);
+  assert.deepEqual(otras.a.x[1], { t: 0.5, value: 9, ease: 'step' });
+  assert.equal(pistas.a.x[1].value, 2);
+  assert.deepEqual(ponerClave(pistas, 'a', 'x', 0.25, 5, 'linear').a.x.map((c) => c.t), [0, 0.25, 0.5]);
+  assert.deepEqual(ponerClave({}, 'p', 'vertices', 0, [{ x: 0, y: 0, bone: 'b' }]).p.vertices[0].value, [{ x: 0, y: 0 }]);
+  assert.deepEqual(quitarClave(quitarClave(pistas, 'a', 'x', 0), 'a', 'x', 0.5), {});
+});

@@ -14,7 +14,7 @@ import { colorDeHueso, elegirVariante, esqueletoActivo, opsDePose, planDeReparen
  */
 export function montarOpciones(raiz, acciones) {
   suscribir((c) => {
-    if (['doc', 'seleccion', 'herramienta', 'pose', 'params', 'edicion', 'vertice', 'id'].some((k) => k in c)) dibujar();
+    if (['doc', 'seleccion', 'herramienta', 'pose', 'params', 'edicion', 'vertice', 'id', 'modo'].some((k) => k in c) || ('tiempo' in c && !estado.reproduciendo)) dibujar();
   });
 
   const boton = (texto, titulo, alHacerClic, clase = '') => {
@@ -41,6 +41,20 @@ export function montarOpciones(raiz, acciones) {
 
     // Reparent Bone, Bind Layer y Bind Points trabajan sobre el hueso elegido: dicen qué hacer con él.
     if (!estado.pose && !estado.params && ['reparentar', 'enlazarCapa', 'enlazarPuntos'].includes(estado.herramienta)) return opcionesDeEnlace(doc, sel?.type === 'bone' ? sel : null);
+
+    if (estado.pose && buscar(doc, estado.pose)?.type === 'animation') {
+      const t = +estado.tiempo.toFixed(3);
+      const partes = [
+        texto(
+          estado.edicion
+            ? `Clip ${codigo(estado.pose)} at ${t} s: points you move are keyed at the playhead (with the same point count, they morph between keyframes).`
+            : `Clip ${codigo(estado.pose)} at ${t} s: drag a bone or its bound drawing to rotate it; mouth, colors, switch… in the inspector. Every change is keyed at the playhead (autokey). <kbd>Enter</kbd> edits a path's points.`,
+        ),
+      ];
+      if (estado.edicion) partes.push(boton('Finish points', 'Exit point editing (Enter)', () => fijar({ edicion: null, vertice: null })));
+      if (estado.modo === 'puppet') partes.push(boton('Close clip', 'Back to the parameter blend', () => fijar({ pose: null, params: estado.params ?? {}, edicion: null, vertice: null, reproduciendo: false }), 'principal'));
+      return partes;
+    }
 
     if (estado.pose) {
       const pose = buscar(doc, estado.pose);

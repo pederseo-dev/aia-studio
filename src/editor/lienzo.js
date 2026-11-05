@@ -6,7 +6,7 @@ import { leerMeta } from '../core/esquema.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
 import { contenidoSvg } from '../render/svg.js';
 import { docVisible, ejecutar, esquema, estado, fijar, idLibre, padreParaNuevo, seleccionar, suscribir } from './estado.js';
-import { crearHuesos, variantesAMostrar } from './huesos.js';
+import { clipAbierto, crearHuesos, variantesAMostrar } from './huesos.js';
 import { crearPluma } from './pluma.js';
 import { crearPuntos } from './puntos.js';
 import { crearTransformar } from './transformar.js';
@@ -51,7 +51,7 @@ export function montarLienzo(contenedor) {
   suscribir((c) => {
     if ('pose' in c) contenedor.classList.toggle('modo-pose', !!estado.pose);
     if ('params' in c) contenedor.classList.toggle('modo-params', !!estado.params && !estado.pose);
-    if ('doc' in c || 'previa' in c || 'pose' in c || 'params' in c) dibujarDocumento();
+    if ('doc' in c || 'previa' in c || 'pose' in c || 'params' in c || 'tiempo' in c) dibujarDocumento();
     // Seleccionar una variante oculta de un switch la muestra (solo en la vista): hay que redibujar el documento.
     else if ('seleccion' in c && JSON.stringify(variantesAMostrar()) !== mostrando) dibujarDocumento();
     else if ('seleccion' in c || 'edicion' in c || 'vertice' in c) dibujarSuperposicion();
@@ -78,7 +78,8 @@ export function montarLienzo(contenedor) {
     const w = leerMeta(esquema, doc, 'width');
     const h = leerMeta(esquema, doc, 'height');
     // Lo que se ve: la pose que se edita, la mezcla de los params (vista Parámetros) o el montaje.
-    const vista = estado.pose ? { pose: estado.pose } : estado.params ? { params: estado.params } : {};
+    const clip = clipAbierto(doc);
+    const vista = clip ? { animation: clip.id, time: estado.tiempo, params: estado.params ?? {} } : estado.pose ? { pose: estado.pose } : estado.params ? { params: estado.params } : {};
     const mostrar = estado.params && !estado.pose ? {} : variantesAMostrar(doc);
     mostrando = JSON.stringify(mostrar);
     documentoG.innerHTML = `${contenidoSvg(doc, esquema, { ...vista, mostrar })}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;

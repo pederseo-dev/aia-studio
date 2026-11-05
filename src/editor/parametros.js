@@ -6,17 +6,19 @@ import { buscar } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { pesoDeDriver, valoresDeParams } from '../core/mezcla.js';
 import { avisar, ejecutar, esquema, estado, fijar, idLibre, seleccionar, suscribir } from './estado.js';
+import { clipAbierto, opsDePose, poseActiva } from './huesos.js';
 
 export function montarParametros(raiz, botonNuevo) {
   suscribir((c) => {
-    if ('doc' in c || 'seleccion' in c || 'id' in c) return dibujar();
+    if ('doc' in c || 'seleccion' in c || 'id' in c || 'pose' in c) return dibujar();
+    if ('tiempo' in c && clipAbierto()) return raiz.contains(document.activeElement) ? actualizarPesos() : dibujar();
     // Mientras se arrastra un control, no se rehace el panel (se cortaría el arrastre): solo se actualizan los pesos.
     if ('params' in c) raiz.contains(document.activeElement) ? actualizarPesos() : dibujar();
   });
 
   function actualizarPesos() {
     const doc = estado.doc;
-    const valores = valoresDeParams(doc, esquema, estado.params ?? {});
+    const valores = valoresVistos(doc);
     for (const chip of raiz.querySelectorAll('[data-driver]')) {
       const d = buscar(doc, chip.dataset.driver);
       const peso = d?.pose && buscar(doc, d.pose) ? pesoDeDriver(doc, esquema, d, valores[d.param]) : 0;
@@ -44,12 +46,21 @@ export function montarParametros(raiz, botonNuevo) {
       raiz.innerHTML = '<p class="ayuda">No parameters. A parameter (happiness, head turn, mouth…) drives one or more poses through drivers: create one with “＋ Parameter” and connect it to a pose.</p>';
       return;
     }
-    const valores = valoresDeParams(doc, esquema, estado.params ?? {});
+    const valores = valoresVistos(doc);
     raiz.replaceChildren(...params.map((p) => fila(doc, p, valores[p.id])));
   }
 
-  /** Cambiar un control: pasa a la vista Parámetros con el valor nuevo. */
-  const mover = (id, v) => fijar({ pose: null, params: { ...(estado.params ?? {}), [id]: v } });
+  /**
+   * Cambiar un control: pasa a la vista Parámetros con el valor nuevo. Con un clip abierto, en cambio, el valor queda
+   * como keyframe del param en el tiempo del playhead (autokey).
+   */
+  const mover = (id, v) => {
+    const clip = clipAbierto();
+    if (!clip) return fijar({ pose: null, params: { ...(estado.params ?? {}), [id]: v } });
+    ejecutar(opsDePose(estado.doc, clip.id, id, { value: v }), `${clip.id}: ${id} at ${+estado.tiempo.toFixed(3)} s`, { agrupar: `clip:${clip.id}.${id}.${estado.tiempo}` });
+  };
+  /** Valores que muestran los controles: los del clip abierto en el playhead o los de la vista Parámetros. */
+  const valoresVistos = (doc) => (clipAbierto(doc) ? poseActiva(doc).params : valoresDeParams(doc, esquema, estado.params ?? {}));
 
   function fila(doc, param, valor) {
     const div = document.createElement('div');

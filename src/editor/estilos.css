@@ -356,3 +356,47 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 #entradas .nota { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #entradas .revertida .nota { text-decoration: line-through; color: var(--tenue); }
 .parentesco .enlace-hueso { border: none; background: none; padding: 0 2px; font-weight: 600; text-decoration: underline dotted; cursor: pointer; }
+
+/* ---------- Modos: Design · Animate · Puppet ---------- */
+#modos { display: flex; margin: 0 4px 0 6px; }
+#modos button, #pestanas-abajo button { border-radius: 0; padding: 3px 10px; background: none; color: var(--suave); margin-left: -1px; }
+#modos button:first-child, #pestanas-abajo button:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
+#modos button:last-child, #pestanas-abajo button:last-child { border-radius: 0 4px 4px 0; }
+#modos button[aria-selected="true"], #pestanas-abajo button[aria-selected="true"] { background: var(--panel-2); color: var(--texto); border-color: var(--acento); position: relative; }
+/* Las poses y los params son de Puppet; Design no tiene timeline. */
+body:not([data-modo="puppet"]) #modo { display: none; }
+body[data-modo="design"] #linea-de-tiempo { display: none; }
+body:not([data-modo="puppet"]) #pestanas-abajo { display: none; }
+#linea-de-tiempo { max-height: 280px; }
+
+/* Biblioteca de clips (Puppet): un botón por clip */
+#clips { flex: 0 0 auto; max-height: 38%; overflow-y: auto; border-bottom: 1px solid var(--borde); padding-bottom: 6px; }
+#lista-clips { display: flex; flex-direction: column; gap: 4px; padding: 4px 10px; }
+#lista-clips > .ayuda { margin: 2px 0; }
+.clip { display: grid; grid-template-columns: minmax(0, 1fr) 30px; gap: 4px; }
+.clip .nombre { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; text-align: left; overflow: hidden; }
+.clip .nombre b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clip .nombre small { color: var(--suave); flex: none; }
+.clip.abierto .nombre, .clip.abierto .play { border-color: var(--pose); color: var(--pose); }
+
+/* Timeline */
+#timeline:focus { outline: none; }
+.barra-tiempo { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 10px; }
+.barra-tiempo .nombre-clip { color: var(--pose); }
+.barra-tiempo .play { min-width: 30px; }
+.barra-tiempo .reloj { font-variant-numeric: tabular-nums; color: var(--suave); min-width: 120px; }
+.campo-corto { display: inline-flex; gap: 4px; align-items: center; color: var(--suave); }
+.campo-corto input[type="number"] { width: 64px; }
+.barra-tiempo .descripcion { flex: 1; min-width: 160px; }
+.pistas { position: relative; padding: 0 10px 8px; user-select: none; touch-action: none; }
+.fila-pista { display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: center; height: 22px; }
+.fila-pista .etiqueta { text-align: left; background: none; border: none; color: var(--suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 6px 0 0; font-size: 12px; }
+.fila-pista.seleccionada .etiqueta { color: var(--texto); }
+.carril { position: relative; height: 100%; margin: 0 8px; border-bottom: 1px solid var(--borde); cursor: text; }
+.regla .carril { border-bottom-color: var(--tenue); }
+.marca { position: absolute; bottom: 2px; font-size: 10px; color: var(--tenue); transform: translateX(-50%); pointer-events: none; }
+.clave { position: absolute; top: 50%; width: 10px; height: 10px; background: var(--pose); border: 1px solid #0008; transform: translate(-50%, -50%) rotate(45deg); cursor: ew-resize; }
+/* step (hold): cuadrado, como el «step» de los keyframes de Moho */
+.clave.step { transform: translate(-50%, -50%); background: var(--ia); }
+.clave.elegida { outline: 2px solid var(--texto); outline-offset: 1px; }
+.playhead { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--error); pointer-events: none; }

@@ -19,8 +19,14 @@ export const estado = {
   edicion: null, // id del path cuyos puntos se están editando
   vertice: null, // índice del vértice seleccionado en la edición de puntos
   herramienta: 'seleccionar',
-  pose: null, // id de la pose que se ve y se edita en el lienzo; null = el montaje
+  modo: 'design', // 'design' (dibujo y rig), 'animate' (timeline de escena) o 'puppet' (controles y clips del muñeco)
+  // Lo que se ve y se edita encima del montaje: una pose o un clip (animation, en `tiempo`). Lo que se cambia va a la
+  // pose o, en un clip, a un keyframe en el tiempo del playhead (autokey). null = el montaje.
+  pose: null,
   params: null, // valores de los params en la vista Parámetros (null = no se mezcla nada)
+  tiempo: 0, // playhead del clip abierto, en segundos
+  abajo: 'parametros', // pestaña del panel de abajo en Puppet: 'timeline' o 'parametros'
+  reproduciendo: false,
   historial: { entradas: [], user: { deshacer: false, rehacer: false } },
 };
 
@@ -108,7 +114,7 @@ export async function abrir(id) {
   const doc = await api.leer(id);
   agregarPestana(id);
   history.replaceState(null, '', `?doc=${encodeURIComponent(id)}`);
-  fijar({ id, doc, previa: null, seleccion: null, seleccionados: [], edicion: null, vertice: null, pose: null, params: null });
+  fijar({ id, doc, previa: null, seleccion: null, seleccionados: [], edicion: null, vertice: null, pose: null, params: null, tiempo: 0, reproduciendo: false });
   await refrescarHistorial();
 }
 
@@ -123,7 +129,7 @@ export async function cerrarPestana(id) {
   if (vecina) return abrir(vecina);
   await enviarPendiente();
   history.replaceState(null, '', location.pathname);
-  fijar({ id: null, doc: null, previa: null, seleccion: null, seleccionados: [], edicion: null, vertice: null, pose: null, params: null, historial: { entradas: [], user: { deshacer: false, rehacer: false } } });
+  fijar({ id: null, doc: null, previa: null, seleccion: null, seleccionados: [], edicion: null, vertice: null, pose: null, params: null, tiempo: 0, reproduciendo: false, historial: { entradas: [], user: { deshacer: false, rehacer: false } } });
 }
 
 /** Documentos que se están borrando desde este editor (para no avisar de un borrado que pidió el propio usuario). */

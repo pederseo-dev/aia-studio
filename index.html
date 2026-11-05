@@ -34,6 +34,11 @@
             <button type="button" role="menuitem" data-accion="atajos">Keyboard shortcuts</button>
           </div>
         </div>
+        <div id="modos" role="tablist" aria-label="Mode">
+          <button type="button" role="tab" data-modo="design">Design</button>
+          <button type="button" role="tab" data-modo="animate">Animate</button>
+          <button type="button" role="tab" data-modo="puppet">Puppet</button>
+        </div>
         <span class="separador"></span>
         <div class="grupo-herramientas desplegable" data-grupo="transformar"></div>
         <div class="grupo-herramientas desplegable" data-grupo="crear"></div>
@@ -139,6 +144,13 @@
       </section>
 
       <aside id="panel-derecho" class="panel">
+        <section id="clips" hidden>
+          <div class="cabecera">
+            <h2>Clips</h2>
+            <button id="nuevo-clip" type="button" title="New clip: a short animation the app or its AI triggers (wave, blink, idle)">＋ Clip</button>
+          </div>
+          <div id="lista-clips"></div>
+        </section>
         <section id="inspector"></section>
         <section id="historial">
           <h2>History</h2>
@@ -148,10 +160,14 @@
 
       <footer id="linea-de-tiempo" class="panel">
         <div class="cabecera">
-          <h2>Parameters</h2>
-          <span class="ayuda">Moving a control shows the pose blend. The timeline arrives in phase 5.</span>
+          <div id="pestanas-abajo" role="tablist" aria-label="Bottom panel">
+            <button type="button" role="tab" data-abajo="timeline">Timeline</button>
+            <button type="button" role="tab" data-abajo="parametros">Parameters</button>
+          </div>
+          <span class="ayuda" id="ayuda-abajo"></span>
           <button id="nuevo-param" type="button" title="New parameter: a control (happy, turn, mouth…) that drives poses through drivers">＋ Parameter</button>
         </div>
+        <div id="timeline"></div>
         <div id="parametros"></div>
       </footer>
     </main>

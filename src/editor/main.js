@@ -12,6 +12,7 @@ import { montarInspector } from './inspector.js';
 import { montarLienzo } from './lienzo.js';
 import { montarOpciones } from './opciones.js';
 import { montarParametros } from './parametros.js';
+import { cambiarModo, montarClips, montarModos, montarTimeline } from './timeline.js';
 import {
   abrir, agregarPestana, api, avisar, borradosAqui, cargarDocumentos, cerrarPestana, deshacer, ejecutar, eliminarDocumento,
   enviarPendiente, esquema, estado, fijar, hayPendiente, idLibre, mantenerPosicion, padreParaNuevo,
@@ -31,6 +32,28 @@ montarHistorial($('#entradas'), $('#deshacer'), $('#rehacer'));
 const lienzo = montarLienzo($('#lienzo'));
 montarOpciones($('#opciones'), { agrupar: () => agruparSeleccion(), switch: () => nuevoSwitch(), esqueleto: () => nuevoEsqueleto(), enlazar: () => enlazarSeleccion(), enlazarTodo: enlazarPorCercania });
 montarParametros($('#parametros'), $('#nuevo-param'));
+montarModos($('#modos'));
+montarClips($('#clips'), $('#lista-clips'), $('#nuevo-clip'));
+montarTimeline($('#timeline'));
+
+// Panel de abajo: Design no tiene; Animate, la timeline; Puppet, la timeline del clip abierto o los params.
+for (const b of document.querySelectorAll('[data-abajo]')) b.addEventListener('click', () => fijar({ abajo: b.dataset.abajo }));
+function dibujarAbajo() {
+  const conTimeline = estado.modo === 'animate' || (estado.modo === 'puppet' && estado.abajo === 'timeline');
+  $('#timeline').hidden = !conTimeline;
+  $('#parametros').hidden = conTimeline;
+  $('#nuevo-param').hidden = conTimeline;
+  for (const b of document.querySelectorAll('[data-abajo]')) b.setAttribute('aria-selected', String(b.dataset.abajo === (conTimeline ? 'timeline' : 'parametros')));
+  $('#ayuda-abajo').textContent = conTimeline
+    ? 'Move the playhead and change things on the canvas or in the inspector: each change is keyed at the playhead.'
+    : 'Moving a control shows the pose blend. With a clip open, it keys the parameter at the playhead.';
+}
+suscribir((c) => {
+  if ('modo' in c || 'abajo' in c) dibujarAbajo();
+  // Al abrir otro documento, el modo sigue: en Animate se abre su primera escena.
+  if ('id' in c && estado.doc && estado.modo !== 'design') cambiarModo(estado.modo);
+});
+dibujarAbajo();
 
 // ---------- Menús desplegables (menú principal, zoom, grupos de herramientas) ----------
 
@@ -379,6 +402,9 @@ function dibujarPoses() {
     ...poses.map((p) => new Option(`Pose: ${p.id}`, p.id)),
     new Option('＋ New pose…', NUEVA_POSE),
   );
+  // Un clip abierto (Puppet) se nombra en la lista, aunque se elija desde la biblioteca de clips.
+  const clip = estado.pose && buscar(estado.doc, estado.pose)?.type === 'animation' ? estado.pose : null;
+  if (clip) select.append(new Option(`Clip: ${clip}`, clip));
   select.value = estado.pose ?? (estado.params && conParams ? PARAMETROS : '');
   $('#modo').classList.toggle('en-pose', !!estado.pose);
   $('#modo').classList.toggle('en-params', !estado.pose && !!estado.params);
@@ -403,7 +429,7 @@ $('#pose').addEventListener('change', (e) => {
 suscribir((c) => {
   if ('doc' in c || 'pose' in c || 'params' in c || 'id' in c) {
     // Si la pose activa desapareció (deshacer, la IA la borró), se vuelve al montaje.
-    if (estado.pose && buscar(estado.doc ?? { objects: [] }, estado.pose)?.type !== 'pose') return fijar({ pose: null });
+    if (estado.pose && !['pose', 'animation'].includes(buscar(estado.doc ?? { objects: [] }, estado.pose)?.type)) return fijar({ pose: null });
     dibujarPoses();
   }
 });

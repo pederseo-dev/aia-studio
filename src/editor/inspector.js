@@ -7,7 +7,7 @@ import { buscar, esqueletoDe } from '../core/documento.js';
 import { validarValor } from '../core/esquema.js';
 import { valoresDeHueso } from '../core/esqueleto.js';
 import { origenDelValor, valorEfectivo } from '../core/estilos.js';
-import { opsDePose, poseActiva } from './huesos.js';
+import { clipAbierto, nombreDeEdicion, opsDePose, poseActiva } from './huesos.js';
 import { ejecutar, esquema, estado, fijar, previsualizar, seleccionar, suscribir } from './estado.js';
 
 const ORDEN_DE_GRUPOS = ['General', 'Forma', 'Transformación', 'Apariencia', 'Degradado', 'Lienzo', 'Tiempo'];
@@ -21,7 +21,8 @@ const ETIQUETAS = { x: 'X', y: 'Y', scaleX: 'SX', scaleY: 'SY', width: 'W', heig
 
 export function montarInspector(raiz) {
   suscribir((c) => {
-    if ('doc' in c || 'seleccion' in c || 'edicion' in c || 'pose' in c) dibujar();
+    // El tiempo cambia los valores de un clip; mientras se reproduce no se rehace (sería en cada cuadro).
+    if ('doc' in c || 'seleccion' in c || 'edicion' in c || 'pose' in c || ('tiempo' in c && !estado.reproduciendo) || ('reproduciendo' in c && !estado.reproduciendo)) dibujar();
   });
 
   function dibujar() {
@@ -77,10 +78,13 @@ export function montarInspector(raiz) {
   function seccionDePose(obj, tipo, pose) {
     const animables = Object.entries(tipo.properties).filter(([, p]) => p.animatable);
     if (!animables.length) return;
-    raiz.append(Object.assign(document.createElement('h3'), { className: 'en-pose', textContent: `Pose “${pose.id}”` }));
-    const fijados = pose.values?.[obj.id] ?? {};
+    const clip = clipAbierto();
+    const titulo = clip ? `Clip “${clip.id}” at ${+estado.tiempo.toFixed(3)} s` : `Pose “${pose.id}”`;
+    raiz.append(Object.assign(document.createElement('h3'), { className: 'en-pose', textContent: titulo }));
+    // En un clip, «fijado» es lo que tiene pista; el valor es el que se ve en el tiempo del playhead.
+    const fijados = clip ? Object.fromEntries(Object.keys(clip.tracks?.[obj.id] ?? {}).map((k) => [k, pose.values?.[obj.id]?.[k]])) : (pose.values?.[obj.id] ?? {});
     const deHueso = obj.type === 'bone' ? valoresDeHueso(esquema, obj, pose) : null;
-    const valor = (k) => (deHueso ? deHueso[k] : (fijados[k] ?? valorEfectivo(esquema, estado.doc, obj, k)));
+    const valor = (k) => (deHueso ? deHueso[k] : (pose.values?.[obj.id]?.[k] ?? valorEfectivo(esquema, estado.doc, obj, k)));
     const enPar = new Set();
     for (const [k, p] of animables) {
       if (enPar.has(k)) continue;
@@ -95,7 +99,8 @@ export function montarInspector(raiz) {
         raiz.append(campoDePose(obj, pose, k, p, valor(k), k in fijados));
       }
     }
-    raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'Below is the setup (the rest pose).' }));
+    const ayuda = clip ? 'Changing a value keys it at the playhead (autokey); ↺ removes that keyframe. Below is the setup (the rest pose).' : 'Below is the setup (the rest pose).';
+    raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: ayuda }));
   }
 
   function campoDePose(obj, pose, k, p, valor, fijado) {
@@ -103,15 +108,16 @@ export function montarInspector(raiz) {
     div.className = `campo${fijado ? '' : ' por-defecto'}`;
     div.dataset.prop = `pose.${k}`;
     const label = Object.assign(document.createElement('label'), { textContent: ETIQUETAS[k] ?? k });
-    label.title = `${k} in the pose${fijado ? '' : ' (not set by the pose: uses the setup value)'}`;
+    const enClip = !!clipAbierto();
+    label.title = enClip ? `${k} in the clip${fijado ? '' : ' (no track yet: uses the setup value)'}` : `${k} in the pose${fijado ? '' : ' (not set by the pose: uses the setup value)'}`;
     const cambio = (v) => opsDePose(estado.doc, pose.id, obj.id, { [k]: v });
     const confirmar = (v) => {
       if (Object.is(v, valor) && fijado) return previsualizar(null);
-      ejecutar(cambio(v), `pose ${pose.id}: ${obj.id}.${k}`, { agrupar: `pose:${pose.id}.${obj.id}.${k}` });
+      ejecutar(cambio(v), `${nombreDeEdicion(pose.id)}: ${obj.id}.${k}`, { agrupar: `pose:${pose.id}.${obj.id}.${k}` });
     };
     const control = CONTROLES[p.type]({ p, valor, previsualizar: (v) => previsualizar(cambio(v)), confirmar, div, label, objetivo: obj.id });
-    const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Remove from pose (back to setup)' });
-    restablecer.addEventListener('click', () => ejecutar(opsDePose(estado.doc, pose.id, obj.id, { [k]: undefined }), `pose ${pose.id}: ${obj.id}.${k} from setup`));
+    const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: enClip ? 'Remove the keyframe at the playhead' : 'Remove from pose (back to setup)' });
+    restablecer.addEventListener('click', () => ejecutar(opsDePose(estado.doc, pose.id, obj.id, { [k]: undefined }), `${nombreDeEdicion(pose.id)}: ${obj.id}.${k} ${enClip ? 'key removed' : 'from setup'}`));
     div.append(label, control, restablecer);
     return div;
   }

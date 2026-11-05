@@ -1,13 +1,11 @@
 // Lógica de las herramientas de animación del MCP (set_keys, delete_keys y el resumen de un clip), sin el
 // transporte, para probarlas sin levantar el servidor. Los textos de error los lee la IA y el aviso del editor.
 
-import { tiemposDeClaves } from '../src/core/animacion.js';
+import { ponerClave, tiemposDeClaves } from '../src/core/animacion.js';
 import { buscar } from '../src/core/documento.js';
 import { leer, sugerir } from '../src/core/esquema.js';
 import { parsearD } from '../src/core/trazado.js';
 
-const MISMO_TIEMPO = 1e-6;
-const redondearT = (t) => Math.round(t * 1e6) / 1e6;
 const n = (t) => +t.toFixed(3);
 
 /** Lo que fija un momento de set_keys: los valores de su pose, más values (con "d" convertido), más params. */
@@ -51,7 +49,7 @@ function valoresDelMomento(doc, k, i) {
 export function planSetKeys(doc, esquema, animacion, { keys = [], usage, duration, loop, description, remove = [] } = {}) {
   const existente = buscar(doc, animacion);
   if (existente && existente.type !== 'animation') throw new Error(`"${animacion}" already exists and is a ${existente.type}; choose another id for the animation`);
-  const pistas = structuredClone(existente?.tracks ?? {});
+  let pistas = structuredClone(existente?.tracks ?? {});
   for (const nombre of remove) {
     const [objeto, prop, ...sobra] = String(nombre).split('.');
     if (!objeto || sobra.length || prop === '') throw new Error(`remove: "${nombre}" should be "object.property" (for example "arm_bone.rotation") or an object id`);
@@ -65,19 +63,8 @@ export function planSetKeys(doc, esquema, animacion, { keys = [], usage, duratio
     if (typeof k?.t !== 'number' || !Number.isFinite(k.t) || k.t < 0) throw new Error(`keys[${i}].t must be a number of seconds ≥ 0`);
     const valores = valoresDelMomento(doc, k, i);
     if (!Object.keys(valores).length) throw new Error(`keys[${i}] (t ${k.t}) sets nothing: pass values, params or pose`);
-    const t = redondearT(k.t);
     for (const [id, campos] of Object.entries(valores)) {
-      for (const [prop, v] of Object.entries(campos)) {
-        const valor = prop === 'vertices' && Array.isArray(v) ? v.map(({ bone, ...resto }) => resto) : v;
-        const claves = ((pistas[id] ??= {})[prop] ??= []);
-        const j = claves.findIndex((c) => Math.abs(c.t - t) < MISMO_TIEMPO);
-        const clave = { t, value: valor };
-        const ease = k.ease ?? (j >= 0 ? claves[j].ease : undefined);
-        if (ease !== undefined && ease !== 'linear') clave.ease = ease;
-        if (j >= 0) claves[j] = clave;
-        else claves.push(clave);
-        claves.sort((a, b) => a.t - b.t);
-      }
+      for (const [prop, v] of Object.entries(campos)) pistas = ponerClave(pistas, id, prop, k.t, v, k.ease);
     }
   }
   const ultimo = Math.max(0, ...Object.values(pistas).flatMap((c) => Object.values(c).flatMap((claves) => claves.map((c) => c.t))));

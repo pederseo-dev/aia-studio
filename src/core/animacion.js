@@ -84,6 +84,38 @@ export function poseDeClip(doc, esquema, clip, t, params = {}) {
   return { ...pose, clip: c.id, tiempo: evaluado.tiempo };
 }
 
+const MISMO_TIEMPO = 1e-6;
+export const redondearTiempo = (t) => Math.round(t * 1e6) / 1e6;
+
+/**
+ * Pistas con un keyframe puesto en `id.prop` en el tiempo t (reemplaza el que hubiera en ese tiempo y conserva su
+ * curva si no se pasa otra). No modifica las pistas recibidas. Los vértices no guardan `bone` (es del montaje).
+ */
+export function ponerClave(pistas, id, prop, t, valor, ease) {
+  const nuevas = structuredClone(pistas ?? {});
+  const claves = ((nuevas[id] ??= {})[prop] ??= []);
+  const tiempo = redondearTiempo(t);
+  const j = claves.findIndex((c) => Math.abs(c.t - tiempo) < MISMO_TIEMPO);
+  const clave = { t: tiempo, value: prop === 'vertices' && Array.isArray(valor) ? valor.map(({ bone, ...v }) => v) : valor };
+  const curva = ease ?? (j >= 0 ? claves[j].ease : undefined);
+  if (curva !== undefined && curva !== 'linear') clave.ease = curva;
+  if (j >= 0) claves[j] = clave;
+  else claves.push(clave);
+  claves.sort((a, b) => a.t - b.t);
+  return nuevas;
+}
+
+/** Pistas sin el keyframe de `id.prop` en el tiempo t (una pista que queda vacía sale). */
+export function quitarClave(pistas, id, prop, t) {
+  const nuevas = structuredClone(pistas ?? {});
+  const claves = nuevas[id]?.[prop];
+  if (!claves) return nuevas;
+  nuevas[id][prop] = claves.filter((c) => Math.abs(c.t - t) >= 1e-3);
+  if (!nuevas[id][prop].length) delete nuevas[id][prop];
+  if (!Object.keys(nuevas[id]).length) delete nuevas[id];
+  return nuevas;
+}
+
 /** Tiempos de todos los keyframes de un clip, ordenados y sin repetir (para la tira de cuadros y el resumen). */
 export function tiemposDeClaves(clip) {
   const tiempos = new Set();

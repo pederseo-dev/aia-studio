@@ -8,7 +8,7 @@ import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.j
 import { aplicarPose } from '../core/mezcla.js';
 import { conHueso, dividirTramo, manijas, muestrearTramo, tangentes, verticeDesdeTangentes } from '../core/trazado.js';
 import { docVisible, ejecutar, esquema, estado, fijar, previsualizar } from './estado.js';
-import { opsDePose, poseActiva } from './huesos.js';
+import { nombreDeEdicion, opsDePose, poseActiva } from './huesos.js';
 
 const CERCA_DEL_CONTORNO = 8; // px
 
@@ -24,7 +24,7 @@ export function crearPuntos(ctx) {
     const pose = poseActiva();
     return pose ? opsDePose(estado.doc, pose.id, estado.edicion, { vertices }) : [{ op: 'set', target: estado.edicion, props: { vertices } }];
   };
-  const guardar = (vertices, nota) => ejecutar(opsDeVertices(vertices), `${estado.pose ? `pose ${estado.pose}: ` : ''}${nota} in ${estado.edicion}`);
+  const guardar = (vertices, nota) => ejecutar(opsDeVertices(vertices), `${estado.pose ? `${nombreDeEdicion()}: ` : ''}${nota} in ${estado.edicion}`);
 
   function dibujar() {
     const obj = path();

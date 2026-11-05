@@ -1,6 +1,6 @@
 # Plan de construcción
 
-> Estado: **fase 4 cerrada; fase 5 en diseño acordado** (2026-11-05). Se basa en [sintesis.md](sintesis.md) y en la investigación de
+> Estado: **fase 5 en construcción: núcleo, MCP y editor básicos listos; falta su prueba con IA** (2026-11-05). Se basa en [sintesis.md](sintesis.md) y en la investigación de
 > [Moho](investigacion/moho-lua.md) y [Rive](investigacion/rive-runtime.md).
 
 ## Cómo trabajamos
@@ -280,6 +280,20 @@ Diseño acordado en [decision-animacion.md](decision-animacion.md): tres modos c
   derecha; en Animate, una timeline larga.
 - **Después dentro de la fase:** clips de Puppet insertados por referencia en Animate, editor de curvas, dope sheet
   con mover/escalar tiempos, runtime incremental (dirty flags, anotado en la fase 3).
+
+Construido (2026-11-05):
+- Núcleo: `animation`, curvas (`src/core/curvas.js`), evaluador (`src/core/animacion.js`: `poseDeClip`,
+  `ponerClave`, `quitarClave`) y render con `animation` + `time`; tira de cuadros `svgTira`.
+- MCP: `set_keys`, `delete_keys`, `render_preview` con `animation`/`time`/`times`; el árbol resume cada clip.
+- Editor (`src/editor/timeline.js`): pestañas **Design / Animate / Puppet**. Design ya no muestra «View» ni la
+  timeline, y en Assets solo estilos y degradados. Un clip abierto se edita como una pose (`estado.pose` = id del
+  clip): girar huesos, el inspector, los puntos y los sliders de params guardan keyframes en el playhead (autokey).
+  Timeline con regla, play/pausa (respeta `loop`), duración, loop, «◆ Key», keyframes que se eligen, se arrastran
+  (con imán a los cuadros), cambian de curva y se borran con <kbd>Del</kbd>. Puppet: biblioteca de clips a la
+  derecha (clic = editar, ▶ = reproducir) y pestañas Timeline / Parameters abajo, con la descripción del clip.
+  Animate: selector de escenas y «＋ Scene».
+- Falta en la fase: clips de Puppet insertados en Animate, editor de curvas, mover y escalar varios keyframes,
+  runtime incremental.
 
 **Prueba con IA:** animar un ciclo de reposo, un saludo y un parpadeo (clips de Puppet) y una escena corta en
 Animate; retocar timing a mano y pedirle a la IA que siga sin pisarlo.

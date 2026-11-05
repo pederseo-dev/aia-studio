@@ -22,6 +22,7 @@ import { buscar, esqueletoDe, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { enlacesPorCercania, evaluarEnPose, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, reparentarVarios, soltarEnlacesAjenos, valoresDeHueso } from '../core/esqueleto.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
+import { ponerClave, poseDeClip, quitarClave } from '../core/animacion.js';
 import { aplicarPose, mezclarPoses } from '../core/mezcla.js';
 import { alternarSeleccion, avisar, docVisible, ejecutar, esquema, estado, idLibre, previsualizar, seleccionar } from './estado.js';
 
@@ -94,10 +95,25 @@ export function huesoParaEnlazar(doc = estado.doc) {
 }
 const GRADOS = 180 / Math.PI;
 
-/** La pose que se está editando en el documento indicado, o null. */
+/**
+ * La pose que se está editando en el documento indicado, o null. Con un clip abierto, es lo que se ve en el tiempo
+ * del playhead (con el id del clip, para que los cambios vayan a sus keyframes).
+ */
 export function poseActiva(doc = estado.doc) {
   const p = estado.pose && buscar(doc, estado.pose);
+  if (p?.type === 'animation') return { ...poseDeClip(doc, esquema, p, estado.tiempo, estado.params ?? {}), id: p.id };
   return p?.type === 'pose' ? p : null;
+}
+
+/** Cómo se nombra en el historial lo que se edita: «pose happy» o «clip wave @ 0.5s». */
+export function nombreDeEdicion(id = estado.pose) {
+  return buscar(estado.doc, id)?.type === 'animation' ? `clip ${id} @ ${+estado.tiempo.toFixed(3)}s` : `pose ${id}`;
+}
+
+/** El clip abierto (animation), o null. */
+export function clipAbierto(doc = estado.doc) {
+  const p = estado.pose && doc && buscar(doc, estado.pose);
+  return p?.type === 'animation' ? p : null;
 }
 
 /** Lo que se ve: la pose que se edita, la mezcla de los params (vista Parámetros) o null (el montaje). */
@@ -105,8 +121,17 @@ export function poseVista(doc = estado.doc) {
   return poseActiva(doc) ?? (estado.params ? mezclarPoses(doc, esquema, estado.params) : null);
 }
 
-/** Lote que fija propiedades de un objeto dentro de una pose (conserva lo demás; undefined quita la propiedad). */
+/**
+ * Lote que fija propiedades de un objeto dentro de una pose (conserva lo demás; undefined quita la propiedad). En un
+ * clip, cada propiedad queda como keyframe en el tiempo del playhead (autokey); undefined quita ese keyframe.
+ */
 export function opsDePose(doc, poseId, id, campos) {
+  const destino = buscar(doc, poseId);
+  if (destino?.type === 'animation') {
+    let tracks = destino.tracks ?? {};
+    for (const [k, v] of Object.entries(campos)) tracks = v === undefined ? quitarClave(tracks, id, k, estado.tiempo) : ponerClave(tracks, id, k, estado.tiempo, v);
+    return [{ op: 'set', target: poseId, props: { tracks } }];
+  }
   const values = structuredClone(buscar(doc, poseId).values ?? {});
   values[id] = { ...values[id], ...campos };
   for (const [k, v] of Object.entries(values[id])) if (v === undefined) delete values[id][k];
@@ -124,7 +149,7 @@ export function varianteDe(doc, sw) {
 /** Elegir qué muestra un switch: en la pose que se edita, si hay una; si no, en el montaje. */
 export function elegirVariante(swId, hijo) {
   const pose = poseActiva();
-  if (pose) return ejecutar(opsDePose(estado.doc, pose.id, swId, { active: hijo }), `pose ${pose.id}: ${swId} shows ${hijo}`);
+  if (pose) return ejecutar(opsDePose(estado.doc, pose.id, swId, { active: hijo }), `${nombreDeEdicion(pose.id)}: ${swId} shows ${hijo}`);
   ejecutar([{ op: 'set', target: swId, props: { active: hijo } }], `${swId} shows ${hijo}`);
 }
 
@@ -335,7 +360,7 @@ export function crearHuesos(ctx) {
     return [{ op: 'set', target: id, props: campos }];
   }
 
-  const nota = (id, que) => (estado.pose ? `pose ${estado.pose}: ${que} ${id}` : `${que} ${id}`);
+  const nota = (id, que) => (estado.pose ? `${nombreDeEdicion()}: ${que} ${id}` : `${que} ${id}`);
 
   // ---------- Interacción ----------
 

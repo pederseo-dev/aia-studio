@@ -11,6 +11,7 @@ import { alternarEnlace, avisarSueltos, elegirVariante, huesoParaEnlazar, soltar
 import { alternarSeleccion, ejecutar, esquema, estado, mantenerPosicion, seleccionRaices, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 
 const esRecurso = (o) => esquema.tipos.get(o.type)?.resource;
+const DE_PUPPET = new Set(['pose', 'param', 'driver', 'animation']);
 
 /** Árbol de objetos en `raiz` y lista de recursos (estilos, degradados) en `raizRecursos`. */
 export function montarArbol(raiz, raizRecursos) {
@@ -20,7 +21,7 @@ export function montarArbol(raiz, raizRecursos) {
   const plegadosDe = () => plegados.get(estado.id) ?? plegados.set(estado.id, new Set()).get(estado.id);
 
   suscribir((c) => {
-    if ('doc' in c || 'seleccion' in c) dibujar();
+    if ('doc' in c || 'seleccion' in c || 'modo' in c) dibujar();
   });
 
   function dibujar() {
@@ -29,7 +30,10 @@ export function montarArbol(raiz, raizRecursos) {
     const objetos = rama(doc, null, 0);
     if (objetos.length) raiz.replaceChildren(...objetos);
     else raiz.innerHTML = '<li class="vacio">Empty. Draw with the tools or ask the AI.</li>';
-    const recursos = doc.objects.filter(esRecurso).map((o) => {
+    // Cada modo muestra sus recursos: Design, estilos y degradados; Animate, además los clips de escena; Puppet, todo
+    // (poses, params, drivers y clips).
+    const visible = (o) => !DE_PUPPET.has(o.type) || estado.modo === 'puppet' || (estado.modo === 'animate' && o.type === 'animation' && o.usage !== 'puppet');
+    const recursos = doc.objects.filter((o) => esRecurso(o) && visible(o)).map((o) => {
       const li = document.createElement('li');
       li.innerHTML = `<div class="fila${claseSeleccion(o.id)}" data-id="${o.id}" style="padding-left:8px"><span class="tipo" title="${o.type}">${ICONO_DE_TIPO[o.type] ?? '•'}</span><span class="nombre"></span></div>`;
       li.querySelector('.nombre').textContent = o.id;
