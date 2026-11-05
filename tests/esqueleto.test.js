@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { buscar, crearDocumento, esqueletoDe, validar } from '../src/core/documento.js';
-import { deltaDe, enlacesPorCercania, evaluarEsqueleto, opsParaReparentar, puntaDe, repartirEntreHuesos, soltarEnlacesAjenos } from '../src/core/esqueleto.js';
+import { deltaDe, enlacesPorCercania, evaluarEnPose, evaluarEsqueleto, opsParaReparentar, reparentarVarios, puntaDe, repartirEntreHuesos, soltarEnlacesAjenos } from '../src/core/esqueleto.js';
 import { aplicar, multiplicar } from '../src/core/geometria.js';
 import { migrarAEsqueletos } from '../src/core/migracion.js';
 import { aplicarOperaciones } from '../src/core/operaciones.js';
@@ -343,4 +343,29 @@ test('los huesos dibujados encima siguen al skeleton cuando una pose lo mueve', 
   const svg = svgDocumento(doc, esquema, { pose: 'mv', huesos: true });
   assert.match(svg, /data-id="rig" transform="translate\(200 0\)"/);
   assert.match(svg, /<circle cx="210" cy="10"/);
+});
+
+test('reparentar varios huesos seguidos conservando las poses (Reparent Bone con varios elegidos)', () => {
+  const doc = op(
+    crearDocumento({}),
+    { op: 'create', type: 'skeleton', id: 'rig' },
+    { op: 'create', type: 'bone', id: 'a', parent: 'rig', props: { from: [0, 0], to: [100, 0] } },
+    { op: 'create', type: 'bone', id: 'b', parent: 'a', props: { from: [100, 0], to: [200, 0] } },
+    { op: 'create', type: 'bone', id: 'c', parent: 'a', props: { from: [100, 0], to: [100, 100] } },
+    { op: 'create', type: 'bone', id: 'z', parent: 'rig', props: { from: [0, 200], to: [100, 200] } },
+    { op: 'create', type: 'pose', id: 'up', props: { values: { a: { rotation: -90 } } } },
+  );
+  const mundo = (d, id) => evaluarEnPose(d, esquema, buscar(d, 'up')).posado.get(id).map((v) => Math.round(v * 100) / 100);
+  const pasos = [['b', 'z'], ['c', 'z']];
+  // Sin conservar: los dos se mueven en "up" (dejan de seguir a "a"), y se avisa una sola vez.
+  const aviso = reparentarVarios(doc, esquema, pasos);
+  assert.deepEqual(aviso.movidas, ['up']);
+  const movido = op(doc, ...aviso.ops);
+  assert.notDeepEqual(mundo(movido, 'b'), mundo(doc, 'b'));
+  // Conservando: los dos quedan donde estaban en la pose, y cuelgan de z.
+  const quieto = reparentarVarios(doc, esquema, pasos, { conservarEnPoses: true });
+  assert.deepEqual(quieto.movidas, []);
+  const despues = op(doc, ...quieto.ops);
+  assert.deepEqual([buscar(despues, 'b').parent, buscar(despues, 'c').parent], ['z', 'z']);
+  for (const id of ['b', 'c']) assert.deepEqual(mundo(despues, id), mundo(doc, id));
 });

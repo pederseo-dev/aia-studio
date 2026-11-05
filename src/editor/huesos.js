@@ -20,11 +20,10 @@
 
 import { buscar, esqueletoDe, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
-import { enlacesPorCercania, evaluarEnPose, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, reparentarHueso, soltarEnlacesAjenos, valoresDeHueso } from '../core/esqueleto.js';
+import { enlacesPorCercania, evaluarEnPose, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, reparentarVarios, soltarEnlacesAjenos, valoresDeHueso } from '../core/esqueleto.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
 import { aplicarPose, mezclarPoses } from '../core/mezcla.js';
 import { alternarSeleccion, avisar, docVisible, ejecutar, esquema, estado, idLibre, previsualizar, seleccionar } from './estado.js';
-import { aplicarOperaciones } from '../core/operaciones.js';
 
 const redondear = (v, d = 10) => Math.round(v * d) / d;
 
@@ -57,17 +56,8 @@ export function planDeReparentar(doc = estado.doc) {
   // Se arma paso a paso: cada hueso se cuelga sobre el documento como quedó con el anterior. `movidas`: poses en las
   // que algún hueso queda en otro lugar (ahora sigue a otro padre); con `conservar`, esas poses se compensan.
   const encadenar = (pasos, conservar = false) => {
-    let actual = doc;
-    const ops = [];
-    const movidas = new Set();
-    for (const [hijo, destino] of pasos) {
-      const { ops: lote, movidas: suyas } = reparentarHueso(actual, esquema, hijo, destino, { conservarEnPoses: conservar });
-      if (!lote.length) continue;
-      actual = aplicarOperaciones(actual, lote, esquema).doc;
-      ops.push(...lote);
-      suyas.forEach((p) => movidas.add(p));
-    }
-    return Object.assign(ops, { movidas: [...movidas] });
+    const { ops, movidas } = reparentarVarios(doc, esquema, pasos, { conservarEnPoses: conservar });
+    return Object.assign(ops, { movidas });
   };
   let problema = null;
   if (padre) {

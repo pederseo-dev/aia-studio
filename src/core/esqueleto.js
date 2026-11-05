@@ -374,6 +374,25 @@ const casiIgual = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-3);
  * en Moho, que conserva la animación al cambiar el padre); `movidas` queda con las que no se pudieron compensar (por
  * minAngle/maxAngle o por un marco que deforma).
  */
+/**
+ * Varios cambios de padre seguidos ([[hueso, padre], ...]), cada uno sobre el documento como quedó con el anterior
+ * (lo que hace Reparent Bone del editor con varios huesos elegidos). Devuelve { ops, movidas } como reparentarHueso,
+ * con las poses de todos los pasos.
+ */
+export function reparentarVarios(doc, esquema, pasos, opciones = {}) {
+  let actual = doc;
+  const ops = [];
+  const movidas = new Set();
+  for (const [hueso, padre] of pasos) {
+    const paso = reparentarHueso(actual, esquema, hueso, padre, opciones);
+    if (!paso.ops.length) continue;
+    actual = aplicarOperaciones(actual, paso.ops, esquema).doc;
+    ops.push(...paso.ops);
+    paso.movidas.forEach((p) => movidas.add(p));
+  }
+  return { ops, movidas: [...movidas] };
+}
+
 export function reparentarHueso(doc, esquema, huesoId, padreId, { conservarEnPoses = false } = {}) {
   const ops = opsParaReparentar(doc, esquema, huesoId, padreId);
   if (!ops.length) return { ops, movidas: [] };
