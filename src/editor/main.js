@@ -103,7 +103,7 @@ function mostrarAbrir() {
       return li;
     }),
   );
-  if (!estado.documentos.length) lista.innerHTML = '<li class="ayuda">No characters yet.</li>';
+  if (!estado.documentos.length) lista.innerHTML = '<li class="ayuda">No files yet.</li>';
   $('#dialogo-abrir').showModal();
 }
 
@@ -406,7 +406,7 @@ suscribir((c) => {
 /** Crea un documento vacío o, con `copiarDe`, una copia del documento indicado. */
 async function nuevoDocumento(copiarDe) {
   const actual = copiarDe && estado.documentos.find((d) => d.id === copiarDe);
-  const nombre = prompt(copiarDe ? 'Name of the copy:' : 'New character name:', actual ? `${actual.name} (copy)` : '')?.trim();
+  const nombre = prompt(copiarDe ? 'Name of the copy:' : 'New file name:', actual ? `${actual.name} (copy)` : '')?.trim();
   if (!nombre) return;
   const base = nombre.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   const raiz = /^[a-z]/.test(base) ? base : `doc_${base || 'nuevo'}`;

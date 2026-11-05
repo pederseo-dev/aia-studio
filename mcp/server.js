@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Servidor MCP de aia-studio: deja que la IA que el usuario ya usa (Claude Desktop, Claude Code, Cursor...)
-// maneje los personajes. Corre en local por stdio, sin API keys. Trabaja sobre los mismos archivos que el editor,
+// maneje los documentos. Corre en local por stdio, sin API keys. Trabaja sobre los mismos archivos que el editor,
 // así que los cambios se ven en vivo en el navegador.
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -25,7 +25,7 @@ const servidor = new McpServer(
   { name: 'aia-studio', version: '0.1.0' },
   {
     instructions:
-      'aia-studio es un editor de personajes 2D. Antes de crear o modificar un documento, lee get_guide. ' +
+      'aia-studio es un editor de animación 2D vectorial (personajes, objetos, íconos, escenas). Antes de crear o modificar un documento, lee get_guide. ' +
       'Antes de editar uno existente, mira get_history: las entradas con origen "user" son retoques a mano del usuario ' +
       'y no hay que pisarlos. Después de cambios visibles, revisa el resultado con render_preview.',
   },
@@ -99,7 +99,7 @@ servidor.registerTool(
 
 servidor.registerTool(
   'list_documents',
-  { description: 'Lista los documentos (personajes) disponibles.' },
+  { description: 'Lista los documentos disponibles.' },
   seguro(async () => texto(await almacen.listar())),
 );
 

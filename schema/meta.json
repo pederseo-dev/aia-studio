@@ -3,7 +3,7 @@
   "description": "Datos generales del documento.",
   "help": "General data of the document.",
   "properties": {
-    "name": { "type": "string", "default": "Sin nombre", "group": "General", "help": "Display name of the character.", "description": "Nombre visible del personaje." },
+    "name": { "type": "string", "default": "Sin nombre", "group": "General", "help": "Display name of the file.", "description": "Nombre visible del documento." },
     "width": { "type": "number", "default": 800, "min": 1, "group": "Lienzo", "help": "Canvas width in px.", "description": "Ancho del lienzo en px." },
     "height": { "type": "number", "default": 800, "min": 1, "group": "Lienzo", "help": "Canvas height in px.", "description": "Alto del lienzo en px." },
     "background": { "type": "color", "default": "#f4f1ea", "nullable": true, "group": "Lienzo", "help": "Background color. Empty = transparent.", "description": "Color de fondo. null = transparente." },

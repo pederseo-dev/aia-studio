@@ -28,7 +28,7 @@ export function guiaParaIA(esquema) {
 
   return `# Guía de aia-studio (formato ${FORMATO})
 
-aia-studio es un editor de personajes 2D. Un documento es JSON; tú lo modificas con lotes de operaciones
+aia-studio es un editor de animación 2D vectorial: personajes, objetos, íconos, escenas o lo que haga falta animar. Un documento es JSON; tú lo modificas con lotes de operaciones
 (\`apply_ops\`) y el usuario lo ve en vivo en el editor, donde también puede retocar a mano.
 
 ## Convenciones

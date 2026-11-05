@@ -2,14 +2,14 @@
 
 # aia-studio
 
-Editor y runtime de personajes 2D animables, construido con HTML, CSS, JS y SVG.
+Editor y runtime de animación 2D vectorial (personajes, objetos, íconos, escenas), construido con HTML, CSS, JS y SVG.
 Toma ideas de **Moho** (huesos, smart bones, switch layers) y de **Rive** (state machines,
 runtime declarativo) y está pensado desde el comienzo para que **una IA manipule los
-personajes** y **el usuario pueda corregir a mano** cuando haga falta.
+documentos** y **el usuario pueda corregir a mano** cuando haga falta.
 
 ## Principios
 
-1. **El personaje es texto.** Todo personaje es un documento JSON legible y con nombres
+1. **El documento es texto.** Todo documento es JSON legible y con nombres
    significativos (`head`, `mouth`, `happiness`), no un binario opaco.
 2. **Una sola API para la IA y para el editor.** Cada acción del editor visual (mover un
    hueso, cambiar una boca, crear un keyframe) es una operación de la misma API que usa la IA.
@@ -60,7 +60,7 @@ muestra las demás herramientas.
 | Switch | En Layers, ▾ junto al botón de grupo → «Switch» (o `Shift+G`): mete la selección en un switch (cada objeto es una variante y se ve una a la vez; las ocultas aparecen en cursiva). El botón de variante de su fila en Layers (o la barra de opciones) elige cuál se ve, en el montaje o, en una pose, dentro de la pose. Al seleccionar una variante oculta, el lienzo la muestra mientras está seleccionada para poder editarla; para que la elija un control, «Create control» en la barra de opciones del switch arma el param (lista), una pose por variante y sus drivers. |
 | Grupos | `G` crea un grupo; arrastrar filas en Layers para reordenar (al cambiar de padre, el objeto queda en el mismo lugar) o meter dentro de un grupo; ▾/▸ pliega. |
 | Duplicar | `Ctrl+D` duplica la selección con sus hijos; ☰ → «Make a copy…» copia el documento. |
-| Pestañas | `+` crea un personaje, × o `Alt+W` cierra la pestaña, ☰ → «Open…» abre otro. Lo que crea la IA se abre en una pestaña nueva. |
+| Pestañas | `+` crea un documento nuevo, × o `Alt+W` cierra la pestaña, ☰ → «Open…» abre otro. Lo que crea la IA se abre en una pestaña nueva. |
 | Renombrar | Doble clic en Layers o el campo de id del inspector. |
 | Ajustar valores | Escribir en el inspector o arrastrar sobre el nombre de la propiedad (Shift = fino, Alt = grueso). `↺` vuelve al valor por defecto. |
 | Vista | Rueda = desplazar, Ctrl + rueda = zoom, Espacio + arrastrar o botón del medio = mover, `F` = ajustar, `1` = 100%; el botón de zoom tiene más opciones. |
@@ -68,7 +68,7 @@ muestra las demás herramientas.
 
 ### Conectar tu IA (MCP, sin API key)
 
-La IA que ya usas maneja los personajes a través de un servidor MCP local (`mcp/server.js`). Trabaja sobre los
+La IA que ya usas maneja los documentos a través de un servidor MCP local (`mcp/server.js`). Trabaja sobre los
 mismos archivos que el editor, así que lo que hace la IA aparece en vivo en el navegador y lo que retocas a mano
 queda en el historial para que la IA lo respete.
 
@@ -105,7 +105,7 @@ más cercano todo el dibujo de un skeleton que todavía no sigue a ninguno) y
 | `servidor/` | Lectura y escritura en disco, y la API local que usa el editor (plugin de Vite). |
 | `mcp/` | Servidor MCP para la IA. |
 | `scripts/` | `migrar-esqueletos.js` (`npm run migrar`): lleva documentos viejos, con huesos en la raíz, al modelo de skeleton. |
-| `personajes/` | Los documentos de personajes. |
+| `personajes/` | Los documentos (la carpeta conserva el nombre de cuando la app era solo de personajes). |
 | `tests/` | Pruebas del núcleo (`node --test`). |
 | `docs/pruebas-ia/` | Tareas y resultados de las pruebas con IA de cada fase. |
 | `referencias/` | Código de terceros para estudiar (ignorado por git). |

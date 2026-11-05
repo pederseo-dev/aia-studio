@@ -61,7 +61,7 @@ export function montarOpciones(raiz, acciones) {
 
     if (estado.params) {
       return [
-        texto('Parameters: the character shows the pose blend set by the controls below. Nothing is edited here; to change a pose, pick it under “View”.'),
+        texto('Parameters: the canvas shows the pose blend set by the controls below. Nothing is edited here; to change a pose, pick it under “View”.'),
         boton('Back to Setup', 'Stop previewing the blend', () => fijar({ params: null }), 'principal'),
       ];
     }
