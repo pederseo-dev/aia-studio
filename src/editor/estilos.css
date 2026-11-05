@@ -358,7 +358,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 .parentesco .enlace-hueso { border: none; background: none; padding: 0 2px; font-weight: 600; text-decoration: underline dotted; cursor: pointer; }
 
 /* ---------- Modos: Design · Animate · Puppet ---------- */
-#modos { display: flex; margin: 0 4px 0 6px; }
+#modos { display: flex; margin: 0 4px; }
 #modos button, #pestanas-abajo button { border-radius: 0; padding: 3px 10px; background: none; color: var(--suave); margin-left: -1px; }
 #modos button:first-child, #pestanas-abajo button:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
 #modos button:last-child, #pestanas-abajo button:last-child { border-radius: 0 4px 4px 0; }
