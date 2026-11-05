@@ -211,26 +211,18 @@ $('#deshacer').addEventListener('click', deshacer);
 $('#rehacer').addEventListener('click', rehacer);
 $('#borrar').addEventListener('click', borrarSeleccion);
 $('#borrar-recurso').addEventListener('click', borrarRecursos);
-// Grupo, switch y skeleton comparten botón, como la pluma y las formas: el principal crea el último tipo elegido.
+// Grupo, switch y skeleton: un solo botón (carpeta con +) que abre el menú para elegir qué crear.
 const CONTENEDORES = {
-  group: { titulo: 'New group (G) · with several selected, groups them (Ctrl+G)', crear: () => (estado.seleccionados.length > 1 ? agruparSeleccion() : nuevoGrupo()) },
-  switch: { titulo: 'New switch (Shift+G): shows one child at a time · with something selected, wraps it as variants', crear: () => nuevoSwitch() },
-  skeleton: { titulo: 'New skeleton (K): a bone layer that holds the bones and the drawing they move · with something selected, wraps it', crear: () => nuevoEsqueleto() },
+  group: () => (estado.seleccionados.length > 1 ? agruparSeleccion() : nuevoGrupo()),
+  switch: () => nuevoSwitch(),
+  skeleton: () => nuevoEsqueleto(),
 };
-let ultimoContenedor = 'group';
-function fijarContenedor(tipo) {
-  ultimoContenedor = tipo;
-  Object.assign($('#nuevo-grupo'), { innerHTML: ICONOS[tipo], title: CONTENEDORES[tipo].titulo });
-}
-fijarContenedor('group');
-$('#nuevo-grupo').addEventListener('click', () => CONTENEDORES[ultimoContenedor].crear());
-$('#crear-grupo .elegir').addEventListener('click', (e) => alternarMenu($('#crear-grupo .menu'), e.currentTarget));
+$('#nuevo-grupo').addEventListener('click', (e) => alternarMenu($('#crear-grupo .menu'), e.currentTarget));
 $('#crear-grupo .menu').addEventListener('click', (e) => {
   const tipo = e.target.closest('[data-tipo]')?.dataset.tipo;
   if (!tipo) return;
   cerrarMenus();
-  fijarContenedor(tipo);
-  CONTENEDORES[tipo].crear();
+  CONTENEDORES[tipo]();
 });
 $('#duplicar').addEventListener('click', duplicarSeleccion);
 $('#nuevo-estilo').addEventListener('click', () => nuevoRecurso('style', 'style', { fill: '#c8c2d4', stroke: '#2b2135' }));

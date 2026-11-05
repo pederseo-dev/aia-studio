@@ -34,6 +34,7 @@ export const ICONOS = {
   estilo: trazo('<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor"/>'),
   degradado: trazo('<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M8 4v16M12 4v16M16 4v16" stroke-dasharray="2 2"/>'),
   agregar: trazo('<path d="M12 6v12M6 12h12"/>'),
+  carpetaMas: trazo('<path d="M20.5 11V9.5a1 1 0 0 0-1-1h-8l-2-3h-5a1 1 0 0 0-1 1V18a1 1 0 0 0 1 1h8.5"/><path d="M18 14v6M15 17h6"/>'),
   menu: trazo('<path d="M4.5 7h15M4.5 12h15M4.5 17h15"/>'),
   radial: trazo('<rect x="4" y="4" width="16" height="16" rx="1.5"/><circle cx="12" cy="12" r="2.5"/><circle cx="12" cy="12" r="5.5" stroke-dasharray="2 2"/>'),
   pose: trazo('<circle cx="12" cy="5" r="2"/><path d="M12 7.5v6.5M7 10.5l5-2 5 2M9 20l3-6 3 6"/>'),
