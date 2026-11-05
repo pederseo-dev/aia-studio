@@ -3,6 +3,10 @@
 const trazo = (cuerpo) =>
   `<svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${cuerpo}</svg>`;
 
+const HUESO = 'M8 10.2h8a2.4 2.4 0 1 1 3.2 1.8 2.4 2.4 0 1 1-3.2 1.8H8a2.4 2.4 0 1 1-3.2-1.8A2.4 2.4 0 1 1 8 10.2z';
+// El hueso achicado en la esquina de arriba a la izquierda, con el mismo grosor de trazo que el resto.
+const huesoChico = `<path transform="translate(9 9) scale(0.72) translate(-12 -12) rotate(-45 12 12)" stroke-width="2.1" d="${HUESO}"/>`;
+
 export const ICONOS = {
   seleccionar: trazo('<path d="M5 3.5 18.5 10l-6 1.8-2.6 6.2z"/>'),
   rotar: trazo('<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v4h-4"/>'),
@@ -12,13 +16,13 @@ export const ICONOS = {
   ellipse: trazo('<ellipse cx="12" cy="12" rx="8" ry="6.5"/>'),
   // Hueso clásico en diagonal (dos nudos en cada punta) para que no se confunda con un pincel.
   hueso: trazo('<path transform="rotate(-45 12 12)" d="M8 10.2h8a2.4 2.4 0 1 1 3.2 1.8 2.4 2.4 0 1 1-3.2 1.8H8a2.4 2.4 0 1 1-3.2-1.8A2.4 2.4 0 1 1 8 10.2z"/>'),
-  // Herramientas de huesos: crear (hueso con un +) y manipular (hueso con una flecha de giro).
-  agregarHueso: trazo('<path transform="rotate(-45 11 13)" d="M7 11.2h8a2.4 2.4 0 1 1 3.2 1.8 2.4 2.4 0 1 1-3.2 1.8H7a2.4 2.4 0 1 1-3.2-1.8A2.4 2.4 0 1 1 7 11.2z"/><path d="M19 2.5v5M16.5 5h5"/>'),
-  manipular: trazo('<path d="M4.5 19.5 14 10"/><circle cx="4.5" cy="19.5" r="1.8"/><circle cx="14" cy="10" r="1.3"/><path d="M11 3.8a8 8 0 0 1 9.2 9.2"/><path d="m20.2 9.5 0 3.5-3.5 0"/>'),
-  // Reparent Bone, Bind Layer y Bind Points.
-  reparentar: trazo('<path d="M5 19 12 12"/><circle cx="12" cy="12" r="1.3"/><path d="M12 12l6-6"/><path d="M8 7.5c0-2 1.5-3.5 3.5-3.5"/><path d="m10 2.5 1.5 1.5L10 5.5"/><circle cx="5" cy="19" r="1.6"/>'),
-  enlazarCapa: trazo('<rect x="3.5" y="12" width="9" height="8" rx="1"/><path d="M14 13 20 5"/><circle cx="20" cy="5" r="1.4"/><path d="M8 12V9.5a2 2 0 0 1 4 0"/>'),
-  enlazarPuntos: trazo('<path d="M14 13 20 5"/><circle cx="20" cy="5" r="1.4"/><circle cx="5" cy="17" r="1.6" fill="currentColor"/><circle cx="10" cy="20" r="1.6" fill="currentColor"/><circle cx="6" cy="10.5" r="1.6"/><path d="M7 16.5 12 13"/>'),
+  // Familia de herramientas de huesos: el mismo hueso chico arriba a la izquierda y, abajo a la derecha, la marca de
+  // lo que hace cada una (+ crear, giro manipular, rama reparentar, capas enlazar capa, puntos enlazar puntos).
+  agregarHueso: trazo(`${huesoChico}<path d="M17.5 14v7M14 17.5h7"/>`),
+  manipular: trazo(`${huesoChico}<path d="M20.5 15.2a3.6 3.6 0 1 0 .5 3.3"/><path d="M20.8 12.8v2.7h-2.7"/>`),
+  reparentar: trazo(`${huesoChico}<path d="M14 13.5v5a1.5 1.5 0 0 0 1.5 1.5H21"/><path d="m19 18 2 2-2 2"/>`),
+  enlazarCapa: trazo(`${huesoChico}<path d="m13.5 16.5 4-2.2 4 2.2-4 2.2z"/><path d="m13.5 19.3 4 2.2 4-2.2"/>`),
+  enlazarPuntos: trazo(`${huesoChico}<path d="M14.5 20.5 17.5 15l3.5 4.5" stroke-width="1"/><circle cx="14.5" cy="20.5" r="1.4" fill="currentColor"/><circle cx="17.5" cy="15" r="1.4" fill="currentColor"/><circle cx="21" cy="19.5" r="1.4" fill="currentColor"/>`),
   deshacer: trazo('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
   rehacer: trazo('<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>'),
   group: trazo('<path d="M3.5 7.5V18a1 1 0 0 0 1 1h15a1 1 0 0 0 1-1V9.5a1 1 0 0 0-1-1h-8l-2-3h-5a1 1 0 0 0-1 1z"/>'),
