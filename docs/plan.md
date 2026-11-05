@@ -294,9 +294,15 @@ Construido (2026-11-05):
   Animate: selector de escenas y «＋ Scene».
 - Prueba con IA: 8/8 sin rechazos ([resultados](pruebas-ia/fase-5.md)). Con lo que encontró: `setup: true` y
   momentos con solo `ease` en `set_keys`, y `undo`/`redo` por pista en los clips (como por clave en las poses).
-- Falta en la fase: clips de Puppet insertados en Animate (lo pidió la IA en la prueba), editor de curvas, mover y
-  escalar varios keyframes, un resumen de un clip con sus valores para la IA, avisar cuando un param animado mueve
-  algo que el clip también anima, y runtime incremental.
+- Tercera auditoría (fase 5): en un loop, `t = duration` es el final; lo que no se suma (switch, colores,
+  vértices) lo decide la pista del clip y no un driver activo ([decisión §4](decision-animacion.md)); el autokey
+  guarda el valor sin el aporte de los drivers; una sola tolerancia de «mismo tiempo» (1 ms). Paridad: la IA tiene
+  `move_keys`, avisos de drivers que suman encima y las pistas con sus keyframes en `get_document`; el editor tiene
+  «◆ Pose…», «◆ Setup», `cubic-bezier` a mano, borrar una pista entera y params en Animate.
+- Falta en la fase: clips de Puppet insertados en Animate (lo pidió la IA en la prueba), editor de curvas
+  (arrastrar las manijas), mover y escalar varios keyframes a la vez (el editor mueve de a uno; `move_keys` mueve
+  un momento entero), que un hueso no herede la escala (respirar sin agrandar la cabeza), una vista previa después de
+  `undo` y el runtime incremental.
 
 **Prueba con IA:** animar un ciclo de reposo, un saludo y un parpadeo (clips de Puppet) y una escena corta en
 Animate; retocar timing a mano y pedirle a la IA que siga sin pisarlo.

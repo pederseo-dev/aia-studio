@@ -29,8 +29,9 @@ npm test        # pruebas del núcleo
 npm run mcp     # servidor MCP por stdio (normalmente lo arranca el cliente de IA)
 ```
 
-> Estado: **fase 4** del [plan](docs/plan.md) (expresiones: poses, params, drivers y switch): dibujo con paths, estilos y degradados, sobre el editor y el MCP de
-> la fase 1. El prototipo que probó la idea quedó en la etiqueta de git `prototipo-0`.
+> Estado: **fase 5** del [plan](docs/plan.md) (animación: modos Design, Animate y Puppet, clips con keyframes y
+> timeline), sobre las expresiones de la fase 4 (poses, params, drivers y switch), los huesos de la fase 3 y el dibujo
+> de la fase 2. El prototipo que probó la idea quedó en la etiqueta de git `prototipo-0`.
 
 ### Editor
 
@@ -41,6 +42,7 @@ muestra las demás herramientas.
 
 | Acción | Cómo |
 | --- | --- |
+| Modos | Arriba a la derecha: **Design** (dibujo y rig: el montaje), **Animate** (una timeline de escena, para exportar) y **Puppet** (los controles del muñeco: poses, params, drivers y clips cortos que la app o su IA disparan). Ver [docs/decision-animacion.md](docs/decision-animacion.md). |
 | Seleccionar y mover | Herramienta `V`; arrastrar en el lienzo (Shift = un solo eje) o flechas (Shift = 10 px). |
 | Seleccionar varios | Ctrl o Shift + clic; arrastrar en un lugar vacío hace un recuadro; en Layers, Ctrl + clic suma y Shift + clic toma el tramo. `Ctrl+A` = todo, `Ctrl+G` = agrupar. Rotan y escalan desde el centro del conjunto; el inspector cambia lo que tienen en común. |
 | Rotar y escalar | `T` y `S`: arrastrar en cualquier parte del lienzo gira o escala la selección desde su pivote. |
@@ -55,8 +57,11 @@ muestra las demás herramientas.
 | Enlazar al esqueleto | Solo se enlaza a huesos del mismo skeleton. **Bind Layer** (`L`): clic en un hueso y después en el dibujo (o su fila en Layers) para que lo siga entero; otro clic lo suelta, Alt elige su grupo. **Bind Points**: clic en un hueso y después en puntos de los paths de su skeleton, o un recuadro alrededor; los puntos toman el color del hueso (Alt suelta). También: `Ctrl+B` con dibujo y hueso seleccionados, `bone` en el inspector, y «Bind all by proximity» con el skeleton seleccionado. Enlazar no mueve nada: el dibujo sigue al hueso en las poses. |
 | Barra de opciones | Arriba del lienzo: qué se puede hacer con la herramienta y lo seleccionado, con botones para las acciones (por ejemplo, con un hueso: enlazar, ver lo enlazado, hueso hijo, probar en una pose). |
 | Doblar con varios huesos | Editando los puntos de un path: «Distribute among bones» (o el hueso de cada punto) en la barra de opciones. En las poses, el path se dobla siguiendo la cadena. |
-| Expresiones | Una pose puede cambiar cualquier cosa animable: en la pose, el inspector muestra arriba lo de la pose y Enter edita los puntos de la boca (morph). Abajo, en Parameters, «＋ Parameter» crea un control y «＋ Pose…» lo conecta a una pose; mover el control muestra la mezcla («View» → «Parameters (blend)»). Un switch muestra un solo hijo (`active`). |
-| Poses | «View» en la barra: «Setup» o una pose (o «＋ New pose…»). En una pose, arrastrar un hueso o el dibujo enlazado lo gira sin tocar el montaje. |
+| Expresiones (Puppet) | Una pose puede cambiar cualquier cosa animable: en la pose, el inspector muestra arriba lo de la pose y Enter edita los puntos de la boca (morph). Abajo, en Parameters, «＋ Parameter» crea un control y «＋ Pose…» lo conecta a una pose; mover el control muestra la mezcla («View» → «Parameters (blend)»). Un switch muestra un solo hijo (`active`). |
+| Poses (Puppet) | «View» (solo en Puppet): «Setup» o una pose (o «＋ New pose…»). En una pose, arrastrar un hueso o el dibujo enlazado lo gira sin tocar el montaje. |
+| Clips (Puppet) | A la derecha, la biblioteca de clips: «＋ Clip» crea uno, clic en un clip lo abre en la timeline y ▶ lo reproduce. Abajo, la descripción del clip (para la IA de la app). |
+| Escenas (Animate) | Abajo, el selector de escenas y «＋ Scene». |
+| Timeline (Animate y Puppet) | Con un clip o escena abierto, todo lo que cambias (girar un hueso, el inspector, los puntos, los sliders de Parameters) queda como keyframe en el playhead (autokey; lo que suman los drivers no se guarda dos veces). Clic o arrastre en la regla mueve el playhead; ▶ reproduce según `loop`. «◆ Key» keya lo seleccionado, «◆ Pose…» una pose entera y «◆ Setup» vuelve al montaje. Un keyframe se elige con clic, se arrastra en el tiempo (con imán a los cuadros; no se suelta encima de otro), cambia de curva (`linear`, `ease-*`, `step` o `cubic-bezier…`) y se borra con Supr; × en el nombre de una pista la borra entera. ⚠ avisa si un driver suma encima de una pista. |
 | Switch | En Layers, ▾ junto al botón de grupo → «Switch» (o `Shift+G`): mete la selección en un switch (cada objeto es una variante y se ve una a la vez; las ocultas aparecen en cursiva). El botón de variante de su fila en Layers (o la barra de opciones) elige cuál se ve, en el montaje o, en una pose, dentro de la pose. Al seleccionar una variante oculta, el lienzo la muestra mientras está seleccionada para poder editarla. Para que la elija un param, se arma a mano: un param (lista), una pose por variante que fija cuál se ve y un driver por opción. |
 | Grupos | `G` crea un grupo; arrastrar filas en Layers para reordenar (al cambiar de padre, el objeto queda en el mismo lugar) o meter dentro de un grupo; ▾/▸ pliega. |
 | Duplicar | `Ctrl+D` duplica la selección con sus hijos; ☰ → «Make a copy…» copia el documento. |
@@ -94,7 +99,10 @@ Herramientas: `get_guide` (la guía del formato, generada desde el esquema), `li
 sueltas), `bind_points` (reparte los puntos de un path entre los huesos de su skeleton), `reparent_bone` (cambia el
 padre de un hueso sin moverlo en el montaje; con `keep_in_poses`, tampoco en las poses), `bind_by_proximity` (enlaza
 al hueso más cercano todo el dibujo de un skeleton que todavía no sigue a ninguno) y
-`render_preview` (devuelve un PNG para que la IA vea lo que hizo; con `pose`, `params`, `region` o `bones`).
+`set_keys` (crea o ajusta un clip por momentos: `values`, `pose`, `params`, `setup` para volver al montaje, `ease`),
+`delete_keys` (quita keyframes por tiempo o pista), `move_keys` (mueve los keyframes de un momento a otro) y
+`render_preview` (devuelve un PNG para que la IA vea lo que hizo; con `pose`, `params`, `region` o `bones`, y con
+`animation` + `time` un cuadro de un clip, o `times` una tira de cuadros).
 
 ## Estructura
 
@@ -121,3 +129,5 @@ al hueso más cercano todo el dibujo de un skeleton que todavía no sigue a ning
 - [docs/sintesis.md](docs/sintesis.md): qué tomamos de cada uno y las decisiones de base
   para aia-studio.
 - [docs/plan.md](docs/plan.md): plan de construcción por fases, con pruebas en el editor y con IA.
+- [docs/decision-animacion.md](docs/decision-animacion.md): los modos Design, Animate y Puppet, el modelo de clips
+  y los destinos de exportación (fases 5 a 7).
