@@ -199,6 +199,7 @@ suscribir((c) => {
     $('#lienzo .sin-documento')?.toggleAttribute('hidden', !!estado.id);
   }
   if ('seleccion' in c || 'doc' in c) $('#borrar').disabled = $('#duplicar').disabled = !estado.seleccionados.length;
+  if ('seleccion' in c || 'doc' in c) $('#borrar-recurso').disabled = !recursosSeleccionados().length;
   // Si algo de la selección desapareció (por ejemplo, la IA borró el objeto), se quita.
   if ('doc' in c && estado.doc && estado.seleccionados.some((id) => !buscar(estado.doc, id))) {
     const quedan = estado.seleccionados.filter((id) => buscar(estado.doc, id));
@@ -209,6 +210,7 @@ suscribir((c) => {
 $('#deshacer').addEventListener('click', deshacer);
 $('#rehacer').addEventListener('click', rehacer);
 $('#borrar').addEventListener('click', borrarSeleccion);
+$('#borrar-recurso').addEventListener('click', borrarRecursos);
 // Grupo, switch y skeleton comparten botón, como la pluma y las formas: el principal crea el último tipo elegido.
 const CONTENEDORES = {
   group: { titulo: 'New group (G) · with several selected, groups them (Ctrl+G)', crear: () => (estado.seleccionados.length > 1 ? agruparSeleccion() : nuevoGrupo()) },
@@ -269,6 +271,17 @@ function duplicarSeleccion() {
   });
   ejecutar(ops, `duplicate ${nombreDe(raices)}`);
   seleccionarVarios(raices.map((id) => `${id}_${sufijo}`));
+}
+
+/** Los recursos (estilos, degradados) de la selección. */
+const recursosSeleccionados = () => (estado.doc ? estado.seleccionados.filter((id) => esquema.tipos.get(buscar(estado.doc, id)?.type)?.resource) : []);
+
+/** Botón de borrar de Assets: borra solo los recursos seleccionados (el núcleo limpia sus referencias). */
+function borrarRecursos() {
+  const ids = recursosSeleccionados();
+  if (!ids.length) return;
+  seleccionarVarios(estado.seleccionados.filter((id) => !ids.includes(id)));
+  ejecutar(ids.map((id) => ({ op: 'delete', target: id })), `delete ${nombreDe(ids)}`);
 }
 
 function borrarSeleccion() {
