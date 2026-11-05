@@ -168,7 +168,8 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 /* Inspector e historial con alto propio y su desplazamiento: cambiar de selección no hace saltar al otro. */
 #panel-derecho { grid-area: derecho; border-left: 1px solid var(--borde); display: flex; flex-direction: column; overflow: hidden; }
 #inspector { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
-#linea-de-tiempo { grid-area: tiempo; border-top: 1px solid var(--borde); min-height: 90px; max-height: 220px; overflow-y: auto; }
+/* Alto fijo: el panel no crece ni se achica según cuánto contenido tenga; lo que sobra se desplaza. */
+#linea-de-tiempo { grid-area: tiempo; border-top: 1px solid var(--borde); height: 240px; overflow-y: auto; }
 #linea-de-tiempo .cabecera .ayuda { flex: 1; margin: 0; }
 #linea-de-tiempo .cabecera h2 { flex: 0 0 auto; }
 #parametros { padding: 4px 10px 8px; display: flex; flex-direction: column; gap: 4px; }
@@ -366,7 +367,6 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 /* Las poses y los params son de Puppet; Design no tiene timeline. */
 body:not([data-modo="puppet"]) #modo { display: none; }
 body[data-modo="design"] #linea-de-tiempo { display: none; }
-#linea-de-tiempo { max-height: 280px; }
 
 /* Biblioteca de clips (Puppet): un botón por clip */
 #clips { flex: 0 0 auto; max-height: 38%; overflow-y: auto; border-bottom: 1px solid var(--borde); padding-bottom: 6px; }
