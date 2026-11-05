@@ -15,13 +15,79 @@ const ID_DOCUMENTO = /^[a-z][a-z0-9_-]*$/;
 // Operaciones que cambian la estructura de un objeto (no una propiedad suelta): tocan "todo" el objeto.
 const ESTRUCTURALES = new Set(['create', 'delete', 'move', 'rename', 'duplicate', '_restore', '_place']);
 
+const esObjeto = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
+// En una pose, "d" es azúcar para los vértices: tocar uno es tocar los otros.
+const claveDePose = (objeto, prop) => `values.${objeto}.${prop === 'd' ? 'vertices' : prop}`;
+
+/**
+ * Cambios de un lote en los `values` de las poses, por (objeto, propiedad) y no la pose entera: así una pose que
+ * editaron los dos orígenes en objetos distintos no bloquea el deshacer. Devuelve Map pose → { antes, despues,
+ * claves } (antes = lo que restauran sus inversas; despues = lo que fijaron sus operaciones).
+ */
+function cambiosDePose(entrada) {
+  const ultimo = (ops) => {
+    const m = new Map();
+    for (const op of ops ?? []) {
+      if (op.op === 'set' && esObjeto(op.props?.values)) m.set(op.target, op.props.values);
+      // Una pose que no tenía values: su inversa es un unset, que equivale a values vacío.
+      else if (op.op === 'unset' && op.props?.includes('values')) m.set(op.target, {});
+    }
+    return m;
+  };
+  const despues = ultimo(entrada.ops);
+  const antes = ultimo(entrada.inversas);
+  const cambios = new Map();
+  for (const pose of new Set([...despues.keys(), ...antes.keys()])) {
+    const [a, d] = [antes.get(pose), despues.get(pose)];
+    const claves = new Set();
+    for (const objeto of new Set([...Object.keys(a ?? {}), ...Object.keys(d ?? {})])) {
+      const [ca, cd] = [a?.[objeto] ?? {}, d?.[objeto] ?? {}];
+      for (const prop of new Set([...Object.keys(ca), ...Object.keys(cd)])) {
+        // Sin las dos versiones (por ejemplo, una pose que no tenía values) cuenta todo lo que se ve.
+        if (!a || !d || JSON.stringify(ca[prop]) !== JSON.stringify(cd[prop])) claves.add(claveDePose(objeto, prop));
+      }
+    }
+    cambios.set(pose, { antes: a, despues: d, claves });
+  }
+  return cambios;
+}
+
+/**
+ * Las inversas de un lote, con los `values` de pose aplicados por clave sobre la pose como está ahora: deshacer un
+ * cambio en un objeto de la pose no se lleva lo que el otro origen cambió después en otro objeto de la misma pose.
+ */
+function inversasPorClave(doc, entrada) {
+  const cambios = cambiosDePose(entrada);
+  if (!cambios.size) return entrada.inversas;
+  return entrada.inversas.flatMap((op) => {
+    const deValues = (op.op === 'set' && esObjeto(op.props?.values)) || (op.op === 'unset' && op.props?.includes('values'));
+    const cambio = deValues && cambios.get(op.target);
+    const actual = cambio && doc.objects.find((o) => o.id === op.target);
+    if (!cambio?.antes || !cambio.despues || actual?.type !== 'pose') return op;
+    const values = structuredClone(actual.values ?? {});
+    for (const clave of cambio.claves) {
+      const [, objeto, prop] = clave.split('.');
+      const viejo = cambio.antes[objeto]?.[prop];
+      if (viejo === undefined) {
+        if (values[objeto]) delete values[objeto][prop];
+        if (values[objeto] && !Object.keys(values[objeto]).length) delete values[objeto];
+      } else (values[objeto] ??= {})[prop] = structuredClone(viejo);
+    }
+    if (op.op === 'set') return [{ ...op, props: { ...op.props, values } }];
+    const resto = op.props.filter((k) => k !== 'values');
+    return [{ op: 'set', target: op.target, props: { values } }, ...(resto.length ? [{ ...op, props: resto }] : [])];
+  });
+}
+
 /** (id, propiedad) que toca un lote, con sus inversas: Map id → Set de propiedades ("*" = el objeto entero). */
 function tocados(entrada) {
   const mapa = new Map();
   const sumar = (id, prop) => id != null && (mapa.get(id) ?? mapa.set(id, new Set()).get(id)).add(prop);
+  const poses = cambiosDePose(entrada);
+  for (const [pose, { claves }] of poses) claves.forEach((k) => sumar(pose, k));
   for (const op of [...(entrada.ops ?? []), ...(entrada.inversas ?? [])]) {
-    if (op.op === 'set') Object.keys(op.props ?? {}).forEach((k) => sumar(op.target, k));
-    else if (op.op === 'unset') (op.props ?? []).forEach((k) => sumar(op.target, k));
+    if (op.op === 'set') Object.keys(op.props ?? {}).forEach((k) => !(k === 'values' && poses.has(op.target)) && sumar(op.target, k));
+    else if (op.op === 'unset') (op.props ?? []).forEach((k) => !(k === 'values' && poses.has(op.target)) && sumar(op.target, k));
     else if (ESTRUCTURALES.has(op.op)) {
       sumar(op.target ?? op.id, '*');
       if (op.op === 'rename' || op.op === 'create') sumar(op.id, '*');
@@ -33,6 +99,9 @@ function tocados(entrada) {
   return mapa;
 }
 
+/** ¿Dos propiedades se pisan? Iguales, o una contiene a la otra ("values" contiene a "values.mouth.x"). */
+const sePisan = (p, q) => p === q || p.startsWith(`${q}.`) || q.startsWith(`${p}.`);
+
 /** Nombres "id.prop" (o "id", si alguno cambió el objeto entero) que dos lotes tocan en común. */
 function comunes(a, b) {
   const salida = new Set();
@@ -40,7 +109,7 @@ function comunes(a, b) {
     const propsB = b.get(id);
     if (!propsB) continue;
     if (propsB.has('*')) salida.add(id);
-    else for (const p of propsB) if (propsA.has('*') || propsA.has(p)) salida.add(`${id}.${p}`);
+    else for (const p of propsB) if (propsA.has('*') || [...propsA].some((q) => sePisan(p, q))) salida.add(`${id}.${p}`);
   }
   return salida;
 }
@@ -152,15 +221,17 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
       throw new Error(`Can't ${verbo} #${entrada.n} "${entrada.nota ?? ''}": it would overwrite later changes from another origin: ${detalle}. Change those properties by hand instead, or ask whoever made them.`);
     }
     let resultado;
+    const actual = await leer(id);
+    const inversas = inversasPorClave(actual, entrada);
     try {
-      resultado = aplicarOperaciones(await leer(id), entrada.inversas, esquema);
+      resultado = aplicarOperaciones(actual, inversas, esquema);
     } catch (e) {
-      throw new Error(`No se puede ${tipo}: el documento cambió después y ya no encaja.\n${e.message}`);
+      throw new Error(`Can't ${tipo === 'deshacer' ? 'undo' : 'redo'}: the document changed afterwards and it no longer fits.\n${e.message}`);
     }
     await escribir(id, resultado.doc);
     // La nota la ve el usuario en el historial: en inglés (los prefijos viejos en español también se limpian).
     const nota = entrada.nota?.replace(/^(deshacer|rehacer|undo|redo): /, '') ?? '';
-    await registrar(id, { origen, tipo, ref: entrada.n, nota: `${tipo === 'deshacer' ? 'undo' : 'redo'}: ${nota}`, ops: entrada.inversas, inversas: resultado.inversas });
+    await registrar(id, { origen, tipo, ref: entrada.n, nota: `${tipo === 'deshacer' ? 'undo' : 'redo'}: ${nota}`, ops: inversas, inversas: resultado.inversas });
     return { doc: resultado.doc, entrada: { n: entrada.n, nota, ops: entrada.ops.length, lote: entrada.ops } };
   }
 

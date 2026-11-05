@@ -89,3 +89,28 @@ test('listar y errores de documento', () =>
     await assert.rejects(a.leer('zzz'), /No existe/);
     await assert.rejects(a.leer('../x'), /inválido/);
   }));
+
+test('en una pose, deshacer compara y restaura por objeto y propiedad, no la pose entera', () =>
+  conAlmacen(async (a) => {
+    await a.crear('cara', {}, { origen: 'user' });
+    await a.operar('cara', [{ op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'rect', id: 'q' }, { op: 'create', type: 'pose', id: 'po' }], { origen: 'ai', nota: 'base' });
+    await a.operar('cara', [{ op: 'set', target: 'po', props: { values: { r: { x: 1 } } } }], { origen: 'ai', nota: 'ai r' });
+    await a.operar('cara', [{ op: 'set', target: 'po', props: { values: { r: { x: 1 }, q: { y: 2 } } } }], { origen: 'user', nota: 'user q' });
+    // La IA deshace lo suyo (r) y lo del usuario en la misma pose (q) se queda.
+    let { doc } = await a.deshacer('cara', 'ai');
+    assert.deepEqual(doc.objects.find((o) => o.id === 'po').values, { q: { y: 2 } });
+    ({ doc } = await a.rehacer('cara', 'ai'));
+    assert.deepEqual(doc.objects.find((o) => o.id === 'po').values, { q: { y: 2 }, r: { x: 1 } });
+    // Si el usuario cambia la misma propiedad de la pose, sí choca, y el error nombra la clave.
+    await a.operar('cara', [{ op: 'set', target: 'po', props: { values: { r: { x: 5 }, q: { y: 2 } } } }], { origen: 'user', nota: 'user r' });
+    await assert.rejects(a.deshacer('cara', 'ai'), /po\.values\.r\.x \(changed by the user/);
+  }));
+
+test('eliminar borra el documento y su historial, y avisa si no existe', () =>
+  conAlmacen(async (a) => {
+    await a.crear('borrame', {}, { origen: 'user' });
+    await a.eliminar('borrame');
+    assert.deepEqual(await a.listar(), []);
+    await assert.rejects(a.leer('borrame'), /No existe/);
+    await assert.rejects(a.eliminar('borrame'), /No existe el documento "borrame"/);
+  }));
