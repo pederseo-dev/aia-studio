@@ -13,7 +13,7 @@ import { montarLienzo } from './lienzo.js';
 import { montarOpciones } from './opciones.js';
 import { montarParametros } from './parametros.js';
 import {
-  abrir, agregarPestana, api, avisar, cargarDocumentos, cerrarPestana, deshacer, ejecutar, eliminarDocumento,
+  abrir, agregarPestana, api, avisar, borradosAqui, cargarDocumentos, cerrarPestana, deshacer, ejecutar, eliminarDocumento,
   enviarPendiente, esquema, estado, fijar, hayPendiente, idLibre, mantenerPosicion, padreParaNuevo,
   pestanasGuardadas, refrescarHistorial, rehacer, seleccionRaices, seleccionar, seleccionarVarios, suscribir,
 } from './estado.js';
@@ -524,6 +524,16 @@ import.meta.hot?.on('aia:documento', async ({ id }) => {
     fijar({ doc, previa: null });
     avisar('The document was changed externally (AI)');
   }
+});
+
+// Un documento borrado fuera del editor (la IA con delete_document, u otro proceso): se cierra su pestaña.
+import.meta.hot?.on('aia:borrado', async ({ id }) => {
+  const nombre = estado.documentos.find((d) => d.id === id)?.name ?? id;
+  const conocido = estado.documentos.some((d) => d.id === id) || estado.pestanas.includes(id);
+  if (!conocido || borradosAqui.has(id)) return;
+  await cerrarPestana(id);
+  await cargarDocumentos();
+  avisar(`“${nombre}” was deleted outside the editor (by the AI or another program)`);
 });
 
 import.meta.hot?.on('aia:historial', ({ id }) => id === estado.id && refrescarHistorial());

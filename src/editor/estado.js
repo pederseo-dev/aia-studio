@@ -126,8 +126,13 @@ export async function cerrarPestana(id) {
   fijar({ id: null, doc: null, previa: null, seleccion: null, seleccionados: [], edicion: null, vertice: null, pose: null, params: null, historial: { entradas: [], user: { deshacer: false, rehacer: false } } });
 }
 
+/** Documentos que se están borrando desde este editor (para no avisar de un borrado que pidió el propio usuario). */
+export const borradosAqui = new Set();
+
 /** Borra el documento del disco (con su historial) y cierra su pestaña. */
 export async function eliminarDocumento(id) {
+  borradosAqui.add(id);
+  setTimeout(() => borradosAqui.delete(id), 5000);
   await cerrarPestana(id);
   await api.eliminar(id);
   await cargarDocumentos();

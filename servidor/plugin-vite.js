@@ -1,6 +1,7 @@
 // API local del editor (origen "user") y aviso en vivo cuando un documento cambia en disco, por ejemplo porque lo
 // editó la IA por MCP.
 
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { CARPETA_PERSONAJES, crearAlmacen } from './almacen.js';
 import { cargarEsquema } from './esquema.js';
@@ -60,6 +61,15 @@ export function aiaDocumentos() {
       };
       server.watcher.on('change', avisar);
       server.watcher.on('add', avisar);
+      // Un documento borrado (por ejemplo, con delete_document desde el MCP): el editor cierra su pestaña. Escribir
+      // usa un temporal y rename, así que un unlink de documento.json se confirma un momento después.
+      const raiz = path.resolve(CARPETA_PERSONAJES);
+      const borrado = (id) => server.ws.send({ type: 'custom', event: 'aia:borrado', data: { id } });
+      server.watcher.on('unlinkDir', (carpeta) => path.dirname(path.resolve(carpeta)) === raiz && borrado(path.basename(carpeta)));
+      server.watcher.on('unlink', (archivo) => {
+        if (path.basename(archivo) !== 'documento.json' || path.dirname(path.dirname(path.resolve(archivo))) !== raiz) return;
+        setTimeout(() => !existsSync(archivo) && borrado(path.basename(path.dirname(archivo))), 200);
+      });
     },
   };
 }
