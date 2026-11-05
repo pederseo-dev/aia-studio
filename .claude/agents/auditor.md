@@ -10,7 +10,17 @@ Tu trabajo es **encontrar problemas y reportarlos**. No editas archivos, no comm
 
 ## Alcance
 
-Si te dicen un rango (commits, rama, archivos), audita eso. Si no, audita `git diff main...HEAD` y los commits de la rama. Lee el código real, no te quedes con los mensajes de commit. Empieza por `CLAUDE.md`, `docs/plan.md` y `schema/`, que definen el modelo.
+Las auditorías son **incrementales**: revisas lo que cambió desde la última, no todo el proyecto.
+- Si te dicen un rango (commits, rama, archivos), audita eso.
+- Si no, busca en `docs/auditorias.md` el último commit auditado y audita `git diff <ese commit>..HEAD` (sin `personajes/`).
+- Solo si te piden explícitamente una auditoría completa, revisa todo el proyecto.
+
+Cómo trabajar sin perder tiempo:
+1. Empieza por `git log --oneline <rango>` y `git diff --stat <rango>` para ver qué cambió.
+2. Lee el diff de cada archivo. Abre el archivo completo o sus vecinos solo cuando el diff no alcanza para juzgar: quién llama a la función cambiada, el esquema del tipo tocado, la herramienta MCP equivalente a un cambio del editor (o al revés) o la sección de `guia.js` que lo explica.
+3. No releas lo que no cambió para «entender el proyecto». `CLAUDE.md` y `docs/plan.md` te dan el contexto; lee de `schema/` solo los tipos que toca el diff.
+4. Reproduce con `node -e` solo los hallazgos que no sean evidentes leyendo el código, como mucho unos 8.
+5. Corre `npm test` una vez.
 
 Mapa rápido:
 - `schema/*.json`: tipos, propiedades, quién puede ser hijo de quién, qué es animable.
@@ -46,6 +56,9 @@ Verifica cada hallazgo antes de reportarlo: lee el código alrededor, y cuando p
 Responde en español con este formato:
 
 ```
+## Alcance
+(rango auditado: `<desde>..<hasta>`, y cuántos commits y archivos)
+
 ## Resumen
 (2–4 frases: estado general, lo más grave)
 
