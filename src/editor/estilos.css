@@ -154,8 +154,9 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 240px 1fr 290px;
-  grid-template-rows: 1fr auto;
+  /* minmax(0, …): un texto largo en el centro no estira la grilla ni empuja el panel derecho. */
+  grid-template-columns: 240px minmax(0, 1fr) 290px;
+  grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas: "objetos lienzo derecho" "tiempo tiempo tiempo";
 }
 .panel { background: var(--panel); overflow-y: auto; }
@@ -164,7 +165,9 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 #arbol { flex: 1; min-height: 80px; overflow-y: auto; }
 .cabecera-recursos { border-top: 1px solid var(--borde); }
 #recursos { flex: 0 0 auto; max-height: 35%; overflow-y: auto; }
-#panel-derecho { grid-area: derecho; border-left: 1px solid var(--borde); display: flex; flex-direction: column; }
+/* Inspector e historial con alto propio y su desplazamiento: cambiar de selección no hace saltar al otro. */
+#panel-derecho { grid-area: derecho; border-left: 1px solid var(--borde); display: flex; flex-direction: column; overflow: hidden; }
+#inspector { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 #linea-de-tiempo { grid-area: tiempo; border-top: 1px solid var(--borde); min-height: 90px; max-height: 220px; overflow-y: auto; }
 #linea-de-tiempo .cabecera .ayuda { flex: 1; margin: 0; }
 #linea-de-tiempo .cabecera h2 { flex: 0 0 auto; }
@@ -319,10 +322,13 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
   font-weight: 600;
   color: var(--suave);
 }
-.campo { display: grid; grid-template-columns: 92px 1fr 20px; align-items: center; gap: 6px; margin-bottom: 4px; }
+.campo { display: grid; grid-template-columns: 92px minmax(0, 1fr) 20px; align-items: center; gap: 6px; margin-bottom: 4px; }
 /* Pares en una fila (x/y, ancho/alto, escala), como en el inspector de Rive */
-.par { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 4px; }
-.par .campo { grid-template-columns: 34px 1fr 14px; gap: 3px; margin-bottom: 0; }
+/* La fila de par usa las mismas columnas que un campo suelto: nombre (92px) | dos mitades | y cada mitad, su letra. */
+.par { display: grid; grid-template-columns: 92px minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 6px; margin-bottom: 4px; }
+.par .nombre-par { color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.par .campo { grid-template-columns: 12px minmax(0, 1fr) 14px; gap: 3px; margin-bottom: 0; }
+.par .campo > label { color: var(--tenue); }
 .par .campo > label { text-transform: none; }
 .campo > label { color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .campo > label.arrastrable { cursor: ew-resize; }
@@ -331,6 +337,8 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 .campo .color input[type=color] { width: 28px; height: 24px; padding: 1px; }
 .campo .color input[type=text] { flex: 1; min-width: 0; }
 .campo .color label { color: var(--suave); font-size: 12px; white-space: nowrap; }
+.campo .color.vertices span { flex: 1; min-width: 0; color: var(--suave); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.campo .color.vertices button { white-space: nowrap; flex: none; }
 .campo.por-defecto input:not([type=checkbox]):not([type=color]), .campo.por-defecto select { color: var(--tenue); }
 .campo .restablecer { border: none; background: none; padding: 0; color: var(--suave); visibility: hidden; }
 .campo:not(.por-defecto) .restablecer { visibility: visible; }
@@ -338,7 +346,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 
 /* ---------- Historial ---------- */
 
-#historial { border-top: 1px solid var(--borde); padding: 8px 10px; flex: 1; min-height: 120px; }
+#historial { border-top: 1px solid var(--borde); padding: 8px 10px; flex: 0 0 32%; min-height: 120px; overflow-y: auto; }
 #entradas { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px; }
 #entradas li { display: flex; gap: 6px; padding: 2px 0; color: var(--suave); }
 #entradas .quien { font-weight: 600; min-width: 22px; }

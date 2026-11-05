@@ -14,6 +14,9 @@ const ORDEN_DE_GRUPOS = ['General', 'Forma', 'Transformación', 'Apariencia', 'D
 // Nombres de grupo del esquema, como se muestran (el esquema sigue en español).
 const NOMBRES_DE_GRUPO = { General: 'General', Forma: 'Shape', Transformación: 'Transform', Apariencia: 'Appearance', Degradado: 'Gradient', Lienzo: 'Canvas', Tiempo: 'Time', Driver: 'Driver', Esqueleto: 'Skeleton', Hueso: 'Bone', Límites: 'Limits', Parámetro: 'Parameter', Pose: 'Pose', Switch: 'Switch', Tramo: 'Range', Otros: 'Other' };
 const PARES = { x: 'y', scaleX: 'scaleY', width: 'height', originX: 'originY', x1: 'y1', x2: 'y2', cx: 'cy' };
+// En una fila de par, el nombre de la fila va en la columna de etiquetas y cada mitad lleva solo su letra (como Rive).
+const NOMBRES_DE_PAR = { x: 'Position', scaleX: 'Scale', width: 'Size', originX: 'Pivot', x1: 'Start', x2: 'End', cx: 'Center' };
+const LETRAS_DE_PAR = { x: 'X', y: 'Y', scaleX: 'X', scaleY: 'Y', width: 'W', height: 'H', originX: 'X', originY: 'Y', x1: 'X', y1: 'Y', x2: 'X', y2: 'Y', cx: 'X', cy: 'Y' };
 const ETIQUETAS = { x: 'X', y: 'Y', scaleX: 'SX', scaleY: 'SY', width: 'W', height: 'H', originX: 'PX', originY: 'PY', x1: 'X1', y1: 'Y1', x2: 'X2', y2: 'Y2', cx: 'CX', cy: 'CY' };
 
 export function montarInspector(raiz) {
@@ -55,7 +58,8 @@ export function montarInspector(raiz) {
           enPar.add(pareja[0]);
           const fila = document.createElement('div');
           fila.className = 'par';
-          fila.append(campo(objetivo, datos, prop, p, ETIQUETAS[prop]), campo(objetivo, datos, pareja[0], pareja[1], ETIQUETAS[pareja[0]]));
+          const nombre = Object.assign(document.createElement('span'), { className: 'nombre-par', textContent: NOMBRES_DE_PAR[prop] ?? prop });
+          fila.append(nombre, campo(objetivo, datos, prop, p, LETRAS_DE_PAR[prop]), campo(objetivo, datos, pareja[0], pareja[1], LETRAS_DE_PAR[pareja[0]]));
           raiz.append(fila);
         } else {
           raiz.append(campo(objetivo, datos, prop, p));
@@ -301,7 +305,7 @@ const CONTROLES = {
   // Los vértices se editan en el lienzo; aquí solo se resume y se entra a editarlos.
   vertices({ valor, objetivo }) {
     const caja = document.createElement('div');
-    caja.className = 'color';
+    caja.className = 'color vertices';
     const boton = Object.assign(document.createElement('button'), { type: 'button', textContent: estado.edicion === objetivo ? 'Done' : 'Edit points' });
     boton.title = 'Or double-click the path, or press Enter';
     boton.addEventListener('click', () => fijar(estado.edicion === objetivo ? { edicion: null, vertice: null } : { edicion: objetivo, seleccion: objetivo, seleccionados: [objetivo], vertice: null, herramienta: 'seleccionar' }));
