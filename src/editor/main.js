@@ -150,6 +150,9 @@ const GRUPOS = {
   ],
 };
 const ultimaDelGrupo = { transformar: 'seleccionar', crear: 'path', esqueleto: 'hueso' };
+// El grupo de huesos muestra siempre el hueso en su botón, sea cual sea la variante elegida (como en Moho);
+// cada variante tiene su ícono en el menú.
+const ICONO_DEL_GRUPO = { esqueleto: 'hueso' };
 const ATAJOS = Object.fromEntries(Object.values(GRUPOS).flat().filter((h) => h.atajo).map((h) => [h.atajo.toLowerCase(), h.id]));
 
 function dibujarGrupos() {
@@ -159,7 +162,7 @@ function dibujarGrupos() {
     if (activa) ultimaDelGrupo[grupo] = activa.id;
     const visible = herramientas.find((h) => h.id === ultimaDelGrupo[grupo]);
     caja.classList.toggle('activo', !!activa);
-    caja.innerHTML = `<button type="button" class="principal" title="${visible.nombre}${visible.atajo ? ` (${visible.atajo})` : ''}" aria-label="${visible.nombre}">${ICONOS[visible.icono ?? visible.id]}</button><button type="button" class="elegir" aria-haspopup="menu" title="More tools">${FLECHA}</button><div class="menu" role="menu" hidden></div>`;
+    caja.innerHTML = `<button type="button" class="principal" title="${visible.nombre}${visible.atajo ? ` (${visible.atajo})` : ''}" aria-label="${visible.nombre}">${ICONOS[ICONO_DEL_GRUPO[grupo] ?? visible.icono ?? visible.id]}</button><button type="button" class="elegir" aria-haspopup="menu" title="More tools">${FLECHA}</button><div class="menu" role="menu" hidden></div>`;
     const menu = caja.querySelector('.menu');
     for (const h of herramientas) {
       const b = document.createElement('button');
