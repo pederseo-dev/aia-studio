@@ -29,6 +29,18 @@ export function valoresDeParams(doc, esquema, pedidos = {}) {
   return valores;
 }
 
+/**
+ * Params que eligen la variante de un switch: los que tienen drivers hacia poses que fijan el `active` de ese
+ * switch. Es solo información (para la barra de opciones y el árbol de la IA).
+ */
+export function paramsDeSwitch(doc, switchId) {
+  const ids = doc.objects
+    .filter((d) => d.type === 'driver' && d.param && buscar(doc, d.pose)?.values?.[switchId]?.active !== undefined)
+    .map((d) => d.param)
+    .filter((id) => buscar(doc, id)?.type === 'param');
+  return [...new Set(ids)];
+}
+
 /** Peso (0 a 1) que un driver le da a su pose con el valor actual de su param. */
 export function pesoDeDriver(doc, esquema, driver, valor) {
   const param = buscar(doc, driver.param);

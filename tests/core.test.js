@@ -156,12 +156,15 @@ test('meta es un id reservado: no se crea, no se renombra a meta ni se duplica c
 test('params y drivers: initial y equals tienen que ser opciones, y min no puede pasar a max', () => {
   const base = op(crearDocumento({}), { op: 'create', type: 'param', id: 'v', props: { kind: 'enum', options: ['a', 'b'] } }, { op: 'create', type: 'pose', id: 'pp' }).doc;
   assert.throws(() => op(base, { op: 'set', target: 'v', props: { initial: 'zz' } }), /v\.initial "zz" is not one of its options: "a", "b"/);
-  assert.throws(() => op(base, { op: 'create', type: 'driver', id: 'dd', props: { param: 'v', pose: 'pp', equals: 'c' } }), /dd\.equals "c" is not an option of param v\. Options: "a", "b"/);
+  assert.throws(() => op(base, { op: 'create', type: 'driver', id: 'dd', props: { param: 'v', pose: 'pp', equals: 'c' } }), /param v has options "a", "b", but driver dd\.equals "c" uses a value that is not among them/);
   assert.throws(() => op(base, { op: 'create', type: 'param', id: 'n', props: { min: 2, max: 1 } }), /min \(2\) is greater than max \(1\)/);
   assert.throws(() => op(base, { op: 'create', type: 'param', id: 'n', props: { max: -1 } }), /min \(0\) is greater than max \(-1\)/);
   // Quitar la opción que usa un driver también avisa.
   const conDriver = op(base, { op: 'create', type: 'driver', id: 'dd', props: { param: 'v', pose: 'pp', equals: 'b' } }).doc;
-  assert.throws(() => op(conDriver, { op: 'set', target: 'v', props: { options: ['a'] } }), /dd\.equals "b"/);
+  const dos = op(conDriver, { op: 'create', type: 'driver', id: 'dd2', props: { param: 'v', pose: 'pp', equals: 'b' } }).doc;
+  assert.throws(() => op(dos, { op: 'set', target: 'v', props: { options: ['a'] } }), /drivers dd\.equals "b", dd2\.equals "b" use values .*change those drivers’ equals in the same batch \(for example \{ "op": "set", "target": "dd", "props": \{ "equals": "a" \} \}\)/);
+  // Cambiando los equals en el mismo lote, pasa.
+  assert.doesNotThrow(() => op(dos, { op: 'set', target: 'v', props: { options: ['a'] } }, { op: 'set', target: 'dd', props: { equals: 'a' } }, { op: 'delete', target: 'dd2' }));
 });
 
 test('sacar de un switch una variante que usa una pose dice las dos salidas', () => {
@@ -172,7 +175,7 @@ test('sacar de un switch una variante que usa una pose dice las dos salidas', ()
     { op: 'create', type: 'rect', id: 'm_o', parent: 'mouth' },
     { op: 'create', type: 'pose', id: 'o', props: { values: { mouth: { active: 'm_o' } } } },
   ).doc;
-  assert.throws(() => op(doc, { op: 'move', target: 'm_o', parent: null }), /pose "o" makes switch mouth show "m_o".*either keep it inside mouth or remove mouth\.active from pose "o"/);
+  assert.throws(() => op(doc, { op: 'move', target: 'm_o', parent: null }), /Pose "o" makes switch mouth show "m_o".*remove only mouth's active from pose "o".*View → Pose: o, select mouth and click ↺ next to active.*set_pose with remove: \["mouth\.active"\].*or keep "m_o" inside mouth/);
 });
 
 test('move con keepPosition deja el objeto en el mismo lugar de la pantalla, y se deshace', () => {

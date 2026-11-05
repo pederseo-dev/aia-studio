@@ -15,7 +15,7 @@ import { svgDocumento } from '../src/render/svg.js';
 import { crearAlmacen } from '../servidor/almacen.js';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { svgAPng } from '../servidor/png.js';
-import { esquemaDelArbol as arbol, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from './herramientas.js';
+import { comprobarBorrado, esquemaDelArbol as arbol, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from './herramientas.js';
 
 const esquema = cargarEsquema();
 const almacen = crearAlmacen({ esquema });
@@ -339,21 +339,27 @@ servidor.registerTool(
     description:
       'Crea o actualiza una pose con nombre (recurso pose) sin tocar el montaje, y devuelve cómo se ve. Una pose fija ' +
       'propiedades animables de cualquier objeto: huesos, vértices de una boca (también con "d"), colores, opacidad, ' +
-      'el hijo activo de un switch... Por defecto se suma a lo que la pose ya tenía; un objeto con {} sale de la pose.',
+      'el hijo activo de un switch... Por defecto se suma a lo que la pose ya tenía; un objeto con {} sale de la pose ' +
+      'entero; remove saca solo algunas propiedades (["mouth.active"]) sin tocar el resto de ese objeto.',
     inputSchema: {
       id,
       pose: z.string().describe('id de la pose, por ejemplo "happy", "look_up" o "viseme_o"'),
       values: z
         .record(z.string(), z.record(z.string(), z.any()))
+        .optional()
         .describe('{ id_de_objeto: { propiedad: valor } }, por ejemplo { "head_bone": { "rotation": -10 }, "mouth": { "active": "mouth_o" } }'),
       replace: z.boolean().optional().describe('true = la pose queda solo con estos valores'),
+      remove: z
+        .array(z.string())
+        .optional()
+        .describe('propiedades que salen de la pose, como "objeto.propiedad" (por ejemplo "mouth.active"); un id solo saca el objeto entero. Se aplica antes que values'),
       note: z.string().optional().describe('qué hace, para el historial'),
       width: z.number().int().min(64).max(2048).optional().describe('ancho de la vista previa'),
       show_bones: z.boolean().optional().describe('true = la vista previa muestra el esqueleto'),
     },
   },
-  seguro(async ({ id, pose, values, replace, note, width, show_bones }) => {
-    const ops = opsDeSetPose(await almacen.leer(id), pose, values, replace);
+  seguro(async ({ id, pose, values, replace, remove, note, width, show_bones }) => {
+    const ops = opsDeSetPose(await almacen.leer(id), pose, values ?? {}, replace, remove ?? []);
     const { doc, avisos } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `pose ${pose}` });
     const guardada = buscar(doc, pose).values;
     const lista = Object.entries(guardada).map(([h, c]) => `${h} ${JSON.stringify(c, (k, v) => (k === 'vertices' ? `(${v.length} vértices)` : v))}`).join(', ') || 'vacía';
@@ -374,7 +380,7 @@ servidor.registerTool(
     },
   },
   seguro(async ({ id, confirm }) => {
-    if (confirm !== id) throw new Error(`confirm tiene que ser "${id}" para borrar el documento`);
+    comprobarBorrado(id, confirm);
     await almacen.eliminar(id);
     return texto(`Documento "${id}" borrado (con su historial).`);
   }),

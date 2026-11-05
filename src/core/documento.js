@@ -195,7 +195,7 @@ function erroresDeReferencia(doc, o, prop, p, valor, dueño, poseId = null) {
     const hijos = doc.objects.filter((x) => x.parent === o.id).map((x) => x.id);
     // Lo más común: sacar del switch una variante que una pose elige. El mensaje dice cómo seguir.
     if (poseId) {
-      return [`pose "${poseId}" makes switch ${o.id} show "${valor}" (${prop}), but "${valor}" is not a child of ${o.id}. Children: ${hijos.join(', ') || 'none'}. If you moved it out of the switch, either keep it inside ${o.id} or remove ${o.id}.${prop} from pose "${poseId}" (set_pose with { "${o.id}": {} }); otherwise pick one of its children.${sugerir(valor, hijos)}`];
+      return [`Pose "${poseId}" makes switch ${o.id} show "${valor}", but "${valor}" is not a child of ${o.id} (children: ${hijos.join(', ') || 'none'}). To take it out of the switch, first remove only ${o.id}'s ${prop} from pose "${poseId}" — in the editor: View → Pose: ${poseId}, select ${o.id} and click ↺ next to ${prop}; for the AI: set_pose with remove: ["${o.id}.${prop}"] — or keep "${valor}" inside ${o.id}. Otherwise, pick one of its children.`];
     }
     return [`${dueño}.${prop}: "${valor}" no es hijo de ${o.id}. Hijos: ${hijos.join(', ') || 'ninguno'}.${sugerir(valor, hijos)}`];
   }
@@ -214,12 +214,14 @@ function erroresDeControl(doc, esquema, o) {
     if (kind === 'enum' && o.initial != null && Array.isArray(opciones) && !opciones.includes(o.initial)) errores.push(`${o.id}.initial "${o.initial}" is not one of its options: ${lista(opciones)}`);
     if (Array.isArray(opciones) && new Set(opciones).size !== opciones.length) errores.push(`${o.id}.options has repeated options: ${lista(opciones)}`);
     if (kind !== 'enum' && typeof min === 'number' && typeof max === 'number' && min > max) errores.push(`${o.id}: min (${min}) is greater than max (${max})`);
-  }
-  if (o.type === 'driver' && o.equals != null) {
-    const param = buscar(doc, o.param);
-    const opciones = param?.type === 'param' && leer(esquema, param, 'kind') === 'enum' ? leer(esquema, param, 'options') : null;
-    if (Array.isArray(opciones) && !opciones.includes(o.equals)) {
-      errores.push(`${o.id}.equals "${o.equals}" is not an option of param ${param.id}. Options: ${lista(opciones)}`);
+    // Drivers cuyo equals no es una opción (por ejemplo, al quitar o renombrar una opción en uso): un solo error que
+    // los nombra a todos y dice cómo seguir.
+    if (kind === 'enum' && Array.isArray(opciones)) {
+      const malos = doc.objects.filter((d) => d.type === 'driver' && d.param === o.id && d.equals != null && !opciones.includes(d.equals));
+      if (malos.length) {
+        const ejemplo = `{ "op": "set", "target": "${malos[0].id}", "props": { "equals": ${JSON.stringify(opciones[0] ?? 'option')} } }`;
+        errores.push(`param ${o.id} has options ${lista(opciones)}, but ${malos.length === 1 ? 'driver' : 'drivers'} ${malos.map((d) => `${d.id}.equals "${d.equals}"`).join(', ')} ${malos.length === 1 ? 'uses a value' : 'use values'} that ${malos.length === 1 ? 'is' : 'are'} not among them. If you are removing or renaming an option, change ${malos.length === 1 ? 'that driver’s' : 'those drivers’'} equals in the same batch (for example ${ejemplo}) or delete ${malos.length === 1 ? 'it' : 'them'}; otherwise use one of the options.`);
+      }
     }
   }
   return errores;

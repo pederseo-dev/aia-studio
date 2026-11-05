@@ -4,9 +4,8 @@ import { cargarEsquema } from '../servidor/esquema.js';
 import { buscar, crearDocumento, validar } from '../src/core/documento.js';
 import { evaluarEnPose, puntaDe } from '../src/core/esqueleto.js';
 import { guiaParaIA } from '../src/core/guia.js';
-import { mezclarPoses } from '../src/core/mezcla.js';
 import { aplicarOperaciones } from '../src/core/operaciones.js';
-import { fusionarPose, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from '../mcp/herramientas.js';
+import { comprobarBorrado, esquemaDelArbol, fusionarPose, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from '../mcp/herramientas.js';
 
 const esquema = cargarEsquema();
 const op = (doc, ...ops) => aplicarOperaciones(doc, ops, esquema).doc;
@@ -115,4 +114,45 @@ test('el switch se maneja igual en el editor y en el MCP: set active, sin herram
     { op: 'set', target: 'mouth', props: { active: 'mouth_o' } },
   );
   assert.equal(buscar(doc, 'mouth').active, 'mouth_o');
+});
+
+test('set_pose con remove saca una sola propiedad, y así la variante puede salir del switch', () => {
+  const doc = op(
+    crearDocumento({}),
+    { op: 'create', type: 'switch', id: 'mouth' },
+    { op: 'create', type: 'rect', id: 'mouth_a', parent: 'mouth' },
+    { op: 'create', type: 'rect', id: 'mouth_o', parent: 'mouth' },
+    { op: 'create', type: 'pose', id: 'turn', props: { values: { mouth: { x: 12, active: 'mouth_o' } } } },
+  );
+  assert.throws(() => op(doc, { op: 'move', target: 'mouth_o', parent: null }), /remove: \["mouth\.active"\]/);
+  // {} sacaría también la x; remove saca solo active.
+  assert.deepEqual(fusionarPose(buscar(doc, 'turn').values, { mouth: {} }), {});
+  const sinActive = op(doc, ...opsDeSetPose(doc, 'turn', {}, false, ['mouth.active']));
+  assert.deepEqual(buscar(sinActive, 'turn').values, { mouth: { x: 12 } });
+  assert.doesNotThrow(() => op(sinActive, { op: 'move', target: 'mouth_o', parent: null }));
+  // Un id solo saca el objeto entero; un nombre mal formado avisa.
+  assert.deepEqual(fusionarPose({ a: { x: 1 }, b: { y: 2 } }, {}, false, ['a']), { b: { y: 2 } });
+  assert.throws(() => fusionarPose({}, {}, false, ['a.b.c']), /should be "object\.property"/);
+});
+
+test('delete_document pide repetir el id en confirm', () => {
+  assert.doesNotThrow(() => comprobarBorrado('prueba_x', 'prueba_x'));
+  assert.throws(() => comprobarBorrado('prueba_x', 'otro'), /confirm has to be "prueba_x"/);
+  assert.throws(() => comprobarBorrado('prueba_x', undefined), /can't be undone/);
+});
+
+test('el árbol dice qué params eligen la variante de un switch', () => {
+  const doc = op(
+    crearDocumento({}),
+    { op: 'create', type: 'switch', id: 'mouth' },
+    { op: 'create', type: 'rect', id: 'mouth_a', parent: 'mouth' },
+    { op: 'create', type: 'rect', id: 'mouth_o', parent: 'mouth' },
+    { op: 'create', type: 'param', id: 'viseme', props: { kind: 'enum', options: ['a', 'o'] } },
+    { op: 'create', type: 'pose', id: 'viseme_o', props: { values: { mouth: { active: 'mouth_o' } } } },
+    { op: 'create', type: 'driver', id: 'viseme_o_driver', props: { param: 'viseme', pose: 'viseme_o', equals: 'o' } },
+    { op: 'create', type: 'switch', id: 'eyes' },
+  );
+  const arbol = esquemaDelArbol(doc, esquema);
+  assert.match(arbol, /- mouth \(switch\) \(muestra el primero; lo elige el param viseme\)/);
+  assert.match(arbol, /- eyes \(switch\) \(muestra el primero\)/);
 });

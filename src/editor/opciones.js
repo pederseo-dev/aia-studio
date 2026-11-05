@@ -4,6 +4,7 @@
 import { buscar, esqueletoDe, huesosDe } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { enlacesPorCercania, huesoDe, repartirEntreHuesos } from '../core/esqueleto.js';
+import { paramsDeSwitch } from '../core/mezcla.js';
 import { avisar, ejecutar, esquema, estado, fijar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 import { colorDeHueso, elegirVariante, esqueletoActivo, opsDePose, planDeReparentar, varianteDe, variantesAMostrar } from './huesos.js';
 
@@ -206,7 +207,11 @@ export function montarOpciones(raiz, acciones) {
     if (!variantes.length) {
       return [texto(`Switch ${codigo(sw.id)} is empty: drag drawings into it in Layers, or draw with it selected. Each child is a variant, shown one at a time.`)];
     }
-    return [selectorDeVariante(doc, sw), texto(`${variantes.length} variant${variantes.length === 1 ? '' : 's'}: to add more, drag drawings into it or draw with the switch selected.`)];
+    const partes = [selectorDeVariante(doc, sw), texto(`${variantes.length} variant${variantes.length === 1 ? '' : 's'}: to add more, drag drawings into it or draw with the switch selected.`)];
+    // Solo información: qué params eligen la variante (por drivers hacia poses que fijan active).
+    const params = paramsDeSwitch(doc, sw.id);
+    if (params.length) partes.push(texto(`Chosen by parameter${params.length === 1 ? '' : 's'} ${params.map(codigo).join(', ')} (in Parameters, below).`));
+    return partes;
   }
 
   /** «X muestra [lista]»: en una pose cambia la pose; si no, el montaje. */

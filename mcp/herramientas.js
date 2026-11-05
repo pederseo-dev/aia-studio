@@ -5,6 +5,7 @@ import { buscar, hijos, huesosDe } from '../src/core/documento.js';
 import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, puntaDe, reparentarHueso, repartirEntreHuesos } from '../src/core/esqueleto.js';
 import { aplicar } from '../src/core/geometria.js';
 import { leer } from '../src/core/esquema.js';
+import { paramsDeSwitch } from '../src/core/mezcla.js';
 
 /** Árbol legible del documento: una línea por objeto, indentado por jerarquía, del fondo al frente. */
 export function esquemaDelArbol(doc, esquema) {
@@ -19,7 +20,10 @@ export function esquemaDelArbol(doc, esquema) {
       else if (buscar(doc, o.parent)?.type === 'skeleton' && o.type !== 'bone' && !huesoDe(doc, o.id) && !o.vertices?.some((v) => v.bone)) detalle = ' (sin hueso: queda quieto en las poses)';
       if (o.type === 'skeleton') detalle += ` [${huesosDe(doc, o.id).length} huesos]`;
       if (o.type === 'pose') detalle = ` [${Object.keys(o.values ?? {}).join(', ') || 'vacía'}]`;
-      if (o.type === 'switch') detalle = ` (muestra ${o.active ?? 'el primero'})`;
+      if (o.type === 'switch') {
+        const params = paramsDeSwitch(doc, o.id);
+        detalle = ` (muestra ${o.active ?? 'el primero'}${params.length ? `; lo elige${params.length > 1 ? 'n los params' : ' el param'} ${params.join(', ')}` : ''})`;
+      }
       if (o.type === 'param') {
         const tipo = leer(esquema, o, 'kind');
         detalle = tipo === 'enum' ? ` enum [${leer(esquema, o, 'options').join(', ')}]` : tipo === 'boolean' ? ' boolean' : ` ${leer(esquema, o, 'min')}…${leer(esquema, o, 'max')}`;
@@ -42,17 +46,32 @@ export function esquemaDelArbol(doc, esquema) {
 
 /**
  * set_pose: los valores nuevos de la pose. Por defecto se suman a los que ya tenía (por objeto, propiedad a
- * propiedad); un objeto con {} sale de la pose; con `replace`, la pose queda solo con estos. Un "d" nuevo reemplaza
- * los vértices que la pose ya tenía para ese path.
+ * propiedad); un objeto con {} sale de la pose entero; con `replace`, la pose queda solo con estos. Un "d" nuevo
+ * reemplaza los vértices que la pose ya tenía para ese path. `quitar` (["mouth.active", "brow_l"]) saca de la pose
+ * una sola propiedad de un objeto, o el objeto entero; se aplica antes que `values`.
  */
-export function fusionarPose(existentes, values, replace = false) {
+export function fusionarPose(existentes, values = {}, replace = false, quitar = []) {
   const valores = replace ? {} : structuredClone(existentes ?? {});
+  for (const nombre of quitar) {
+    const [objeto, prop, ...sobra] = String(nombre).split('.');
+    if (!objeto || sobra.length || prop === '') throw new Error(`remove: "${nombre}" should be "object.property" (for example "mouth.active") or an object id`);
+    if (prop === undefined) delete valores[objeto];
+    else if (valores[objeto]) {
+      delete valores[objeto][prop === 'd' ? 'vertices' : prop];
+      if (!Object.keys(valores[objeto]).length) delete valores[objeto];
+    }
+  }
   for (const [objeto, campos] of Object.entries(values)) {
     const previos = campos.d !== undefined ? (({ vertices, ...resto }) => resto)(valores[objeto] ?? {}) : valores[objeto];
     if (Object.keys(campos).length) valores[objeto] = { ...previos, ...campos };
     else delete valores[objeto];
   }
   return valores;
+}
+
+/** delete_document: el confirm tiene que repetir el id (borrar no se puede deshacer). */
+export function comprobarBorrado(id, confirm) {
+  if (confirm !== id) throw new Error(`To delete the document, confirm has to be "${id}" (the same id). Deleting can't be undone.`);
 }
 
 /** set_pose: lo que recortan los límites de los huesos (la pose guarda el valor pedido, pero se ve el recortado). */
@@ -66,10 +85,10 @@ export function recortesDePose(doc, esquema, valores) {
 }
 
 /** set_pose: el lote que crea o actualiza la pose. */
-export function opsDeSetPose(doc, pose, values, replace = false) {
+export function opsDeSetPose(doc, pose, values, replace = false, quitar = []) {
   const existente = buscar(doc, pose);
   if (existente && existente.type !== 'pose') throw new Error(`"${pose}" ya existe y es un ${existente.type}; elige otro id para la pose`);
-  const valores = fusionarPose(existente?.values, values, replace);
+  const valores = fusionarPose(existente?.values, values, replace, quitar);
   return existente ? [{ op: 'set', target: pose, props: { values: valores } }] : [{ op: 'create', type: 'pose', id: pose, props: { values: valores } }];
 }
 
