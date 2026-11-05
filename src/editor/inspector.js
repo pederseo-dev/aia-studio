@@ -334,6 +334,19 @@ const CONTROLES = {
     return caja;
   },
 
+  // Las pistas de un clip se editan en la timeline: aquí solo se resumen.
+  tracks({ valor }) {
+    const lista = document.createElement('ul');
+    lista.className = 'resumen-pose';
+    for (const [id, campos] of Object.entries(valor ?? {})) {
+      const li = document.createElement('li');
+      li.textContent = `${id}: ${Object.entries(campos).map(([k, claves]) => `${k} (${claves.length} keys)`).join(', ')}`;
+      lista.append(li);
+    }
+    if (!lista.children.length) lista.innerHTML = '<li>No keyframes yet.</li>';
+    return lista;
+  },
+
   // Paradas de un degradado: color, offset y quitar; más un botón para agregar.
   stops({ valor, confirmar }) {
     const lista = document.createElement('div');

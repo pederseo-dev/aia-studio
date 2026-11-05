@@ -162,6 +162,33 @@ export function validar(doc, esquema) {
         }
       }
     }
+    // Las pistas de un clip: como las poses, más los params (que animan su valor) y los tiempos dentro de la duración.
+    for (const [prop, p] of Object.entries(tipo.properties)) {
+      if (p.type !== 'tracks' || validarValor(p, o[prop] ?? {})) continue;
+      const duracion = leer(esquema, o, 'duration');
+      for (const [id, campos] of Object.entries(o[prop] ?? {})) {
+        const destino = buscar(doc, id);
+        if (!destino) {
+          errores.push(`${o.id}.${prop}: object "${id}" does not exist.${sugerir(id, ids)}`);
+          continue;
+        }
+        for (const [k, claves] of Object.entries(campos)) {
+          const dueño = `${o.id}.${prop}.${id}.${k}`;
+          const fuera = claves.find((c) => c.t < 0 || c.t > duracion + 1e-9);
+          if (fuera) errores.push(`${dueño}: keyframe at t ${fuera.t} is outside the clip (0…${duracion} s). Make duration longer or move the keyframe.`);
+          const errorDeValor = errorDeValorAnimado(doc, esquema, destino, k);
+          if (typeof errorDeValor === 'string') {
+            errores.push(`${dueño}: ${errorDeValor}`);
+            continue;
+          }
+          for (const [i, c] of claves.entries()) {
+            const error = errorDeValor(c.value);
+            if (error) errores.push(`${dueño}[${i}].value ${error}`);
+            else if (esquema.tipos.get(destino.type).properties[k]?.type === 'ref') errores.push(...erroresDeReferencia(doc, destino, k, esquema.tipos.get(destino.type).properties[k], c.value, `${dueño}[${i}]`));
+          }
+        }
+      }
+    }
   }
 
   // Ciclos: subir por los padres nunca debe volver al punto de partida.
@@ -176,6 +203,26 @@ export function validar(doc, esquema) {
     }
   }
   return { errores, avisos };
+}
+
+/**
+ * Qué valores acepta una pista de `destino.prop`: devuelve un validador (valor → mensaje o null), o un mensaje si esa
+ * propiedad no se puede animar. Un param anima su `value` (número, 0/1 o una de sus opciones).
+ */
+export function errorDeValorAnimado(doc, esquema, destino, prop) {
+  if (destino.type === 'param') {
+    if (prop !== 'value') return `a param only animates "value" (not "${prop}")`;
+    const kind = leer(esquema, destino, 'kind');
+    if (kind === 'enum') {
+      const opciones = leer(esquema, destino, 'options');
+      return (v) => (opciones.includes(v) ? null : `must be one of the options of ${destino.id}: ${opciones.join(', ') || 'none yet'}`);
+    }
+    return (v) => (kind === 'boolean' && typeof v === 'boolean') || (typeof v === 'number' && Number.isFinite(v)) ? null : 'must be a number';
+  }
+  const props = esquema.tipos.get(destino.type)?.properties ?? {};
+  const animables = Object.keys(props).filter((k) => props[k].animatable);
+  if (!props[prop]?.animatable) return `${destino.type} has no animatable "${prop}". Animatable: ${animables.join(', ') || 'none'}.${sugerir(prop, animables)}`;
+  return (v) => validarValor(props[prop], v);
 }
 
 /**

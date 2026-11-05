@@ -74,7 +74,7 @@ function aRgba(color) {
   return [0, 2, 4, 6].map((i) => (i < h.length ? parseInt(h.slice(i, i + 2), 16) : 255));
 }
 
-function mezclarColor(a, b, w) {
+export function mezclarColor(a, b, w) {
   if (a == null || b == null) return w >= 0.5 ? b : a;
   const [ca, cb] = [aRgba(a), aRgba(b)];
   const c = ca.map((v, i) => Math.round(v + (cb[i] - v) * w));
@@ -100,9 +100,10 @@ export function mezclarVertices(a, b, w) {
 
 /**
  * La pose que resulta de mezclar todas las poses según los drivers y los valores de los params. Es un objeto pose
- * (sin id real) que se dibuja igual que una pose con nombre.
+ * (sin id real) que se dibuja igual que una pose con nombre. `base` ({ objeto: { propiedad: valor } }, lo que fija
+ * un clip en un tiempo) reemplaza al montaje como punto de partida: las poses se suman encima de lo animado.
  */
-export function mezclarPoses(doc, esquema, pedidos = {}) {
+export function mezclarPoses(doc, esquema, pedidos = {}, base = {}) {
   const params = valoresDeParams(doc, esquema, pedidos);
   const acumulado = new Map(); // "objeto\u0000propiedad" → { id, prop, tipo, base, valor }
   for (const driver of doc.objects.filter((o) => o.type === 'driver')) {
@@ -118,9 +119,11 @@ export function mezclarPoses(doc, esquema, pedidos = {}) {
         const p = definiciones[prop];
         if (!p) continue;
         const clave = `${id}\u0000${prop}`;
-        // El valor del montaje es el que se ve: el propio, el del estilo o el por defecto.
-        const base = valorEfectivo(esquema, doc, obj, prop);
-        if (!acumulado.has(clave)) acumulado.set(clave, { id, prop, tipo: p.type, base, suma: 0, valor: base });
+        // El valor del montaje es el que se ve: el propio, el del estilo o el por defecto. Las diferencias de los
+        // números se miden contra él (como siempre) y se suman a lo animado; colores y vértices parten de lo animado.
+        const montaje = valorEfectivo(esquema, doc, obj, prop);
+        const desde = base[id]?.[prop] !== undefined ? base[id][prop] : montaje;
+        if (!acumulado.has(clave)) acumulado.set(clave, { id, prop, tipo: p.type, base: montaje, desde, suma: 0, valor: desde });
         const a = acumulado.get(clave);
         if (p.type === 'number') a.suma += w * (objetivo - a.base);
         else if (p.type === 'color') a.valor = mezclarColor(a.valor, objetivo, w);
@@ -129,9 +132,9 @@ export function mezclarPoses(doc, esquema, pedidos = {}) {
       }
     }
   }
-  const values = {};
+  const values = structuredClone(base);
   for (const a of acumulado.values()) {
-    (values[a.id] ??= {})[a.prop] = a.tipo === 'number' ? a.base + a.suma : a.valor;
+    (values[a.id] ??= {})[a.prop] = a.tipo === 'number' ? a.desde + a.suma : a.valor;
   }
   return { id: null, type: 'pose', values, params };
 }

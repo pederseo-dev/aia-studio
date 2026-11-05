@@ -165,6 +165,56 @@ function expandirPose(doc, esquema, tipo, props) {
   return { ...props, values };
 }
 
+/**
+ * Lo mismo para las pistas de un clip: rehace las pistas cambiando ids de objetos y los valores que son referencias.
+ * Un keyframe que apuntaba a algo quitado sale de la pista; una pista vacía sale entera.
+ */
+function mapearPistas(doc, esquema, pistas, cambiar) {
+  const resultado = {};
+  for (const [id, campos] of Object.entries(pistas)) {
+    const nuevo = cambiar(id);
+    if (nuevo == null) continue;
+    const tipo = esquema.tipos.get(buscar(doc, nuevo)?.type ?? buscar(doc, id)?.type);
+    const limpios = {};
+    for (const [k, claves] of Object.entries(campos)) {
+      const esRef = tipo?.properties[k]?.type === 'ref';
+      const nuevas = !esRef || !Array.isArray(claves) ? claves : claves.filter((c) => c.value == null || cambiar(c.value) != null).map((c) => (c.value == null ? c : { ...c, value: cambiar(c.value) }));
+      if (!Array.isArray(nuevas) || nuevas.length) limpios[k] = nuevas;
+    }
+    if (Object.keys(limpios).length) resultado[nuevo] = limpios;
+  }
+  return resultado;
+}
+
+/**
+ * Azúcar para la IA en las pistas de un clip: un path acepta una pista `d` (cada value, un trazado SVG) que se guarda
+ * como pista de `vertices` (para el morph). Como en las poses, los vértices no guardan `bone`.
+ */
+function expandirPistas(doc, esquema, tipo, props) {
+  if (!props?.tracks || typeof props.tracks !== 'object' || Array.isArray(props.tracks)) return props;
+  if (!Object.values(esquema.tipos.get(tipo)?.properties ?? {}).some((p) => p.type === 'tracks')) return props;
+  const tracks = {};
+  for (const [id, campos] of Object.entries(props.tracks)) {
+    const tipoDestino = esquema.tipos.get(buscar(doc, id)?.type);
+    if (!tipoDestino?.properties.vertices || !campos || typeof campos !== 'object') {
+      tracks[id] = campos;
+      continue;
+    }
+    let { d, ...resto } = campos;
+    if (Array.isArray(d)) {
+      resto.vertices = d.map((c) => {
+        if (typeof c?.value !== 'string') return c;
+        const subtrazados = parsearD(c.value);
+        if (subtrazados.length !== 1) throw new Error(`${id}.d at t ${c.t}: the path has ${subtrazados.length} subpaths; a keyframe needs exactly one`);
+        return { ...c, value: subtrazados[0].vertices };
+      });
+    } else if (d !== undefined) resto.d = d;
+    if (Array.isArray(resto.vertices)) resto.vertices = resto.vertices.map((c) => (Array.isArray(c?.value) ? { ...c, value: c.value.map(({ bone, ...v }) => v) } : c));
+    tracks[id] = resto;
+  }
+  return { ...props, tracks };
+}
+
 /** Azúcar para la IA: un bone acepta `from` y `to` ([x, y] en el documento) en vez de x, y, rotation y length. */
 function expandirHueso(doc, esquema, tipo, padre, props, actual) {
   if (props?.from === undefined && props?.to === undefined) return props;
@@ -194,7 +244,7 @@ function aplicarUna(doc, op, esquema) {
       }
       const padre = contenedor(doc, op.parent, esquema);
       if (op.props !== undefined) comprobarProps(op.props);
-      const props = expandirPose(doc, esquema, op.type, expandirHueso(doc, esquema, op.type, padre, expandirD(tipo, op.props))) ?? {};
+      const props = expandirPistas(doc, esquema, op.type, expandirPose(doc, esquema, op.type, expandirHueso(doc, esquema, op.type, padre, expandirD(tipo, op.props)))) ?? {};
       insertar(doc, { id: op.id, type: op.type, parent: padre, ...structuredClone(props) }, padre, op.index);
       return [{ op: 'delete', target: op.id }];
     }
@@ -202,7 +252,7 @@ function aplicarUna(doc, op, esquema) {
     case 'set': {
       comprobarProps(op.props);
       const obj = op.target === 'meta' ? doc.meta : objetivo(doc, op.target);
-      const props = op.target === 'meta' ? op.props : expandirPose(doc, esquema, obj.type, expandirHueso(doc, esquema, obj.type, obj.parent ?? null, expandirD(esquema.tipos.get(obj.type), op.props), obj));
+      const props = op.target === 'meta' ? op.props : expandirPistas(doc, esquema, obj.type, expandirPose(doc, esquema, obj.type, expandirHueso(doc, esquema, obj.type, obj.parent ?? null, expandirD(esquema.tipos.get(obj.type), op.props), obj)));
       const anteriores = {};
       const nuevas = [];
       for (const [k, v] of Object.entries(props)) {
@@ -247,8 +297,8 @@ function aplicarUna(doc, op, esquema) {
           } else if (p.type === 'vertices' && o[prop]?.some((v) => ids.has(v.bone))) {
             anteriores[prop] = structuredClone(o[prop]);
             o[prop] = o[prop].map(({ bone, ...v }) => (bone === undefined || ids.has(bone) ? v : { ...v, bone }));
-          } else if (p.type === 'pose' && o[prop]) {
-            const limpia = mapearPose(doc, esquema, o[prop], (id) => (ids.has(id) ? null : id));
+          } else if ((p.type === 'pose' || p.type === 'tracks') && o[prop]) {
+            const limpia = (p.type === 'pose' ? mapearPose : mapearPistas)(doc, esquema, o[prop], (id) => (ids.has(id) ? null : id));
             if (JSON.stringify(limpia) !== JSON.stringify(o[prop])) {
               anteriores[prop] = structuredClone(o[prop]);
               o[prop] = limpia;
@@ -314,6 +364,7 @@ function aplicarUna(doc, op, esquema) {
         for (const [prop, p] of Object.entries(tipo?.properties ?? {})) {
           if (p.type === 'ref' && o[prop] === anterior) o[prop] = op.id;
           if (p.type === 'pose' && o[prop]) o[prop] = mapearPose(doc, esquema, o[prop], (id) => (id === anterior ? op.id : id));
+          if (p.type === 'tracks' && o[prop]) o[prop] = mapearPistas(doc, esquema, o[prop], (id) => (id === anterior ? op.id : id));
           if (p.type === 'vertices' && o[prop]?.some((v) => v.bone === anterior)) o[prop] = o[prop].map((v) => (v.bone === anterior ? { ...v, bone: op.id } : v));
         }
       }

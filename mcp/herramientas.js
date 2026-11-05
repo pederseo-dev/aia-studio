@@ -6,6 +6,7 @@ import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, puntaDe, 
 import { aplicar } from '../src/core/geometria.js';
 import { leer } from '../src/core/esquema.js';
 import { paramsDeSwitch } from '../src/core/mezcla.js';
+import { resumenDeClip } from './animacion.js';
 
 /** Árbol legible del documento: una línea por objeto, indentado por jerarquía, del fondo al frente. */
 export function esquemaDelArbol(doc, esquema) {
@@ -20,6 +21,7 @@ export function esquemaDelArbol(doc, esquema) {
       else if (buscar(doc, o.parent)?.type === 'skeleton' && o.type !== 'bone' && !huesoDe(doc, o.id) && !o.vertices?.some((v) => v.bone)) detalle = ' (sin hueso: queda quieto en las poses)';
       if (o.type === 'skeleton') detalle += ` [${huesosDe(doc, o.id).length} huesos]`;
       if (o.type === 'pose') detalle = ` [${Object.keys(o.values ?? {}).join(', ') || 'vacía'}]`;
+      if (o.type === 'animation') detalle = ` ${resumenDeClip(esquema, o)}`;
       if (o.type === 'switch') {
         const params = paramsDeSwitch(doc, o.id);
         detalle = ` (muestra ${o.active ?? 'el primero'}${params.length ? `; lo elige${params.length > 1 ? 'n los params' : ' el param'} ${params.join(', ')}` : ''})`;

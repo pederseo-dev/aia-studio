@@ -251,6 +251,32 @@ tiene en el montaje los mismos 2 vértices que en las poses, así que la boca se
 \`render_preview\` y \`params\` (por ejemplo \`{ "happiness": 0.5, "viseme": "o" }\`); el texto dice qué poses quedaron
 activas y con qué peso.
 
+## Animación: clips con keyframes
+
+El editor tiene tres modos: **Design** (dibujo y rig), **Animate** (una timeline de escena para exportar a video,
+Lottie o SVG) y **Puppet** (el muñeco listo para que una app o su IA lo manejen en vivo: params, poses y clips
+cortos que se disparan, uno por botón). Los dos últimos usan el mismo recurso, \`animation\` (un clip), con
+\`usage\` \`animate\` o \`puppet\`.
+
+- **Pistas** (\`tracks\`): \`{ id_de_objeto: { propiedad: [ { "t": 0, "value": 0 }, { "t": 0.4, "value": -60, "ease": "ease-out" } ] } }\`,
+  con la misma forma que \`values\` de una pose: valores **absolutos**, como en el montaje. Cualquier propiedad
+  animable sirve: huesos, \`fill\`, \`opacity\`, el \`active\` de un switch, \`vertices\` (o \`d\`) con la misma cantidad
+  de puntos para un morph. Un **param** también tiene pista: \`{ "happiness": { "value": [...] } }\`, y sus drivers
+  suman la pose (un clip «laugh» puede llevar \`happiness\` a 1 en vez de repetir la cara feliz).
+- \`t\` en segundos, de 0 a \`duration\`. Antes del primer keyframe vale el primero; después del último, el último; una
+  propiedad sin pista vale lo del montaje. \`loop\`: \`once\`, \`loop\` (vuelve a empezar; repite el primer valor al final
+  para que no salte) o \`pingpong\`.
+- \`ease\` va en el keyframe y vale para el tramo que **sale** de él: \`linear\` (por defecto), \`step\` (se mantiene hasta
+  el siguiente), \`ease-in\`, \`ease-out\`, \`ease-in-out\` o \`[x1, y1, x2, y2]\` (cubic-bezier de CSS; \`[0.3, 1.6, 0.6, 1]\`
+  se pasa y vuelve, para un rebote). El \`active\` de un switch, los booleanos y los textos cambian de golpe.
+- Orden: montaje → clip en ese tiempo → los drivers suman sus poses encima (los params del clip pisan a los de afuera).
+- **Cómo armarlo:** \`set_keys\` piensa en **momentos**: «en t = 0.3, el brazo así y la boca así» (\`values\`, como en
+  \`set_pose\`), «en t = 0.6, la pose \`happy\`» (\`pose\`, copia sus valores) o params (\`params\`). Crea el clip si no
+  existe. \`delete_keys\` quita keyframes. Revisa el movimiento con \`render_preview\` y \`animation\` + \`times\` (una
+  tira de cuadros en una sola imagen) o \`time\` (un cuadro).
+- Para Puppet, escribe \`description\` (qué hace el clip, en pocas palabras): la IA de la app la lee para elegir cuándo
+  dispararlo. Los clips de puppet suelen ser cortos (parpadeo 0.2 s, saludo 1–1.5 s, reposo en loop 2–4 s).
+
 ## Tipos
 
 ### \`meta\` (propiedades del documento, se cambian con \`target: "meta"\`)

@@ -1,9 +1,10 @@
 // Esquema: las definiciones de schema/*.json resueltas (herencia incluida). Es la fuente única de verdad de qué tipos
 // existen y qué propiedades tienen; de aquí salen la validación, el inspector del editor y la guía para la IA.
 
+import { errorDeCurva } from './curvas.js';
 import { erroresDeVertice } from './trazado.js';
 
-const TIPOS_DE_PROPIEDAD = new Set(['number', 'string', 'strings', 'boolean', 'color', 'enum', 'ref', 'vertices', 'stops', 'pose']);
+const TIPOS_DE_PROPIEDAD = new Set(['number', 'string', 'strings', 'boolean', 'color', 'enum', 'ref', 'vertices', 'stops', 'pose', 'tracks']);
 const ID_DE_POSE = /^[a-z][a-z0-9_]*$/;
 const COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
@@ -94,6 +95,28 @@ export function validarValor(p, valor) {
       for (const [id, campos] of Object.entries(valor)) {
         if (!ID_DE_POSE.test(id)) return `"${id}" no es un id válido`;
         if (!campos || typeof campos !== 'object' || Array.isArray(campos)) return `${id} debe ser un objeto { propiedad: valor }`;
+      }
+      return null;
+    }
+    case 'tracks': {
+      // Solo la forma: qué objetos, propiedades y valores valen lo revisa el documento, que conoce los tipos y la
+      // duración.
+      const ejemplo = '{ object_id: { property: [ { "t": 0, "value": 10 } ] } }';
+      if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return `must be an object ${ejemplo}`;
+      for (const [id, campos] of Object.entries(valor)) {
+        if (!ID_DE_POSE.test(id)) return `"${id}" is not a valid id`;
+        if (!campos || typeof campos !== 'object' || Array.isArray(campos)) return `${id} must be an object { property: [keyframes] }`;
+        for (const [prop, claves] of Object.entries(campos)) {
+          if (!Array.isArray(claves)) return `${id}.${prop} must be a list of keyframes [ { "t": 0, "value": … } ]`;
+          for (const [i, k] of claves.entries()) {
+            if (!k || typeof k !== 'object' || Array.isArray(k)) return `${id}.${prop}[${i}] must be a keyframe { "t": seconds, "value": … }`;
+            if (typeof k.t !== 'number' || !Number.isFinite(k.t)) return `${id}.${prop}[${i}].t must be a number of seconds`;
+            if (!('value' in k)) return `${id}.${prop}[${i}] needs a value`;
+            if (i && k.t <= claves[i - 1].t) return `${id}.${prop}: keyframes must be in order of t, with no repeated times (t ${k.t} after ${claves[i - 1].t})`;
+            const curva = errorDeCurva(k.ease);
+            if (curva) return `${id}.${prop}[${i}]: ${curva}`;
+          }
+        }
       }
       return null;
     }

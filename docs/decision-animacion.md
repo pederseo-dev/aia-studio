@@ -82,8 +82,9 @@ montaje → clip en t (valores absolutos) → params (los del clip pisan a los d
    a empezar, `pingpong` va y vuelve).
 2. Las pistas de params dan el valor de esos params; los demás params vienen de afuera (la app, los sliders) o de su
    valor inicial.
-3. Los drivers suman sus poses **encima de lo animado**, igual que hoy suman sobre el montaje: un saludo animado más
-   la cara feliz que da un param.
+3. Los drivers suman sus poses **encima de lo animado**: un saludo animado más la cara feliz que da un param. En los
+   números, la diferencia de cada pose se sigue midiendo contra el montaje (como en la mezcla de la fase 4) y se suma
+   a lo animado; colores y vértices se interpolan desde lo animado hacia la pose.
 
 El resultado es una pose más, que se dibuja con el mismo render de siempre (`src/render/svg.js`).
 

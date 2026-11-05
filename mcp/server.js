@@ -11,10 +11,12 @@ import { leerMeta, sugerir } from '../src/core/esquema.js';
 import { pesoDeDriver, valoresDeParams } from '../src/core/mezcla.js';
 import { guiaParaIA } from '../src/core/guia.js';
 import { resumirOperaciones } from '../src/core/operaciones.js';
-import { svgDocumento } from '../src/render/svg.js';
+import { svgDocumento, svgTira } from '../src/render/svg.js';
+import { evaluarClip } from '../src/core/animacion.js';
 import { crearAlmacen } from '../servidor/almacen.js';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { svgAPng } from '../servidor/png.js';
+import { planDeleteKeys, planSetKeys, resumenDeClip, tiemposParaTira } from './animacion.js';
 import { comprobarBorrado, esquemaDelArbol as arbol, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from './herramientas.js';
 
 const esquema = cargarEsquema();
@@ -205,8 +207,9 @@ const region = z
   .object({ x: z.number(), y: z.number(), width: z.number().positive(), height: z.number().positive() })
   .describe('recorte del documento, en sus coordenadas (para ver un detalle de cerca)');
 
-/** PNG del documento (opcionalmente posado y recortado) como resultado de herramienta. */
-function vistaPrevia(doc, { width, pose, region, bones, params }, encabezado) {
+/** PNG del documento (opcionalmente posado, animado y recortado) como resultado de herramienta. */
+function vistaPrevia(doc, { width, pose, region, bones, params, animation, time, times }, encabezado) {
+  if (animation) return vistaDeClip(doc, { width, region, bones, params, animation, time, times }, encabezado);
   if (pose && buscar(doc, pose)?.type !== 'pose') {
     const poses = doc.objects.filter((o) => o.type === 'pose').map((o) => o.id);
     throw new Error(`no existe la pose "${pose}". Poses: ${poses.join(', ') || 'ninguna'}`);
@@ -239,13 +242,36 @@ function vistaPrevia(doc, { width, pose, region, bones, params }, encabezado) {
   };
 }
 
+/** Vista previa de un clip: un cuadro (time) o una tira de cuadros (times, o los tiempos de sus keyframes). */
+function vistaDeClip(doc, { width, region, bones, params, animation, time, times }, encabezado) {
+  const clip = buscar(doc, animation);
+  if (clip?.type !== 'animation') {
+    const clips = doc.objects.filter((o) => o.type === 'animation').map((o) => o.id);
+    throw new Error(`there is no animation "${animation}".${sugerir(animation, clips)} Animations: ${clips.join(', ') || 'none'}`);
+  }
+  const tiempos = time != null ? [time] : times?.length ? times : tiemposParaTira(clip);
+  const opciones = { animation, params: params ?? {}, region, huesos: bones };
+  const svg = tiempos.length === 1 ? svgDocumento(doc, esquema, { ...opciones, time: tiempos[0] }) : svgTira(doc, esquema, { ...opciones, times: tiempos });
+  const png = svgAPng(svg, width ?? (tiempos.length === 1 ? 600 : 1000));
+  const animados = Object.keys(evaluarClip(doc, esquema, clip, 0).params);
+  const cuadros = tiempos.length === 1 ? `cuadro en t = ${tiempos[0]} s` : `${tiempos.length} cuadros en t = ${tiempos.join(', ')} s`;
+  const resumen = `Clip "${animation}" (${resumenDeClip(esquema, clip)}): ${cuadros}${animados.length ? `; el clip anima los params ${animados.join(', ')}` : ''}.`;
+  return {
+    content: [
+      { type: 'image', data: Buffer.from(png).toString('base64'), mimeType: 'image/png' },
+      { type: 'text', text: encabezado ? `${encabezado}\n${resumen}` : resumen },
+    ],
+  };
+}
+
 servidor.registerTool(
   'render_preview',
   {
     description:
       'Devuelve una imagen PNG del documento tal como lo ve el usuario. Úsala para revisar tus cambios. Con pose, ' +
       'muestra esa pose sola; con params, la mezcla de poses que dan los drivers con esos valores; con region, un ' +
-      'recorte para ver un detalle; con bones, el esqueleto encima.',
+      'recorte para ver un detalle; con bones, el esqueleto encima. Con animation, un clip: time = un cuadro; times (o ' +
+      'nada) = una tira de cuadros en una sola imagen, para ver el movimiento (por defecto, en los tiempos de sus keyframes).',
     inputSchema: {
       id,
       width: z.number().int().min(64).max(2048).optional().describe('ancho de la imagen en px (por defecto 600)'),
@@ -256,6 +282,9 @@ servidor.registerTool(
         .describe('{ id_de_param: valor } para ver la mezcla (los que falten van con su valor inicial; {} = todos iniciales)'),
       region: region.optional(),
       bones: z.boolean().optional().describe('true = dibujar los huesos encima, con su id (en el editor siempre se ven)'),
+      animation: z.string().optional().describe('id de un clip (animation): muestra el clip en time, o una tira de cuadros en times; params se suman encima'),
+      time: z.number().min(0).optional().describe('con animation: un solo cuadro, en segundos'),
+      times: z.array(z.number().min(0)).max(24).optional().describe('con animation: tiempos de la tira de cuadros, en segundos (por defecto, los de sus keyframes)'),
     },
   },
   seguro(async ({ id, ...opciones }) => vistaPrevia(await almacen.leer(id), opciones)),
@@ -365,6 +394,74 @@ servidor.registerTool(
     const lista = Object.entries(guardada).map(([h, c]) => `${h} ${JSON.stringify(c, (k, v) => (k === 'vertices' ? `(${v.length} vértices)` : v))}`).join(', ') || 'vacía';
     const notas = [...avisos, ...recortesDePose(doc, esquema, guardada)];
     return vistaPrevia(doc, { width, pose, bones: show_bones }, `Pose "${pose}": ${lista}.${notas.length ? `\nAvisos: ${notas.join('; ')}` : ''}`);
+  }),
+);
+
+const momento = z.object({
+  t: z.number().min(0).describe('tiempo en segundos'),
+  values: z
+    .record(z.string(), z.record(z.string(), z.any()))
+    .optional()
+    .describe('{ id_de_objeto: { propiedad: valor } } absolutos, como en set_pose (un path acepta "d"); por ejemplo { "arm_r_bone": { "rotation": -60 }, "mouth": { "active": "mouth_o" } }'),
+  params: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])).optional().describe('{ id_de_param: valor } en ese momento; sus drivers suman las poses'),
+  pose: z.string().optional().describe('id de una pose: copia todos sus valores como keyframes en ese momento (values los pisa)'),
+  ease: z
+    .union([z.enum(['linear', 'step', 'ease-in', 'ease-out', 'ease-in-out']), z.array(z.number()).length(4)])
+    .optional()
+    .describe('curva del tramo que SALE de estos keyframes hacia los siguientes: linear (por defecto), step, ease-in, ease-out, ease-in-out o [x1, y1, x2, y2] (cubic-bezier de CSS)'),
+});
+
+servidor.registerTool(
+  'set_keys',
+  {
+    description:
+      'Crea o actualiza un clip de animación (recurso animation) pensando en momentos: en cada t, cómo está el ' +
+      'personaje (values, como en set_pose), qué pose toma (pose) o qué valor tienen los params (params). Cada ' +
+      'propiedad queda como keyframe en ese tiempo; uno que ya existía en el mismo t se reemplaza. Crea el clip si no ' +
+      'existe y alarga duration si un keyframe la pasa. Devuelve una tira de cuadros del clip. usage: "puppet" para ' +
+      'clips del muñeco (saludo, parpadeo, reposo; escribe description), "animate" para una timeline de escena.',
+    inputSchema: {
+      id,
+      animation: z.string().describe('id del clip, por ejemplo "wave", "blink" o "idle"'),
+      keys: z.array(momento).optional().describe('los momentos, en cualquier orden'),
+      usage: z.enum(['animate', 'puppet']).optional().describe('al crear, por defecto "animate"'),
+      duration: z.number().positive().optional().describe('duración en segundos'),
+      loop: z.enum(['once', 'loop', 'pingpong']).optional(),
+      description: z.string().optional().describe('qué hace el clip (para la IA de la app que lo dispara)'),
+      remove: z.array(z.string()).optional().describe('pistas que salen del clip antes de agregar: "objeto.propiedad" o un id (todas las de ese objeto)'),
+      note: z.string().optional().describe('qué hace, para el historial'),
+      width: z.number().int().min(64).max(2048).optional().describe('ancho de la vista previa'),
+      show_bones: z.boolean().optional().describe('true = la vista previa muestra el esqueleto'),
+    },
+  },
+  seguro(async ({ id, animation, keys, usage, duration, loop, description, remove, note, width, show_bones }) => {
+    const plan = planSetKeys(await almacen.leer(id), esquema, animation, { keys, usage, duration, loop, description, remove });
+    const { doc, avisos } = await almacen.operar(id, plan.ops, { origen: ORIGEN, nota: note ?? `animation ${animation}` });
+    const notas = [...avisos];
+    if (plan.alargadaDesde != null) notas.push(`duration pasó de ${plan.alargadaDesde} a ${plan.duracion} s para que entren los keyframes`);
+    return vistaPrevia(doc, { width, animation, bones: show_bones }, notas.length ? `Avisos: ${notas.join('; ')}` : '');
+  }),
+);
+
+servidor.registerTool(
+  'delete_keys',
+  {
+    description:
+      'Quita keyframes de un clip: los de ciertos tiempos (times), los de ciertas pistas (targets: "objeto.propiedad" o ' +
+      'un id) o los dos a la vez (esas pistas en esos tiempos). Sin times, las pistas elegidas salen enteras.',
+    inputSchema: {
+      id,
+      animation: z.string().describe('id del clip'),
+      times: z.array(z.number().min(0)).optional().describe('tiempos en segundos (tolerancia de 1 ms)'),
+      targets: z.array(z.string()).optional().describe('pistas: "objeto.propiedad" o un id de objeto'),
+      note: z.string().optional().describe('qué hace, para el historial'),
+    },
+  },
+  seguro(async ({ id, animation, times, targets, note }) => {
+    const { ops, quitadas } = planDeleteKeys(await almacen.leer(id), animation, { times, targets });
+    if (!ops.length) return texto(`No había keyframes que quitar en "${animation}" con esos tiempos y pistas.`);
+    const { doc } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `delete keys in ${animation}` });
+    return texto(`Quitados ${quitadas} keyframes. ${animation}: ${resumenDeClip(esquema, buscar(doc, animation))}.`);
   }),
 );
 

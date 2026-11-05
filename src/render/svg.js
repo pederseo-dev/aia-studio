@@ -4,6 +4,7 @@ import { buscar, hijos } from '../core/documento.js';
 import { leerMeta } from '../core/esquema.js';
 import { valorEfectivo } from '../core/estilos.js';
 import { evaluarEnPose, evaluarEsqueleto } from '../core/esqueleto.js';
+import { poseDeClip } from '../core/animacion.js';
 import { aplicarPose, mezclarPoses } from '../core/mezcla.js';
 import { IDENTIDAD, invertir, matrizLocal, matrizMundo, multiplicar } from '../core/geometria.js';
 import { transformarVertices, verticesAD } from '../core/trazado.js';
@@ -122,10 +123,11 @@ function nodo(doc, esquema, obj, ctx) {
 }
 
 /**
- * Qué se dibuja: una pose sola (por id o como objeto), la mezcla de poses que dan los params (un objeto
- * { id_de_param: valor }, vacío = sus valores iniciales) o, sin nada, el montaje.
+ * Qué se dibuja: un clip en un tiempo (con los params encima), una pose sola (por id o como objeto), la mezcla de
+ * poses que dan los params (un objeto { id_de_param: valor }, vacío = sus valores iniciales) o, sin nada, el montaje.
  */
-export function resolverPose(doc, esquema, pose, params) {
+export function resolverPose(doc, esquema, pose, params, animation = null, time = 0) {
+  if (animation) return poseDeClip(doc, esquema, animation, time, params ?? {});
   if (pose) {
     const p = typeof pose === 'string' ? buscar(doc, pose) : pose;
     return p?.type === 'pose' ? p : null;
@@ -136,10 +138,11 @@ export function resolverPose(doc, esquema, pose, params) {
 /**
  * Contenido del SVG (definiciones + fondo + objetos), para insertar dentro de otro <svg> o <g>.
  * `pose`: id de una pose (o el objeto) para dibujarla sola; `params`: valores de params para dibujar la mezcla de
- * poses que dan los drivers; sin ninguno de los dos, el montaje.
+ * poses que dan los drivers; `animation` + `time`: un clip en ese tiempo (en segundos), con los params encima; sin
+ * nada, el montaje.
  */
-export function contenidoSvg(montaje, esquema, { pose, params, mostrar } = {}) {
-  const poseActiva = resolverPose(montaje, esquema, pose, params);
+export function contenidoSvg(montaje, esquema, { pose, params, animation, time, mostrar } = {}) {
+  const poseActiva = resolverPose(montaje, esquema, pose, params, animation, time);
   // Lo que no es hueso toma los valores de la pose; los huesos se mueven por el esqueleto (con su delta).
   const doc = aplicarPose(montaje, esquema, poseActiva);
   const fondo = leerMeta(esquema, doc, 'background');
@@ -159,11 +162,11 @@ export function contenidoSvg(montaje, esquema, { pose, params, mostrar } = {}) {
  * El esqueleto dibujado encima, con el id de cada hueso: para revisar dónde quedaron (en el editor se ven en su
  * superposición; esto es para las vistas previas de la IA).
  */
-function svgHuesos(doc, esquema, pose, params) {
+function svgHuesos(doc, esquema, { pose, params, animation, time }) {
   const huesos = doc.objects.filter((o) => o.type === 'bone');
   if (!huesos.length) return '';
   // Sobre lo que se ve: si la pose mueve el skeleton (o un grupo de arriba), los huesos van con él.
-  const { posado } = evaluarEnPose(doc, esquema, resolverPose(doc, esquema, pose, params));
+  const { posado } = evaluarEnPose(doc, esquema, resolverPose(doc, esquema, pose, params, animation, time));
   const partes = huesos.map((h) => {
     const m = posado.get(h.id);
     const largo = valorEfectivo(esquema, doc, h, 'length');
@@ -183,6 +186,31 @@ function svgHuesos(doc, esquema, pose, params) {
  */
 export function svgDocumento(doc, esquema, { region, huesos, ...opciones } = {}) {
   const r = region ?? { x: 0, y: 0, width: leerMeta(esquema, doc, 'width'), height: leerMeta(esquema, doc, 'height') };
-  const encima = huesos ? svgHuesos(doc, esquema, opciones.pose, opciones.params) : '';
+  const encima = huesos ? svgHuesos(doc, esquema, opciones) : '';
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${n(r.x)} ${n(r.y)} ${n(r.width)} ${n(r.height)}" width="${n(r.width)}" height="${n(r.height)}">${contenidoSvg(doc, esquema, opciones)}${encima}</svg>`;
+}
+
+/**
+ * Tira de cuadros de un clip: un cuadro por tiempo, en filas de hasta `columnas`, con el tiempo debajo de cada uno.
+ * Sirve para ver el movimiento en una sola imagen (la vista previa de la IA). Acepta las mismas opciones que
+ * svgDocumento (`region`, `huesos`, `params`) más `animation` y `times`.
+ */
+export function svgTira(doc, esquema, { times, columnas = 4, region, huesos, ...opciones } = {}) {
+  const r = region ?? { x: 0, y: 0, width: leerMeta(esquema, doc, 'width'), height: leerMeta(esquema, doc, 'height') };
+  const cols = Math.min(columnas, times.length);
+  const filas = Math.ceil(times.length / cols);
+  const margen = r.width * 0.03;
+  const rotulo = Math.max(14, r.width * 0.07);
+  const [ancho, alto] = [r.width + margen, r.height + rotulo + margen];
+  const cuadros = times.map((time, i) => {
+    const [x, y] = [(i % cols) * ancho, Math.floor(i / cols) * alto];
+    const o = { ...opciones, time };
+    const encima = huesos ? svgHuesos(doc, esquema, o) : '';
+    const vista = `<svg x="${n(x)}" y="${n(y)}" width="${n(r.width)}" height="${n(r.height)}" viewBox="${n(r.x)} ${n(r.y)} ${n(r.width)} ${n(r.height)}" overflow="hidden">${contenidoSvg(doc, esquema, o)}${encima}</svg>`;
+    const marco = `<rect x="${n(x)}" y="${n(y)}" width="${n(r.width)}" height="${n(r.height)}" fill="none" stroke="#999999" stroke-width="${n(r.width / 300)}"/>`;
+    const texto = `<text x="${n(x + r.width / 2)}" y="${n(y + r.height + rotulo * 0.8)}" text-anchor="middle" font-family="sans-serif" font-size="${n(rotulo * 0.7)}" fill="#333333">t = ${+time.toFixed(3)} s</text>`;
+    return vista + marco + texto;
+  });
+  const [w, h] = [cols * ancho - margen, filas * alto - margen];
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n(w)} ${n(h)}" width="${n(w)}" height="${n(h)}"><rect width="${n(w)}" height="${n(h)}" fill="#ffffff"/>${cuadros.join('')}</svg>`;
 }
