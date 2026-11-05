@@ -158,7 +158,7 @@ export function validar(doc, esquema) {
           }
           const error = validarValor(props[k], v);
           if (error) errores.push(`${o.id}.${prop}.${id}.${k} ${error}`);
-          else if (props[k].type === 'ref') errores.push(...erroresDeReferencia(doc, destino, k, props[k], v, `${o.id}.${prop}.${id}`, o.id));
+          else if (props[k].type === 'ref') errores.push(...erroresDeReferencia(doc, destino, k, props[k], v, `${o.id}.${prop}.${id}`, { pose: o.id }));
         }
       }
     }
@@ -184,7 +184,7 @@ export function validar(doc, esquema) {
           for (const [i, c] of claves.entries()) {
             const error = errorDeValor(c.value);
             if (error) errores.push(`${dueño}[${i}].value ${error}`);
-            else if (esquema.tipos.get(destino.type).properties[k]?.type === 'ref') errores.push(...erroresDeReferencia(doc, destino, k, esquema.tipos.get(destino.type).properties[k], c.value, `${dueño}[${i}]`));
+            else if (esquema.tipos.get(destino.type).properties[k]?.type === 'ref') errores.push(...erroresDeReferencia(doc, destino, k, esquema.tipos.get(destino.type).properties[k], c.value, `${dueño}[${i}]`, { clip: o.id, t: c.t }));
           }
         }
       }
@@ -229,7 +229,7 @@ export function errorDeValorAnimado(doc, esquema, destino, prop) {
  * Errores de una referencia: que exista, que sea del tipo pedido y, con refScope "children", que sea un hijo; con
  * refScope "skeleton", que sea un hueso del skeleton que contiene al objeto.
  */
-function erroresDeReferencia(doc, o, prop, p, valor, dueño, poseId = null) {
+function erroresDeReferencia(doc, o, prop, p, valor, dueño, { pose: poseId = null, clip = null, t = null } = {}) {
   if (valor == null) return [];
   if (p.refScope === 'skeleton') {
     const error = errorDeEnlace(doc, o.id, valor, `${dueño}.${prop}`);
@@ -242,9 +242,12 @@ function erroresDeReferencia(doc, o, prop, p, valor, dueño, poseId = null) {
     const hijos = doc.objects.filter((x) => x.parent === o.id).map((x) => x.id);
     // Lo más común: sacar del switch una variante que una pose elige. El mensaje dice cómo seguir.
     if (poseId) {
-      return [`Pose "${poseId}" makes switch ${o.id} show "${valor}", but "${valor}" is not a child of ${o.id} (children: ${hijos.join(', ') || 'none'}). To take it out of the switch, first remove only ${o.id}'s ${prop} from pose "${poseId}" — in the editor: View → Pose: ${poseId}, select ${o.id} and click ↺ next to ${prop}; for the AI: set_pose with remove: ["${o.id}.${prop}"] — or keep "${valor}" inside ${o.id}. Otherwise, pick one of its children.`];
+      return [`Pose "${poseId}" makes switch ${o.id} show "${valor}", but "${valor}" is not a child of ${o.id} (children: ${hijos.join(', ') || 'none'}). To take it out of the switch, first remove only ${o.id}'s ${prop} from pose "${poseId}" — in the editor: Puppet → View → Pose: ${poseId}, select ${o.id} and click ↺ next to ${prop}; for the AI: set_pose with remove: ["${o.id}.${prop}"] — or keep "${valor}" inside ${o.id}. Otherwise, pick one of its children.`];
     }
-    return [`${dueño}.${prop}: "${valor}" no es hijo de ${o.id}. Hijos: ${hijos.join(', ') || 'ninguno'}.${sugerir(valor, hijos)}`];
+    if (clip) {
+      return [`Clip "${clip}" makes switch ${o.id} show "${valor}" at t ${t} s, but "${valor}" is not a child of ${o.id} (children: ${hijos.join(', ') || 'none'}). To take it out of the switch, first delete that keyframe — in the editor: open the clip in Animate or Puppet, click the keyframe in the ${o.id}.${prop} track and press Del; for the AI: delete_keys with targets ["${o.id}.${prop}"] and times [${t}] (or set_keys with remove: ["${o.id}.${prop}"] for the whole track) — or keep "${valor}" inside ${o.id}. Otherwise, pick one of its children.`];
+    }
+    return [`${dueño}.${prop}: "${valor}" is not a child of ${o.id}. Children: ${hijos.join(', ') || 'none'}.${sugerir(valor, hijos)}`];
   }
   return [];
 }

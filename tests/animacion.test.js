@@ -103,7 +103,7 @@ test('validación de pistas: objetos, propiedades, tiempos, orden, curvas y para
   assert.match(errores({ arm: { x: [{ t: 0, value: 1, ease: 'boing' }] } }), /ease must be one of/);
   assert.match(errores({ arm: { x: [{ t: 0, value: 'a' }] } }), /value debe ser un número/);
   assert.match(errores({ happiness: { rotation: [{ t: 0, value: 1 }] } }), /a param only animates "value"/);
-  assert.match(errores({ mouth: { active: [{ t: 0, value: 'face' }] } }), /no es hijo de mouth/);
+  assert.match(errores({ mouth: { active: [{ t: 0, value: 'face' }] } }), /Clip "wave" makes switch mouth show "face" at t 0 s.*delete_keys with targets \["mouth\.active"\] and times \[0\]/);
   assert.equal(errores({ arm: { x: [{ t: 0, value: 1 }] } }, { duration: 3, loop: 'pingpong', usage: 'puppet' }), '');
 });
 

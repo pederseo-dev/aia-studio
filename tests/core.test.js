@@ -175,7 +175,7 @@ test('sacar de un switch una variante que usa una pose dice las dos salidas', ()
     { op: 'create', type: 'rect', id: 'm_o', parent: 'mouth' },
     { op: 'create', type: 'pose', id: 'o', props: { values: { mouth: { active: 'm_o' } } } },
   ).doc;
-  assert.throws(() => op(doc, { op: 'move', target: 'm_o', parent: null }), /Pose "o" makes switch mouth show "m_o".*remove only mouth's active from pose "o".*View → Pose: o, select mouth and click ↺ next to active.*set_pose with remove: \["mouth\.active"\].*or keep "m_o" inside mouth/);
+  assert.throws(() => op(doc, { op: 'move', target: 'm_o', parent: null }), /Pose "o" makes switch mouth show "m_o".*remove only mouth's active from pose "o".*Puppet → View → Pose: o, select mouth and click ↺ next to active.*set_pose with remove: \["mouth\.active"\].*or keep "m_o" inside mouth/);
 });
 
 test('move con keepPosition deja el objeto en el mismo lugar de la pantalla, y se deshace', () => {
