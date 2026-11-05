@@ -1,6 +1,6 @@
 # Plan de construcción
 
-> Estado: **fase 4 construida; falta su prueba con IA** (2026-11-04). Se basa en [sintesis.md](sintesis.md) y en la investigación de
+> Estado: **fase 4 cerrada; fase 5 en diseño acordado** (2026-11-05). Se basa en [sintesis.md](sintesis.md) y en la investigación de
 > [Moho](investigacion/moho-lua.md) y [Rive](investigacion/rive-runtime.md).
 
 ## Cómo trabajamos
@@ -263,29 +263,51 @@ Notas de lo construido:
 **Prueba con IA:** crear expresiones (feliz, triste, sorpresa) y el giro de cabeza como params; preparar visemas para
 lip-sync.
 
-## Fase 5: animación
+## Fase 5: animación (Design · Animate · Puppet)
 
-- Pistas tipadas (`number`, `vec2`, `color`, `bool`, `string`) por ruta legible, keyframes con interpolación **por
-  keyframe**: `linear`, `step`, `ease-in/out`, `bezier`, más `hold` e `interval` *(de Moho)*.
-- Clips con loop `once`, `loop` y `pingpong`, y mezcla con `mix` *(de Rive)*. Acciones insertadas por referencia.
-- Editor: línea de tiempo con playhead, dope sheet, autokey y editor de curvas básico.
+Diseño acordado en [decision-animacion.md](decision-animacion.md): tres modos con un solo motor de clips.
 
-**Prueba con IA:** animar un ciclo de reposo, un saludo y un parpadeo; retocar timing a mano y pedirle a la IA que
-siga sin pisarlo.
+- **Núcleo:** recurso `animation` (`usage` animate/puppet, `duration`, `loop` once/loop/pingpong, `description`,
+  `tracks` con la forma de `values` de una pose). Keyframes `{ t, value, ease }` con la curva por keyframe: `linear`,
+  `step`, `ease-in`, `ease-out`, `ease-in-out` y `cubic-bezier` `[x1, y1, x2, y2]`. Los params también tienen pista.
+  Evaluación: montaje → clip en t → params → drivers suman sus poses encima. Rename y delete actualizan las pistas.
+- **MCP (a la par del núcleo):** `set_keys` (por momentos, con `values`, `params` o una `pose` entera),
+  `delete_keys`, `render_preview` con `animation` + `time` y tira de cuadros con `times`, y el árbol que resume cada
+  clip.
+- **Editor:** pestañas de modo **Design / Animate / Puppet**. Las poses, params y drivers salen de Design y pasan a
+  Puppet. Timeline con playhead, play/loop, keyframes por propiedad, autokey (en un clip, lo que se cambia va a un
+  keyframe en el tiempo del playhead) y curva por keyframe. En Puppet, la biblioteca de clips como botones a la
+  derecha; en Animate, una timeline larga.
+- **Después dentro de la fase:** clips de Puppet insertados por referencia en Animate, editor de curvas, dope sheet
+  con mover/escalar tiempos, runtime incremental (dirty flags, anotado en la fase 3).
 
-## Fase 6: state machine
+**Prueba con IA:** animar un ciclo de reposo, un saludo y un parpadeo (clips de Puppet) y una escena corta en
+Animate; retocar timing a mano y pedirle a la IA que siga sin pisarlo.
 
-- Capas, estados (animación, blend 1D, any, entry, exit) y transiciones con condiciones sobre params, duración de
-  mezcla y exit time. Límite de cambios por frame *(de Rive)*.
+## Fase 6: comportamiento (Puppet en vivo)
+
+- **Live** en Puppet: los botones disparan clips, con fundidos entre ellos y params moviéndose a la vez.
+- State machine por capas: estados (clip, blend 1D, any, entry, exit) y transiciones con condiciones sobre params,
+  duración de mezcla y exit time. Límite de cambios por frame *(de Rive)*. Clips por región del cuerpo (máscaras) y
+  clips aditivos.
 - Editor: vista de la state machine y previsualización en vivo moviendo params.
 
 **Prueba con IA:** comportamiento de asistente (reposo, escuchando, pensando, hablando, reacción).
 
 ## Fase 7: exportación y uso
 
-- Formato de uso `.aia` autocontenido, runtime liviano sin dependencias y manifiesto para la IA de la app
-  (params, expresiones con nombre y estados → herramientas para el LLM). Ver [sintesis.md §6](sintesis.md).
+- **Prioridad: `.aia` + runtime JS** (`src/core` + `src/render`, sin dependencias) con manifiesto para la IA de la
+  app: params, clips de Puppet con su ficha y estados → herramientas para el LLM. Ver
+  [decision-animacion.md §5](decision-animacion.md).
+- **Video** (mp4/webm/gif, PNG por cuadro) muestreando el mismo evaluador con resvg y ffmpeg.
+- **Lottie y SVG/CSS**: pistas simples directas; huesos y mezclas horneados cuadro a cuadro.
 - Demo: un avatar en una página, controlado por un LLM, con lip-sync desde el audio.
+
+## Ideas anotadas
+
+Grabar una actuación de Puppet como pistas de Animate (Rec), atajos de teclado por botón, escenas con varios
+personajes (instancias de otros documentos), lo procedural (parpadeo, mirada) como dato del personaje y curvas
+elastic/bounce/«a dos». Detalle en [decision-animacion.md §7](decision-animacion.md).
 
 ## Después
 
