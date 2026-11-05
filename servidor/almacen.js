@@ -16,66 +16,75 @@ const ID_DOCUMENTO = /^[a-z][a-z0-9_-]*$/;
 const ESTRUCTURALES = new Set(['create', 'delete', 'move', 'rename', 'duplicate', '_restore', '_place']);
 
 const esObjeto = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
-// En una pose, "d" es azúcar para los vértices: tocar uno es tocar los otros.
-const claveDePose = (objeto, prop) => `values.${objeto}.${prop === 'd' ? 'vertices' : prop}`;
+// Propiedades que se deshacen por (objeto, propiedad) y no enteras: los `values` de una pose y las `tracks` de un
+// clip. Así una pose o un clip que editaron los dos orígenes en objetos o pistas distintas no bloquea el deshacer.
+const POR_CLAVE = { values: 'pose', tracks: 'animation' };
+// En una pose o una pista, "d" es azúcar para los vértices: tocar uno es tocar los otros.
+const claveDe = (campo, objeto, prop) => `${campo}.${objeto}.${prop === 'd' ? 'vertices' : prop}`;
 
 /**
- * Cambios de un lote en los `values` de las poses, por (objeto, propiedad) y no la pose entera: así una pose que
- * editaron los dos orígenes en objetos distintos no bloquea el deshacer. Devuelve Map pose → { antes, despues,
- * claves } (antes = lo que restauran sus inversas; despues = lo que fijaron sus operaciones).
+ * Cambios de un lote en los `values` de las poses y las `tracks` de los clips, por (objeto, propiedad). Devuelve
+ * Map destino → { campo, antes, despues, claves } (antes = lo que restauran sus inversas; despues = lo que fijaron
+ * sus operaciones).
  */
-function cambiosDePose(entrada) {
+function cambiosPorClave(entrada) {
   const ultimo = (ops) => {
     const m = new Map();
     for (const op of ops ?? []) {
-      if (op.op === 'set' && esObjeto(op.props?.values)) m.set(op.target, op.props.values);
-      // Una pose que no tenía values: su inversa es un unset, que equivale a values vacío.
-      else if (op.op === 'unset' && op.props?.includes('values')) m.set(op.target, {});
+      for (const campo of Object.keys(POR_CLAVE)) {
+        if (op.op === 'set' && esObjeto(op.props?.[campo])) m.set(op.target, { campo, valor: op.props[campo] });
+        // Una pose o un clip que no tenía el campo: su inversa es un unset, que equivale a vacío.
+        else if (op.op === 'unset' && op.props?.includes(campo)) m.set(op.target, { campo, valor: {} });
+      }
     }
     return m;
   };
   const despues = ultimo(entrada.ops);
   const antes = ultimo(entrada.inversas);
   const cambios = new Map();
-  for (const pose of new Set([...despues.keys(), ...antes.keys()])) {
-    const [a, d] = [antes.get(pose), despues.get(pose)];
+  for (const destino of new Set([...despues.keys(), ...antes.keys()])) {
+    const campo = (despues.get(destino) ?? antes.get(destino)).campo;
+    const [a, d] = [antes.get(destino)?.valor, despues.get(destino)?.valor];
     const claves = new Set();
     for (const objeto of new Set([...Object.keys(a ?? {}), ...Object.keys(d ?? {})])) {
       const [ca, cd] = [a?.[objeto] ?? {}, d?.[objeto] ?? {}];
       for (const prop of new Set([...Object.keys(ca), ...Object.keys(cd)])) {
         // Sin las dos versiones (por ejemplo, una pose que no tenía values) cuenta todo lo que se ve.
-        if (!a || !d || JSON.stringify(ca[prop]) !== JSON.stringify(cd[prop])) claves.add(claveDePose(objeto, prop));
+        if (!a || !d || JSON.stringify(ca[prop]) !== JSON.stringify(cd[prop])) claves.add(claveDe(campo, objeto, prop));
       }
     }
-    cambios.set(pose, { antes: a, despues: d, claves });
+    cambios.set(destino, { campo, antes: a, despues: d, claves });
   }
   return cambios;
 }
 
 /**
- * Las inversas de un lote, con los `values` de pose aplicados por clave sobre la pose como está ahora: deshacer un
- * cambio en un objeto de la pose no se lleva lo que el otro origen cambió después en otro objeto de la misma pose.
+ * Las inversas de un lote, con los `values` de pose y las `tracks` de clip aplicados por clave sobre cómo están
+ * ahora: deshacer un cambio en un objeto de la pose (o en una pista del clip) no se lleva lo que el otro origen
+ * cambió después en otro objeto o pista.
  */
 function inversasPorClave(doc, entrada) {
-  const cambios = cambiosDePose(entrada);
+  const cambios = cambiosPorClave(entrada);
   if (!cambios.size) return entrada.inversas;
   return entrada.inversas.flatMap((op) => {
-    const deValues = (op.op === 'set' && esObjeto(op.props?.values)) || (op.op === 'unset' && op.props?.includes('values'));
-    const cambio = deValues && cambios.get(op.target);
-    const actual = cambio && doc.objects.find((o) => o.id === op.target);
-    if (!cambio?.antes || !cambio.despues || actual?.type !== 'pose') return op;
-    const values = structuredClone(actual.values ?? {});
+    const cambio = cambios.get(op.target);
+    if (!cambio) return op;
+    const { campo } = cambio;
+    const delCampo = (op.op === 'set' && esObjeto(op.props?.[campo])) || (op.op === 'unset' && op.props?.includes(campo));
+    const actual = delCampo && doc.objects.find((o) => o.id === op.target);
+    if (!cambio.antes || !cambio.despues || actual?.type !== POR_CLAVE[campo]) return op;
+    const valor = structuredClone(actual[campo] ?? {});
     for (const clave of cambio.claves) {
       const [, objeto, prop] = clave.split('.');
       const viejo = cambio.antes[objeto]?.[prop];
       if (viejo === undefined) {
-        if (values[objeto]) delete values[objeto][prop];
-        if (values[objeto] && !Object.keys(values[objeto]).length) delete values[objeto];
-      } else (values[objeto] ??= {})[prop] = structuredClone(viejo);
+        if (valor[objeto]) delete valor[objeto][prop];
+        if (valor[objeto] && !Object.keys(valor[objeto]).length) delete valor[objeto];
+      } else (valor[objeto] ??= {})[prop] = structuredClone(viejo);
     }
-    if (op.op === 'set') return [{ ...op, props: { ...op.props, values } }];
-    const resto = op.props.filter((k) => k !== 'values');
-    return [{ op: 'set', target: op.target, props: { values } }, ...(resto.length ? [{ ...op, props: resto }] : [])];
+    if (op.op === 'set') return [{ ...op, props: { ...op.props, [campo]: valor } }];
+    const resto = op.props.filter((k) => k !== campo);
+    return [{ op: 'set', target: op.target, props: { [campo]: valor } }, ...(resto.length ? [{ ...op, props: resto }] : [])];
   });
 }
 
@@ -83,11 +92,12 @@ function inversasPorClave(doc, entrada) {
 function tocados(entrada) {
   const mapa = new Map();
   const sumar = (id, prop) => id != null && (mapa.get(id) ?? mapa.set(id, new Set()).get(id)).add(prop);
-  const poses = cambiosDePose(entrada);
-  for (const [pose, { claves }] of poses) claves.forEach((k) => sumar(pose, k));
+  const porClave = cambiosPorClave(entrada);
+  for (const [destino, { claves }] of porClave) claves.forEach((k) => sumar(destino, k));
+  const yaContado = (id, k) => porClave.get(id)?.campo === k;
   for (const op of [...(entrada.ops ?? []), ...(entrada.inversas ?? [])]) {
-    if (op.op === 'set') Object.keys(op.props ?? {}).forEach((k) => !(k === 'values' && poses.has(op.target)) && sumar(op.target, k));
-    else if (op.op === 'unset') (op.props ?? []).forEach((k) => !(k === 'values' && poses.has(op.target)) && sumar(op.target, k));
+    if (op.op === 'set') Object.keys(op.props ?? {}).forEach((k) => !yaContado(op.target, k) && sumar(op.target, k));
+    else if (op.op === 'unset') (op.props ?? []).forEach((k) => !yaContado(op.target, k) && sumar(op.target, k));
     else if (ESTRUCTURALES.has(op.op)) {
       sumar(op.target ?? op.id, '*');
       if (op.op === 'rename' || op.op === 'create') sumar(op.id, '*');

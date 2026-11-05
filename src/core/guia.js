@@ -264,8 +264,15 @@ cortos que se disparan, uno por botón). Los dos últimos usan el mismo recurso,
   de puntos para un morph. Un **param** también tiene pista: \`{ "happiness": { "value": [...] } }\`, y sus drivers
   suman la pose (un clip «laugh» puede llevar \`happiness\` a 1 en vez de repetir la cara feliz).
 - \`t\` en segundos, de 0 a \`duration\`. Antes del primer keyframe vale el primero; después del último, el último; una
-  propiedad sin pista vale lo del montaje. \`loop\`: \`once\`, \`loop\` (vuelve a empezar; repite el primer valor al final
-  para que no salte) o \`pingpong\`.
+  propiedad sin pista vale lo del montaje. \`loop\`: \`once\`, \`loop\` (vuelve a empezar: pon en \`t = duration\` los
+  mismos valores que en 0 para que no salte) o \`pingpong\`.
+- Para **empezar y terminar en reposo**, un momento con \`setup: true\` pone el montaje en todo lo que el clip anima (y los
+  params en su valor inicial), sin copiar valores a mano.
+- **Ojo con los params:** animar un param mueve **todas** las poses de sus drivers (\`get_document\` las lista). Si
+  uno de ellos mueve también algo que el clip anima (un hueso), los dos se suman; revísalo con la tira de cuadros.
+- \`set_keys\` solo cambia las pistas que nombras: las demás, también los retoques del usuario, quedan como estaban, y
+  \`undo\` va por pista. Un momento con solo \`t\` y \`ease\` cambia la curva de los keyframes que ya hay en ese tiempo.
+  Para alargar un clip basta con \`duration\`.
 - \`ease\` va en el keyframe y vale para el tramo que **sale** de él: \`linear\` (por defecto), \`step\` (se mantiene hasta
   el siguiente), \`ease-in\`, \`ease-out\`, \`ease-in-out\` o \`[x1, y1, x2, y2]\` (cubic-bezier de CSS; \`[0.3, 1.6, 0.6, 1]\`
   se pasa y vuelve, para un rebote). El \`active\` de un switch, los booleanos y los textos cambian de golpe.

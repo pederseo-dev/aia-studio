@@ -3,14 +3,31 @@
 
 import { ponerClave, tiemposDeClaves } from '../src/core/animacion.js';
 import { buscar } from '../src/core/documento.js';
+import { valorEfectivo } from '../src/core/estilos.js';
+import { valoresDeParams } from '../src/core/mezcla.js';
 import { leer, sugerir } from '../src/core/esquema.js';
 import { parsearD } from '../src/core/trazado.js';
 
 const n = (t) => +t.toFixed(3);
 
-/** Lo que fija un momento de set_keys: los valores de su pose, más values (con "d" convertido), más params. */
-function valoresDelMomento(doc, k, i) {
+/**
+ * Lo que fija un momento de set_keys: con `setup`, el montaje de todo lo que el clip ya anima (y de lo que trae la
+ * pose del momento); después los valores de su pose, values (con "d" convertido) y params.
+ */
+function valoresDelMomento(doc, esquema, pistas, k, i) {
   const valores = {};
+  if (k.setup) {
+    const params = valoresDeParams(doc, esquema);
+    const props = new Map(Object.entries(pistas).map(([id, campos]) => [id, new Set(Object.keys(campos))]));
+    for (const [id, campos] of Object.entries(buscar(doc, k.pose ?? '')?.values ?? {})) for (const prop of Object.keys(campos)) (props.get(id) ?? props.set(id, new Set()).get(id)).add(prop);
+    for (const [id, nombres] of props) {
+      const obj = buscar(doc, id);
+      if (!obj) continue;
+      for (const prop of nombres) (valores[id] ??= {})[prop] = obj.type === 'param' ? params[id] : valorEfectivo(esquema, doc, obj, prop);
+    }
+    // Con setup, la pose solo dice qué propiedades vuelven al montaje (no se copian sus valores).
+    k = { ...k, pose: undefined };
+  }
   if (k.pose != null) {
     const pose = buscar(doc, k.pose);
     if (pose?.type !== 'pose') {
@@ -41,8 +58,10 @@ function valoresDelMomento(doc, k, i) {
 }
 
 /**
- * set_keys: cada momento ({ t, values, params, pose, ease }) se vuelve keyframes del clip. `pose` copia los valores
- * de esa pose; `values` (como en set_pose, acepta "d") los suma o pisa; `params` anima params. Un keyframe en un
+ * set_keys: cada momento ({ t, values, params, pose, setup, ease, targets }) se vuelve keyframes del clip. `pose`
+ * copia los valores de esa pose; `setup` pone el montaje en todo lo que el clip anima; `values` (como en set_pose,
+ * acepta "d") los suma o pisa; `params` anima params. Un momento con solo `ease` (y `targets`) cambia la curva de los
+ * keyframes que ya hay en ese tiempo. Un keyframe en un
  * tiempo que ya tenía uno lo reemplaza (y conserva su ease si no se pasa otro). `remove` ("objeto.propiedad" o un id)
  * saca pistas enteras antes de agregar. Crea el clip si no existe y alarga la duración si un keyframe la pasa.
  */
@@ -59,10 +78,26 @@ export function planSetKeys(doc, esquema, animacion, { keys = [], usage, duratio
       if (!Object.keys(pistas[objeto]).length) delete pistas[objeto];
     }
   }
-  for (const [i, k] of keys.entries()) {
+  // Los momentos con setup van al final: así vuelven al montaje también las pistas que agregan los demás momentos.
+  const orden = keys.map((k, i) => [i, k]).sort(([, a], [, b]) => Number(!!a?.setup) - Number(!!b?.setup));
+  for (const [i, k] of orden) {
     if (typeof k?.t !== 'number' || !Number.isFinite(k.t) || k.t < 0) throw new Error(`keys[${i}].t must be a number of seconds ≥ 0`);
-    const valores = valoresDelMomento(doc, k, i);
-    if (!Object.keys(valores).length) throw new Error(`keys[${i}] (t ${k.t}) sets nothing: pass values, params or pose`);
+    const valores = valoresDelMomento(doc, esquema, pistas, k, i);
+    if (!Object.keys(valores).length) {
+      // Solo una curva: cambia la de los keyframes que ya hay en ese tiempo (sin tocar sus valores).
+      if (k.ease === undefined) throw new Error(`keys[${i}] (t ${k.t}) sets nothing: pass values, params, pose or setup (or only ease, to change the ease of the keyframes already at that time)`);
+      let cambiadas = 0;
+      for (const [id, campos] of Object.entries(pistas)) {
+        for (const [prop, claves] of Object.entries(campos)) {
+          const clave = claves.find((c) => Math.abs(c.t - k.t) < 1e-3);
+          if (!clave || (k.targets?.length && !k.targets.some((x) => x === id || x === `${id}.${prop}`))) continue;
+          pistas = ponerClave(pistas, id, prop, clave.t, clave.value, k.ease);
+          cambiadas++;
+        }
+      }
+      if (!cambiadas) throw new Error(`keys[${i}]: there are no keyframes at t ${k.t}${k.targets?.length ? ` in ${k.targets.join(', ')}` : ''} to change the ease of. Keys at: ${tiemposDeClaves({ tracks: pistas }).map(n).join(', ') || 'none'}`);
+      continue;
+    }
     for (const [id, campos] of Object.entries(valores)) {
       for (const [prop, v] of Object.entries(campos)) pistas = ponerClave(pistas, id, prop, k.t, v, k.ease);
     }

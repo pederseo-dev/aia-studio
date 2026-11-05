@@ -187,3 +187,27 @@ test('ponerClave y quitarClave: reemplazan en el mismo t, conservan la curva y n
   assert.deepEqual(ponerClave({}, 'p', 'vertices', 0, [{ x: 0, y: 0, bone: 'b' }]).p.vertices[0].value, [{ x: 0, y: 0 }]);
   assert.deepEqual(quitarClave(quitarClave(pistas, 'a', 'x', 0), 'a', 'x', 0.5), {});
 });
+
+test('set_keys: setup vuelve al montaje y un momento con solo ease cambia la curva', async () => {
+  const { planSetKeys } = await import('../mcp/animacion.js');
+  let doc = muñeco();
+  doc = op(doc, { op: 'delete', target: 'wave' });
+  // setup va al final aunque esté primero: también vuelve al montaje lo que agregan los otros momentos (la pose).
+  doc = op(doc, ...planSetKeys(doc, esquema, 'hi', {
+    usage: 'puppet',
+    keys: [
+      { t: 0, setup: true },
+      { t: 0.5, pose: 'happy', params: { happiness: 1 } },
+      { t: 1, setup: true, values: { arm_bone: { rotation: 5 } } },
+    ],
+  }).ops);
+  const pistas = buscar(doc, 'hi').tracks;
+  assert.deepEqual(pistas.face.fill.map((c) => c.value), ['#000000', '#ffff00', '#000000']);
+  assert.deepEqual(pistas.arm_bone.rotation.map((c) => c.value), [0, 10, 5]);
+  assert.deepEqual(pistas.happiness.value.map((c) => c.value), [0, 1, 0]);
+  // Solo ease: cambia la curva de lo que ya hay en ese t, sin tocar valores (con targets, solo esas pistas).
+  doc = op(doc, ...planSetKeys(doc, esquema, 'hi', { keys: [{ t: 0.5, ease: 'ease-out', targets: ['arm_bone'] }] }).ops);
+  assert.deepEqual(buscar(doc, 'hi').tracks.arm_bone.rotation[1], { t: 0.5, value: 10, ease: 'ease-out' });
+  assert.equal(buscar(doc, 'hi').tracks.face.fill[1].ease, undefined);
+  assert.throws(() => planSetKeys(doc, esquema, 'hi', { keys: [{ t: 0.7, ease: 'step' }] }), /no keyframes at t 0.7.*Keys at: 0, 0.5, 1/);
+});

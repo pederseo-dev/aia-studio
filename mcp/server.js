@@ -405,10 +405,12 @@ const momento = z.object({
     .describe('{ id_de_objeto: { propiedad: valor } } absolutos, como en set_pose (un path acepta "d"); por ejemplo { "arm_r_bone": { "rotation": -60 }, "mouth": { "active": "mouth_o" } }'),
   params: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])).optional().describe('{ id_de_param: valor } en ese momento; sus drivers suman las poses'),
   pose: z.string().optional().describe('id de una pose: copia todos sus valores como keyframes en ese momento (values los pisa)'),
+  setup: z.boolean().optional().describe('true = en ese momento, todo lo que el clip anima (y lo que fija pose, si la pasas) vuelve al valor del montaje, y sus params al inicial; values los pisa. Sirve para empezar y terminar en reposo'),
+  targets: z.array(z.string()).optional().describe('con un momento que solo trae ease: a qué pistas cambiarle la curva ("objeto.propiedad" o un id); por defecto, a todas las que tienen keyframe en ese t'),
   ease: z
     .union([z.enum(['linear', 'step', 'ease-in', 'ease-out', 'ease-in-out']), z.array(z.number()).length(4)])
     .optional()
-    .describe('curva del tramo que SALE de estos keyframes hacia los siguientes: linear (por defecto), step, ease-in, ease-out, ease-in-out o [x1, y1, x2, y2] (cubic-bezier de CSS)'),
+    .describe('curva del tramo que SALE de estos keyframes hacia los siguientes: linear (por defecto), step, ease-in, ease-out, ease-in-out o [x1, y1, x2, y2] (cubic-bezier de CSS). Un momento con solo t y ease cambia la curva de los keyframes que ya hay en ese t, sin tocar sus valores'),
 });
 
 servidor.registerTool(
@@ -418,7 +420,9 @@ servidor.registerTool(
       'Crea o actualiza un clip de animación (recurso animation) pensando en momentos: en cada t, cómo está el ' +
       'personaje (values, como en set_pose), qué pose toma (pose) o qué valor tienen los params (params). Cada ' +
       'propiedad queda como keyframe en ese tiempo; uno que ya existía en el mismo t se reemplaza. Crea el clip si no ' +
-      'existe y alarga duration si un keyframe la pasa. Devuelve una tira de cuadros del clip. usage: "puppet" para ' +
+      'existe y alarga duration si un keyframe la pasa. Solo cambia las pistas que nombras: las demás (también los ' +
+      'retoques del usuario) quedan como estaban, y undo va por pista. Para alargar un clip basta con duration. ' +
+      'Devuelve una tira de cuadros del clip. usage: "puppet" para ' +
       'clips del muñeco (saludo, parpadeo, reposo; escribe description), "animate" para una timeline de escena.',
     inputSchema: {
       id,

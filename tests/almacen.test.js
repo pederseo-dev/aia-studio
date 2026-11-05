@@ -114,3 +114,18 @@ test('eliminar borra el documento y su historial, y avisa si no existe', () =>
     await assert.rejects(a.leer('borrame'), /No existe/);
     await assert.rejects(a.eliminar('borrame'), /No existe el documento "borrame"/);
   }));
+
+test('en un clip, deshacer compara y restaura por pista, no el clip entero', () =>
+  conAlmacen(async (a) => {
+    await a.crear('clip', {}, { origen: 'user' });
+    await a.operar('clip', [{ op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'animation', id: 'c', props: { usage: 'puppet' } }], { origen: 'ai', nota: 'base' });
+    const r = [{ t: 0, value: 1 }, { t: 1, value: 2 }];
+    await a.operar('clip', [{ op: 'set', target: 'c', props: { tracks: { r: { x: r } } } }], { origen: 'ai', nota: 'ai r.x' });
+    await a.operar('clip', [{ op: 'set', target: 'c', props: { tracks: { r: { x: r, y: [{ t: 0.5, value: 9 }] } } } }], { origen: 'user', nota: 'user r.y' });
+    let { doc } = await a.deshacer('clip', 'ai');
+    assert.deepEqual(doc.objects.find((o) => o.id === 'c').tracks, { r: { y: [{ t: 0.5, value: 9 }] } });
+    ({ doc } = await a.rehacer('clip', 'ai'));
+    assert.deepEqual(doc.objects.find((o) => o.id === 'c').tracks.r.x, r);
+    await a.operar('clip', [{ op: 'set', target: 'c', props: { tracks: { r: { x: [{ t: 0, value: 5 }], y: [{ t: 0.5, value: 9 }] } } } }], { origen: 'user', nota: 'user r.x' });
+    await assert.rejects(a.deshacer('clip', 'ai'), /c\.tracks\.r\.x \(changed by the user/);
+  }));
