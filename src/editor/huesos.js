@@ -22,7 +22,7 @@ import { buscar, esqueletoDe, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { enlacesPorCercania, evaluarEnPose, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, reparentarVarios, soltarEnlacesAjenos, valoresDeHueso } from '../core/esqueleto.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
-import { ponerClave, poseDeClip, quitarClave } from '../core/animacion.js';
+import { ponerClave, poseDeClip, quitarClave, valorAGuardar } from '../core/animacion.js';
 import { aplicarPose, mezclarPoses } from '../core/mezcla.js';
 import { alternarSeleccion, avisar, docVisible, ejecutar, esquema, estado, idLibre, previsualizar, seleccionar } from './estado.js';
 
@@ -129,7 +129,9 @@ export function opsDePose(doc, poseId, id, campos) {
   const destino = buscar(doc, poseId);
   if (destino?.type === 'animation') {
     let tracks = destino.tracks ?? {};
-    for (const [k, v] of Object.entries(campos)) tracks = v === undefined ? quitarClave(tracks, id, k, estado.tiempo) : ponerClave(tracks, id, k, estado.tiempo, v);
+    // Lo que se ve trae lo que suman los drivers: se guarda el valor sin ese aporte (si no, se sumaría dos veces).
+    const params = estado.params ?? {};
+    for (const [k, v] of Object.entries(campos)) tracks = v === undefined ? quitarClave(tracks, id, k, estado.tiempo) : ponerClave(tracks, id, k, estado.tiempo, valorAGuardar(doc, esquema, destino, estado.tiempo, params, id, k, v));
     return [{ op: 'set', target: poseId, props: { tracks } }];
   }
   const values = structuredClone(buscar(doc, poseId).values ?? {});

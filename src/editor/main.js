@@ -36,13 +36,15 @@ montarModos($('#modos'));
 montarClips($('#clips'), $('#lista-clips'), $('#nuevo-clip'));
 montarTimeline($('#timeline'));
 
-// Panel de abajo: Design no tiene; Animate, la timeline; Puppet, la timeline del clip abierto o los params.
+// Panel de abajo: Design no tiene; Animate y Puppet, la timeline del clip abierto o los params.
 for (const b of document.querySelectorAll('[data-abajo]')) b.addEventListener('click', () => fijar({ abajo: b.dataset.abajo }));
 function dibujarAbajo() {
-  const conTimeline = estado.modo === 'animate' || (estado.modo === 'puppet' && estado.abajo === 'timeline');
+  // En Animate también se ven los params: una escena puede animar las expresiones del personaje (con la escena
+  // abierta, mover un control lo guarda como keyframe). Crear params es de Puppet.
+  const conTimeline = estado.abajo === 'timeline';
   $('#timeline').hidden = !conTimeline;
   $('#parametros').hidden = conTimeline;
-  $('#nuevo-param').hidden = conTimeline;
+  $('#nuevo-param').hidden = conTimeline || estado.modo !== 'puppet';
   for (const b of document.querySelectorAll('[data-abajo]')) b.setAttribute('aria-selected', String(b.dataset.abajo === (conTimeline ? 'timeline' : 'parametros')));
   $('#ayuda-abajo').textContent = conTimeline
     ? 'Move the playhead and change things on the canvas or in the inspector: each change is keyed at the playhead.'

@@ -366,7 +366,6 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 /* Las poses y los params son de Puppet; Design no tiene timeline. */
 body:not([data-modo="puppet"]) #modo { display: none; }
 body[data-modo="design"] #linea-de-tiempo { display: none; }
-body:not([data-modo="puppet"]) #pestanas-abajo { display: none; }
 #linea-de-tiempo { max-height: 280px; }
 
 /* Biblioteca de clips (Puppet): un botón por clip */
@@ -390,8 +389,13 @@ body:not([data-modo="puppet"]) #pestanas-abajo { display: none; }
 .barra-tiempo .descripcion { flex: 1; min-width: 160px; }
 .pistas { position: relative; padding: 0 10px 8px; user-select: none; touch-action: none; }
 .fila-pista { display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: center; height: 22px; }
-.fila-pista .etiqueta { text-align: left; background: none; border: none; color: var(--suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 6px 0 0; font-size: 12px; }
-.fila-pista.seleccionada .etiqueta { color: var(--texto); }
+.fila-pista .etiqueta { display: flex; align-items: center; min-width: 0; padding-right: 6px; }
+.fila-pista .nombre-pista { flex: 1; min-width: 0; text-align: left; background: none; border: none; color: var(--suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; font-size: 12px; }
+.fila-pista .quitar-pista { flex: none; background: none; border: none; color: var(--tenue); padding: 0 4px; visibility: hidden; }
+.fila-pista:hover .quitar-pista { visibility: visible; }
+.fila-pista .quitar-pista:hover { color: var(--error); }
+.aviso-drivers { color: var(--ia); cursor: help; }
+.fila-pista.seleccionada .nombre-pista { color: var(--texto); }
 .carril { position: relative; height: 100%; margin: 0 8px; border-bottom: 1px solid var(--borde); cursor: text; }
 .regla .carril { border-bottom-color: var(--tenue); }
 .marca { position: absolute; bottom: 2px; font-size: 10px; color: var(--tenue); transform: translateX(-50%); pointer-events: none; }

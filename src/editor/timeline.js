@@ -4,8 +4,8 @@
 // Un clip abierto se edita como una pose (estado.pose = id del clip): lo que se cambia en el lienzo o en el inspector
 // queda como keyframe en el tiempo del playhead (autokey, ver opsDePose en huesos.js).
 
-import { ponerClave, quitarClave, redondearTiempo, tiempoLocal } from '../core/animacion.js';
-import { NOMBRES_DE_CURVA } from '../core/curvas.js';
+import { avisosDeClip, moverClave, ponerClave, quitarClave, redondearTiempo, tiempoLocal, valorAGuardar, valoresDeMontaje } from '../core/animacion.js';
+import { NOMBRES_DE_CURVA, errorDeCurva, mismoTiempo } from '../core/curvas.js';
 import { buscar } from '../core/documento.js';
 import { leer, leerMeta } from '../core/esquema.js';
 import { valorEfectivo } from '../core/estilos.js';
@@ -158,7 +158,7 @@ export function montarTimeline(raiz) {
     const doc = estado.doc;
     if (!doc) return raiz.replaceChildren();
     const clip = clipVisible();
-    if (elegida && !clip?.tracks?.[elegida.id]?.[elegida.prop]?.some((c) => Math.abs(c.t - elegida.t) < 1e-6)) elegida = null;
+    if (elegida && !clip?.tracks?.[elegida.id]?.[elegida.prop]?.some((c) => mismoTiempo(c.t, elegida.t))) elegida = null;
     raiz.replaceChildren(barra(doc, clip), clip ? pistas(clip) : vacio());
     moverPlayhead();
   }
@@ -218,18 +218,51 @@ export function montarTimeline(raiz) {
 
     div.append(etiquetaDuracion, loop, boton('◆ Key', 'Key the selected object at the playhead: its animated properties (or, if it has none, its rotation and position)', () => clavarSeleccion(clip)));
 
+    // Una pose entera como keyframes en el playhead, y volver al montaje (lo mismo que pose y setup en set_keys).
+    const poses = doc.objects.filter((o) => o.type === 'pose');
+    if (poses.length) {
+      const conPose = document.createElement('select');
+      conPose.title = 'Key all the values of a pose at the playhead';
+      conPose.append(new Option('◆ Pose…', ''), ...poses.map((p) => new Option(p.id, p.id)));
+      conPose.addEventListener('change', () => conPose.value && clavarValores(clip, structuredClone(buscar(estado.doc, conPose.value).values ?? {}), `pose ${conPose.value}`, false));
+      div.append(conPose);
+    }
+    div.append(boton('◆ Setup', 'Key the setup values (the rest pose) of everything this clip animates at the playhead, and its parameters at their initial value', () => {
+      const valores = valoresDeMontaje(estado.doc, esquema, clip.tracks);
+      if (!Object.keys(valores).length) return avisar('This clip animates nothing yet: key something first', true);
+      clavarValores(clip, valores, 'setup', false);
+    }));
+
+    // Drivers que suman encima de pistas del clip (lo mismo que avisan set_keys y render_preview a la IA).
+    const avisos = avisosDeClip(doc, esquema, clip, estado.params ?? {});
+    if (avisos.length) div.append(Object.assign(document.createElement('span'), { className: 'aviso-drivers', textContent: `⚠ ${avisos.length} driver${avisos.length > 1 ? 's' : ''} add on top`, title: avisos.join('\n') }));
+
     // Curva y borrar del keyframe elegido.
     if (elegida) {
-      const clave = clip.tracks[elegida.id][elegida.prop].find((c) => Math.abs(c.t - elegida.t) < 1e-6);
+      const clave = clip.tracks[elegida.id][elegida.prop].find((c) => mismoTiempo(c.t, elegida.t));
       const curva = document.createElement('select');
       curva.title = 'Ease of the segment that leaves this keyframe';
       const actual = Array.isArray(clave.ease) ? 'custom' : (clave.ease ?? 'linear');
       for (const v of NOMBRES_DE_CURVA) curva.append(new Option(v, v, false, v === actual));
       if (actual === 'custom') curva.append(new Option(`cubic-bezier(${clave.ease.join(', ')})`, 'custom', false, true));
+      curva.append(new Option('cubic-bezier…', 'editar'));
       curva.addEventListener('change', () => {
-        if (curva.value === 'custom') return;
-        const tracks = ponerClave(clip.tracks, elegida.id, elegida.prop, clave.t, clave.value, curva.value);
-        ejecutar([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: ease ${curva.value} at ${n(clave.t)} s`);
+        let ease = curva.value;
+        if (ease === 'custom') return;
+        if (ease === 'editar') {
+          // Como en CSS: x1, y1, x2, y2 (x entre 0 y 1; y puede pasarse para un rebote).
+          const previa = Array.isArray(clave.ease) ? clave.ease.join(', ') : '0.3, 1.6, 0.6, 1';
+          const texto = prompt('cubic-bezier x1, y1, x2, y2 (as in CSS; y outside 0…1 overshoots):', previa);
+          if (texto == null) return dibujar();
+          ease = texto.split(/[\s,]+/).filter(Boolean).map(Number);
+          const error = errorDeCurva(ease);
+          if (error) {
+            avisar(error, true);
+            return dibujar();
+          }
+        }
+        const tracks = ponerClave(clip.tracks, elegida.id, elegida.prop, clave.t, clave.value, ease);
+        ejecutar([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: ease ${Array.isArray(ease) ? `cubic-bezier(${ease.join(', ')})` : ease} at ${n(clave.t)} s`);
       });
       const etiqueta = Object.assign(document.createElement('label'), { className: 'campo-corto', textContent: `${elegida.id}.${elegida.prop} @ ${n(clave.t)} s` });
       etiqueta.append(curva);
@@ -258,9 +291,28 @@ export function montarTimeline(raiz) {
     if (!claves.length) claves = (obj.type === 'bone' ? ['rotation'] : ['x', 'y', 'rotation']).filter((k) => props[k]?.animatable);
     if (!claves.length) return avisar(`${obj.id} has nothing to key here: change a value in the inspector to key it`, true);
     const pose = poseActiva();
+    clavarValores(clip, { [obj.id]: Object.fromEntries(claves.map((k) => [k, pose?.values?.[obj.id]?.[k] ?? valorEfectivo(esquema, estado.doc, obj, k)])) }, obj.id);
+  }
+
+  /**
+   * Keyframes en el playhead con estos valores ({ objeto: { propiedad: valor } }; un param, { value }). Con `vistos`,
+   * son lo que se ve y se les resta lo que suman los drivers; los de una pose o del montaje se guardan tal cual.
+   */
+  function clavarValores(clip, valores, que, vistos = true) {
+    const params = estado.params ?? {};
     let tracks = clip.tracks ?? {};
-    for (const k of claves) tracks = ponerClave(tracks, obj.id, k, estado.tiempo, pose?.values?.[obj.id]?.[k] ?? valorEfectivo(esquema, estado.doc, obj, k));
-    ejecutar([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: key ${obj.id} at ${n(estado.tiempo)} s`);
+    for (const [id, campos] of Object.entries(valores)) {
+      for (const [k, v] of Object.entries(campos)) tracks = ponerClave(tracks, id, k, estado.tiempo, vistos ? valorAGuardar(estado.doc, esquema, clip, estado.tiempo, params, id, k, v) : v);
+    }
+    ejecutar([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: key ${que} at ${n(estado.tiempo)} s`);
+  }
+
+  /** Borra una pista entera (todos sus keyframes). */
+  function borrarPista(clip, id, prop) {
+    const tracks = structuredClone(clip.tracks ?? {});
+    delete tracks[id]?.[prop];
+    if (tracks[id] && !Object.keys(tracks[id]).length) delete tracks[id];
+    ejecutar([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: delete track ${id}.${prop}`);
   }
 
   function borrarElegida(clip) {
@@ -304,13 +356,18 @@ export function montarTimeline(raiz) {
     for (const [id, prop] of filas) {
       const fila = document.createElement('div');
       fila.className = `fila-pista${id === estado.seleccion ? ' seleccionada' : ''}`;
-      const etiqueta = Object.assign(document.createElement('button'), { type: 'button', className: 'etiqueta', textContent: `${id}.${prop}`, title: `Select ${id}` });
-      etiqueta.addEventListener('click', () => seleccionar(id));
+      const etiqueta = document.createElement('span');
+      etiqueta.className = 'etiqueta';
+      const nombre = Object.assign(document.createElement('button'), { type: 'button', className: 'nombre-pista', textContent: `${id}.${prop}`, title: `Select ${id}` });
+      nombre.addEventListener('click', () => seleccionar(id));
+      const quitar = Object.assign(document.createElement('button'), { type: 'button', className: 'quitar-pista', textContent: '×', title: `Delete the whole ${id}.${prop} track (all its keyframes)` });
+      quitar.addEventListener('click', () => borrarPista(clip, id, prop));
+      etiqueta.append(nombre, quitar);
       const carrilPista = document.createElement('div');
       carrilPista.className = 'carril';
       for (const clave of clip.tracks[id][prop]) {
         const rombo = document.createElement('span');
-        const esElegida = elegida && elegida.id === id && elegida.prop === prop && Math.abs(elegida.t - clave.t) < 1e-6;
+        const esElegida = elegida && elegida.id === id && elegida.prop === prop && mismoTiempo(elegida.t, clave.t);
         rombo.className = `clave${esElegida ? ' elegida' : ''}${clave.ease === 'step' ? ' step' : ''}`;
         rombo.style.left = `${(clave.t / duracion) * 100}%`;
         rombo.title = `${id}.${prop} = ${resumir(clave.value)} at ${n(clave.t)} s (${Array.isArray(clave.ease) ? 'cubic-bezier' : (clave.ease ?? 'linear')}). Drag to move it in time.`;
@@ -352,23 +409,32 @@ export function montarTimeline(raiz) {
     const duracion = leer(esquema, clip, 'duration');
     const x0 = e.clientX;
     let nuevo = clave.t;
-    const ops = (t) => {
-      const sinVieja = quitarClave(clip.tracks, id, prop, clave.t);
-      return [{ op: 'set', target: clip.id, props: { tracks: ponerClave(sinVieja, id, prop, t, clave.value, clave.ease ?? 'linear') } }];
-    };
+    // moverClave falla si en el destino ya hay otro keyframe de la pista (soltarlo encima lo borraría).
+    const ops = (t) => [{ op: 'set', target: clip.id, props: { tracks: moverClave(clip.tracks, id, prop, clave.t, t) } }];
     // Elegir el keyframe redibuja la timeline (el rombo se reemplaza): el arrastre se sigue en window.
     const mover = (ev) => {
       if (Math.abs(ev.clientX - x0) < 3 && nuevo === clave.t) return;
       nuevo = Math.max(0, Math.min(duracion, ajustarACuadro(clave.t + ((ev.clientX - x0) / zona.width) * duracion)));
-      previsualizar(ops(nuevo));
+      try {
+        previsualizar(ops(nuevo));
+      } catch {
+        previsualizar(null);
+      }
       fijar({ tiempo: nuevo });
     };
     window.addEventListener('pointermove', mover);
     window.addEventListener('pointerup', () => {
       window.removeEventListener('pointermove', mover);
-      if (Math.abs(nuevo - clave.t) < 1e-6) return previsualizar(null);
+      if (mismoTiempo(nuevo, clave.t)) return previsualizar(null);
+      let lote;
+      try {
+        lote = ops(nuevo);
+      } catch (error) {
+        previsualizar(null);
+        return avisar(error.message, true);
+      }
       elegida = { id, prop, t: redondearTiempo(nuevo) };
-      ejecutar(ops(nuevo), `${clip.id}: move key ${id}.${prop} ${n(clave.t)} → ${n(nuevo)} s`);
+      ejecutar(lote, `${clip.id}: move key ${id}.${prop} ${n(clave.t)} → ${n(nuevo)} s`);
     }, { once: true });
   }
 
