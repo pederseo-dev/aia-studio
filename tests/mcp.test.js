@@ -6,7 +6,7 @@ import { evaluarEnPose, puntaDe } from '../src/core/esqueleto.js';
 import { guiaParaIA } from '../src/core/guia.js';
 import { mezclarPoses } from '../src/core/mezcla.js';
 import { aplicarOperaciones } from '../src/core/operaciones.js';
-import { fusionarPose, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, planSwitchControl, recortesDePose } from '../mcp/herramientas.js';
+import { fusionarPose, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from '../mcp/herramientas.js';
 
 const esquema = cargarEsquema();
 const op = (doc, ...ops) => aplicarOperaciones(doc, ops, esquema).doc;
@@ -101,19 +101,18 @@ test('reparent_bone avisa en qué poses el hueso cambia de lugar y, si se pide, 
   assert.equal(planReparentBone(doc, esquema, 'b', 'a').ops.length, 0);
 });
 
-test('create_switch_control crea el param, una pose y un driver por variante', () => {
+
+test('el switch se maneja igual en el editor y en el MCP: set active, sin herramienta aparte', () => {
+  const guia = guiaParaIA(esquema);
+  assert.doesNotMatch(guia, /create_switch_control|Create control/);
+  assert.match(guia, /`set` con `\{ "active": "<hijo>" \}`/);
+  // Lo que hace el selector del editor (elegirVariante) es este mismo set.
   const doc = op(
     crearDocumento({}),
-    { op: 'create', type: 'switch', id: 'mouth', props: { active: 'mouth_o' } },
-    { op: 'create', type: 'rect', id: 'mouth_rest', parent: 'mouth' },
+    { op: 'create', type: 'switch', id: 'mouth' },
+    { op: 'create', type: 'rect', id: 'mouth_a', parent: 'mouth' },
     { op: 'create', type: 'rect', id: 'mouth_o', parent: 'mouth' },
+    { op: 'set', target: 'mouth', props: { active: 'mouth_o' } },
   );
-  const plan = planSwitchControl(doc, 'mouth', 'Viseme');
-  assert.equal(plan.param, 'viseme');
-  assert.deepEqual(plan.opciones, ['rest', 'o']);
-  const conControl = op(doc, ...plan.ops);
-  assert.equal(buscar(conControl, 'viseme').initial, 'o');
-  assert.deepEqual(mezclarPoses(conControl, esquema, { viseme: 'rest' }).values, { mouth: { active: 'mouth_rest' } });
-  assert.throws(() => planSwitchControl(conControl, 'mouth', 'viseme'), /already exists/);
-  assert.throws(() => planSwitchControl(doc, 'mouth_o'), /is not a switch/);
+  assert.equal(buscar(doc, 'mouth').active, 'mouth_o');
 });

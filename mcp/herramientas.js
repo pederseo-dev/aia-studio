@@ -2,7 +2,6 @@
 // guardan), para poder probarlas sin levantar el servidor. Los textos que devuelven los lee la IA.
 
 import { buscar, hijos, huesosDe } from '../src/core/documento.js';
-import { opsDeControl } from '../src/core/controles.js';
 import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, puntaDe, reparentarHueso, repartirEntreHuesos } from '../src/core/esqueleto.js';
 import { aplicar } from '../src/core/geometria.js';
 import { leer } from '../src/core/esquema.js';
@@ -106,11 +105,4 @@ export function planReparentBone(doc, esquema, bone, parent, keepInPoses = false
   } else if (keepInPoses && compensadas.length) poses = ` En las poses quedó donde estaba (valores ajustados en ${[...new Set(compensadas)].join(', ')}).`;
   else poses = ' En las poses tampoco cambia de lugar.';
   return { ops, movidas, texto: `${bone} ahora cuelga de ${parent}; en el montaje quedó donde estaba.${poses}` };
-}
-
-/** create_switch_control: el lote (param enum, una pose y un driver por variante) y su resumen. */
-export function planSwitchControl(doc, sw, name) {
-  const { ops, param, opciones } = opsDeControl(doc, sw, name);
-  const texto = `Control ${param} (enum: ${opciones.join(', ')}) creado para ${sw}: una pose ${param}_<opción> por variante, cada una con su driver (equals). Pruébalo con render_preview y params { "${param}": "${opciones.at(-1)}" }.`;
-  return { ops, param, opciones, texto };
 }

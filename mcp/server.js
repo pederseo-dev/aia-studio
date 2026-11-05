@@ -15,7 +15,7 @@ import { svgDocumento } from '../src/render/svg.js';
 import { crearAlmacen } from '../servidor/almacen.js';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { svgAPng } from '../servidor/png.js';
-import { esquemaDelArbol as arbol, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, planSwitchControl, recortesDePose } from './herramientas.js';
+import { esquemaDelArbol as arbol, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from './herramientas.js';
 
 const esquema = cargarEsquema();
 const almacen = crearAlmacen({ esquema });
@@ -359,27 +359,6 @@ servidor.registerTool(
     const lista = Object.entries(guardada).map(([h, c]) => `${h} ${JSON.stringify(c, (k, v) => (k === 'vertices' ? `(${v.length} vértices)` : v))}`).join(', ') || 'vacía';
     const notas = [...avisos, ...recortesDePose(doc, esquema, guardada)];
     return vistaPrevia(doc, { width, pose, bones: show_bones }, `Pose "${pose}": ${lista}.${notas.length ? `\nAvisos: ${notas.join('; ')}` : ''}`);
-  }),
-);
-
-servidor.registerTool(
-  'create_switch_control',
-  {
-    description:
-      'Create control de un switch (como el botón del editor): crea un param enum con una opción por variante (el id ' +
-      'de cada hijo, sin el prefijo del switch si todos lo tienen: mouth_a → a), una pose por opción que pone esa ' +
-      'variante en active y un driver con equals para cada una. La opción inicial es la que muestra el switch.',
-    inputSchema: {
-      id,
-      switch: z.string().describe('id del switch'),
-      name: z.string().optional().describe('id del param, por ejemplo "viseme" (por defecto <switch>_choice)'),
-      note: z.string().optional().describe('qué hace, para el historial'),
-    },
-  },
-  seguro(async ({ id, switch: sw, name, note }) => {
-    const plan = planSwitchControl(await almacen.leer(id), sw, name);
-    await almacen.operar(id, plan.ops, { origen: ORIGEN, nota: note ?? `control ${plan.param} for ${sw} (${plan.opciones.length} options)` });
-    return texto(plan.texto);
   }),
 );
 

@@ -238,8 +238,9 @@ Notas de lo construido:
   un lote posterior del otro origen tocó las mismas propiedades; `reparent_bone` avisa en qué poses el hueso cambia
   de lugar y con `keep_in_poses` las compensa (en el editor, «Keep poses»); los huesos dibujados encima siguen a una
   pose que mueve el skeleton; `meta` es un id reservado; se validan `initial`/`equals` contra `options` y
-  `min ≤ max`. Herramientas nuevas para la IA: `move` con `keepPosition`, `create_switch_control` (la lógica de
-  «Create control», ahora en `src/core/controles.js`) y `delete_document`. La lógica de las herramientas del MCP
+  `min ≤ max`. Herramientas nuevas para la IA: `move` con `keepPosition`, `create_switch_control` (quitada después,
+  junto con «Create control» del editor: el switch quedó simple, como en Moho, y la variante se elige con `active`) y
+  `delete_document`. La lógica de las herramientas del MCP
   vive en `mcp/herramientas.js`, con pruebas.
 - Pendiente: **importar SVG desde el MCP.** El importador del editor (`src/editor/importar.js`) monta el SVG en la
   página para que el navegador resuelva transformaciones, viewBox, estilos CSS y unidades: lee la matriz de cada

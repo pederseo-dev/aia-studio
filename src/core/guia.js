@@ -218,10 +218,12 @@ Así se controla al personaje desde afuera (la app, otra IA): con **params** de 
    colores y vértices se interpolan, y lo que no se interpola (el \`active\` de un switch) lo toma la pose con peso
    ≥ 0.5.
 
-**Switch**: un grupo que muestra un solo hijo, el de \`active\` (o el primero). Para bocas o visemas con dibujos
-distintos, mete cada variante en un switch y que cada pose elija una con \`active\`. **\`create_switch_control\`**
-arma todo de una vez, como «Create control» en el editor: un param enum con una opción por variante, una pose por
-opción y su driver con \`equals\`. Si sacas del switch una variante que una pose elige, el lote falla: quita esa
+**Switch**: un grupo que muestra un solo hijo, el de \`active\` (o el primero, si es null), como la switch layer de
+Moho. Se crea con \`create\` y \`type: "switch"\`, y cada variante es un hijo suyo (\`parent\`). Para elegir cuál se ve,
+\`set\` con \`{ "active": "<hijo>" }\`: es lo mismo que hace el usuario con el menú ▾ del switch en Layers o con el
+selector de la barra de opciones. En una pose: \`set_pose\` con \`{ "<switch>": { "active": "<hijo>" } }\`. Si un param
+tiene que elegir la variante (bocas, visemas), arma tú las piezas: un param enum, una pose por opción que fija
+\`active\` y un driver con \`equals\` para cada una, como en el ejemplo de abajo. Si sacas del switch una variante que una pose elige, el lote falla: quita esa
 variante de la pose (\`set_pose\` con \`{ "mouth": {} }\`) o déjala dentro del switch.
 
 El \`initial\` de un param enum y el \`equals\` de sus drivers tienen que ser opciones de \`options\`; en un param
