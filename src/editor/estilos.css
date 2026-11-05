@@ -62,7 +62,11 @@ kbd { font: 11px ui-monospace, monospace; color: var(--suave); border: 1px solid
 
 /* Fila de pestañas */
 #fila-pestanas { display: flex; align-items: flex-end; gap: 6px; padding: 6px 8px 0; background: var(--fondo); border-bottom: 1px solid var(--borde); }
-#fila-pestanas > .desplegable, #fila-pestanas > .marca, #fila-pestanas > button { align-self: center; margin-bottom: 6px; }
+#fila-pestanas > .marca { align-self: center; margin-bottom: 6px; }
+/* El + va pegado a la última pestaña y apoyado en la línea de abajo, como una pestaña más. */
+#nueva-pestana { align-self: flex-end; margin: 0 0 3px -4px; width: 24px; height: 24px; min-width: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--suave); border-radius: 5px; }
+#nueva-pestana:hover { background: var(--panel-2); color: var(--texto); }
+#nueva-pestana .ico { width: 16px; height: 16px; }
 .marca { margin: 0 6px 6px 2px; font-size: 12px; color: var(--suave); display: inline-flex; align-items: center; gap: 6px; }
 .marca img { display: block; }
 #pestanas { display: flex; gap: 2px; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; margin-bottom: -1px; }
