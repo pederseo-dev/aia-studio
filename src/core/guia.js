@@ -277,10 +277,18 @@ cortos que se disparan, uno por botón). Los dos últimos usan el mismo recurso,
   el siguiente), \`ease-in\`, \`ease-out\`, \`ease-in-out\` o \`[x1, y1, x2, y2]\` (cubic-bezier de CSS; \`[0.3, 1.6, 0.6, 1]\`
   se pasa y vuelve, para un rebote). El \`active\` de un switch, los booleanos y los textos cambian de golpe.
 - Orden: montaje → clip en ese tiempo → los drivers suman sus poses encima (los params del clip pisan a los de afuera).
+  Los **números se suman** (un hueso keyado en 10 con un driver activo que le suma 30 se ve en 40; \`set_keys\` y
+  \`render_preview\` lo avisan). Lo que **no se suma** (el \`active\` de un switch, colores, vértices, booleanos) lo
+  decide la pista del clip si la tiene; si no, los drivers.
+- **Si un param elige la variante** (visemas, bocas, ojos): anima el **param** (\`params: { "viseme": "o" }\`) y no el
+  \`active\` del switch. Así el clip usa las mismas piezas que la app y se combina con sus drivers. Un param enum siempre
+  tiene una opción activa: sus drivers están siempre en juego.
 - **Cómo armarlo:** \`set_keys\` piensa en **momentos**: «en t = 0.3, el brazo así y la boca así» (\`values\`, como en
   \`set_pose\`), «en t = 0.6, la pose \`happy\`» (\`pose\`, copia sus valores) o params (\`params\`). Crea el clip si no
-  existe. \`delete_keys\` quita keyframes. Revisa el movimiento con \`render_preview\` y \`animation\` + \`times\` (una
-  tira de cuadros en una sola imagen) o \`time\` (un cuadro).
+  existe. \`delete_keys\` quita keyframes y \`move_keys\` los mueve en el tiempo (con su valor y su curva). Revisa el
+  movimiento con \`render_preview\` y \`animation\` + \`times\` (una tira de cuadros en una sola imagen) o \`time\` (un
+  cuadro). \`get_document\` lista cada pista de un clip con sus keyframes (\`t = valor curva\`), para leerlo sin el JSON.
+- \`duration\` no puede quedar más corta que los keyframes: para acortar un clip, borra o mueve antes los últimos.
 - Para Puppet, escribe \`description\` (qué hace el clip, en pocas palabras): la IA de la app la lee para elegir cuándo
   dispararlo. Los clips de puppet suelen ser cortos (parpadeo 0.2 s, saludo 1–1.5 s, reposo en loop 2–4 s).
 

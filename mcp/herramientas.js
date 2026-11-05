@@ -6,7 +6,7 @@ import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, puntaDe, 
 import { aplicar } from '../src/core/geometria.js';
 import { leer } from '../src/core/esquema.js';
 import { paramsDeSwitch } from '../src/core/mezcla.js';
-import { resumenDeClip } from './animacion.js';
+import { lineasDePistas, resumenDeClip } from './animacion.js';
 
 /** Árbol legible del documento: una línea por objeto, indentado por jerarquía, del fondo al frente. */
 export function esquemaDelArbol(doc, esquema) {
@@ -39,6 +39,8 @@ export function esquemaDelArbol(doc, esquema) {
         detalle = ` de (${r(ox)}, ${r(oy)}) a (${r(px)}, ${r(py)}), ${r((Math.atan2(m[1], m[0]) * 180) / Math.PI)}° en pantalla`;
       }
       lineas.push(`${'  '.repeat(nivel)}- ${o.id} (${o.type})${detalle}`);
+      // Las pistas de un clip, con sus keyframes: para leerlo sin el JSON entero.
+      if (o.type === 'animation') for (const l of lineasDePistas(o)) lineas.push(`${'  '.repeat(nivel + 2)}${l}`);
       recorrer(o.id, nivel + 1);
     }
   };

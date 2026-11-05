@@ -11,12 +11,11 @@ import { leerMeta, sugerir } from '../src/core/esquema.js';
 import { pesoDeDriver, valoresDeParams } from '../src/core/mezcla.js';
 import { guiaParaIA } from '../src/core/guia.js';
 import { resumirOperaciones } from '../src/core/operaciones.js';
-import { svgDocumento, svgTira } from '../src/render/svg.js';
-import { evaluarClip } from '../src/core/animacion.js';
+import { svgDocumento } from '../src/render/svg.js';
 import { crearAlmacen } from '../servidor/almacen.js';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { svgAPng } from '../servidor/png.js';
-import { planDeleteKeys, planSetKeys, resumenDeClip, tiemposParaTira } from './animacion.js';
+import { errorDeVistaPrevia, planDeleteKeys, planMoveKeys, planSetKeys, planVistaDeClip, resumenDeClip } from './animacion.js';
 import { comprobarBorrado, esquemaDelArbol as arbol, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from './herramientas.js';
 
 const esquema = cargarEsquema();
@@ -209,6 +208,8 @@ const region = z
 
 /** PNG del documento (opcionalmente posado, animado y recortado) como resultado de herramienta. */
 function vistaPrevia(doc, { width, pose, region, bones, params, animation, time, times }, encabezado) {
+  const error = errorDeVistaPrevia({ pose, animation, time, times });
+  if (error) throw new Error(error);
   if (animation) return vistaDeClip(doc, { width, region, bones, params, animation, time, times }, encabezado);
   if (pose && buscar(doc, pose)?.type !== 'pose') {
     const poses = doc.objects.filter((o) => o.type === 'pose').map((o) => o.id);
@@ -242,20 +243,10 @@ function vistaPrevia(doc, { width, pose, region, bones, params, animation, time,
   };
 }
 
-/** Vista previa de un clip: un cuadro (time) o una tira de cuadros (times, o los tiempos de sus keyframes). */
-function vistaDeClip(doc, { width, region, bones, params, animation, time, times }, encabezado) {
-  const clip = buscar(doc, animation);
-  if (clip?.type !== 'animation') {
-    const clips = doc.objects.filter((o) => o.type === 'animation').map((o) => o.id);
-    throw new Error(`there is no animation "${animation}".${sugerir(animation, clips)} Animations: ${clips.join(', ') || 'none'}`);
-  }
-  const tiempos = time != null ? [time] : times?.length ? times : tiemposParaTira(clip);
-  const opciones = { animation, params: params ?? {}, region, huesos: bones };
-  const svg = tiempos.length === 1 ? svgDocumento(doc, esquema, { ...opciones, time: tiempos[0] }) : svgTira(doc, esquema, { ...opciones, times: tiempos });
-  const png = svgAPng(svg, width ?? (tiempos.length === 1 ? 600 : 1000));
-  const animados = Object.keys(evaluarClip(doc, esquema, clip, 0).params);
-  const cuadros = tiempos.length === 1 ? `cuadro en t = ${tiempos[0]} s` : `${tiempos.length} cuadros en t = ${tiempos.join(', ')} s`;
-  const resumen = `Clip "${animation}" (${resumenDeClip(esquema, clip)}): ${cuadros}${animados.length ? `; el clip anima los params ${animados.join(', ')}` : ''}.`;
+/** Vista previa de un clip como resultado de herramienta: el SVG y el texto salen de planVistaDeClip. */
+function vistaDeClip(doc, opciones, encabezado) {
+  const { svg, ancho, texto: resumen } = planVistaDeClip(doc, esquema, opciones);
+  const png = svgAPng(svg, opciones.width ?? ancho);
   return {
     content: [
       { type: 'image', data: Buffer.from(png).toString('base64'), mimeType: 'image/png' },
@@ -402,8 +393,8 @@ const momento = z.object({
   values: z
     .record(z.string(), z.record(z.string(), z.any()))
     .optional()
-    .describe('{ id_de_objeto: { propiedad: valor } } absolutos, como en set_pose (un path acepta "d"); por ejemplo { "arm_r_bone": { "rotation": -60 }, "mouth": { "active": "mouth_o" } }'),
-  params: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])).optional().describe('{ id_de_param: valor } en ese momento; sus drivers suman las poses'),
+    .describe('{ id_de_objeto: { propiedad: valor } } absolutos, como en set_pose (un path acepta "d"); por ejemplo { "arm_r_bone": { "rotation": -60 }, "tail": { "opacity": 0.5 } }. Si un param elige una variante (visemas), anima el param en params y no el active del switch'),
+  params: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])).optional().describe('{ id_de_param: valor } en ese momento, por ejemplo { "happiness": 1, "viseme": "o" }; sus drivers suman las poses'),
   pose: z.string().optional().describe('id de una pose: copia todos sus valores como keyframes en ese momento (values los pisa)'),
   setup: z.boolean().optional().describe('true = en ese momento, todo lo que el clip anima (y lo que fija pose, si la pasas) vuelve al valor del montaje, y sus params al inicial; values los pisa. Sirve para empezar y terminar en reposo'),
   targets: z.array(z.string()).optional().describe('con un momento que solo trae ease: a qué pistas cambiarle la curva ("objeto.propiedad" o un id); por defecto, a todas las que tienen keyframe en ese t'),
@@ -466,6 +457,30 @@ servidor.registerTool(
     if (!ops.length) return texto(`No había keyframes que quitar en "${animation}" con esos tiempos y pistas.`);
     const { doc } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `delete keys in ${animation}` });
     return texto(`Quitados ${quitadas} keyframes. ${animation}: ${resumenDeClip(esquema, buscar(doc, animation))}.`);
+  }),
+);
+
+servidor.registerTool(
+  'move_keys',
+  {
+    description:
+      'Mueve en el tiempo los keyframes de un momento de un clip (from → to), con su valor y su curva: en todas las ' +
+      'pistas que tienen keyframe en from, o solo en targets. Falla si en to ya hay un keyframe en alguna de esas ' +
+      'pistas (lo borraría) o si to pasa la duración (alárgala antes con set_keys y duration).',
+    inputSchema: {
+      id,
+      animation: z.string().describe('id del clip'),
+      from: z.number().min(0).describe('tiempo actual de los keyframes, en segundos (tolerancia de 1 ms)'),
+      to: z.number().min(0).describe('tiempo nuevo, en segundos'),
+      targets: z.array(z.string()).optional().describe('pistas: "objeto.propiedad" o un id de objeto (por defecto, todas las que tienen keyframe en from)'),
+      note: z.string().optional().describe('qué hace, para el historial'),
+      width: z.number().int().min(64).max(2048).optional().describe('ancho de la vista previa'),
+    },
+  },
+  seguro(async ({ id, animation, from, to, targets, note, width }) => {
+    const { ops, movidas } = planMoveKeys(await almacen.leer(id), esquema, animation, { from, to, targets });
+    const { doc } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `move keys in ${animation} ${from} → ${to} s` });
+    return vistaPrevia(doc, { width, animation }, `Movidos de ${from} a ${to} s: ${movidas.join(', ')}.`);
   }),
 );
 

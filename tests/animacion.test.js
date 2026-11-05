@@ -282,3 +282,44 @@ test('moverClave y la tolerancia compartida de «mismo tiempo»', async () => {
   // La validación no deja dos keyframes a menos de 1 ms.
   assert.throws(() => conDrivers({ box: { x: [{ t: 0.3333, value: 1 }, { t: 0.3335, value: 2 }] } }), /at least 1 ms apart/);
 });
+
+test('MCP: duration corta, setup sin pistas, move_keys, delete_keys con tiempos cercanos y resumen de pistas', async () => {
+  const { planDeleteKeys, planMoveKeys, planSetKeys, lineasDePistas } = await import('../mcp/animacion.js');
+  const { esquemaDelArbol } = await import('../mcp/herramientas.js');
+  let doc = conDrivers({ box: { rotation: [{ t: 0, value: 0 }, { t: 1.5, value: 10, ease: 'ease-out' }] } });
+  assert.throws(() => planSetKeys(doc, esquema, 'talk', { duration: 0.5 }), /duration 0\.5 s is shorter than the keyframes, which go up to 1\.5 s/);
+  assert.throws(() => planSetKeys(doc, esquema, 'nuevo', { keys: [{ t: 0, setup: true }] }), /this clip animates nothing yet/);
+  // move_keys: conserva valor y curva; no pisa otro keyframe ni pasa la duración.
+  doc = op(doc, ...planMoveKeys(doc, esquema, 'talk', { from: 1.5, to: 1 }).ops);
+  assert.deepEqual(buscar(doc, 'talk').tracks.box.rotation[1], { t: 1, value: 10, ease: 'ease-out' });
+  assert.throws(() => planMoveKeys(doc, esquema, 'talk', { from: 1, to: 0 }), /already has a keyframe at 0 s/);
+  assert.throws(() => planMoveKeys(doc, esquema, 'talk', { from: 1, to: 3 }), /between 0 and the clip's duration \(2 s\)/);
+  assert.throws(() => planMoveKeys(doc, esquema, 'talk', { from: 0.7, to: 0.8 }), /no keyframes at t 0\.7.*Keys at: 0, 1/);
+  // delete_keys: un tiempo a 0.5 ms de otro keyframe es el mismo momento; uno a 10 ms, no.
+  doc = op(doc, ...planSetKeys(doc, esquema, 'talk', { keys: [{ t: 0.3, values: { box: { rotation: 5 } } }, { t: 0.31, values: { box: { rotation: 6 } } }] }).ops);
+  const borrado = planDeleteKeys(doc, 'talk', { times: [0.3005] });
+  assert.equal(borrado.quitadas, 1);
+  assert.deepEqual(borrado.ops[0].props.tracks.box.rotation.map((c) => c.t), [0, 0.31, 1]);
+  // El árbol lista cada pista con sus keyframes.
+  assert.deepEqual(lineasDePistas(buscar(doc, 'talk')), ['box.rotation: 0 = 0 · 0.3 = 5 · 0.31 = 6 · 1 = 10 ease-out']);
+  assert.match(esquemaDelArbol(doc, esquema), /- talk \(animation\) animate, 2 s, loop; .*\n {4}box\.rotation: 0 = 0/);
+});
+
+test('render_preview con animation: tira, avisos de drivers y opciones incompatibles', async () => {
+  const { planVistaDeClip, errorDeVistaPrevia } = await import('../mcp/animacion.js');
+  const doc = conDrivers({ box: { rotation: [{ t: 0, value: 0 }, { t: 2, value: 90 }] }, viseme: { value: [{ t: 0, value: 'o' }] } });
+  const tira = planVistaDeClip(doc, esquema, { animation: 'talk' });
+  // Los tiempos de los keyframes: el último cuadro de un loop es el final (90°), no el principio.
+  assert.equal((tira.svg.match(/t = /g) ?? []).length, 2);
+  assert.match(tira.svg, /t = 2 s/);
+  assert.match(tira.svg, /rotate\(120\)/); // 90 del clip + 30 del driver de lean
+  assert.match(tira.texto, /el clip anima los params viseme/);
+  assert.match(tira.texto, /Ojo, drivers que suman encima del clip:\n- box\.rotation: the clip keys it and driver d_lean/);
+  const cuadro = planVistaDeClip(doc, esquema, { animation: 'talk', time: 1, params: { lean: 0 } });
+  assert.match(cuadro.svg, /rotate\(45\)/);
+  assert.doesNotMatch(cuadro.texto, /Ojo/);
+  assert.throws(() => planVistaDeClip(doc, esquema, { animation: 'tlak' }), /no animation "tlak".*"talk"/);
+  assert.match(errorDeVistaPrevia({ pose: 'v_o', animation: 'talk' }), /either pose or animation/);
+  assert.match(errorDeVistaPrevia({ time: 1 }), /need animation/);
+  assert.equal(errorDeVistaPrevia({ animation: 'talk', time: 1 }), null);
+});
