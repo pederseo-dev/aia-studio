@@ -118,6 +118,10 @@ export function mezclarPoses(doc, esquema, pedidos = {}, base = {}) {
       for (const [prop, objetivo] of Object.entries(campos)) {
         const p = definiciones[prop];
         if (!p) continue;
+        // Lo que no se suma (colores, vértices, el hijo de un switch, booleanos) lo decide la pista del clip, si la
+        // tiene: un param enum siempre tiene una opción activa y, si no, su driver taparía el keyframe (ver
+        // docs/decision-animacion.md §4).
+        if (p.type !== 'number' && base[id]?.[prop] !== undefined) continue;
         const clave = `${id}\u0000${prop}`;
         // El valor del montaje es el que se ve: el propio, el del estilo o el por defecto. Las diferencias de los
         // números se miden contra él (como siempre) y se suman a lo animado; colores y vértices parten de lo animado.

@@ -10,6 +10,13 @@ export const CURVAS_CON_NOMBRE = {
 };
 export const NOMBRES_DE_CURVA = [...Object.keys(CURVAS_CON_NOMBRE), 'step'];
 
+/**
+ * Dos keyframes de una pista a menos de esto (en segundos) son el mismo momento: ponerlos reemplaza, quitar o mover
+ * los elige juntos, y la validación no deja guardar dos tan cerca. Es menos que un cuadro a 120 fps.
+ */
+export const MISMO_TIEMPO = 1e-3;
+export const mismoTiempo = (a, b) => Math.abs(a - b) < MISMO_TIEMPO;
+
 /** Por qué una curva no sirve (null si sirve). `undefined` es linear. */
 export function errorDeCurva(ease) {
   if (ease === undefined || NOMBRES_DE_CURVA.includes(ease)) return null;

@@ -85,6 +85,13 @@ montaje → clip en t (valores absolutos) → params (los del clip pisan a los d
 3. Los drivers suman sus poses **encima de lo animado**: un saludo animado más la cara feliz que da un param. En los
    números, la diferencia de cada pose se sigue midiendo contra el montaje (como en la mezcla de la fase 4) y se suma
    a lo animado; colores y vértices se interpolan desde lo animado hacia la pose.
+4. **Lo que no se suma lo decide la pista del clip** *(cambio del 2026-11-05, por la auditoría de la fase 5)*: si el
+   clip tiene pista en un color, unos vértices, el hijo de un switch o un booleano, los drivers no lo cambian. Los
+   drivers siguen decidiendo donde el clip no tiene pista. Motivo: un param enum siempre tiene una opción activa (y
+   un param numérico puede arrancar distinto de 0), así que su driver pesaba 1 en todo clip y tapaba el keyframe de
+   `mouth.active`. Cuando un param elige la variante (visemas), lo natural es animar el param, no `active`.
+   Los números se siguen sumando: `avisosDeClip` (en `set_keys`, `render_preview` y la timeline) avisa cuando un
+   driver activo le suma su pose a una pista del clip, y el autokey del editor guarda el valor sin ese aporte.
 
 El resultado es una pose más, que se dibuja con el mismo render de siempre (`src/render/svg.js`).
 

@@ -1,7 +1,7 @@
 // Esquema: las definiciones de schema/*.json resueltas (herencia incluida). Es la fuente única de verdad de qué tipos
 // existen y qué propiedades tienen; de aquí salen la validación, el inspector del editor y la guía para la IA.
 
-import { errorDeCurva } from './curvas.js';
+import { MISMO_TIEMPO, errorDeCurva } from './curvas.js';
 import { erroresDeVertice } from './trazado.js';
 
 const TIPOS_DE_PROPIEDAD = new Set(['number', 'string', 'strings', 'boolean', 'color', 'enum', 'ref', 'vertices', 'stops', 'pose', 'tracks']);
@@ -112,7 +112,7 @@ export function validarValor(p, valor) {
             if (!k || typeof k !== 'object' || Array.isArray(k)) return `${id}.${prop}[${i}] must be a keyframe { "t": seconds, "value": … }`;
             if (typeof k.t !== 'number' || !Number.isFinite(k.t)) return `${id}.${prop}[${i}].t must be a number of seconds`;
             if (!('value' in k)) return `${id}.${prop}[${i}] needs a value`;
-            if (i && k.t <= claves[i - 1].t) return `${id}.${prop}: keyframes must be in order of t, with no repeated times (t ${k.t} after ${claves[i - 1].t})`;
+            if (i && k.t - claves[i - 1].t < MISMO_TIEMPO) return `${id}.${prop}: keyframes must be in order of t and at least ${MISMO_TIEMPO * 1000} ms apart (t ${k.t} after ${claves[i - 1].t})`;
             const curva = errorDeCurva(k.ease);
             if (curva) return `${id}.${prop}[${i}]: ${curva}`;
           }

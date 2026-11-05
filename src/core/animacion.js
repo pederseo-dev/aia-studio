@@ -5,16 +5,24 @@
 //   montaje → clip en t (valores absolutos) → params (los del clip pisan a los de afuera) → drivers suman sus poses
 
 import { buscar } from './documento.js';
-import { aplicarCurva } from './curvas.js';
+import { aplicarCurva, mismoTiempo } from './curvas.js';
 import { leer } from './esquema.js';
-import { mezclarColor, mezclarPoses, mezclarVertices } from './mezcla.js';
+import { valorEfectivo } from './estilos.js';
+import { mezclarColor, mezclarPoses, mezclarVertices, pesoDeDriver, valoresDeParams } from './mezcla.js';
 
-/** El tiempo dentro del clip (0…duration) para un tiempo de reproducción, según su loop. */
+/**
+ * El tiempo dentro del clip (0…duration) para un tiempo de reproducción, según su loop. En un loop, el final de cada
+ * vuelta (t = duration, 2·duration…) es el final y no el principio: así el último cuadro de la tira, el playhead al
+ * final y el keyframe que se guarda ahí hablan del mismo momento.
+ */
 export function tiempoLocal(esquema, clip, t) {
   const d = leer(esquema, clip, 'duration');
   const modo = leer(esquema, clip, 'loop');
   if (!(d > 0) || !Number.isFinite(t)) return 0;
-  if (modo === 'loop') return ((t % d) + d) % d;
+  if (modo === 'loop') {
+    const r = ((t % d) + d) % d;
+    return r === 0 && t > 0 ? d : r;
+  }
   if (modo === 'pingpong') {
     const ciclo = ((t % (2 * d)) + 2 * d) % (2 * d);
     return ciclo <= d ? ciclo : 2 * d - ciclo;
@@ -84,7 +92,6 @@ export function poseDeClip(doc, esquema, clip, t, params = {}) {
   return { ...pose, clip: c.id, tiempo: evaluado.tiempo };
 }
 
-const MISMO_TIEMPO = 1e-6;
 export const redondearTiempo = (t) => Math.round(t * 1e6) / 1e6;
 
 /**
@@ -95,7 +102,7 @@ export function ponerClave(pistas, id, prop, t, valor, ease) {
   const nuevas = structuredClone(pistas ?? {});
   const claves = ((nuevas[id] ??= {})[prop] ??= []);
   const tiempo = redondearTiempo(t);
-  const j = claves.findIndex((c) => Math.abs(c.t - tiempo) < MISMO_TIEMPO);
+  const j = claves.findIndex((c) => mismoTiempo(c.t, tiempo));
   const clave = { t: tiempo, value: prop === 'vertices' && Array.isArray(valor) ? valor.map(({ bone, ...v }) => v) : valor };
   const curva = ease ?? (j >= 0 ? claves[j].ease : undefined);
   if (curva !== undefined && curva !== 'linear') clave.ease = curva;
@@ -110,7 +117,7 @@ export function quitarClave(pistas, id, prop, t) {
   const nuevas = structuredClone(pistas ?? {});
   const claves = nuevas[id]?.[prop];
   if (!claves) return nuevas;
-  nuevas[id][prop] = claves.filter((c) => Math.abs(c.t - t) >= 1e-3);
+  nuevas[id][prop] = claves.filter((c) => !mismoTiempo(c.t, t));
   if (!nuevas[id][prop].length) delete nuevas[id][prop];
   if (!Object.keys(nuevas[id]).length) delete nuevas[id];
   return nuevas;
@@ -121,4 +128,77 @@ export function tiemposDeClaves(clip) {
   const tiempos = new Set();
   for (const campos of Object.values(clip.tracks ?? {})) for (const claves of Object.values(campos)) for (const c of claves ?? []) tiempos.add(c.t);
   return [...tiempos].sort((a, b) => a - b);
+}
+
+/**
+ * El valor que hay que guardar en la pista para que se vea `visto` (autokey): lo que se ve ya trae lo que suman los
+ * drivers, y al evaluar se sumaría otra vez. En los números se resta ese aporte; lo demás (colores, vértices,
+ * discretos) se guarda tal cual, porque la pista del clip gana sobre los drivers (ver mezclarPoses).
+ */
+export function valorAGuardar(doc, esquema, clip, t, params, id, prop, visto) {
+  const obj = buscar(doc, id);
+  if (typeof visto !== 'number' || !obj || obj.type === 'param' || esquema.tipos.get(obj.type)?.properties[prop]?.type !== 'number') return visto;
+  const c = typeof clip === 'string' ? buscar(doc, clip) : clip;
+  const delClip = evaluarClip(doc, esquema, c, t).values[id]?.[prop] ?? valorEfectivo(esquema, doc, obj, prop);
+  const final = poseDeClip(doc, esquema, c, t, params).values[id]?.[prop] ?? delClip;
+  const aporte = final - delClip;
+  return Math.abs(aporte) < 1e-9 ? visto : Math.round((visto - aporte) * 1e6) / 1e6;
+}
+
+/**
+ * Los valores del montaje de todo lo que el clip anima (y de lo que fija la pose `poseId`, si se pasa), con los
+ * params en su valor inicial: { objeto: { propiedad: valor } }. Es «Key setup» del editor y `setup: true` de set_keys.
+ */
+export function valoresDeMontaje(doc, esquema, pistas, poseId = null) {
+  const params = valoresDeParams(doc, esquema);
+  const props = new Map(Object.entries(pistas ?? {}).map(([id, campos]) => [id, new Set(Object.keys(campos))]));
+  for (const [id, campos] of Object.entries(buscar(doc, poseId ?? '')?.values ?? {})) for (const prop of Object.keys(campos)) (props.get(id) ?? props.set(id, new Set()).get(id)).add(prop);
+  const valores = {};
+  for (const [id, nombres] of props) {
+    const obj = buscar(doc, id);
+    if (!obj) continue;
+    for (const prop of nombres) (valores[id] ??= {})[prop] = obj.type === 'param' ? params[id] : valorEfectivo(esquema, doc, obj, prop);
+  }
+  return valores;
+}
+
+/**
+ * Pistas con el keyframe de `id.prop` en `desde` movido a `hasta` (conserva valor y curva), o null si no hay
+ * keyframe en `desde`. Error si en `hasta` ya hay otro: moverlo encima lo borraría.
+ */
+export function moverClave(pistas, id, prop, desde, hasta) {
+  const claves = pistas?.[id]?.[prop] ?? [];
+  const clave = claves.find((c) => mismoTiempo(c.t, desde));
+  if (!clave) return null;
+  if (!mismoTiempo(desde, hasta) && claves.some((c) => c !== clave && mismoTiempo(c.t, hasta))) throw new Error(`${id}.${prop} already has a keyframe at ${redondearTiempo(hasta)} s: delete it first or move to another time`);
+  return ponerClave(quitarClave(pistas, id, prop, clave.t), id, prop, hasta, clave.value, clave.ease ?? 'linear');
+}
+
+/**
+ * Avisos de un clip para la IA y el editor: las pistas numéricas a las que un driver activo les suma su pose encima
+ * (un param animado, o uno con valor inicial distinto de 0), en los tiempos de sus keyframes. Así no sorprende que
+ * un hueso keyado en 10 se vea en 40.
+ */
+export function avisosDeClip(doc, esquema, clip, params = {}) {
+  const c = typeof clip === 'string' ? buscar(doc, clip) : clip;
+  if (c?.type !== 'animation') return [];
+  const avisos = new Map();
+  const drivers = doc.objects.filter((o) => o.type === 'driver' && buscar(doc, o.pose)?.type === 'pose');
+  for (const t of tiemposDeClaves(c)) {
+    const valores = valoresDeParams(doc, esquema, { ...params, ...evaluarClip(doc, esquema, c, t).params });
+    for (const d of drivers) {
+      if (!(d.param in valores)) continue;
+      const w = pesoDeDriver(doc, esquema, d, valores[d.param]);
+      if (w <= 0) continue;
+      for (const [id, campos] of Object.entries(buscar(doc, d.pose).values ?? {})) {
+        for (const prop of Object.keys(campos)) {
+          if (!c.tracks?.[id]?.[prop]) continue;
+          if (esquema.tipos.get(buscar(doc, id)?.type)?.properties[prop]?.type !== 'number') continue;
+          const clave = `${id}.${prop} ${d.id}`;
+          if (!avisos.has(clave)) avisos.set(clave, `${id}.${prop}: the clip keys it and driver ${d.id} (${d.param} = ${JSON.stringify(valores[d.param])}${c.tracks?.[d.param] ? ', animated by the clip' : ''}) adds pose ${d.pose} on top (weight ${Math.round(w * 100)}% at ${t} s), so it shows more than the keyed value`);
+        }
+      }
+    }
+  }
+  return [...avisos.values()];
 }

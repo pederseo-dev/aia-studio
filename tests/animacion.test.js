@@ -211,3 +211,74 @@ test('set_keys: setup vuelve al montaje y un momento con solo ease cambia la cur
   assert.equal(buscar(doc, 'hi').tracks.face.fill[1].ease, undefined);
   assert.throws(() => planSetKeys(doc, esquema, 'hi', { keys: [{ t: 0.7, ease: 'step' }] }), /no keyframes at t 0.7.*Keys at: 0, 0.5, 1/);
 });
+
+// ---------- Arreglos de la auditoría de la fase 5 ----------
+
+// Una caja con un param numérico que arranca en 1 (su driver la inclina +30) y una boca switch elegida por un enum.
+function conDrivers(pistas = {}) {
+  return op(
+    crearDocumento({ name: 'Drivers' }),
+    { op: 'create', type: 'switch', id: 'mouth' },
+    { op: 'create', type: 'rect', id: 'mouth_rest', parent: 'mouth', props: { width: 10, height: 2 } },
+    { op: 'create', type: 'ellipse', id: 'mouth_o', parent: 'mouth', props: { width: 8, height: 8 } },
+    { op: 'create', type: 'rect', id: 'box', props: { width: 10, height: 10 } },
+    { op: 'create', type: 'param', id: 'viseme', props: { kind: 'enum', options: ['rest', 'o'] } },
+    { op: 'create', type: 'pose', id: 'v_rest', props: { values: { mouth: { active: 'mouth_rest' } } } },
+    { op: 'create', type: 'pose', id: 'v_o', props: { values: { mouth: { active: 'mouth_o' } } } },
+    { op: 'create', type: 'driver', id: 'd_rest', props: { param: 'viseme', pose: 'v_rest', equals: 'rest' } },
+    { op: 'create', type: 'driver', id: 'd_o', props: { param: 'viseme', pose: 'v_o', equals: 'o' } },
+    { op: 'create', type: 'param', id: 'lean', props: { min: 0, max: 1, default: 1 } },
+    { op: 'create', type: 'pose', id: 'leaning', props: { values: { box: { rotation: 30 } } } },
+    { op: 'create', type: 'driver', id: 'd_lean', props: { param: 'lean', pose: 'leaning' } },
+    { op: 'create', type: 'animation', id: 'talk', props: { duration: 2, loop: 'loop', tracks: pistas } },
+  );
+}
+
+test('loop: el final de la vuelta es el final, no el principio', () => {
+  const doc = conDrivers({ box: { rotation: [{ t: 0, value: 0 }, { t: 2, value: 90 }] } });
+  const clip = buscar(doc, 'talk');
+  assert.equal(tiempoLocal(esquema, clip, 2), 2);
+  assert.equal(tiempoLocal(esquema, clip, 4), 2);
+  assert.equal(tiempoLocal(esquema, clip, 0), 0);
+  assert.equal(tiempoLocal(esquema, clip, 2.5), 0.5);
+  assert.equal(evaluarClip(doc, esquema, clip, 2).values.box.rotation, 90);
+});
+
+test('una pista del clip en algo que no se suma gana sobre un driver activo (enum en peso 1)', () => {
+  const doc = conDrivers({ mouth: { active: [{ t: 0, value: 'mouth_o' }, { t: 1, value: 'mouth_rest' }] } });
+  assert.equal(poseDeClip(doc, esquema, 'talk', 0.5).values.mouth.active, 'mouth_o');
+  assert.equal(poseDeClip(doc, esquema, 'talk', 1.5).values.mouth.active, 'mouth_rest');
+  // Sin pista, el driver sigue eligiendo.
+  const sinPista = conDrivers({ box: { x: [{ t: 0, value: 0 }] } });
+  assert.equal(poseDeClip(sinPista, esquema, 'talk', 0, { viseme: 'o' }).values.mouth.active, 'mouth_o');
+});
+
+test('autokey con drivers: se guarda lo que fija el clip, sin lo que suman los drivers', async () => {
+  const { valorAGuardar, avisosDeClip } = await import('../src/core/animacion.js');
+  const doc = conDrivers({ box: { rotation: [{ t: 0, value: 0 }] } });
+  // Se ve 30 (0 del clip + 30 del driver de lean = 1). Para que se vea 30, el clip guarda 0; para ver 45, guarda 15.
+  assert.equal(poseDeClip(doc, esquema, 'talk', 0).values.box.rotation, 30);
+  assert.equal(valorAGuardar(doc, esquema, 'talk', 0, {}, 'box', 'rotation', 30), 0);
+  assert.equal(valorAGuardar(doc, esquema, 'talk', 0, {}, 'box', 'rotation', 45), 15);
+  // Con lean en 0 no hay aporte; lo discreto se guarda tal cual.
+  assert.equal(valorAGuardar(doc, esquema, 'talk', 0, { lean: 0 }, 'box', 'rotation', 45), 45);
+  assert.equal(valorAGuardar(doc, esquema, 'talk', 0, {}, 'mouth', 'active', 'mouth_o'), 'mouth_o');
+  // El aviso nombra la pista y el driver que le suma.
+  const avisos = avisosDeClip(doc, esquema, 'talk');
+  assert.equal(avisos.length, 1);
+  assert.match(avisos[0], /^box\.rotation: the clip keys it and driver d_lean \(lean = 1\) adds pose leaning on top/);
+});
+
+test('moverClave y la tolerancia compartida de «mismo tiempo»', async () => {
+  const { moverClave, ponerClave, quitarClave } = await import('../src/core/animacion.js');
+  const pistas = { a: { x: [{ t: 0, value: 1 }, { t: 0.5, value: 2, ease: 'ease-out' }, { t: 1, value: 3 }] } };
+  assert.deepEqual(moverClave(pistas, 'a', 'x', 0.5, 0.75).a.x, [{ t: 0, value: 1 }, { t: 0.75, value: 2, ease: 'ease-out' }, { t: 1, value: 3 }]);
+  assert.throws(() => moverClave(pistas, 'a', 'x', 0.5, 1.0004), /already has a keyframe at 1\.0004 s/);
+  assert.equal(moverClave(pistas, 'a', 'x', 0.3, 0.4), null);
+  // 0.3333 y 0.3335 son el mismo momento: poner reemplaza y quitar quita uno solo.
+  const cerca = ponerClave(ponerClave({}, 'b', 'y', 0.3333, 5), 'b', 'y', 0.3335, 6);
+  assert.deepEqual(cerca.b.y, [{ t: 0.3335, value: 6 }]);
+  assert.deepEqual(quitarClave({ b: { y: [{ t: 0.3, value: 1 }, { t: 0.31, value: 2 }] } }, 'b', 'y', 0.3).b.y, [{ t: 0.31, value: 2 }]);
+  // La validación no deja dos keyframes a menos de 1 ms.
+  assert.throws(() => conDrivers({ box: { x: [{ t: 0.3333, value: 1 }, { t: 0.3335, value: 2 }] } }), /at least 1 ms apart/);
+});
