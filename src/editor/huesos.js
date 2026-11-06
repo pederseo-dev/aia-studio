@@ -440,10 +440,11 @@ export function crearHuesos(ctx) {
     crear(e);
   }
 
-  /** Manipulate Bones en el montaje: arrastrar un hueso lo gira; un clic en vacío suelta la selección. */
+  /** Manipulate Bones en el montaje: arrastrar un hueso lo gira; Ctrl + clic lo suma o lo quita; un clic en vacío suelta la selección. */
   function pointerdownManipular(e) {
     const id = e.target.closest('[data-hueso]')?.dataset.hueso;
     if (!id) return seleccionar(null);
+    if (e.ctrlKey || e.metaKey) return alternarSeleccion(id);
     seleccionar(id);
     rotar(e, id);
   }
@@ -545,8 +546,10 @@ export function crearHuesos(ctx) {
       const g = e.target.closest('[data-id]');
       if (!g || !ctx.documentoG.contains(g)) return seleccionar(null);
       id = huesoDe(estado.doc, g.dataset.id) ?? huesoCercanoDePuntos(g.dataset.id, ctx.puntoPantalla(e));
-      if (!id) return seleccionar(g.dataset.id);
+      if (!id) return e.ctrlKey || e.metaKey ? alternarSeleccion(g.dataset.id) : seleccionar(g.dataset.id);
     }
+    // Ctrl + clic: suma o quita de la selección sin girar (para ver y keyar varios en la timeline).
+    if (e.ctrlKey || e.metaKey) return alternarSeleccion(id);
     seleccionar(id);
     rotar(e, id);
   }

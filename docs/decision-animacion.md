@@ -143,5 +143,10 @@ seleccionado, con o sin keys). Para no saturar la interfaz, **se empieza como Mo
   que ve la IA no cambia).
 - Todos los keyframes son **◆**, como en Moho; el **color dice la curva** del tramo que sale de él: verde linear,
   violeta ease, ámbar step, celeste cubic-bezier, blanco si las propiedades del canal tienen curvas distintas.
-- Queda abierta la parte de Rive (la jerarquía de todo lo animado) por si con clips grandes hace falta ver todo a la
-  vez.
+- **Varios a la vez, como en Rive** (pedido del usuario el mismo día): cada cosa seleccionada (en Layers con Ctrl +
+  clic o Shift + clic, o con Ctrl + clic sobre los huesos del lienzo, también en Manipulate, poses y clips) es un
+  **grupo plegable** en la timeline. La fila del grupo resume sus keyframes; ▸/▾ la abre y muestra sus canales como
+  arriba. Para no saturar, solo el principal (el último elegido) arranca abierto; lo que el usuario abre o cierra se
+  recuerda mientras dura la sesión. «◆ Key» keya todos los seleccionados en un solo paso de deshacer.
+- Sigue abierta la otra mitad de Rive: ver todo lo animado sin seleccionarlo (hoy, sin selección, la timeline lista
+  los objetos animados para elegirlos).

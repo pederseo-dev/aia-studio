@@ -9,7 +9,7 @@ import { NOMBRES_DE_CURVA, errorDeCurva, mismoTiempo } from '../core/curvas.js';
 import { buscar } from '../core/documento.js';
 import { leer, leerMeta } from '../core/esquema.js';
 import { valorEfectivo } from '../core/estilos.js';
-import { avisar, ejecutar, esquema, estado, fijar, previsualizar, seleccionar, suscribir } from './estado.js';
+import { avisar, ejecutar, esquema, estado, fijar, previsualizar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 import { clipAbierto, poseActiva } from './huesos.js';
 
 const MODOS = {
@@ -143,6 +143,8 @@ export function montarClips(raiz, lista, botonNuevo) {
 export function montarTimeline(raiz) {
   // Keyframe elegido: { id, prop, t } (solo del editor).
   let elegida = null;
+  // Grupos de la timeline abiertos o cerrados a mano (id → true/false); si no se tocó, solo el principal va abierto.
+  const plegados = new Map();
   raiz.tabIndex = -1;
 
   suscribir((c) => {
@@ -286,16 +288,31 @@ export function montarTimeline(raiz) {
     return b;
   }
 
-  /** ◆ Key: el objeto seleccionado en el tiempo del playhead, con lo que tiene pista o, si no, rotación y posición. */
+  /** ◆ Key: los objetos seleccionados en el tiempo del playhead, cada uno con lo que tiene pista o, si no, rotación y posición. */
   function clavarSeleccion(clip) {
-    const obj = estado.seleccion && buscar(estado.doc, estado.seleccion);
-    if (!obj || esquema.tipos.get(obj.type).resource) return avisar('Select an object (or a bone) to key it', true);
-    const props = esquema.tipos.get(obj.type).properties;
-    let claves = Object.keys(clip.tracks?.[obj.id] ?? {});
-    if (!claves.length) claves = (obj.type === 'bone' ? ['rotation'] : ['x', 'y', 'rotation']).filter((k) => props[k]?.animatable);
-    if (!claves.length) return avisar(`${obj.id} has nothing to key here: change a value in the inspector to key it`, true);
+    const objs = objetosElegidos().filter((o) => o.type !== 'param');
+    if (!objs.length) return avisar('Select objects or bones to key them', true);
     const pose = poseActiva();
-    clavarValores(clip, { [obj.id]: Object.fromEntries(claves.map((k) => [k, pose?.values?.[obj.id]?.[k] ?? valorEfectivo(esquema, estado.doc, obj, k)])) }, obj.id);
+    const valores = {};
+    for (const obj of objs) {
+      const props = esquema.tipos.get(obj.type).properties;
+      let claves = Object.keys(clip.tracks?.[obj.id] ?? {});
+      if (!claves.length) claves = (obj.type === 'bone' ? ['rotation'] : ['x', 'y', 'rotation']).filter((k) => props[k]?.animatable);
+      if (claves.length) valores[obj.id] = Object.fromEntries(claves.map((k) => [k, pose?.values?.[obj.id]?.[k] ?? valorEfectivo(esquema, estado.doc, obj, k)]));
+    }
+    const ids = Object.keys(valores);
+    if (!ids.length) return avisar(`${objs.map((o) => o.id).join(', ')}: nothing to key here; change a value in the inspector to key it`, true);
+    clavarValores(clip, valores, ids.length === 1 ? ids[0] : `${ids.length} objects`);
+  }
+
+  /** Lo seleccionado que tiene canales (objetos, huesos y params; no recursos), en el orden en que se eligió. */
+  function objetosElegidos() {
+    return estado.seleccionados.map((id) => buscar(estado.doc, id)).filter((o) => o && (o.type === 'param' || !esquema.tipos.get(o.type)?.resource));
+  }
+
+  /** Abierto o cerrado: lo que eligió el usuario o, si no lo tocó, abierto solo el principal (o el único). */
+  function grupoAbierto(id, cuantos) {
+    return plegados.has(id) ? plegados.get(id) : cuantos === 1 || id === estado.seleccion;
   }
 
   /**
@@ -357,9 +374,7 @@ export function montarTimeline(raiz) {
       marca.style.left = izquierda(t);
       carril.append(marca);
     }
-    // Sobre la regla, de quién son los canales de abajo (como el nombre de la capa en la timeline de Moho).
-    const elegido = estado.seleccion && buscar(estado.doc, estado.seleccion);
-    regla.append(Object.assign(document.createElement('span'), { className: 'etiqueta nombre-seleccion', textContent: elegido ? elegido.id : '' }), carril);
+    regla.append(Object.assign(document.createElement('span'), { className: 'etiqueta' }), carril);
     cuerpo.append(regla);
 
     // Todos los keyframes del clip, en gris: para ver el ritmo y saber dónde hay algo (clic = llevar el playhead ahí).
@@ -377,41 +392,79 @@ export function montarTimeline(raiz) {
     }
     cuerpo.append(todos);
 
-    const obj = estado.seleccion && buscar(estado.doc, estado.seleccion);
-    const canales = obj ? canalesDe(obj) : [];
-    if (!canales.length) {
+    // Como en Rive: un grupo por cada cosa seleccionada (en Layers o en el lienzo), plegable; abierto, sus canales como en Moho.
+    const objs = objetosElegidos().filter((o) => canalesDe(o).length);
+    if (!objs.length) {
       // Sin selección: qué objetos tiene animados el clip, para ir a ellos.
       const ayuda = document.createElement('div');
       ayuda.className = 'ayuda-canales';
       const animados = Object.keys(clip.tracks ?? {}).filter((id) => buscar(estado.doc, id));
-      ayuda.append(document.createTextNode(obj ? `${obj.id} has no animatable channels. ` : 'Select an object or a bone to see its channels. '));
+      ayuda.append(document.createTextNode(estado.seleccion ? `${estado.seleccion} has no animatable channels. ` : 'Select objects or bones (Ctrl + click in Layers adds more) to see their channels. '));
       if (animados.length) {
         ayuda.append(document.createTextNode('Animated: '));
         for (const id of animados) ayuda.append(boton(id, `Select ${id}`, () => seleccionar(id), 'chip'));
       }
       cuerpo.append(ayuda);
     }
-    for (const canal of canales) {
-      const conPista = canal.props.some((p) => clip.tracks?.[obj.id]?.[p]?.length);
-      const f = fila(canal.nombre, `${obj.id}: ${canal.props.join(', ')}`);
-      if (!conPista) f.classList.add('vacia');
-      const clavar = boton(conPista ? '◆' : '◇', `Key ${obj.id} ${canal.nombre} at the playhead`, () => clavarCanal(clip, obj, canal), 'clavar-canal');
-      const quitar = boton('×', `Delete the whole ${canal.nombre} track of ${obj.id} (all its keyframes)`, () => borrarCanal(clip, obj.id, canal), 'quitar-pista');
-      if (!conPista) quitar.hidden = true;
-      f.etiqueta.append(clavar, quitar);
-      for (const t of tiemposDelCanal(clip, obj.id, canal.props)) {
-        const claves = clavesEn(clip, obj.id, canal.props, t);
-        const rombo = document.createElement('span');
-        const esElegida = elegida && elegida.id === obj.id && elegida.canal === canal.nombre && mismoTiempo(elegida.t, t);
-        rombo.className = `clave ${claseDeCurva(claves)}${esElegida ? ' elegida' : ''}`;
+    for (const obj of objs) {
+      const canales = canalesDe(obj);
+      const abierto = grupoAbierto(obj.id, objs.length);
+      // La fila del objeto: ▸/▾ pliega, el nombre lo hace principal, y en el carril todos sus keyframes juntos.
+      const cabeza = fila(obj.id, `${obj.id} (${obj.type})`);
+      cabeza.classList.add('grupo');
+      if (obj.id === estado.seleccion) cabeza.classList.add('principal');
+      const flecha = boton(abierto ? '▾' : '▸', abierto ? `Collapse ${obj.id}` : `Expand ${obj.id} to see its channels`, () => {
+        plegados.set(obj.id, !abierto);
+        dibujar();
+      }, 'plegar');
+      cabeza.etiqueta.prepend(flecha);
+      const nombre = cabeza.etiqueta.querySelector('.nombre-pista');
+      nombre.style.cursor = 'pointer';
+      nombre.addEventListener('click', () => seleccionarVarios(estado.seleccionados, obj.id));
+      const props = canales.flatMap((c) => c.props);
+      for (const t of tiemposDelCanal(clip, obj.id, props)) {
+        const rombo = Object.assign(document.createElement('span'), { className: 'clave resumen', title: `${obj.id}: keyframes at ${n(t)} s` });
         rombo.style.left = izquierda(t);
-        rombo.title = `${obj.id} ${canal.nombre} at ${n(t)} s: ${claves.map(([p, c]) => `${p} = ${resumir(c.value)}`).join(', ')} (${nombreDeCurva(claves)}). Drag to move it in time.`;
-        rombo.addEventListener('pointerdown', (e) => arrastrarClave(e, clip, obj.id, canal, t, f.carril));
-        f.carril.append(rombo);
+        rombo.addEventListener('pointerdown', (e) => {
+          e.stopPropagation();
+          detener();
+          fijar({ tiempo: t });
+        });
+        cabeza.carril.append(rombo);
       }
-      cuerpo.append(f);
+      cuerpo.append(cabeza);
+      if (abierto) for (const canal of canales) cuerpo.append(filaDeCanal(clip, obj, canal, izquierda));
     }
 
+    cerrarPistas(cuerpo, duracion);
+    return cuerpo;
+  }
+
+  /** Una fila de canal (Position, Rotation…) de un objeto: ◇/◆ para keyarla, × para borrarla y sus keyframes. */
+  function filaDeCanal(clip, obj, canal, izquierda) {
+    const conPista = canal.props.some((p) => clip.tracks?.[obj.id]?.[p]?.length);
+    const f = fila(canal.nombre, `${obj.id}: ${canal.props.join(', ')}`);
+    f.classList.add('canal');
+    if (!conPista) f.classList.add('vacia');
+    const clavar = boton(conPista ? '◆' : '◇', `Key ${obj.id} ${canal.nombre} at the playhead`, () => clavarCanal(clip, obj, canal), 'clavar-canal');
+    const quitar = boton('×', `Delete the whole ${canal.nombre} track of ${obj.id} (all its keyframes)`, () => borrarCanal(clip, obj.id, canal), 'quitar-pista');
+    if (!conPista) quitar.hidden = true;
+    f.etiqueta.append(clavar, quitar);
+    for (const t of tiemposDelCanal(clip, obj.id, canal.props)) {
+      const claves = clavesEn(clip, obj.id, canal.props, t);
+      const rombo = document.createElement('span');
+      const esElegida = elegida && elegida.id === obj.id && elegida.canal === canal.nombre && mismoTiempo(elegida.t, t);
+      rombo.className = `clave ${claseDeCurva(claves)}${esElegida ? ' elegida' : ''}`;
+      rombo.style.left = izquierda(t);
+      rombo.title = `${obj.id} ${canal.nombre} at ${n(t)} s: ${claves.map(([p, c]) => `${p} = ${resumir(c.value)}`).join(', ')} (${nombreDeCurva(claves)}). Drag to move it in time.`;
+      rombo.addEventListener('pointerdown', (e) => arrastrarClave(e, clip, obj.id, canal, t, f.carril));
+      f.carril.append(rombo);
+    }
+    return f;
+  }
+
+  /** El playhead y el clic o arrastre en la regla o en un carril vacío para moverlo. */
+  function cerrarPistas(cuerpo, duracion) {
     const playhead = document.createElement('div');
     playhead.className = 'playhead';
     cuerpo.append(playhead);
