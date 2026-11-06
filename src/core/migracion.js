@@ -120,3 +120,22 @@ function llevarAlMarco(doc, esquema, hueso, { m, rotacion, escala }) {
     Object.assign(valores, convertir(valores, { ...montaje, ...valores }));
   }
 }
+
+/**
+ * Escenas de Animate con pistas de params (de antes de que los params fueran solo de Puppet, o un clip que pasó de
+ * Puppet a Animate a mano): ya no validan y el documento no aceptaría ninguna operación. Se pasan a Puppet, que sí
+ * anima params; así no se pierde ningún keyframe y el usuario decide (volver a Animate quitando esas pistas, o
+ * dejarlo como clip). Devuelve { doc, cambios } como migrarAEsqueletos.
+ */
+export function migrarEscenasConParams(original, esquema) {
+  const conParams = (clip) => Object.keys(clip.tracks ?? {}).some((id) => buscar(original, id)?.type === 'param');
+  const escenas = original.objects.filter((o) => o.type === 'animation' && leer(esquema, o, 'usage') !== 'puppet' && conParams(o));
+  if (!escenas.length) return { doc: original, cambios: [] };
+  const doc = structuredClone(original);
+  const cambios = [];
+  for (const { id } of escenas) {
+    buscar(doc, id).usage = 'puppet';
+    cambios.push(`Scene "${id}" animated parameters, which only Puppet clips can do: it is now a Puppet clip (nothing was lost). To use it as a scene again, delete its parameter tracks and set Usage to animate.`);
+  }
+  return { doc, cambios };
+}

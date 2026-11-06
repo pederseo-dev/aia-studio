@@ -129,3 +129,29 @@ test('en un clip, deshacer compara y restaura por pista, no el clip entero', () 
     await a.operar('clip', [{ op: 'set', target: 'c', props: { tracks: { r: { x: [{ t: 0, value: 5 }], y: [{ t: 0.5, value: 9 }] } } } }], { origen: 'user', nota: 'user r.x' });
     await assert.rejects(a.deshacer('clip', 'ai'), /c\.tracks\.r\.x \(changed by the user/);
   }));
+
+test('leer migra una escena vieja que anima params: pasa a Puppet una sola vez, con una entrada en el historial', async () => {
+  const { readFile, writeFile } = await import('node:fs/promises');
+  const carpeta = await mkdtemp(path.join(tmpdir(), 'aia-'));
+  try {
+    const a = crearAlmacen({ esquema, carpeta });
+    await a.crear('viejo', { name: 'Viejo' }, { origen: 'user' });
+    await a.operar('viejo', [{ op: 'create', type: 'param', id: 'happiness' }, { op: 'create', type: 'animation', id: 'escena', props: { usage: 'puppet', duration: 1, tracks: { happiness: { value: [{ t: 0, value: 1 }] } } } }], { origen: 'user', nota: 'clip' });
+    // Como lo dejaba la versión de antes: una escena con pista de param (hoy no valida).
+    const archivo = path.join(carpeta, 'viejo', 'documento.json');
+    const viejo = JSON.parse(await readFile(archivo, 'utf8'));
+    viejo.objects.find((o) => o.id === 'escena').usage = 'animate';
+    await writeFile(archivo, JSON.stringify(viejo));
+    const [d1, d2] = await Promise.all([a.leer('viejo'), a.leer('viejo')]);
+    assert.equal(d1.objects.find((o) => o.id === 'escena').usage, 'puppet');
+    assert.equal(d2.objects.find((o) => o.id === 'escena').usage, 'puppet');
+    const { entradas } = await a.historial('viejo');
+    assert.equal(entradas.filter((e) => e.tipo === 'migracion').length, 1);
+    assert.match(entradas.at(-1).nota, /Scene "escena" animated parameters/);
+    // Y vuelve a aceptar operaciones.
+    await a.operar('viejo', [{ op: 'set', target: 'escena', props: { duration: 2 } }], { origen: 'user' });
+    assert.match(await readFile(archivo, 'utf8'), /"usage": "puppet"/);
+  } finally {
+    await rm(carpeta, { recursive: true, force: true });
+  }
+});

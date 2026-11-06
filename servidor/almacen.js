@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ErrorDeValidacion, crearDocumento, validar } from '../src/core/documento.js';
+import { migrarEscenasConParams } from '../src/core/migracion.js';
 import { aplicarOperaciones } from '../src/core/operaciones.js';
 
 export const CARPETA_PERSONAJES = fileURLToPath(new URL('../personajes/', import.meta.url));
@@ -135,12 +136,30 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
   };
 
   async function leer(id) {
+    let doc;
     try {
-      return JSON.parse(await fs.readFile(ruta(id, 'documento.json'), 'utf8'));
+      doc = JSON.parse(await fs.readFile(ruta(id, 'documento.json'), 'utf8'));
     } catch (e) {
       if (e.code === 'ENOENT') throw new Error(`No existe el documento "${id}"`);
       throw e;
     }
+    return migrarAlLeer(id, doc);
+  }
+
+  // Migraciones del formato que se hacen solas al leer (ver src/core/migracion.js): se guardan una vez, con una
+  // entrada «migracion» en el historial. Una promesa por documento, para que dos lecturas a la vez no migren dos veces.
+  const migrando = new Map();
+  async function migrarAlLeer(id, doc) {
+    const { doc: migrado, cambios } = migrarEscenasConParams(doc, esquema);
+    if (!cambios.length) return doc;
+    if (!migrando.has(id)) {
+      migrando.set(id, (async () => {
+        await escribir(id, migrado);
+        await registrar(id, { origen: 'system', tipo: 'migracion', nota: cambios.join(' '), ops: [], inversas: [] });
+      })().finally(() => migrando.delete(id)));
+    }
+    await migrando.get(id);
+    return migrado;
   }
 
   async function escribir(id, doc) {
