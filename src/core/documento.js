@@ -172,6 +172,11 @@ export function validar(doc, esquema) {
           errores.push(`${o.id}.${prop}: object "${id}" does not exist.${sugerir(id, ids)}`);
           continue;
         }
+        // Los params son del muñeco: solo un clip de Puppet los anima. Una escena keya los valores mismos.
+        if (destino.type === 'param' && leer(esquema, o, 'usage') !== 'puppet') {
+          errores.push(`${o.id}.${prop}.${id}: scene "${o.id}" (Animate) can't animate params: params belong to Puppet. Key the values themselves instead (set_keys with values or pose), or animate "${id}" in a Puppet clip.`);
+          continue;
+        }
         for (const [k, claves] of Object.entries(campos)) {
           const dueño = `${o.id}.${prop}.${id}.${k}`;
           const fuera = claves.find((c) => c.t < 0 || c.t > duracion + 1e-9);

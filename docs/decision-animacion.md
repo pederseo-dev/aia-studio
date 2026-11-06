@@ -148,8 +148,10 @@ seleccionado, con o sin keys). Para no saturar la interfaz, **se empieza como Mo
   **grupo plegable** en la timeline. La fila del grupo resume sus keyframes; ▸/▾ la abre y muestra sus canales como
   arriba. Para no saturar, solo el principal (el último elegido) arranca abierto; lo que el usuario abre o cierra se
   recuerda mientras dura la sesión. «◆ Key» keya todos los seleccionados en un solo paso de deshacer.
-- **El panel de abajo es solo la timeline** (2026-11-06): Parameters pasó al panel derecho (en Puppet, y en Animate
-  si hay params). Arriba de la timeline, pestañas como las de los documentos: en Animate una por escena (+ crea una,
+- **Los params son solo de Puppet** (2026-11-06, decisión del usuario): el panel Parameters está solo en Puppet y
+  una escena de Animate no anima params (la validación lo rechaza, también por el MCP). Una escena keya los valores
+  mismos o copia una pose con «◆ Pose…» / `set_keys` con `pose`.
+- **El panel de abajo es solo la timeline** (2026-11-06): Parameters pasó al panel derecho, solo en Puppet. Arriba de la timeline, pestañas como las de los documentos: en Animate una por escena (+ crea una,
   × la borra con confirmación), en Puppet el clip abierto (× lo cierra). La barra tiene la reproducción al medio:
   « (keyframe anterior), ▶ y » (keyframe siguiente); a la izquierda el reloj, la duración y el loop; a la derecha
   los botones de keyar y la curva.

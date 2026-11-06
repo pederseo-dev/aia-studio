@@ -36,14 +36,10 @@ montarModos($('#modos'));
 montarClips($('#clips'), $('#lista-clips'), $('#nuevo-clip'));
 montarTimeline($('#timeline'));
 
-// Abajo, la timeline ocupa todo el panel (Design no tiene). Los params van a la derecha, en Animate y en Puppet: una
-// escena puede animar las expresiones del personaje (con la escena abierta, mover un control lo guarda como
-// keyframe). Crear params es de Puppet.
+// Abajo, la timeline ocupa todo el panel (Design no tiene). Los params son del muñeco: el panel Parameters, a la
+// derecha, está solo en Puppet. Una escena de Animate no anima params; keya los valores mismos.
 function dibujarParametros() {
-  // En Animate, sin params no hay nada que mostrar (se crean en Puppet).
-  const hay = estado.doc?.objects.some((o) => o.type === 'param');
-  $('#seccion-parametros').hidden = estado.modo === 'design' || (estado.modo === 'animate' && !hay);
-  $('#nuevo-param').hidden = estado.modo !== 'puppet';
+  $('#seccion-parametros').hidden = estado.modo !== 'puppet';
 }
 suscribir((c) => {
   if ('modo' in c || 'doc' in c) dibujarParametros();

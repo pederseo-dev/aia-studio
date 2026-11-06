@@ -26,7 +26,7 @@ function muñeco(pistas = {}, clip = {}) {
     { op: 'create', type: 'pose', id: 'happy', props: { values: { face: { fill: '#ffff00' }, arm_bone: { rotation: 10 } } } },
     { op: 'create', type: 'param', id: 'happiness' },
     { op: 'create', type: 'driver', id: 'd_happy', props: { param: 'happiness', pose: 'happy' } },
-    { op: 'create', type: 'animation', id: 'wave', props: { duration: 1, ...clip, tracks: pistas } },
+    { op: 'create', type: 'animation', id: 'wave', props: { usage: 'puppet', duration: 1, ...clip, tracks: pistas } },
   );
 }
 
@@ -230,7 +230,7 @@ function conDrivers(pistas = {}) {
     { op: 'create', type: 'param', id: 'lean', props: { min: 0, max: 1, default: 1 } },
     { op: 'create', type: 'pose', id: 'leaning', props: { values: { box: { rotation: 30 } } } },
     { op: 'create', type: 'driver', id: 'd_lean', props: { param: 'lean', pose: 'leaning' } },
-    { op: 'create', type: 'animation', id: 'talk', props: { duration: 2, loop: 'loop', tracks: pistas } },
+    { op: 'create', type: 'animation', id: 'talk', props: { usage: 'puppet', duration: 2, loop: 'loop', tracks: pistas } },
   );
 }
 
@@ -302,7 +302,7 @@ test('MCP: duration corta, setup sin pistas, move_keys, delete_keys con tiempos 
   assert.deepEqual(borrado.ops[0].props.tracks.box.rotation.map((c) => c.t), [0, 0.31, 1]);
   // El árbol lista cada pista con sus keyframes.
   assert.deepEqual(lineasDePistas(buscar(doc, 'talk')), ['box.rotation: 0 = 0 · 0.3 = 5 · 0.31 = 6 · 1 = 10 ease-out']);
-  assert.match(esquemaDelArbol(doc, esquema), /- talk \(animation\) animate, 2 s, loop; .*\n {4}box\.rotation: 0 = 0/);
+  assert.match(esquemaDelArbol(doc, esquema), /- talk \(animation\) puppet, 2 s, loop; .*\n {4}box\.rotation: 0 = 0/);
 });
 
 test('render_preview con animation: tira, avisos de drivers y opciones incompatibles', async () => {
@@ -322,4 +322,15 @@ test('render_preview con animation: tira, avisos de drivers y opciones incompati
   assert.match(errorDeVistaPrevia({ pose: 'v_o', animation: 'talk' }), /either pose or animation/);
   assert.match(errorDeVistaPrevia({ time: 1 }), /need animation/);
   assert.equal(errorDeVistaPrevia({ animation: 'talk', time: 1 }), null);
+});
+
+test('una escena de Animate no anima params; un clip de Puppet sí', () => {
+  const base = op(
+    crearDocumento({ name: 'P' }),
+    { op: 'create', type: 'param', id: 'happiness' },
+  );
+  const pista = { happiness: { value: [{ t: 0, value: 0 }, { t: 1, value: 1 }] } };
+  assert.throws(() => op(base, { op: 'create', type: 'animation', id: 'escena', props: { duration: 1, tracks: pista } }), /can't animate params: params belong to Puppet/);
+  const doc = op(base, { op: 'create', type: 'animation', id: 'gesto', props: { usage: 'puppet', duration: 1, tracks: pista } });
+  assert.equal(evaluarClip(doc, esquema, buscar(doc, 'gesto'), 1).params.happiness, 1);
 });

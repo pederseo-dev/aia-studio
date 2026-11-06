@@ -284,7 +284,8 @@ cortos que se disparan, uno por botón). Los dos últimos usan el mismo recurso,
   \`active\` del switch. Así el clip usa las mismas piezas que la app y se combina con sus drivers. Un param enum siempre
   tiene una opción activa: sus drivers están siempre en juego.
 - **Cómo armarlo:** \`set_keys\` piensa en **momentos**: «en t = 0.3, el brazo así y la boca así» (\`values\`, como en
-  \`set_pose\`), «en t = 0.6, la pose \`happy\`» (\`pose\`, copia sus valores) o params (\`params\`). Crea el clip si no
+  \`set_pose\`), «en t = 0.6, la pose \`happy\`» (\`pose\`, copia sus valores) o, solo en un clip de Puppet, params (\`params\`): los params son
+  del muñeco y una escena de Animate no los anima (keya los valores, o copia la pose con \`pose\`). Crea el clip si no
   existe. \`delete_keys\` quita keyframes y \`move_keys\` los mueve en el tiempo (con su valor y su curva). Revisa el
   movimiento con \`render_preview\` y \`animation\` + \`times\` (una tira de cuadros en una sola imagen) o \`time\` (un
   cuadro). \`get_document\` lista cada pista de un clip con sus keyframes (\`t = valor curva\`), para leerlo sin el JSON.
