@@ -384,3 +384,77 @@ test('move_keys: con targets mueve solo esas pistas; from == to es un error', as
   assert.deepEqual(buscar(doc, 'talk').tracks.box.rotation.map((c) => c.t), [0, 1]);
   assert.throws(() => planMoveKeys(doc, esquema, 'talk', { from: 1, to: 1.0004 }), /same time.*nothing to move/);
 });
+
+test('scale_time: el clip entero en proporción, un tramo con los de después corridos, factor y errores', async () => {
+  const { planScaleTime } = await import('../mcp/animacion.js');
+  const pistas = { arm_bone: { rotation: [{ t: 0, value: 0 }, { t: 0.9, value: 40, ease: 'ease-out' }, { t: 1.8, value: 0 }] }, happiness: { value: [{ t: 0.6, value: 1 }] } };
+  let doc = muñeco(pistas, { duration: 1.8 });
+  // Entero: 1.8 → 1 s, un solo set (un paso de deshacer), con valor y curva.
+  const plan = planScaleTime(doc, esquema, 'wave', { duration: 1 });
+  assert.equal(plan.ops.length, 1);
+  doc = op(doc, ...plan.ops);
+  const clip = buscar(doc, 'wave');
+  assert.equal(clip.duration, 1);
+  assert.deepEqual(clip.tracks.arm_bone.rotation.map((c) => c.t), [0, 0.5, 1]);
+  assert.equal(clip.tracks.arm_bone.rotation[1].ease, 'ease-out');
+  cerca(clip.tracks.happiness.value[0].t, 1 / 3);
+  // Un tramo: 0…0.5 pasa a durar 1 s; lo de después se corre 0.5 s y la duración también.
+  doc = op(doc, ...planScaleTime(doc, esquema, 'wave', { from: 0, to: 0.5, duration: 1 }).ops);
+  assert.deepEqual(buscar(doc, 'wave').tracks.arm_bone.rotation.map((c) => c.t), [0, 1, 1.5]);
+  assert.equal(buscar(doc, 'wave').duration, 1.5);
+  // factor 2: el doble de largo.
+  doc = op(doc, ...planScaleTime(doc, esquema, 'wave', { factor: 2 }).ops);
+  assert.equal(buscar(doc, 'wave').duration, 3);
+  assert.throws(() => planScaleTime(doc, esquema, 'wave', {}), /duration.*or factor/);
+  assert.throws(() => planScaleTime(doc, esquema, 'wave', { duration: 1, factor: 2 }), /one of the two/);
+  assert.throws(() => planScaleTime(doc, esquema, 'wave', { from: 2, to: 1, duration: 1 }), /from < to/);
+  assert.throws(() => planScaleTime(doc, esquema, 'wave', { duration: 0.0005 }), /same time/);
+});
+
+test('set_keys: pose con only o except, valores relativos al montaje y curvas fuertes con nombre', async () => {
+  const { planSetKeys } = await import('../mcp/animacion.js');
+  const doc = muñeco();
+  const pistas = (keys) => planSetKeys(doc, esquema, 'wave', { keys }).ops[0].props.tracks;
+  // only copia solo eso de la pose; except, todo menos eso.
+  let t = pistas([{ t: 0.5, pose: 'happy', only: ['face'] }]);
+  assert.deepEqual(Object.keys(t), ['face']);
+  t = pistas([{ t: 0.5, pose: 'happy', except: ['face.fill'] }]);
+  assert.deepEqual(Object.keys(t), ['arm_bone']);
+  assert.throws(() => pistas([{ t: 0, pose: 'happy', only: ['tail'] }]), /doesn't set "tail".*It sets: face\.fill, arm_bone\.rotation/);
+  assert.throws(() => pistas([{ t: 0, pose: 'happy', only: ['face'], except: ['arm_bone'] }]), /not both/);
+  assert.throws(() => pistas([{ t: 0, only: ['face'] }]), /pass pose too/);
+  // Con setup, la pose filtrada dice qué vuelve al montaje.
+  t = pistas([{ t: 0, setup: true, pose: 'happy', only: ['arm_bone'] }]);
+  assert.deepEqual(Object.keys(t), ['arm_bone']);
+  // Relativos: "+=n" y "-=n" sobre el valor del montaje; solo en números.
+  const conBrazo = op(doc, { op: 'set', target: 'arm', props: { opacity: 0.8 } });
+  t = planSetKeys(conBrazo, esquema, 'wave', { keys: [{ t: 0.2, values: { arm_bone: { rotation: '+=14' }, arm: { opacity: '-=0.3' } } }] }).ops[0].props.tracks;
+  assert.equal(t.arm_bone.rotation[0].value, 14);
+  cerca(t.arm.opacity[0].value, 0.5);
+  assert.throws(() => pistas([{ t: 0, values: { face: { fill: '+=1' } } }]), /relative to the setup.*number properties/);
+  // Curvas fuertes: con nombre, válidas y con la forma esperada.
+  assert.equal(errorDeCurva('ease-in-expo'), null);
+  assert.ok(aplicarCurva('ease-in-expo', 0.5) < 0.1, 'ease-in-expo casi no se mueve a la mitad');
+  assert.ok(aplicarCurva('ease-out-back', 0.7) > 1, 'ease-out-back se pasa del valor');
+  assert.ok(aplicarCurva('ease-in-back', 0.2) < 0, 'ease-in-back toma impulso hacia atrás');
+  t = pistas([{ t: 0, values: { arm_bone: { rotation: 0 } }, ease: 'ease-in-out-cubic' }, { t: 1, values: { arm_bone: { rotation: 10 } } }]);
+  assert.equal(t.arm_bone.rotation[0].ease, 'ease-in-out-cubic');
+});
+
+test('qué poses mueve cada param animado: set_keys y render_preview lo listan; una escena no', async () => {
+  const { planVistaDeClip } = await import('../mcp/animacion.js');
+  const { lineasDePosesDeParams } = await import('../src/core/animacion.js');
+  let doc = muñeco({ happiness: { value: [{ t: 0, value: 0 }, { t: 1, value: 1 }] } });
+  doc = op(doc, { op: 'create', type: 'pose', id: 'look_up', props: { values: { arm_bone: { rotation: -5 } } } }, { op: 'create', type: 'driver', id: 'd_look', props: { param: 'happiness', pose: 'look_up' } });
+  assert.deepEqual(lineasDePosesDeParams(doc, esquema, 'wave'), ['happiness → happy (face, arm_bone), look_up (arm_bone)']);
+  const { texto } = planVistaDeClip(doc, esquema, { animation: 'wave', time: 0.5 });
+  assert.match(texto, /poses que mueven[\s\S]*happiness → happy \(face, arm_bone\), look_up \(arm_bone\)/);
+  doc = op(doc, { op: 'set', target: 'wave', props: { usage: 'animate', tracks: {} } });
+  assert.deepEqual(lineasDePosesDeParams(doc, esquema, 'wave'), []);
+});
+
+test('cada curva con nombre tiene su descripción en la guía', async () => {
+  const { DESCRIPCION_DE_CURVAS, NOMBRES_DE_CURVA } = await import('../src/core/curvas.js');
+  const descritas = DESCRIPCION_DE_CURVAS.flatMap(([nombres]) => nombres.split(', '));
+  assert.deepEqual([...descritas].sort(), [...NOMBRES_DE_CURVA].sort());
+});

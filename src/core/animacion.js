@@ -154,13 +154,15 @@ export function valorAGuardar(doc, esquema, clip, t, params, id, prop, visto) {
 }
 
 /**
- * Los valores del montaje de todo lo que el clip anima (y de lo que fija la pose `poseId`, si se pasa), con los
- * params en su valor inicial: { objeto: { propiedad: valor } }. Es «Key setup» del editor y `setup: true` de set_keys.
+ * Los valores del montaje de todo lo que el clip anima (y de lo que fija `pose`, si se pasa: el id de una pose o sus
+ * values ya filtrados), con los params en su valor inicial: { objeto: { propiedad: valor } }. Es «Key setup» del
+ * editor y `setup: true` de set_keys.
  */
-export function valoresDeMontaje(doc, esquema, pistas, poseId = null) {
+export function valoresDeMontaje(doc, esquema, pistas, pose = null) {
   const params = valoresDeParams(doc, esquema);
   const props = new Map(Object.entries(pistas ?? {}).map(([id, campos]) => [id, new Set(Object.keys(campos))]));
-  for (const [id, campos] of Object.entries(buscar(doc, poseId ?? '')?.values ?? {})) for (const prop of Object.keys(campos)) (props.get(id) ?? props.set(id, new Set()).get(id)).add(prop);
+  const extra = typeof pose === 'string' ? buscar(doc, pose)?.values : pose;
+  for (const [id, campos] of Object.entries(extra ?? {})) for (const prop of Object.keys(campos)) (props.get(id) ?? props.set(id, new Set()).get(id)).add(prop);
   const valores = {};
   for (const [id, nombres] of props) {
     const obj = buscar(doc, id);
@@ -210,4 +212,54 @@ export function avisosDeClip(doc, esquema, clip, params = {}) {
     }
   }
   return [...avisos.values()];
+}
+
+/**
+ * Reescala el tiempo de un tramo de un clip: los keyframes entre `desde` y `hasta` se estiran o comprimen en
+ * proporción para que el tramo dure `largo`, y los de después se corren lo mismo (con su valor y su curva). Sin
+ * desde/hasta, el clip entero. Devuelve { pistas, duracion } (la duración cambia lo mismo que el tramo). Error si
+ * dos keyframes de una pista quedarían en el mismo momento.
+ */
+export function escalarTiempo(pistas, duracion, { desde = 0, hasta = duracion, largo }) {
+  if (!(desde >= 0) || !(hasta <= duracion + 1e-9) || !(hasta - desde > 0)) throw new Error(`the stretch to scale must be inside the clip (0…${redondearTiempo(duracion)} s) with from < to (received ${desde}…${hasta})`);
+  if (!(largo > 0) || !Number.isFinite(largo)) throw new Error(`the new length must be a number of seconds > 0 (received ${largo})`);
+  const viejo = hasta - desde;
+  const delta = largo - viejo;
+  const mapear = (t) => redondearTiempo(t <= desde ? t : t >= hasta - 1e-9 ? t + delta : desde + ((t - desde) * largo) / viejo);
+  const nuevas = {};
+  for (const [id, campos] of Object.entries(pistas ?? {})) {
+    for (const [prop, claves] of Object.entries(campos)) {
+      const movidas = claves.map((c) => ({ ...c, t: mapear(c.t) }));
+      for (let i = 1; i < movidas.length; i++) {
+        if (mismoTiempo(movidas[i - 1].t, movidas[i].t)) throw new Error(`${id}.${prop}: the keyframes at ${claves[i - 1].t} and ${claves[i].t} s would land on the same time (${movidas[i].t} s). Use a longer length, or delete one of them first`);
+      }
+      (nuevas[id] ??= {})[prop] = movidas;
+    }
+  }
+  return { pistas: nuevas, duracion: redondearTiempo(duracion + delta) };
+}
+
+/**
+ * Qué mueve cada param que anima un clip de Puppet: [{ param, poses: [{ driver, pose, objetos }] }], con las poses de
+ * sus drivers y los objetos que toca cada una. Así la IA (y la timeline) ven que animar `happiness` mueve también,
+ * por ejemplo, `mirando_arriba`. En una escena, nada (no tiene params ni drivers).
+ */
+export function posesDeParamsAnimados(doc, esquema, clip) {
+  const c = typeof clip === 'string' ? buscar(doc, clip) : clip;
+  if (c?.type !== 'animation' || esEscena(esquema, c)) return [];
+  const drivers = doc.objects.filter((o) => o.type === 'driver');
+  return Object.keys(c.tracks ?? {})
+    .filter((id) => buscar(doc, id)?.type === 'param' && c.tracks[id].value?.length)
+    .map((param) => ({
+      param,
+      poses: drivers.filter((d) => d.param === param && buscar(doc, d.pose)?.type === 'pose').map((d) => ({ driver: d.id, pose: d.pose, objetos: Object.keys(buscar(doc, d.pose).values ?? {}) })),
+    }));
+}
+
+/** Una línea por param animado: «happiness → happy (eye_l, mouth), mirando_arriba (head_bone)». */
+export function lineasDePosesDeParams(doc, esquema, clip) {
+  const objetos = (ids) => (ids.length > 6 ? `${ids.slice(0, 6).join(', ')}…` : ids.join(', '));
+  return posesDeParamsAnimados(doc, esquema, clip).map(({ param, poses }) =>
+    `${param} → ${poses.length ? poses.map((p) => `${p.pose} (${objetos(p.objetos) || 'empty'})`).join(', ') : 'no driver: it moves nothing'}`,
+  );
 }

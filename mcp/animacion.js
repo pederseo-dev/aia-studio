@@ -1,10 +1,11 @@
 // Lógica de las herramientas de animación del MCP (set_keys, delete_keys, move_keys y el resumen de un clip), sin el
 // transporte, para probarlas sin levantar el servidor. Los textos de error los lee la IA y el aviso del editor.
 
-import { avisosDeClip, esEscena, evaluarClip, moverClave, ponerClave, tiemposDeClaves, valoresDeMontaje } from '../src/core/animacion.js';
+import { avisosDeClip, escalarTiempo, esEscena, evaluarClip, lineasDePosesDeParams, moverClave, ponerClave, tiemposDeClaves, valoresDeMontaje } from '../src/core/animacion.js';
 import { mismoTiempo } from '../src/core/curvas.js';
 import { buscar } from '../src/core/documento.js';
 import { leer, sugerir } from '../src/core/esquema.js';
+import { valorEfectivo } from '../src/core/estilos.js';
 import { parsearD } from '../src/core/trazado.js';
 import { svgDocumento, svgTira } from '../src/render/svg.js';
 
@@ -21,26 +22,61 @@ function clipDe(doc, animacion) {
 const elegida = (targets, id, prop) => !targets?.length || targets.some((x) => x === id || x === `${id}.${prop}` || (prop === 'vertices' && x === `${id}.d`));
 
 /**
+ * Los values de la pose de un momento, filtrados por `only` o `except` ("objeto.propiedad" o un id; "d" vale por
+ * "vertices"). Error si la pose no existe, si se pasan los dos filtros o si uno nombra algo que la pose no fija.
+ */
+function valoresDePose(doc, k, i) {
+  if (k.pose == null) {
+    if (k.only?.length || k.except?.length) throw new Error(`keys[${i}]: only and except filter what pose copies; pass pose too`);
+    return null;
+  }
+  const pose = buscar(doc, k.pose);
+  if (pose?.type !== 'pose') {
+    const poses = doc.objects.filter((o) => o.type === 'pose').map((o) => o.id);
+    throw new Error(`keys[${i}].pose: there is no pose "${k.pose}".${sugerir(k.pose, poses)} Poses: ${poses.join(', ') || 'none'}`);
+  }
+  if (k.only?.length && k.except?.length) throw new Error(`keys[${i}]: pass only or except, not both`);
+  const filtro = k.only?.length ? k.only : k.except;
+  const valores = structuredClone(pose.values ?? {});
+  if (!filtro?.length) return valores;
+  const tiene = Object.entries(valores).flatMap(([id, campos]) => Object.keys(campos).map((prop) => `${id}.${prop}`));
+  for (const x of filtro) {
+    if (!Object.entries(valores).some(([id, campos]) => Object.keys(campos).some((prop) => elegida([x], id, prop)))) {
+      throw new Error(`keys[${i}].${k.only?.length ? 'only' : 'except'}: pose "${k.pose}" doesn't set "${x}".${sugerir(x, Object.keys(valores))} It sets: ${tiene.join(', ') || 'nothing'}`);
+    }
+  }
+  const quedan = {};
+  for (const [id, campos] of Object.entries(valores)) {
+    for (const [prop, v] of Object.entries(campos)) if (elegida(filtro, id, prop) === !!k.only?.length) (quedan[id] ??= {})[prop] = v;
+  }
+  return quedan;
+}
+
+/** "+=14" o "-=2.5": un valor relativo al del montaje (solo en propiedades numéricas). */
+const RELATIVO = /^([+-])=\s*(\d+(?:\.\d+)?|\.\d+)$/;
+
+/**
  * Lo que fija un momento de set_keys: con `setup`, el montaje de todo lo que el clip ya anima (y de lo que trae la
- * pose del momento); después los valores de su pose, values (con "d" convertido) y params.
+ * pose del momento); después los valores de su pose (filtrada con only o except), values (con "d" convertido y los
+ * relativos "+=n" sumados al montaje) y params.
  */
 function valoresDelMomento(doc, esquema, pistas, k, i) {
   let valores = {};
-  if (k.setup) {
-    valores = valoresDeMontaje(doc, esquema, pistas, k.pose);
-    // Con setup, la pose solo dice qué propiedades vuelven al montaje (no se copian sus valores).
-    k = { ...k, pose: undefined };
-  }
-  if (k.pose != null) {
-    const pose = buscar(doc, k.pose);
-    if (pose?.type !== 'pose') {
-      const poses = doc.objects.filter((o) => o.type === 'pose').map((o) => o.id);
-      throw new Error(`keys[${i}].pose: there is no pose "${k.pose}".${sugerir(k.pose, poses)} Poses: ${poses.join(', ') || 'none'}`);
-    }
-    for (const [id, campos] of Object.entries(pose.values ?? {})) valores[id] = { ...campos };
-  }
+  const dePose = valoresDePose(doc, k, i);
+  // Con setup, la pose solo dice qué propiedades vuelven al montaje (no se copian sus valores).
+  if (k.setup) valores = valoresDeMontaje(doc, esquema, pistas, dePose);
+  else if (dePose) valores = dePose;
   for (const [id, campos] of Object.entries(k.values ?? {})) {
     const propios = { ...campos };
+    for (const [prop, v] of Object.entries(propios)) {
+      const m = typeof v === 'string' && v.match(RELATIVO);
+      if (!m) continue;
+      const obj = buscar(doc, id);
+      if (!obj || obj.type === 'param' || esquema.tipos.get(obj.type)?.properties[prop]?.type !== 'number') {
+        throw new Error(`keys[${i}].values.${id}.${prop}: "${v}" (relative to the setup) only works on number properties of objects${obj ? '' : ` and there is no object "${id}"`}`);
+      }
+      propios[prop] = Math.round((valorEfectivo(esquema, doc, obj, prop) + (m[1] === '-' ? -1 : 1) * Number(m[2])) * 1e6) / 1e6;
+    }
     if (propios.d !== undefined) {
       if (buscar(doc, id)?.type !== 'path') throw new Error(`keys[${i}].values.${id}.d: "d" only works on paths`);
       const subtrazados = parsearD(propios.d);
@@ -206,7 +242,8 @@ export function planVistaDeClip(doc, esquema, { region, bones, params, animation
   const animados = Object.keys(evaluarClip(doc, esquema, clip, 0).params);
   const cuadros = tiempos.length === 1 ? `cuadro en t = ${tiempos[0]} s` : `${tiempos.length} cuadros en t = ${tiempos.join(', ')} s`;
   const avisos = avisosDeClip(doc, esquema, clip, params ?? {});
-  const texto = `Clip "${animation}" (${resumenDeClip(esquema, clip)}): ${cuadros}${animados.length ? `; el clip anima los params ${animados.join(', ')}` : ''}.${avisos.length ? `\nOjo, drivers que suman encima del clip:\n${avisos.map((a) => `- ${a}`).join('\n')}` : ''}`;
+  const poses = textoDePosesDeParams(doc, esquema, clip);
+  const texto = `Clip "${animation}" (${resumenDeClip(esquema, clip)}): ${cuadros}${animados.length ? `; el clip anima los params ${animados.join(', ')}` : ''}.${poses ? `\n${poses}` : ''}${avisos.length ? `\nOjo, drivers que suman encima del clip:\n${avisos.map((a) => `- ${a}`).join('\n')}` : ''}`;
   return { svg, ancho: tiempos.length === 1 ? 600 : 1000, texto };
 }
 
@@ -215,4 +252,27 @@ export function errorDeVistaPrevia({ pose, animation, time, times } = {}) {
   if (animation && pose) return 'pass either pose or animation, not both: a clip already sets its own values (to see a pose at some moment of a clip, key it there with set_keys and pose)';
   if (!animation && (time != null || times?.length)) return 'time and times need animation (the id of a clip)';
   return null;
+}
+
+/**
+ * scale_time: estira o comprime en proporción el tiempo de un clip (o del tramo from…to) para que dure `duration`
+ * (o `factor` veces lo que dura). Los keyframes de después del tramo se corren y la duración del clip cambia lo mismo.
+ * Un solo paso de deshacer.
+ */
+export function planScaleTime(doc, esquema, animacion, { duration, factor, from, to } = {}) {
+  const clip = clipDe(doc, animacion);
+  const total = leer(esquema, clip, 'duration');
+  if ((duration === undefined) === (factor === undefined)) throw new Error('pass duration (the new length in seconds) or factor (0.5 = twice as fast), one of the two');
+  const desde = from ?? 0;
+  const hasta = to ?? total;
+  const largo = duration ?? (hasta - desde) * factor;
+  if (!tiemposDeClaves(clip).length) throw new Error(`"${animacion}" has no keyframes to scale; to change its length use set_keys with duration`);
+  const { pistas, duracion } = escalarTiempo(clip.tracks, total, { desde, hasta, largo });
+  return { ops: [{ op: 'set', target: animacion, props: { tracks: pistas, duration: duracion } }], antes: total, duracion, desde, hasta: n(hasta), largo: n(largo) };
+}
+
+/** Las líneas «param → poses (objetos)» de un clip de Puppet, como texto para la IA (vacío si no anima params). */
+export function textoDePosesDeParams(doc, esquema, clip) {
+  const lineas = lineasDePosesDeParams(doc, esquema, clip);
+  return lineas.length ? `Params animados y las poses que mueven (por sus drivers; todas se suman):\n${lineas.map((l) => `- ${l}`).join('\n')}` : '';
 }

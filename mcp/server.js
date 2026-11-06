@@ -15,7 +15,8 @@ import { svgDocumento } from '../src/render/svg.js';
 import { crearAlmacen } from '../servidor/almacen.js';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { svgAPng } from '../servidor/png.js';
-import { errorDeVistaPrevia, planDeleteKeys, planMoveKeys, planSetKeys, planVistaDeClip, resumenDeClip } from './animacion.js';
+import { NOMBRES_DE_CURVA } from '../src/core/curvas.js';
+import { errorDeVistaPrevia, planDeleteKeys, planMoveKeys, planScaleTime, planSetKeys, planVistaDeClip, resumenDeClip } from './animacion.js';
 import { comprobarBorrado, esquemaDelArbol as arbol, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from './herramientas.js';
 
 const esquema = cargarEsquema();
@@ -393,15 +394,17 @@ const momento = z.object({
   values: z
     .record(z.string(), z.record(z.string(), z.any()))
     .optional()
-    .describe('{ id_de_objeto: { propiedad: valor } } absolutos, como en set_pose (un path acepta "d"); por ejemplo { "arm_r_bone": { "rotation": -60 }, "tail": { "opacity": 0.5 } }. En un clip de puppet, si un param elige una variante (visemas), anima el param en params y no el active del switch; en una escena (animate), keya el active'),
+    .describe('{ id_de_objeto: { propiedad: valor } } absolutos, como en set_pose (un path acepta "d"); por ejemplo { "arm_r_bone": { "rotation": -60 }, "tail": { "opacity": 0.5 } }. Un número puede ser relativo al montaje con un texto "+=n" o "-=n": { "head_bone": { "rotation": "+=14" } } = 14° más que en el montaje. En un clip de puppet, si un param elige una variante (visemas), anima el param en params y no el active del switch; en una escena (animate), keya el active'),
   params: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])).optional().describe('solo en un clip de puppet: { id_de_param: valor } en ese momento, por ejemplo { "happiness": 1, "viseme": "o" }; sus drivers suman las poses. Una escena (animate) no anima params ni tiene drivers: copia la pose con pose o keya los valores'),
-  pose: z.string().optional().describe('id de una pose: copia todos sus valores como keyframes en ese momento (values los pisa)'),
+  pose: z.string().optional().describe('id de una pose: copia sus valores como keyframes en ese momento (values los pisa); con only o except, solo una parte'),
+  only: z.array(z.string()).optional().describe('con pose: copiar solo esto de la pose ("objeto.propiedad" o un id), por ejemplo ["eye_l", "eye_r", "mouth.active"]'),
+  except: z.array(z.string()).optional().describe('con pose: copiar todo menos esto ("objeto.propiedad" o un id), por ejemplo ["tail_bone"]'),
   setup: z.boolean().optional().describe('true = en ese momento, todo lo que el clip anima (y lo que fija pose, si la pasas) vuelve al valor del montaje, y en puppet sus params al inicial; values los pisa. Sirve para empezar y terminar en reposo'),
   targets: z.array(z.string()).optional().describe('con un momento que solo trae ease: a qué pistas cambiarle la curva ("objeto.propiedad" o un id); por defecto, a todas las que tienen keyframe en ese t'),
   ease: z
-    .union([z.enum(['linear', 'step', 'ease-in', 'ease-out', 'ease-in-out']), z.array(z.number()).length(4)])
+    .union([z.enum(NOMBRES_DE_CURVA), z.array(z.number()).length(4)])
     .optional()
-    .describe('curva del tramo que SALE de estos keyframes hacia los siguientes: linear (por defecto), step, ease-in, ease-out, ease-in-out o [x1, y1, x2, y2] (cubic-bezier de CSS). Un momento con solo t y ease cambia la curva de los keyframes que ya hay en ese t, sin tocar sus valores'),
+    .describe('curva del tramo que SALE de estos keyframes hacia los siguientes: linear (por defecto), step, ease-in, ease-out, ease-in-out, las fuertes (ease-in-quad, -cubic, -expo, -back y sus -out y -in-out; la guía dice qué hace cada una) o [x1, y1, x2, y2] (cubic-bezier de CSS). Un momento con solo t y ease cambia la curva de los keyframes que ya hay en ese t, sin tocar sus valores'),
 });
 
 servidor.registerTool(
@@ -436,6 +439,7 @@ servidor.registerTool(
     const { doc, avisos } = await almacen.operar(id, plan.ops, { origen: ORIGEN, nota: note ?? `animation ${animation}` });
     const notas = [...avisos];
     if (plan.alargadaDesde != null) notas.push(`duration pasó de ${plan.alargadaDesde} a ${plan.duracion} s para que entren los keyframes`);
+    // La vista del clip ya lista qué poses mueve cada param animado (planVistaDeClip).
     return vistaPrevia(doc, { width, animation, bones: show_bones }, notas.length ? `Avisos: ${notas.join('; ')}` : '');
   }),
 );
@@ -483,6 +487,32 @@ servidor.registerTool(
     const { ops, movidas } = planMoveKeys(await almacen.leer(id), esquema, animation, { from, to, targets });
     const { doc } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `move keys in ${animation} ${from} → ${to} s` });
     return vistaPrevia(doc, { width, animation }, `Movidos de ${from} a ${to} s: ${movidas.join(', ')}.`);
+  }),
+);
+
+servidor.registerTool(
+  'scale_time',
+  {
+    description:
+      'Estira o comprime el tiempo de un clip en proporción, en un solo paso de deshacer: todos los keyframes (con su ' +
+      'valor y su curva) y la duración. Con from y to, solo ese tramo: sus keyframes se reparten en el largo nuevo y ' +
+      'los de después se corren. Para acortar un saludo de 1.8 a 1 s: duration 1. Para que vaya el doble de rápido: factor 0.5.',
+    inputSchema: {
+      id,
+      animation: z.string().describe('id del clip'),
+      duration: z.number().positive().optional().describe('largo nuevo en segundos, del clip entero o del tramo from…to'),
+      factor: z.number().positive().optional().describe('en vez de duration: cuántas veces el largo actual (0.5 = el doble de rápido, 2 = la mitad de rápido)'),
+      from: z.number().min(0).optional().describe('inicio del tramo, en segundos (por defecto 0)'),
+      to: z.number().min(0).optional().describe('fin del tramo, en segundos (por defecto, la duración del clip)'),
+      note: z.string().optional().describe('qué hace, para el historial'),
+      width: z.number().int().min(64).max(2048).optional().describe('ancho de la vista previa'),
+    },
+  },
+  seguro(async ({ id, animation, duration, factor, from, to, note, width }) => {
+    const plan = planScaleTime(await almacen.leer(id), esquema, animation, { duration, factor, from, to });
+    const tramo = from == null && to == null ? '' : ` (tramo ${plan.desde}…${plan.hasta} s → ${plan.largo} s)`;
+    const { doc } = await almacen.operar(id, plan.ops, { origen: ORIGEN, nota: note ?? `scale time of ${animation}: ${plan.antes} → ${plan.duracion} s` });
+    return vistaPrevia(doc, { width, animation }, `${animation}: ${plan.antes} → ${plan.duracion} s${tramo}.`);
   }),
 );
 
