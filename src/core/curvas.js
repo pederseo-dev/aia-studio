@@ -2,13 +2,37 @@
 // Moho y Rive). Todas son cubic-bezier como las de CSS, para que pasen sin pérdida a CSS, Lottie y Rive; `step`
 // mantiene el valor hasta el keyframe siguiente.
 
+// Las fuertes (quad, cubic, expo, back) son las aproximaciones cubic-bezier clásicas (las de easings.net).
 export const CURVAS_CON_NOMBRE = {
   linear: [0, 0, 1, 1],
   'ease-in': [0.42, 0, 1, 1],
   'ease-out': [0, 0, 0.58, 1],
   'ease-in-out': [0.42, 0, 0.58, 1],
+  'ease-in-quad': [0.11, 0, 0.5, 0],
+  'ease-out-quad': [0.5, 1, 0.89, 1],
+  'ease-in-out-quad': [0.45, 0, 0.55, 1],
+  'ease-in-cubic': [0.32, 0, 0.67, 0],
+  'ease-out-cubic': [0.33, 1, 0.68, 1],
+  'ease-in-out-cubic': [0.65, 0, 0.35, 1],
+  'ease-in-expo': [0.7, 0, 0.84, 0],
+  'ease-out-expo': [0.16, 1, 0.3, 1],
+  'ease-in-out-expo': [0.87, 0, 0.13, 1],
+  'ease-in-back': [0.36, 0, 0.66, -0.56],
+  'ease-out-back': [0.34, 1.56, 0.64, 1],
+  'ease-in-out-back': [0.68, -0.6, 0.32, 1.6],
 };
 export const NOMBRES_DE_CURVA = [...Object.keys(CURVAS_CON_NOMBRE), 'step'];
+
+/** Qué hace cada curva, para la guía de la IA (una línea por familia). */
+export const DESCRIPCION_DE_CURVAS = [
+  ['linear', 'velocidad pareja (por defecto)'],
+  ['step', 'se mantiene y cambia de golpe en el keyframe siguiente'],
+  ['ease-in, ease-out, ease-in-out', 'suaves: arranca despacio, frena al llegar o las dos cosas'],
+  ['ease-in-quad, ease-out-quad, ease-in-out-quad', 'un poco más marcadas que las suaves'],
+  ['ease-in-cubic, ease-out-cubic, ease-in-out-cubic', 'marcadas: un arranque o un frenado que se nota'],
+  ['ease-in-expo, ease-out-expo, ease-in-out-expo', 'muy fuertes: casi quieto y después de golpe (ease-in-expo = «vuelve de golpe» al final), o un golpe que frena en seco (ease-out-expo)'],
+  ['ease-in-back, ease-out-back, ease-in-out-back', 'se pasan: ease-in-back toma impulso hacia atrás antes de salir; ease-out-back se pasa del valor y vuelve (un rebote corto)'],
+];
 
 /**
  * Dos keyframes de una pista a menos de esto (en segundos) son el mismo momento: ponerlos reemplaza, quitar o mover
