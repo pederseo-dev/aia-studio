@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { buscar, crearDocumento, validar } from '../src/core/documento.js';
-import { evaluarClip, poseDeClip, tiempoLocal, tiemposDeClaves, valorDePista } from '../src/core/animacion.js';
+import { avisosDeClip, evaluarClip, poseDeClip, valorAGuardar, tiempoLocal, tiemposDeClaves, valorDePista } from '../src/core/animacion.js';
 import { aplicarCurva, errorDeCurva } from '../src/core/curvas.js';
 import { aplicarOperaciones } from '../src/core/operaciones.js';
 import { svgDocumento } from '../src/render/svg.js';
@@ -333,4 +333,54 @@ test('una escena de Animate no anima params; un clip de Puppet sí', () => {
   assert.throws(() => op(base, { op: 'create', type: 'animation', id: 'escena', props: { duration: 1, tracks: pista } }), /can't animate params: params belong to Puppet/);
   const doc = op(base, { op: 'create', type: 'animation', id: 'gesto', props: { usage: 'puppet', duration: 1, tracks: pista } });
   assert.equal(evaluarClip(doc, esquema, buscar(doc, 'gesto'), 1).params.happiness, 1);
+});
+
+test('una escena de Animate se ve sin drivers: montaje + keyframes, sin avisos; render_preview rechaza params', async () => {
+  const { planVistaDeClip } = await import('../mcp/animacion.js');
+  // lean arranca en 1: en un clip de Puppet su driver gira la caja 30°; en una escena, no.
+  const pistas = { box: { x: [{ t: 0, value: 0 }, { t: 1, value: 50 }] } };
+  let doc = conDrivers(pistas);
+  assert.equal(poseDeClip(doc, esquema, 'talk', 1).values.box.rotation, 30);
+  assert.equal(avisosDeClip(doc, esquema, 'talk').length, 0); // no anima la rotación: nada que avisar
+  doc = op(doc, { op: 'create', type: 'animation', id: 'escena', props: { duration: 1, tracks: { box: { rotation: [{ t: 0, value: 5 }] } } } });
+  const vista = poseDeClip(doc, esquema, 'escena', 0.5, { lean: 1 });
+  assert.equal(vista.values.box.rotation, 5);
+  assert.equal(vista.values.mouth, undefined); // el driver de viseme tampoco suma
+  assert.deepEqual(vista.params, {});
+  assert.deepEqual(avisosDeClip(doc, esquema, 'escena', { lean: 1 }), []);
+  // El autokey guarda lo que se ve (no hay aporte de drivers que restar).
+  assert.equal(valorAGuardar(doc, esquema, 'escena', 0, {}, 'box', 'rotation', 12), 12);
+  assert.throws(() => planVistaDeClip(doc, esquema, { animation: 'escena', params: { lean: 1 } }), /is a scene \(Animate\).*set_keys and pose/);
+  assert.doesNotThrow(() => planVistaDeClip(doc, esquema, { animation: 'escena', time: 0 }));
+});
+
+test('params en una escena: pasar un clip de Puppet a Animate, set_keys sobre una escena nueva y la migración', async () => {
+  const { planSetKeys } = await import('../mcp/animacion.js');
+  const { migrarEscenasConParams } = await import('../src/core/migracion.js');
+  const doc = muñeco({ happiness: { value: [{ t: 0, value: 0 }, { t: 1, value: 1 }] } });
+  // Un clip de Puppet con pistas de params no puede pasar a escena: el error dice cómo seguir.
+  assert.throws(() => op(doc, { op: 'set', target: 'wave', props: { usage: 'animate' } }), /if this is a Puppet clip, pass usage: "puppet".*delete_keys with targets: \["happiness"\]/i);
+  // set_keys con params sobre una escena nueva (usage por defecto animate): rechazado.
+  const plan = planSetKeys(doc, esquema, 'intro', { keys: [{ t: 0, params: { happiness: 1 } }] });
+  assert.throws(() => op(doc, ...plan.ops), /scene "intro" \(Animate\) can't animate params/);
+  assert.doesNotThrow(() => op(doc, ...planSetKeys(doc, esquema, 'intro', { usage: 'puppet', keys: [{ t: 0, params: { happiness: 1 } }] }).ops));
+  // Un documento viejo con una escena que anima params: la migración la pasa a Puppet sin perder keyframes.
+  const viejo = structuredClone(doc);
+  buscar(viejo, 'wave').usage = 'animate';
+  assert.ok(validar(viejo, esquema).errores.length);
+  const { doc: migrado, cambios } = migrarEscenasConParams(viejo, esquema);
+  assert.equal(buscar(migrado, 'wave').usage, 'puppet');
+  assert.deepEqual(buscar(migrado, 'wave').tracks, buscar(viejo, 'wave').tracks);
+  assert.match(cambios[0], /Scene "wave" animated parameters.*now a Puppet clip/);
+  assert.deepEqual(validar(migrado, esquema).errores, []);
+  assert.equal(migrarEscenasConParams(doc, esquema).doc, doc);
+});
+
+test('move_keys: con targets mueve solo esas pistas; from == to es un error', async () => {
+  const { planMoveKeys } = await import('../mcp/animacion.js');
+  let doc = conDrivers({ box: { rotation: [{ t: 0, value: 0 }, { t: 1, value: 10 }], x: [{ t: 0, value: 0 }, { t: 1, value: 50 }] } });
+  doc = op(doc, ...planMoveKeys(doc, esquema, 'talk', { from: 1, to: 1.5, targets: ['box.x'] }).ops);
+  assert.deepEqual(buscar(doc, 'talk').tracks.box.x.map((c) => c.t), [0, 1.5]);
+  assert.deepEqual(buscar(doc, 'talk').tracks.box.rotation.map((c) => c.t), [0, 1]);
+  assert.throws(() => planMoveKeys(doc, esquema, 'talk', { from: 1, to: 1.0004 }), /same time.*nothing to move/);
 });

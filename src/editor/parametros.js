@@ -1,7 +1,8 @@
-// Panel de parámetros (a la derecha, en Animate y Puppet): un control por param (deslizador, casilla o lista) y sus drivers. Mover un control
+// Panel de parámetros (a la derecha, solo en Puppet: los params son del muñeco): un control por param (deslizador, casilla o lista) y sus drivers. Mover un control
 // pasa a la vista Parámetros: el lienzo muestra la mezcla de poses que dan los drivers. Los valores de los controles
 // son del editor (no se guardan); lo que se guarda son los params, los drivers y las poses.
 
+import { esEscena } from '../core/animacion.js';
 import { buscar } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { pesoDeDriver, valoresDeParams } from '../core/mezcla.js';
@@ -10,7 +11,7 @@ import { clipAbierto, opsDePose, poseActiva } from './huesos.js';
 
 export function montarParametros(raiz, botonNuevo) {
   suscribir((c) => {
-    if ('doc' in c || 'seleccion' in c || 'id' in c || 'pose' in c) return dibujar();
+    if ('doc' in c || 'seleccion' in c || 'id' in c || 'pose' in c || 'modo' in c) return dibujar();
     if ('tiempo' in c && clipAbierto()) return raiz.contains(document.activeElement) ? actualizarPesos() : dibujar();
     // Mientras se arrastra un control, no se rehace el panel (se cortaría el arrastre): solo se actualizan los pesos.
     if ('params' in c) raiz.contains(document.activeElement) ? actualizarPesos() : dibujar();
@@ -40,7 +41,8 @@ export function montarParametros(raiz, botonNuevo) {
   function dibujar() {
     const doc = estado.doc;
     botonNuevo.disabled = !doc;
-    if (!doc) return raiz.replaceChildren();
+    // Solo Puppet tiene params (en una escena no hay valores de params que mostrar).
+    if (!doc || estado.modo !== 'puppet') return raiz.replaceChildren();
     const params = doc.objects.filter((o) => o.type === 'param');
     if (!params.length) {
       raiz.innerHTML = '<p class="ayuda">No parameters. A parameter (happiness, head turn, mouth…) drives one or more poses through drivers: create one with “＋ Parameter” and connect it to a pose.</p>';
@@ -60,7 +62,7 @@ export function montarParametros(raiz, botonNuevo) {
     ejecutar(opsDePose(estado.doc, clip.id, id, { value: v }), `${clip.id}: ${id} at ${+estado.tiempo.toFixed(3)} s`, { agrupar: `clip:${clip.id}.${id}.${estado.tiempo}` });
   };
   /** Valores que muestran los controles: los del clip abierto en el playhead o los de la vista Parámetros. */
-  const valoresVistos = (doc) => (clipAbierto(doc) ? poseActiva(doc).params : valoresDeParams(doc, esquema, estado.params ?? {}));
+  const valoresVistos = (doc) => (clipAbierto(doc) && !esEscena(esquema, clipAbierto(doc)) ? poseActiva(doc).params : valoresDeParams(doc, esquema, estado.params ?? {}));
 
   function fila(doc, param, valor) {
     const div = document.createElement('div');

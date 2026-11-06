@@ -1,7 +1,7 @@
 // Lógica de las herramientas de animación del MCP (set_keys, delete_keys, move_keys y el resumen de un clip), sin el
 // transporte, para probarlas sin levantar el servidor. Los textos de error los lee la IA y el aviso del editor.
 
-import { avisosDeClip, evaluarClip, moverClave, ponerClave, tiemposDeClaves, valoresDeMontaje } from '../src/core/animacion.js';
+import { avisosDeClip, esEscena, evaluarClip, moverClave, ponerClave, tiemposDeClaves, valoresDeMontaje } from '../src/core/animacion.js';
 import { mismoTiempo } from '../src/core/curvas.js';
 import { buscar } from '../src/core/documento.js';
 import { leer, sugerir } from '../src/core/esquema.js';
@@ -147,6 +147,8 @@ export function planMoveKeys(doc, esquema, animacion, { from, to, targets } = {}
   const clip = clipDe(doc, animacion);
   const duracion = leer(esquema, clip, 'duration');
   if (!(to >= 0) || to > duracion + 1e-9) throw new Error(`to must be between 0 and the clip's duration (${n(duracion)} s); to move a keyframe later, first make duration longer`);
+  // Mover al mismo tiempo no cambia nada: error, para no dejar en el historial una entrada vacía.
+  if (mismoTiempo(from, to)) throw new Error(`from and to are the same time (${n(from)} s): nothing to move`);
   let pistas = clip.tracks ?? {};
   const movidas = [];
   for (const [id, campos] of Object.entries(clip.tracks ?? {})) {
@@ -196,6 +198,8 @@ export function tiemposParaTira(clip, maximo = 12) {
  */
 export function planVistaDeClip(doc, esquema, { region, bones, params, animation, time, times }) {
   const clip = clipDe(doc, animation);
+  // Una escena se ve sin params ni drivers (como se exporta): params ahí no cambiaría nada y confundiría.
+  if (esEscena(esquema, clip) && Object.keys(params ?? {}).length) throw new Error(`"${animation}" is a scene (Animate): scenes play without params or drivers (setup + keyframes). Drop params, or to see an expression in the scene, key it with set_keys and pose`);
   const tiempos = time != null ? [time] : times?.length ? times : tiemposParaTira(clip);
   const opciones = { animation, params: params ?? {}, region, huesos: bones };
   const svg = tiempos.length === 1 ? svgDocumento(doc, esquema, { ...opciones, time: tiempos[0] }) : svgTira(doc, esquema, { ...opciones, times: tiempos });

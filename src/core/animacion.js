@@ -3,6 +3,9 @@
 // el video y Lottie. Orden (ver docs/decision-animacion.md §4):
 //
 //   montaje → clip en t (valores absolutos) → params (los del clip pisan a los de afuera) → drivers suman sus poses
+//
+// Eso es en un clip de Puppet. Una escena de Animate se evalúa sin drivers: montaje + keyframes, como Design + lo
+// animado (los params, las poses y los drivers son del muñeco; en una escena, una pose se copia como keyframes).
 
 import { buscar } from './documento.js';
 import { aplicarCurva, mismoTiempo } from './curvas.js';
@@ -80,14 +83,19 @@ export function evaluarClip(doc, esquema, clip, t) {
   return { values, params, tiempo: local };
 }
 
+/** Una escena de Animate (no un clip de Puppet): se evalúa sin params ni drivers. */
+export const esEscena = (esquema, clip) => clip?.type === 'animation' && leer(esquema, clip, 'usage') !== 'puppet';
+
 /**
- * La pose que se ve con un clip en el tiempo t: lo animado, con los drivers sumando sus poses encima. `params` son
- * los de afuera (la app, los sliders); los que el clip anima los pisan.
+ * La pose que se ve con un clip en el tiempo t. En un clip de Puppet, lo animado con los drivers sumando sus poses
+ * encima; `params` son los de afuera (la app, los sliders) y los que el clip anima los pisan. En una escena de
+ * Animate, solo lo animado: `params` no cuenta y los drivers no suman.
  */
 export function poseDeClip(doc, esquema, clip, t, params = {}) {
   const c = typeof clip === 'string' ? buscar(doc, clip) : clip;
   if (c?.type !== 'animation') return null;
   const evaluado = evaluarClip(doc, esquema, c, t);
+  if (esEscena(esquema, c)) return { id: null, type: 'pose', values: evaluado.values, params: {}, clip: c.id, tiempo: evaluado.tiempo };
   const pose = mezclarPoses(doc, esquema, { ...params, ...evaluado.params }, evaluado.values);
   return { ...pose, clip: c.id, tiempo: evaluado.tiempo };
 }
@@ -181,7 +189,8 @@ export function moverClave(pistas, id, prop, desde, hasta) {
  */
 export function avisosDeClip(doc, esquema, clip, params = {}) {
   const c = typeof clip === 'string' ? buscar(doc, clip) : clip;
-  if (c?.type !== 'animation') return [];
+  // Una escena no tiene drivers encima (ver poseDeClip).
+  if (c?.type !== 'animation' || esEscena(esquema, c)) return [];
   const avisos = new Map();
   const drivers = doc.objects.filter((o) => o.type === 'driver' && buscar(doc, o.pose)?.type === 'pose');
   for (const t of tiemposDeClaves(c)) {
