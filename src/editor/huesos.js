@@ -24,7 +24,7 @@ import { enlacesPorCercania, evaluarEnPose, evaluarEsqueleto, huesoDe, limitarAn
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
 import { ponerClave, poseDeClip, quitarClave, valorAGuardar } from '../core/animacion.js';
 import { aplicarPose, mezclarPoses } from '../core/mezcla.js';
-import { alternarSeleccion, avisar, docVisible, ejecutar, esquema, estado, idLibre, previsualizar, seleccionar } from './estado.js';
+import { alternarSeleccion, avisar, docVisible, ejecutar, esquema, estado, idLibre, previsualizar, seleccionar, seleccionarVarios } from './estado.js';
 
 const redondear = (v, d = 10) => Math.round(v * d) / d;
 
@@ -443,10 +443,45 @@ export function crearHuesos(ctx) {
   /** Manipulate Bones en el montaje: arrastrar un hueso lo gira; Ctrl + clic lo suma o lo quita; un clic en vacío suelta la selección. */
   function pointerdownManipular(e) {
     const id = e.target.closest('[data-hueso]')?.dataset.hueso;
-    if (!id) return seleccionar(null);
+    if (!id) return recuadroDeHuesos(e, e.ctrlKey || e.metaKey || e.shiftKey);
     if (e.ctrlKey || e.metaKey) return alternarSeleccion(id);
     seleccionar(id);
     rotar(e, id);
+  }
+
+  /** Arrastrar en un lugar vacío: elige los huesos que toca el recuadro (con Ctrl o Shift, los suma). Clic: suelta todo. */
+  function recuadroDeHuesos(e, sumar) {
+    const doc = docVisible();
+    const base = sumar ? estado.seleccionados.filter(esHueso) : [];
+    const { posado } = evaluarEnPose(doc, esquema, poseVista(doc));
+    const camara = ctx.matrizCamara();
+    // Cada hueso como unos puntos a lo largo de su eje, en pantalla: lo toca el recuadro si alguno cae adentro.
+    const huesos = doc.objects.filter((o) => o.type === 'bone').map((h) => {
+      const m = multiplicar(camara, posado.get(h.id));
+      const largo = leer(esquema, h, 'length');
+      return { id: h.id, puntos: Array.from({ length: 13 }, (_, i) => aplicar(m, (largo * i) / 12, 0)) };
+    });
+    const s0 = ctx.puntoPantalla(e);
+    const caja = ctx.crear('rect', { class: 'recuadro' });
+    let movio = false;
+    ctx.arrastrar(
+      e,
+      (ev) => {
+        const s = ctx.puntoPantalla(ev);
+        if (!movio && Math.hypot(s[0] - s0[0], s[1] - s0[1]) < 3) return;
+        movio = true;
+        const [x0, y0, x1, y1] = [Math.min(s0[0], s[0]), Math.min(s0[1], s[1]), Math.max(s0[0], s[0]), Math.max(s0[1], s[1])];
+        const tocados = huesos.filter((h) => h.puntos.some(([x, y]) => x >= x0 && x <= x1 && y >= y0 && y <= y1)).map((h) => h.id);
+        const ids = [...base, ...tocados.filter((t) => !base.includes(t))];
+        if (ids.join() !== estado.seleccionados.join()) seleccionarVarios(ids, ids.at(-1) ?? null);
+        for (const [k, v] of Object.entries({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 })) caja.setAttribute(k, v);
+        ctx.superposicion.append(caja); // la superposición se redibuja al cambiar la selección
+      },
+      () => {
+        caja.remove();
+        if (!movio && !sumar) seleccionar(null);
+      },
+    );
   }
 
   const huesoTocado = (e) => e.target.closest('[data-hueso]')?.dataset.hueso ?? null;

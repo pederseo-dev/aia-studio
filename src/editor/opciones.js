@@ -103,7 +103,7 @@ export function montarOpciones(raiz, acciones) {
       }
       case 'manipular':
         return [
-          texto(huesos.length ? 'Manipulate Bones: drag a bone to rotate it; select one to move its origin or change its direction and length with the handles.' : 'Manipulate Bones: there are no bones yet. Create them with Add Bone (B).'),
+          texto(huesos.length ? 'Manipulate Bones: drag a bone to rotate it; drag on empty space to select several (Ctrl or Shift adds); select one to move its origin or change its direction and length with the handles.' : 'Manipulate Bones: there are no bones yet. Create them with Add Bone (B).'),
           ...(huesos.length ? [] : [boton('Add Bone', 'Create bones (B)', () => fijar({ herramienta: 'hueso' }), 'principal')]),
         ];
       case 'path':
