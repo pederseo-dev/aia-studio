@@ -169,7 +169,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 #panel-derecho { grid-area: derecho; border-left: 1px solid var(--borde); display: flex; flex-direction: column; overflow: hidden; }
 #inspector { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 /* Alto fijo: el panel no crece ni se achica según cuánto contenido tenga; lo que sobra se desplaza. */
-#linea-de-tiempo { grid-area: tiempo; border-top: 1px solid var(--borde); height: clamp(260px, 38vh, 420px); overflow-y: auto; }
+#linea-de-tiempo { grid-area: tiempo; border-top: 1px solid var(--borde); height: 240px; overflow-y: auto; }
 /* Parameters, a la derecha (Animate y Puppet): nombre y control en una fila, los drivers debajo. */
 #seccion-parametros { flex: 0 1 auto; max-height: 34%; overflow-y: auto; border-bottom: 1px solid var(--borde); }
 #parametros { padding: 4px 10px 8px; display: flex; flex-direction: column; gap: 6px; }
@@ -384,23 +384,26 @@ body[data-modo="design"] #linea-de-tiempo { display: none; }
 /* Arriba de la timeline: pestañas de escenas (o el clip abierto) como las de los documentos, y una barra con la
    reproducción al medio. */
 .cabeza-tiempo { position: sticky; top: 0; z-index: 2; background: var(--panel); }
-.pestanas-tiempo { display: flex; align-items: flex-end; gap: 2px; padding: 6px 10px 0; border-bottom: 1px solid var(--borde); overflow-x: auto; scrollbar-width: none; }
+.pestanas-tiempo { display: flex; align-items: flex-end; gap: 2px; padding: 3px 8px 0; border-bottom: 1px solid var(--borde); overflow-x: auto; scrollbar-width: none; }
 .pestanas-tiempo .pestana { margin-bottom: -1px; background: var(--fondo); }
 .pestanas-tiempo .pestana.activa { background: var(--panel); border-bottom-color: var(--panel); }
 .pestanas-tiempo .nueva-pestana { margin-left: 2px; }
-.barra-tiempo { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: center; padding: 4px 10px; }
-.barra-tiempo .zona { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+/* Contenido compacto, en la proporción de Rive y Moho: filas de 20 px y letra de 11–12 px. */
+.pestanas-tiempo .pestana { padding: 2px 4px 2px 10px; font-size: 12px; }
+.barra-tiempo :is(button, select, input) { padding: 1px 7px; font-size: 12px; min-height: 0; height: 22px; }
+.barra-tiempo { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: center; padding: 3px 8px; }
+.barra-tiempo .zona { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-width: 0; }
 .barra-tiempo .zona.derecha { justify-content: flex-end; }
 .barra-tiempo .zona.centro button { min-width: 30px; }
 .barra-tiempo .play { min-width: 30px; }
-.barra-tiempo .reloj { font-variant-numeric: tabular-nums; color: var(--suave); min-width: 112px; }
+.barra-tiempo .reloj { font-variant-numeric: tabular-nums; color: var(--suave); min-width: 104px; font-size: 12px; }
 .campo-corto { display: inline-flex; gap: 4px; align-items: center; color: var(--suave); }
 .campo-corto input[type="number"] { width: 64px; }
 .barra-tiempo .descripcion { flex: 1; min-width: 160px; }
-.pistas { position: relative; padding: 0 10px 8px; user-select: none; touch-action: none; }
-.fila-pista { display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: center; height: 22px; }
+.pistas { position: relative; padding: 0 8px 6px; user-select: none; touch-action: none; }
+.fila-pista { display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: center; height: 20px; }
 .fila-pista .etiqueta { display: flex; align-items: center; min-width: 0; padding-right: 6px; }
-.fila-pista .nombre-pista { flex: 1; min-width: 0; text-align: left; background: none; border: none; color: var(--suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; font-size: 12px; }
+.fila-pista .nombre-pista { flex: 1; min-width: 0; text-align: left; background: none; border: none; color: var(--suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; font-size: 11px; }
 .fila-pista .quitar-pista { flex: none; background: none; border: none; color: var(--tenue); padding: 0 4px; visibility: hidden; }
 .fila-pista:hover .quitar-pista { visibility: visible; }
 .fila-pista .quitar-pista:hover { color: var(--error); }
@@ -408,18 +411,18 @@ body[data-modo="design"] #linea-de-tiempo { display: none; }
 .fila-pista.seleccionada .nombre-pista { color: var(--texto); }
 .carril { position: relative; height: 100%; margin: 0 8px; border-bottom: 1px solid #3b3547; cursor: text; }
 /* Regla: franja más oscura, segundos legibles y una rayita en cada uno (como la regla de Rive). */
-.fila-pista.regla { height: 24px; }
+.fila-pista.regla { height: 20px; }
 .regla .carril { background: var(--fondo); border-bottom-color: var(--suave); border-radius: 3px 3px 0 0; }
 .pistas > .fila-pista:nth-child(odd):not(.regla) .carril { background: #ffffff05; }
-.regla .marca { position: absolute; top: 3px; font-size: 11px; color: var(--suave); font-variant-numeric: tabular-nums; transform: translateX(-50%); pointer-events: none; }
-.regla .marca::after { content: ''; position: absolute; left: 50%; top: 15px; height: 6px; border-left: 1px solid var(--suave); }
-.clave { position: absolute; top: 50%; width: 11px; height: 11px; background: var(--pose); border: 1px solid #000a; box-shadow: 0 0 0 1px #ffffff26; transform: translate(-50%, -50%) rotate(45deg); cursor: ew-resize; }
+.regla .marca { position: absolute; top: 2px; font-size: 10px; color: var(--suave); font-variant-numeric: tabular-nums; transform: translateX(-50%); pointer-events: none; }
+.regla .marca::after { content: ''; position: absolute; left: 50%; top: 13px; height: 5px; border-left: 1px solid var(--suave); }
+.clave { position: absolute; top: 50%; width: 9px; height: 9px; background: var(--pose); border: 1px solid #000a; box-shadow: 0 0 0 1px #ffffff26; transform: translate(-50%, -50%) rotate(45deg); cursor: ew-resize; }
 /* Siempre ◆ (como en Moho); el color dice la curva del tramo que sale de él. */
 .clave.curva-ease { background: #a99bff; }
 .clave.curva-step { background: var(--ia); }
 .clave.curva-bezier { background: #5fb8ff; }
 .clave.curva-mixta { background: var(--texto); }
-.clave.resumen { background: #b8b0c8; width: 9px; height: 9px; cursor: pointer; }
+.clave.resumen { background: #b8b0c8; width: 8px; height: 8px; cursor: pointer; }
 /* Canales de lo seleccionado (Moho): los que no tienen keyframes se ven apagados, listos para keyar con ◇. */
 .fila-pista.resumen .nombre-pista { color: var(--tenue); }
 .fila-pista.vacia .nombre-pista { color: var(--tenue); }
@@ -432,7 +435,7 @@ body[data-modo="design"] #linea-de-tiempo { display: none; }
 .fila-pista .clavar-canal { flex: none; background: none; border: none; color: var(--pose); padding: 0 4px; font-size: 11px; }
 .fila-pista.vacia .clavar-canal { color: var(--tenue); }
 .fila-pista .clavar-canal:hover { color: var(--texto); }
-.ayuda-canales { color: var(--suave); font-size: 12px; padding: 4px 0; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.ayuda-canales .chip { padding: 1px 6px; font-size: 12px; }
+.ayuda-canales { color: var(--suave); font-size: 11px; padding: 3px 0; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.ayuda-canales .chip { padding: 0 6px; font-size: 11px; }
 .clave.elegida { outline: 2px solid var(--texto); outline-offset: 1px; }
 .playhead { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--error); pointer-events: none; }
