@@ -174,7 +174,7 @@ export function validar(doc, esquema) {
         }
         // Los params son del muñeco: solo un clip de Puppet los anima. Una escena keya los valores mismos.
         if (destino.type === 'param' && leer(esquema, o, 'usage') !== 'puppet') {
-          errores.push(`${o.id}.${prop}.${id}: scene "${o.id}" (Animate) can't animate params: params belong to Puppet. Key the values themselves instead (set_keys with values or pose), or animate "${id}" in a Puppet clip.`);
+          errores.push(`${o.id}.${prop}.${id}: scene "${o.id}" (Animate) can't animate params: params belong to Puppet. If this is a Puppet clip, pass usage: "puppet". Otherwise key the values themselves (set_keys with values or pose) and remove this track (set_keys with remove: ["${id}"], delete_keys with targets: ["${id}"], or × on the track in the editor).`);
           continue;
         }
         for (const [k, claves] of Object.entries(campos)) {

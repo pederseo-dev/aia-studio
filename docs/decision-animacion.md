@@ -93,6 +93,14 @@ montaje → clip en t (valores absolutos) → params (los del clip pisan a los d
    Los números se siguen sumando: `avisosDeClip` (en `set_keys`, `render_preview` y la timeline) avisa cuando un
    driver activo le suma su pose a una pista del clip, y el autokey del editor guarda el valor sin ese aporte.
 
+5. **Una escena de Animate se evalúa sin drivers** *(2026-11-06, sigue a «los params son solo de Puppet», §8)*:
+   montaje + keyframes, nada más (Design + lo animado). Todo lo de arriba sobre params y drivers vale para los clips
+   de Puppet. Motivo: con params solo de Puppet, en una escena los drivers sumaban con los params en su valor inicial,
+   sin control ni aviso (un param con `default` 1 giraba una caja que en Design se ve derecha). En una escena, una
+   expresión se copia como keyframes («◆ Pose…» o `set_keys` con `pose`) y una variante se elige keyando el `active`
+   del switch. Vale igual en el editor, en `render_preview` (con una escena, rechaza `params`), en `avisosDeClip`
+   (una escena no tiene avisos) y en la exportación, porque todos usan `poseDeClip`.
+
 El resultado es una pose más, que se dibuja con el mismo render de siempre (`src/render/svg.js`).
 
 ## 5. Exportación (fase 7)
@@ -150,7 +158,9 @@ seleccionado, con o sin keys). Para no saturar la interfaz, **se empieza como Mo
   recuerda mientras dura la sesión. «◆ Key» keya todos los seleccionados en un solo paso de deshacer.
 - **Los params son solo de Puppet** (2026-11-06, decisión del usuario): el panel Parameters está solo en Puppet y
   una escena de Animate no anima params (la validación lo rechaza, también por el MCP). Una escena keya los valores
-  mismos o copia una pose con «◆ Pose…» / `set_keys` con `pose`.
+  mismos o copia una pose con «◆ Pose…» / `set_keys` con `pose`. Además, **una escena se ve sin drivers** (§4,
+  punto 5). Un documento viejo con una escena que anima params se migra al abrirlo: el clip pasa a Puppet (no se
+  pierde ningún keyframe) y el historial lo anota (`migrarEscenasConParams` en `src/core/migracion.js`).
 - **El panel de abajo es solo la timeline** (2026-11-06): Parameters pasó al panel derecho, solo en Puppet. Arriba de la timeline, pestañas como las de los documentos: en Animate una por escena (+ crea una,
   × la borra con confirmación), en Puppet el clip abierto (× lo cierra). La barra tiene la reproducción al medio:
   « (keyframe anterior), ▶ y » (keyframe siguiente); a la izquierda el reloj, la duración y el loop; a la derecha

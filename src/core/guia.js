@@ -261,14 +261,17 @@ cortos que se disparan, uno por botón). Los dos últimos usan el mismo recurso,
 - **Pistas** (\`tracks\`): \`{ id_de_objeto: { propiedad: [ { "t": 0, "value": 0 }, { "t": 0.4, "value": -60, "ease": "ease-out" } ] } }\`,
   con la misma forma que \`values\` de una pose: valores **absolutos**, como en el montaje. Cualquier propiedad
   animable sirve: huesos, \`fill\`, \`opacity\`, el \`active\` de un switch, \`vertices\` (o \`d\`) con la misma cantidad
-  de puntos para un morph. Un **param** también tiene pista: \`{ "happiness": { "value": [...] } }\`, y sus drivers
-  suman la pose (un clip «laugh» puede llevar \`happiness\` a 1 en vez de repetir la cara feliz).
+  de puntos para un morph. **Solo en un clip de Puppet**, un **param** también tiene pista: \`{ "happiness": { "value": [...] } }\`,
+  y sus drivers suman la pose (un clip «laugh» puede llevar \`happiness\` a 1 en vez de repetir la cara feliz).
+- **Una escena de Animate no tiene params ni drivers:** se ve el montaje con sus keyframes, nada más (como se exporta).
+  Las poses y los params son del muñeco; en una escena, una expresión se copia como keyframes (\`set_keys\` con
+  \`pose\`) y una variante se elige keyando el \`active\` del switch (\`values: { "mouth": { "active": "mouth_o" } }\`).
 - \`t\` en segundos, de 0 a \`duration\`. Antes del primer keyframe vale el primero; después del último, el último; una
   propiedad sin pista vale lo del montaje. \`loop\`: \`once\`, \`loop\` (vuelve a empezar: pon en \`t = duration\` los
   mismos valores que en 0 para que no salte) o \`pingpong\`.
-- Para **empezar y terminar en reposo**, un momento con \`setup: true\` pone el montaje en todo lo que el clip anima (y los
-  params en su valor inicial), sin copiar valores a mano.
-- **Ojo con los params:** animar un param mueve **todas** las poses de sus drivers (\`get_document\` las lista). Si
+- Para **empezar y terminar en reposo**, un momento con \`setup: true\` pone el montaje en todo lo que el clip anima (y,
+  en Puppet, los params en su valor inicial), sin copiar valores a mano.
+- **Ojo con los params (Puppet):** animar un param mueve **todas** las poses de sus drivers (\`get_document\` las lista). Si
   uno de ellos mueve también algo que el clip anima (un hueso), los dos se suman; revísalo con la tira de cuadros.
 - \`set_keys\` solo cambia las pistas que nombras: las demás, también los retoques del usuario, quedan como estaban, y
   \`undo\` va por pista. Un momento con solo \`t\` y \`ease\` cambia la curva de los keyframes que ya hay en ese tiempo.
@@ -276,17 +279,20 @@ cortos que se disparan, uno por botón). Los dos últimos usan el mismo recurso,
 - \`ease\` va en el keyframe y vale para el tramo que **sale** de él: \`linear\` (por defecto), \`step\` (se mantiene hasta
   el siguiente), \`ease-in\`, \`ease-out\`, \`ease-in-out\` o \`[x1, y1, x2, y2]\` (cubic-bezier de CSS; \`[0.3, 1.6, 0.6, 1]\`
   se pasa y vuelve, para un rebote). El \`active\` de un switch, los booleanos y los textos cambian de golpe.
-- Orden: montaje → clip en ese tiempo → los drivers suman sus poses encima (los params del clip pisan a los de afuera).
+- Orden en un clip de **Puppet**: montaje → clip en ese tiempo → los drivers suman sus poses encima (los params del
+  clip pisan a los de afuera). En una escena de Animate no hay drivers: solo montaje → clip.
   Los **números se suman** (un hueso keyado en 10 con un driver activo que le suma 30 se ve en 40; \`set_keys\` y
   \`render_preview\` lo avisan). Lo que **no se suma** (el \`active\` de un switch, colores, vértices, booleanos) lo
   decide la pista del clip si la tiene; si no, los drivers.
-- **Si un param elige la variante** (visemas, bocas, ojos): anima el **param** (\`params: { "viseme": "o" }\`) y no el
-  \`active\` del switch. Así el clip usa las mismas piezas que la app y se combina con sus drivers. Un param enum siempre
-  tiene una opción activa: sus drivers están siempre en juego.
+- **Si un param elige la variante** (visemas, bocas, ojos): en un clip de **Puppet**, anima el **param**
+  (\`params: { "viseme": "o" }\`) y no el \`active\` del switch; así el clip usa las mismas piezas que la app y se combina
+  con sus drivers (un param enum siempre tiene una opción activa: sus drivers están siempre en juego). En una
+  **escena**, keya el \`active\` (\`values: { "mouth": { "active": "mouth_o" } }\`) o copia la pose con \`pose\`.
 - **Cómo armarlo:** \`set_keys\` piensa en **momentos**: «en t = 0.3, el brazo así y la boca así» (\`values\`, como en
   \`set_pose\`), «en t = 0.6, la pose \`happy\`» (\`pose\`, copia sus valores) o, solo en un clip de Puppet, params (\`params\`): los params son
   del muñeco y una escena de Animate no los anima (keya los valores, o copia la pose con \`pose\`). Crea el clip si no
-  existe. \`delete_keys\` quita keyframes y \`move_keys\` los mueve en el tiempo (con su valor y su curva). Revisa el
+  existe. Si una escena tiene pistas de params (un clip que pasó de Puppet a Animate), quítalas con \`set_keys\` y
+  \`remove\` o con \`delete_keys\` y \`targets\`. \`delete_keys\` quita keyframes y \`move_keys\` los mueve en el tiempo (con su valor y su curva). Revisa el
   movimiento con \`render_preview\` y \`animation\` + \`times\` (una tira de cuadros en una sola imagen) o \`time\` (un
   cuadro). \`get_document\` lista cada pista de un clip con sus keyframes (\`t = valor curva\`), para leerlo sin el JSON.
 - \`duration\` no puede quedar más corta que los keyframes: para acortar un clip, borra o mueve antes los últimos.

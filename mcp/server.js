@@ -273,7 +273,7 @@ servidor.registerTool(
         .describe('{ id_de_param: valor } para ver la mezcla (los que falten van con su valor inicial; {} = todos iniciales)'),
       region: region.optional(),
       bones: z.boolean().optional().describe('true = dibujar los huesos encima, con su id (en el editor siempre se ven)'),
-      animation: z.string().optional().describe('id de un clip (animation): muestra el clip en time, o una tira de cuadros en times; params se suman encima'),
+      animation: z.string().optional().describe('id de un clip (animation): muestra el clip en time, o una tira de cuadros en times; en un clip de puppet, params se suman encima (una escena se ve sin params ni drivers y los rechaza)'),
       time: z.number().min(0).optional().describe('con animation: un solo cuadro, en segundos'),
       times: z.array(z.number().min(0)).max(24).optional().describe('con animation: tiempos de la tira de cuadros, en segundos (por defecto, los de sus keyframes)'),
     },
@@ -393,10 +393,10 @@ const momento = z.object({
   values: z
     .record(z.string(), z.record(z.string(), z.any()))
     .optional()
-    .describe('{ id_de_objeto: { propiedad: valor } } absolutos, como en set_pose (un path acepta "d"); por ejemplo { "arm_r_bone": { "rotation": -60 }, "tail": { "opacity": 0.5 } }. Si un param elige una variante (visemas), anima el param en params y no el active del switch'),
-  params: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])).optional().describe('{ id_de_param: valor } en ese momento, por ejemplo { "happiness": 1, "viseme": "o" }; sus drivers suman las poses'),
+    .describe('{ id_de_objeto: { propiedad: valor } } absolutos, como en set_pose (un path acepta "d"); por ejemplo { "arm_r_bone": { "rotation": -60 }, "tail": { "opacity": 0.5 } }. En un clip de puppet, si un param elige una variante (visemas), anima el param en params y no el active del switch; en una escena (animate), keya el active'),
+  params: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])).optional().describe('solo en un clip de puppet: { id_de_param: valor } en ese momento, por ejemplo { "happiness": 1, "viseme": "o" }; sus drivers suman las poses. Una escena (animate) no anima params ni tiene drivers: copia la pose con pose o keya los valores'),
   pose: z.string().optional().describe('id de una pose: copia todos sus valores como keyframes en ese momento (values los pisa)'),
-  setup: z.boolean().optional().describe('true = en ese momento, todo lo que el clip anima (y lo que fija pose, si la pasas) vuelve al valor del montaje, y sus params al inicial; values los pisa. Sirve para empezar y terminar en reposo'),
+  setup: z.boolean().optional().describe('true = en ese momento, todo lo que el clip anima (y lo que fija pose, si la pasas) vuelve al valor del montaje, y en puppet sus params al inicial; values los pisa. Sirve para empezar y terminar en reposo'),
   targets: z.array(z.string()).optional().describe('con un momento que solo trae ease: a qué pistas cambiarle la curva ("objeto.propiedad" o un id); por defecto, a todas las que tienen keyframe en ese t'),
   ease: z
     .union([z.enum(['linear', 'step', 'ease-in', 'ease-out', 'ease-in-out']), z.array(z.number()).length(4)])
@@ -409,7 +409,9 @@ servidor.registerTool(
   {
     description:
       'Crea o actualiza un clip de animación (recurso animation) pensando en momentos: en cada t, cómo está el ' +
-      'personaje (values, como en set_pose), qué pose toma (pose) o qué valor tienen los params (params). Cada ' +
+      'personaje (values, como en set_pose), qué pose toma (pose) o, solo en un clip de puppet, qué valor tienen los ' +
+      'params (params). Una escena (animate) se ve sin params ni drivers: montaje + keyframes; ahí una expresión se ' +
+      'copia con pose y una variante se elige keyando el active del switch. Cada ' +
       'propiedad queda como keyframe en ese tiempo; uno que ya existía en el mismo t se reemplaza. Crea el clip si no ' +
       'existe y alarga duration si un keyframe la pasa. Solo cambia las pistas que nombras: las demás (también los ' +
       'retoques del usuario) quedan como estaban, y undo va por pista. Para alargar un clip basta con duration. ' +
