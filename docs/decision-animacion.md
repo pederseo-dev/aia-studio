@@ -118,6 +118,12 @@ El resultado es una pose más, que se dibuja con el mismo render de siempre (`sr
   Moho). `delete_keys` quita keyframes por tiempo o por propiedad. `render_preview` acepta `animation` + `time`, y
   `times` para una **tira de cuadros** en una sola imagen, para ver el movimiento sin pedir diez imágenes. El árbol de
   `get_document` resume cada clip (uso, duración, loop, qué anima y en qué tiempos).
+- **Después de la segunda prueba (2026-11-06):** `scale_time` reescala el tiempo de un clip o de un tramo en un solo
+  paso de deshacer (el editor lo hace con «Scale keys» al cambiar Length); `pose` acepta `only`/`except` para copiar
+  una parte; un número de `values` puede ser **relativo al montaje** (`"+=14"`), que se resuelve al guardar: la pista
+  sigue guardando valores absolutos, así que el formato no cambia. Las curvas fuertes con nombre (`-quad`, `-cubic`,
+  `-expo`, `-back`) son cubic-bezier fijas, así que pasan sin pérdida a CSS, Lottie y Rive. `set_keys` y
+  `render_preview` listan qué poses mueve cada param animado (un driver del usuario puede mover más de lo esperado).
 - **Uso en vivo (fase 7):** el manifiesto convierte los clips de Puppet en herramientas para el LLM de la app
   (`play("wave")`, `set_param("happiness", 0.8)`), con la descripción de cada clip.
 

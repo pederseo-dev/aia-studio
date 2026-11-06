@@ -125,3 +125,21 @@ pasaron de a una, sin pistas:
    Es lo esperado, pero conviene decirlo en la guía.
 7. **Rig:** sin brazo ni IK o pin, la pata del saludo flota. Esto es del personaje, no de la herramienta.
 
+
+**Arreglado después de la segunda ronda** (en `fase-4/params`, con paridad en el editor y pruebas):
+
+1. **Reescalar el tiempo:** herramienta nueva `scale_time` (`duration` o `factor`; con `from`/`to`, solo un tramo, y lo
+   de después se corre). Es un solo `set`, así que se deshace en un paso. En el editor, «Scale keys» junto a Length:
+   cambiar el largo estira o comprime todos los keyframes. Acortar `greet` ahora es una llamada.
+2. **Qué mueve un param:** `set_keys` y `render_preview` listan, por cada param animado de un clip de Puppet, las poses
+   de sus drivers y los objetos que toca cada una (`happiness → happy (…), sad (…), mirando_arriba (head_bone, …)`). En
+   la timeline, el canal del param dice `→ happy, sad, mirando_arriba` y el detalle va en el tooltip.
+3. **Una parte de una pose:** `pose` con `only` o `except` ("objeto.propiedad" o un id); si se nombra algo que la pose
+   no fija, el error dice qué fija. En el editor, «◆ Pose…» tiene un grupo «Only the selection» (lo seleccionado y lo que
+   cuelga de ello).
+4. **Relativos al montaje:** un número de `values` puede ser `"+=14"` o `"-=0.3"`. Se resuelve al guardar y la pista
+   sigue siendo absoluta, así que el esquema no cambia. Solo en propiedades numéricas.
+5. **Curvas:** 12 curvas fuertes con nombre (`ease-in/out/in-out` con `-quad`, `-cubic`, `-expo` y `-back`), todas
+   cubic-bezier fijas. La guía describe cada una (sale de `DESCRIPCION_DE_CURVAS`, y una prueba exige que estén todas)
+   y recomienda `ease-in-expo` para «vuelve de golpe». La timeline dibuja la forma de la curva del ◆ elegido.
+6. **Guía:** keyar el estado inicial en `t = 0`, porque antes del primer keyframe se ve el valor de ese keyframe.

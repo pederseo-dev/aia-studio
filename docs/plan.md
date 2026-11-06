@@ -301,6 +301,10 @@ Construido (2026-11-05):
   `move_keys`, avisos de drivers que suman encima y las pistas con sus keyframes en `get_document`; el editor tiene
   «◆ Pose…», «◆ Setup», `cubic-bezier` a mano y borrar una pista entera. Los params son solo de Puppet: una escena
   no los anima y se ve sin drivers (ver [decision-animacion.md](decision-animacion.md) §4).
+- Segunda prueba con IA: 9/9 ([resultados](pruebas-ia/fase-5.md#segunda-ronda-2026-11-06-timeline-escenas-y-clips-de-puppet)).
+  Con lo que pidió: `scale_time` (y «Scale keys» en Length), `pose` con `only`/`except` (y «Only the selection» en
+  «◆ Pose…»), valores relativos al montaje (`"+=14"`), curvas fuertes con nombre (y su forma dibujada en la
+  timeline), y la lista de poses que mueve cada param animado en `set_keys`, `render_preview` y el canal del param.
 - Falta en la fase: clips de Puppet insertados en Animate (lo pidió la IA en la prueba), editor de curvas
   (arrastrar las manijas), elegir y escalar varios keyframes sueltos a la vez (el editor ya mueve un momento entero
   arrastrando el ◆ de «All keys» o de la fila de un objeto, como `move_keys`), que un hueso no herede la escala (respirar sin agrandar la cabeza), una vista previa después de
