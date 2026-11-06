@@ -4,7 +4,7 @@
 // Un clip abierto se edita como una pose (estado.pose = id del clip): lo que se cambia en el lienzo o en el inspector
 // queda como keyframe en el tiempo del playhead (autokey, ver opsDePose en huesos.js).
 
-import { avisosDeClip, moverClave, ponerClave, quitarClave, redondearTiempo, tiempoLocal, valorAGuardar, valoresDeMontaje } from '../core/animacion.js';
+import { avisosDeClip, moverClave, ponerClave, quitarClave, redondearTiempo, tiempoLocal, tiemposDeClaves, valorAGuardar, valoresDeMontaje } from '../core/animacion.js';
 import { NOMBRES_DE_CURVA, errorDeCurva, mismoTiempo } from '../core/curvas.js';
 import { buscar } from '../core/documento.js';
 import { leer, leerMeta } from '../core/esquema.js';
@@ -158,7 +158,7 @@ export function montarTimeline(raiz) {
     const doc = estado.doc;
     if (!doc) return raiz.replaceChildren();
     const clip = clipVisible();
-    if (elegida && !clip?.tracks?.[elegida.id]?.[elegida.prop]?.some((c) => mismoTiempo(c.t, elegida.t))) elegida = null;
+    if (elegida && !clavesEn(clip, elegida.id, elegida.props, elegida.t).length) elegida = null;
     raiz.replaceChildren(barra(doc, clip), clip ? pistas(clip) : vacio());
     moverPlayhead();
   }
@@ -237,21 +237,24 @@ export function montarTimeline(raiz) {
     const avisos = avisosDeClip(doc, esquema, clip, estado.params ?? {});
     if (avisos.length) div.append(Object.assign(document.createElement('span'), { className: 'aviso-drivers', textContent: `⚠ ${avisos.length} driver${avisos.length > 1 ? 's' : ''} add on top`, title: avisos.join('\n') }));
 
-    // Curva y borrar del keyframe elegido.
+    // Curva y borrar del keyframe elegido (en todas las propiedades de su canal que tienen keyframe ahí).
     if (elegida) {
-      const clave = clip.tracks[elegida.id][elegida.prop].find((c) => mismoTiempo(c.t, elegida.t));
+      const claves = clavesEn(clip, elegida.id, elegida.props, elegida.t);
+      const curvas = [...new Set(claves.map(([, c]) => JSON.stringify(c.ease ?? 'linear')))];
+      const primera = claves[0][1].ease;
       const curva = document.createElement('select');
       curva.title = 'Ease of the segment that leaves this keyframe';
-      const actual = Array.isArray(clave.ease) ? 'custom' : (clave.ease ?? 'linear');
+      const actual = curvas.length > 1 ? 'mixed' : Array.isArray(primera) ? 'custom' : (primera ?? 'linear');
+      if (actual === 'mixed') curva.append(new Option('(mixed)', 'mixed', false, true));
       for (const v of NOMBRES_DE_CURVA) curva.append(new Option(v, v, false, v === actual));
-      if (actual === 'custom') curva.append(new Option(`cubic-bezier(${clave.ease.join(', ')})`, 'custom', false, true));
+      if (actual === 'custom') curva.append(new Option(`cubic-bezier(${primera.join(', ')})`, 'custom', false, true));
       curva.append(new Option('cubic-bezier…', 'editar'));
       curva.addEventListener('change', () => {
         let ease = curva.value;
-        if (ease === 'custom') return;
+        if (ease === 'custom' || ease === 'mixed') return;
         if (ease === 'editar') {
           // Como en CSS: x1, y1, x2, y2 (x entre 0 y 1; y puede pasarse para un rebote).
-          const previa = Array.isArray(clave.ease) ? clave.ease.join(', ') : '0.3, 1.6, 0.6, 1';
+          const previa = Array.isArray(primera) ? primera.join(', ') : '0.3, 1.6, 0.6, 1';
           const texto = prompt('cubic-bezier x1, y1, x2, y2 (as in CSS; y outside 0…1 overshoots):', previa);
           if (texto == null) return dibujar();
           ease = texto.split(/[\s,]+/).filter(Boolean).map(Number);
@@ -261,10 +264,11 @@ export function montarTimeline(raiz) {
             return dibujar();
           }
         }
-        const tracks = ponerClave(clip.tracks, elegida.id, elegida.prop, clave.t, clave.value, ease);
-        ejecutar([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: ease ${Array.isArray(ease) ? `cubic-bezier(${ease.join(', ')})` : ease} at ${n(clave.t)} s`);
+        let tracks = clip.tracks;
+        for (const [prop, c] of claves) tracks = ponerClave(tracks, elegida.id, prop, c.t, c.value, ease);
+        ejecutar([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: ease ${Array.isArray(ease) ? `cubic-bezier(${ease.join(', ')})` : ease} at ${n(elegida.t)} s`);
       });
-      const etiqueta = Object.assign(document.createElement('label'), { className: 'campo-corto', textContent: `${elegida.id}.${elegida.prop} @ ${n(clave.t)} s` });
+      const etiqueta = Object.assign(document.createElement('label'), { className: 'campo-corto', textContent: `${elegida.id} ${elegida.canal} @ ${n(elegida.t)} s` });
       etiqueta.append(curva);
       div.append(etiqueta, boton('Delete key', 'Delete this keyframe (Del)', () => borrarElegida(clip)));
     }
@@ -307,18 +311,19 @@ export function montarTimeline(raiz) {
     ejecutar([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: key ${que} at ${n(estado.tiempo)} s`);
   }
 
-  /** Borra una pista entera (todos sus keyframes). */
-  function borrarPista(clip, id, prop) {
+  /** Borra un canal entero (todos los keyframes de sus propiedades). */
+  function borrarCanal(clip, id, canal) {
     const tracks = structuredClone(clip.tracks ?? {});
-    delete tracks[id]?.[prop];
+    for (const prop of canal.props) delete tracks[id]?.[prop];
     if (tracks[id] && !Object.keys(tracks[id]).length) delete tracks[id];
-    ejecutar([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: delete track ${id}.${prop}`);
+    ejecutar([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: delete ${id} ${canal.nombre} track`);
   }
 
   function borrarElegida(clip) {
     if (!elegida) return;
-    const tracks = quitarClave(clip.tracks, elegida.id, elegida.prop, elegida.t);
-    ejecutar([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: delete key ${elegida.id}.${elegida.prop} at ${n(elegida.t)} s`);
+    let tracks = clip.tracks;
+    for (const prop of elegida.props) tracks = quitarClave(tracks, elegida.id, prop, elegida.t);
+    ejecutar([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: delete key ${elegida.id} ${elegida.canal} at ${n(elegida.t)} s`);
     elegida = null;
   }
 
@@ -332,57 +337,87 @@ export function montarTimeline(raiz) {
     }
   });
 
-  /** La regla, una fila por pista y el playhead. */
+  /**
+   * La regla, una fila con todos los keyframes del clip y, como en Moho, los canales de lo seleccionado: todos los
+   * animables, también los que todavía no tienen keyframes (◇ los keya en el playhead).
+   */
   function pistas(clip) {
     const duracion = leer(esquema, clip, 'duration');
     const cuerpo = document.createElement('div');
     cuerpo.className = 'pistas';
-    const filas = Object.entries(clip.tracks ?? {}).flatMap(([id, campos]) => Object.keys(campos).map((prop) => [id, prop]));
+    const izquierda = (t) => `${(t / duracion) * 100}%`;
 
     const regla = document.createElement('div');
     regla.className = 'fila-pista regla';
     const carril = document.createElement('div');
     carril.className = 'carril';
-    // Marcas: cada segundo con número, y cada cuadro (si caben) como rayita.
     const pasoMarca = duracion > 20 ? 5 : duracion > 8 ? 2 : duracion > 3 ? 1 : duracion > 1 ? 0.5 : 0.25;
     for (let t = 0; t <= duracion + 1e-9; t += pasoMarca) {
       const marca = Object.assign(document.createElement('span'), { className: 'marca', textContent: `${n(t)}s` });
-      marca.style.left = `${(t / duracion) * 100}%`;
+      marca.style.left = izquierda(t);
       carril.append(marca);
     }
-    regla.append(Object.assign(document.createElement('span'), { className: 'etiqueta', textContent: filas.length ? '' : 'No keyframes yet' }), carril);
+    // Sobre la regla, de quién son los canales de abajo (como el nombre de la capa en la timeline de Moho).
+    const elegido = estado.seleccion && buscar(estado.doc, estado.seleccion);
+    regla.append(Object.assign(document.createElement('span'), { className: 'etiqueta nombre-seleccion', textContent: elegido ? elegido.id : '' }), carril);
     cuerpo.append(regla);
 
-    for (const [id, prop] of filas) {
-      const fila = document.createElement('div');
-      fila.className = `fila-pista${id === estado.seleccion ? ' seleccionada' : ''}`;
-      const etiqueta = document.createElement('span');
-      etiqueta.className = 'etiqueta';
-      const nombre = Object.assign(document.createElement('button'), { type: 'button', className: 'nombre-pista', textContent: `${id}.${prop}`, title: `Select ${id}` });
-      nombre.addEventListener('click', () => seleccionar(id));
-      const quitar = Object.assign(document.createElement('button'), { type: 'button', className: 'quitar-pista', textContent: '×', title: `Delete the whole ${id}.${prop} track (all its keyframes)` });
-      quitar.addEventListener('click', () => borrarPista(clip, id, prop));
-      etiqueta.append(nombre, quitar);
-      const carrilPista = document.createElement('div');
-      carrilPista.className = 'carril';
-      for (const clave of clip.tracks[id][prop]) {
-        const rombo = document.createElement('span');
-        const esElegida = elegida && elegida.id === id && elegida.prop === prop && mismoTiempo(elegida.t, clave.t);
-        rombo.className = `clave${esElegida ? ' elegida' : ''}${clave.ease === 'step' ? ' step' : ''}`;
-        rombo.style.left = `${(clave.t / duracion) * 100}%`;
-        rombo.title = `${id}.${prop} = ${resumir(clave.value)} at ${n(clave.t)} s (${Array.isArray(clave.ease) ? 'cubic-bezier' : (clave.ease ?? 'linear')}). Drag to move it in time.`;
-        rombo.addEventListener('pointerdown', (e) => arrastrarClave(e, clip, id, prop, clave, carrilPista));
-        carrilPista.append(rombo);
-      }
-      fila.append(etiqueta, carrilPista);
-      cuerpo.append(fila);
+    // Todos los keyframes del clip, en gris: para ver el ritmo y saber dónde hay algo (clic = llevar el playhead ahí).
+    const todos = fila('All keys', 'Every keyframe of the clip, of any object. Click one to move the playhead there.');
+    todos.classList.add('resumen');
+    for (const t of tiemposDeClaves(clip)) {
+      const rombo = Object.assign(document.createElement('span'), { className: 'clave resumen', title: `Keyframes at ${n(t)} s` });
+      rombo.style.left = izquierda(t);
+      rombo.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        detener();
+        fijar({ tiempo: t });
+      });
+      todos.carril.append(rombo);
     }
+    cuerpo.append(todos);
+
+    const obj = estado.seleccion && buscar(estado.doc, estado.seleccion);
+    const canales = obj ? canalesDe(obj) : [];
+    if (!canales.length) {
+      // Sin selección: qué objetos tiene animados el clip, para ir a ellos.
+      const ayuda = document.createElement('div');
+      ayuda.className = 'ayuda-canales';
+      const animados = Object.keys(clip.tracks ?? {}).filter((id) => buscar(estado.doc, id));
+      ayuda.append(document.createTextNode(obj ? `${obj.id} has no animatable channels. ` : 'Select an object or a bone to see its channels. '));
+      if (animados.length) {
+        ayuda.append(document.createTextNode('Animated: '));
+        for (const id of animados) ayuda.append(boton(id, `Select ${id}`, () => seleccionar(id), 'chip'));
+      }
+      cuerpo.append(ayuda);
+    }
+    for (const canal of canales) {
+      const conPista = canal.props.some((p) => clip.tracks?.[obj.id]?.[p]?.length);
+      const f = fila(canal.nombre, `${obj.id}: ${canal.props.join(', ')}`);
+      if (!conPista) f.classList.add('vacia');
+      const clavar = boton(conPista ? '◆' : '◇', `Key ${obj.id} ${canal.nombre} at the playhead`, () => clavarCanal(clip, obj, canal), 'clavar-canal');
+      const quitar = boton('×', `Delete the whole ${canal.nombre} track of ${obj.id} (all its keyframes)`, () => borrarCanal(clip, obj.id, canal), 'quitar-pista');
+      if (!conPista) quitar.hidden = true;
+      f.etiqueta.append(clavar, quitar);
+      for (const t of tiemposDelCanal(clip, obj.id, canal.props)) {
+        const claves = clavesEn(clip, obj.id, canal.props, t);
+        const rombo = document.createElement('span');
+        const esElegida = elegida && elegida.id === obj.id && elegida.canal === canal.nombre && mismoTiempo(elegida.t, t);
+        rombo.className = `clave ${claseDeCurva(claves)}${esElegida ? ' elegida' : ''}`;
+        rombo.style.left = izquierda(t);
+        rombo.title = `${obj.id} ${canal.nombre} at ${n(t)} s: ${claves.map(([p, c]) => `${p} = ${resumir(c.value)}`).join(', ')} (${nombreDeCurva(claves)}). Drag to move it in time.`;
+        rombo.addEventListener('pointerdown', (e) => arrastrarClave(e, clip, obj.id, canal, t, f.carril));
+        f.carril.append(rombo);
+      }
+      cuerpo.append(f);
+    }
+
     const playhead = document.createElement('div');
     playhead.className = 'playhead';
     cuerpo.append(playhead);
     // Clic o arrastre en la regla o en un carril vacío: mover el playhead (con imán a los cuadros).
     cuerpo.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || e.target.closest('.clave, .etiqueta')) return;
+      if (e.button !== 0 || e.target.closest('.clave, .etiqueta, .ayuda-canales')) return;
       const zona = cuerpo.querySelector('.carril').getBoundingClientRect();
       const mover = (ev) => fijar({ tiempo: Math.max(0, Math.min(duracion, ajustarACuadro(((ev.clientX - zona.left) / zona.width) * duracion))) });
       detener();
@@ -395,26 +430,52 @@ export function montarTimeline(raiz) {
     return cuerpo;
   }
 
-  /** Clic en un keyframe lo elige (y lleva el playhead ahí); arrastrarlo lo mueve en el tiempo. */
-  function arrastrarClave(e, clip, id, prop, clave, carril) {
+  /** Una fila de la timeline: etiqueta a la izquierda y carril a la derecha. */
+  function fila(texto, titulo) {
+    const div = document.createElement('div');
+    div.className = 'fila-pista';
+    const etiqueta = document.createElement('span');
+    etiqueta.className = 'etiqueta';
+    etiqueta.append(Object.assign(document.createElement('span'), { className: 'nombre-pista', textContent: texto, title: titulo }));
+    const carril = document.createElement('div');
+    carril.className = 'carril';
+    div.append(etiqueta, carril);
+    return Object.assign(div, { etiqueta, carril });
+  }
+
+  /** ◇/◆ de un canal: keya sus propiedades en el playhead con lo que se ve (sin el aporte de los drivers). */
+  function clavarCanal(clip, obj, canal) {
+    const pose = poseActiva();
+    const valores = Object.fromEntries(canal.props.map((k) => [k, obj.type === 'param' ? pose?.params?.[obj.id] : (pose?.values?.[obj.id]?.[k] ?? valorEfectivo(esquema, estado.doc, obj, k))]));
+    clavarValores(clip, { [obj.id]: valores }, `${obj.id} ${canal.nombre}`);
+  }
+
+  /** Clic en un keyframe lo elige (y lleva el playhead ahí); arrastrarlo lo mueve en el tiempo, con todo su canal. */
+  function arrastrarClave(e, clip, id, canal, t0, carril) {
     if (e.button !== 0) return;
     e.stopPropagation();
     detener();
     raiz.focus();
     // Se mide antes de elegir: elegir redibuja la timeline y este carril deja de estar en la página.
     const zona = carril.getBoundingClientRect();
-    elegida = { id, prop, t: clave.t };
-    seleccionar(id);
-    fijar({ tiempo: clave.t });
+    const props = clavesEn(clip, id, canal.props, t0).map(([p]) => p);
+    elegida = { id, props, t: t0, canal: canal.nombre };
+    // Cambia la barra (curva y borrar del keyframe elegido): se redibuja ya, no solo el playhead.
+    dibujar();
+    fijar({ tiempo: t0 });
     const duracion = leer(esquema, clip, 'duration');
     const x0 = e.clientX;
-    let nuevo = clave.t;
+    let nuevo = t0;
     // moverClave falla si en el destino ya hay otro keyframe de la pista (soltarlo encima lo borraría).
-    const ops = (t) => [{ op: 'set', target: clip.id, props: { tracks: moverClave(clip.tracks, id, prop, clave.t, t) } }];
+    const ops = (t) => {
+      let tracks = clip.tracks;
+      for (const p of props) tracks = moverClave(tracks, id, p, t0, t);
+      return [{ op: 'set', target: clip.id, props: { tracks } }];
+    };
     // Elegir el keyframe redibuja la timeline (el rombo se reemplaza): el arrastre se sigue en window.
     const mover = (ev) => {
-      if (Math.abs(ev.clientX - x0) < 3 && nuevo === clave.t) return;
-      nuevo = Math.max(0, Math.min(duracion, ajustarACuadro(clave.t + ((ev.clientX - x0) / zona.width) * duracion)));
+      if (Math.abs(ev.clientX - x0) < 3 && nuevo === t0) return;
+      nuevo = Math.max(0, Math.min(duracion, ajustarACuadro(t0 + ((ev.clientX - x0) / zona.width) * duracion)));
       try {
         previsualizar(ops(nuevo));
       } catch {
@@ -425,7 +486,7 @@ export function montarTimeline(raiz) {
     window.addEventListener('pointermove', mover);
     window.addEventListener('pointerup', () => {
       window.removeEventListener('pointermove', mover);
-      if (mismoTiempo(nuevo, clave.t)) return previsualizar(null);
+      if (mismoTiempo(nuevo, t0)) return previsualizar(null);
       let lote;
       try {
         lote = ops(nuevo);
@@ -433,8 +494,8 @@ export function montarTimeline(raiz) {
         previsualizar(null);
         return avisar(error.message, true);
       }
-      elegida = { id, prop, t: redondearTiempo(nuevo) };
-      ejecutar(lote, `${clip.id}: move key ${id}.${prop} ${n(clave.t)} → ${n(nuevo)} s`);
+      elegida = { id, props, t: redondearTiempo(nuevo), canal: canal.nombre };
+      ejecutar(lote, `${clip.id}: move key ${id} ${canal.nombre} ${n(t0)} → ${n(nuevo)} s`);
     }, { once: true });
   }
 
@@ -452,6 +513,54 @@ export function montarTimeline(raiz) {
     if (reloj) reloj.textContent = `${estado.tiempo.toFixed(2)} s · frame ${Math.round(estado.tiempo * fps())}`;
   }
   new ResizeObserver(moverPlayhead).observe(raiz);
+}
+
+// Canales como en Moho: la posición (x, y) y la escala (scaleX, scaleY) van juntas en una fila; un param, su valor.
+const JUNTAS = [['Position', ['x', 'y']], ['Rotation', ['rotation']], ['Scale', ['scaleX', 'scaleY']]];
+const ETIQUETAS_DE_CANAL = { opacity: 'Opacity', visible: 'Visible', fill: 'Fill', stroke: 'Stroke', strokeWidth: 'Stroke width', vertices: 'Points', active: 'Switch', width: 'Width', height: 'Height', length: 'Length', cornerRadius: 'Corner radius' };
+
+function canalesDe(obj) {
+  if (obj.type === 'param') return [{ nombre: 'Value', props: ['value'] }];
+  const tipo = esquema.tipos.get(obj.type);
+  if (!tipo || tipo.resource) return [];
+  const animables = Object.keys(tipo.properties).filter((k) => tipo.properties[k].animatable);
+  const canales = [];
+  const usadas = new Set();
+  for (const [nombre, props] of JUNTAS) {
+    const hay = props.filter((k) => animables.includes(k));
+    if (!hay.length) continue;
+    canales.push({ nombre, props: hay });
+    hay.forEach((k) => usadas.add(k));
+  }
+  for (const k of animables) if (!usadas.has(k)) canales.push({ nombre: ETIQUETAS_DE_CANAL[k] ?? k, props: [k] });
+  return canales;
+}
+
+/** Tiempos con keyframe en alguna de las propiedades de un canal. */
+function tiemposDelCanal(clip, id, props) {
+  const tiempos = [];
+  for (const p of props) for (const c of clip.tracks?.[id]?.[p] ?? []) if (!tiempos.some((t) => mismoTiempo(t, c.t))) tiempos.push(c.t);
+  return tiempos.sort((a, b) => a - b);
+}
+
+/** Los keyframes [propiedad, keyframe] de un canal en el tiempo t. */
+function clavesEn(clip, id, props, t) {
+  return (props ?? []).flatMap((p) => {
+    const c = clip?.tracks?.[id]?.[p]?.find((k) => mismoTiempo(k.t, t));
+    return c ? [[p, c]] : [];
+  });
+}
+
+/** El color del ◆ dice la curva del tramo que sale de él (como la forma del keyframe en Moho). */
+function claseDeCurva(claves) {
+  const curvas = new Set(claves.map(([, c]) => (Array.isArray(c.ease) ? 'bezier' : (c.ease ?? 'linear'))));
+  if (curvas.size > 1) return 'curva-mixta';
+  const [curva] = curvas;
+  return `curva-${curva === 'ease-in' || curva === 'ease-out' || curva === 'ease-in-out' ? 'ease' : curva}`;
+}
+function nombreDeCurva(claves) {
+  const nombres = [...new Set(claves.map(([, c]) => (Array.isArray(c.ease) ? `cubic-bezier(${c.ease.join(', ')})` : (c.ease ?? 'linear'))))];
+  return nombres.join(' / ');
 }
 
 function resumir(v) {

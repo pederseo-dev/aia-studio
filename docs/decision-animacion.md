@@ -127,3 +127,21 @@ El resultado es una pose más, que se dibuja con el mismo render de siempre (`sr
 - **Lo procedural como dato del personaje:** qué clip es el parpadeo y qué params son la mirada y la boca, para que el
   runtime los active con una línea (el *cuándo* sigue siendo de la app).
 - Curvas `elastic`, `bounce`, `noisy` y animación «a dos» (`interval` de Moho / `quantize` de Rive).
+
+## 8. Cómo se ve la timeline (2026-11-06)
+
+Se debatió entre Rive (la jerarquía de todo lo animado, solo las propiedades con keys) y Moho (los canales de lo
+seleccionado, con o sin keys). Para no saturar la interfaz, **se empieza como Moho**:
+
+- Arriba, una fila **«All keys»** con todos los keyframes del clip en gris, para ver el ritmo (clic = llevar el
+  playhead ahí).
+- Abajo, **los canales del objeto o hueso seleccionado, siempre todos** sus animables, también los que no tienen
+  keyframes (apagados, con ◇ para keyar ese canal en el playhead). Sin selección, se listan los objetos animados para
+  ir a ellos.
+- Canales como en Moho: **Position** (x e y juntas) y **Scale** (scaleX y scaleY juntas) son una sola fila; elegir,
+  mover, cambiar la curva o borrar un keyframe actúa sobre las dos. En los datos siguen siendo pistas separadas (lo
+  que ve la IA no cambia).
+- Todos los keyframes son **◆**, como en Moho; el **color dice la curva** del tramo que sale de él: verde linear,
+  violeta ease, ámbar step, celeste cubic-bezier, blanco si las propiedades del canal tienen curvas distintas.
+- Queda abierta la parte de Rive (la jerarquía de todo lo animado) por si con clips grandes hace falta ver todo a la
+  vez.

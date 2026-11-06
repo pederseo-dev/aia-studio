@@ -400,7 +400,20 @@ body[data-modo="design"] #linea-de-tiempo { display: none; }
 .regla .carril { border-bottom-color: var(--tenue); }
 .marca { position: absolute; bottom: 2px; font-size: 10px; color: var(--tenue); transform: translateX(-50%); pointer-events: none; }
 .clave { position: absolute; top: 50%; width: 10px; height: 10px; background: var(--pose); border: 1px solid #0008; transform: translate(-50%, -50%) rotate(45deg); cursor: ew-resize; }
-/* step (hold): cuadrado, como el «step» de los keyframes de Moho */
-.clave.step { transform: translate(-50%, -50%); background: var(--ia); }
+/* Siempre ◆ (como en Moho); el color dice la curva del tramo que sale de él. */
+.clave.curva-ease { background: #a99bff; }
+.clave.curva-step { background: var(--ia); }
+.clave.curva-bezier { background: #5fb8ff; }
+.clave.curva-mixta { background: var(--texto); }
+.clave.resumen { background: var(--tenue); width: 8px; height: 8px; cursor: pointer; }
+/* Canales de lo seleccionado (Moho): los que no tienen keyframes se ven apagados, listos para keyar con ◇. */
+.fila-pista.resumen .nombre-pista { color: var(--tenue); }
+.fila-pista.vacia .nombre-pista { color: var(--tenue); }
+.fila-pista .clavar-canal { flex: none; background: none; border: none; color: var(--pose); padding: 0 4px; font-size: 11px; }
+.fila-pista.vacia .clavar-canal { color: var(--tenue); }
+.fila-pista .clavar-canal:hover { color: var(--texto); }
+.ayuda-canales { color: var(--suave); font-size: 12px; padding: 4px 0; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.ayuda-canales .chip { padding: 1px 6px; font-size: 12px; }
 .clave.elegida { outline: 2px solid var(--texto); outline-offset: 1px; }
 .playhead { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--error); pointer-events: none; }
+.regla .nombre-seleccion { color: var(--texto); font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
