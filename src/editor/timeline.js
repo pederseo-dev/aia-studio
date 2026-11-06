@@ -5,7 +5,7 @@
 // queda como keyframe en el tiempo del playhead (autokey, ver opsDePose en huesos.js).
 
 import { ICONOS } from './iconos.js';
-import { avisosDeClip, moverClave, ponerClave, quitarClave, redondearTiempo, tiempoLocal, tiemposDeClaves, valorAGuardar, valoresDeMontaje } from '../core/animacion.js';
+import { avisosDeClip, esEscena, moverClave, ponerClave, quitarClave, redondearTiempo, tiempoLocal, tiemposDeClaves, valorAGuardar, valoresDeMontaje } from '../core/animacion.js';
 import { NOMBRES_DE_CURVA, errorDeCurva, mismoTiempo } from '../core/curvas.js';
 import { buscar } from '../core/documento.js';
 import { leer, leerMeta } from '../core/esquema.js';
@@ -283,7 +283,10 @@ export function montarTimeline(raiz) {
       conPose.addEventListener('change', () => conPose.value && clavarValores(clip, structuredClone(buscar(estado.doc, conPose.value).values ?? {}), `pose ${conPose.value}`, false));
       div.append(conPose);
     }
-    div.append(boton('◆ Setup', 'Key the setup values (the rest pose) of everything this clip animates at the playhead, and its parameters at their initial value', () => {
+    const ayudaSetup = esEscena(esquema, clip)
+      ? 'Key the setup values (the rest pose) of everything this scene animates at the playhead'
+      : 'Key the setup values (the rest pose) of everything this clip animates at the playhead, and its parameters at their initial value';
+    div.append(boton('◆ Setup', ayudaSetup, () => {
       const valores = valoresDeMontaje(estado.doc, esquema, clip.tracks);
       if (!Object.keys(valores).length) return avisar('This clip animates nothing yet: key something first', true);
       clavarValores(clip, valores, 'setup', false);
@@ -361,7 +364,9 @@ export function montarTimeline(raiz) {
 
   /** Lo seleccionado que tiene canales (objetos, huesos y params; no recursos), en el orden en que se eligió. */
   function objetosElegidos() {
-    return estado.seleccionados.map((id) => buscar(estado.doc, id)).filter((o) => o && (o.type === 'param' || !esquema.tipos.get(o.type)?.resource));
+    // Los params son de Puppet: en una escena no tienen canal (pudieron quedar seleccionados al venir de Puppet).
+    const params = !esEscena(esquema, clipVisible());
+    return estado.seleccionados.map((id) => buscar(estado.doc, id)).filter((o) => o && (o.type === 'param' ? params : !esquema.tipos.get(o.type)?.resource));
   }
 
   /** Abierto o cerrado: lo que eligió el usuario o, si no lo tocó, abierto solo el principal (o el único). */
@@ -435,13 +440,9 @@ export function montarTimeline(raiz) {
     const todos = fila('All keys', 'Every keyframe of the clip, of any object. Click one to move the playhead there.');
     todos.classList.add('resumen');
     for (const t of tiemposDeClaves(clip)) {
-      const rombo = Object.assign(document.createElement('span'), { className: 'clave resumen', title: `Keyframes at ${n(t)} s` });
+      const rombo = Object.assign(document.createElement('span'), { className: 'clave resumen', title: `Keyframes at ${n(t)} s. Click to go there; drag to move the whole moment (every keyframe at ${n(t)} s).` });
       rombo.style.left = izquierda(t);
-      rombo.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
-        detener();
-        fijar({ tiempo: t });
-      });
+      rombo.addEventListener('pointerdown', (e) => arrastrarMomento(e, clip, null, t, todos.carril));
       todos.carril.append(rombo);
     }
     cuerpo.append(todos);
@@ -477,13 +478,9 @@ export function montarTimeline(raiz) {
       nombre.addEventListener('click', () => seleccionarVarios(estado.seleccionados, obj.id));
       const props = canales.flatMap((c) => c.props);
       for (const t of tiemposDelCanal(clip, obj.id, props)) {
-        const rombo = Object.assign(document.createElement('span'), { className: 'clave resumen', title: `${obj.id}: keyframes at ${n(t)} s` });
+        const rombo = Object.assign(document.createElement('span'), { className: 'clave resumen', title: `${obj.id}: keyframes at ${n(t)} s. Click to go there; drag to move all of ${obj.id}'s keyframes at ${n(t)} s.` });
         rombo.style.left = izquierda(t);
-        rombo.addEventListener('pointerdown', (e) => {
-          e.stopPropagation();
-          detener();
-          fijar({ tiempo: t });
-        });
+        rombo.addEventListener('pointerdown', (e) => arrastrarMomento(e, clip, obj.id, t, cabeza.carril));
         cabeza.carril.append(rombo);
       }
       cuerpo.append(cabeza);
@@ -603,6 +600,54 @@ export function montarTimeline(raiz) {
       }
       elegida = { id, props, t: redondearTiempo(nuevo), canal: canal.nombre };
       ejecutar(lote, `${clip.id}: move key ${id} ${canal.nombre} ${n(t0)} → ${n(nuevo)} s`);
+    }, { once: true });
+  }
+
+  /**
+   * Un ◆ de «All keys» (id null) o de la fila de un objeto: clic lleva el playhead ahí; arrastrar mueve el momento
+   * entero (todos los keyframes de ese tiempo, del clip o del objeto), como move_keys de la IA.
+   */
+  function arrastrarMomento(e, clip, soloId, t0, carril) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    detener();
+    raiz.focus();
+    const zona = carril.getBoundingClientRect();
+    const duracion = leer(esquema, clip, 'duration');
+    const x0 = e.clientX;
+    let nuevo = t0;
+    fijar({ tiempo: t0 });
+    const ops = (t) => {
+      let tracks = clip.tracks;
+      for (const [id, campos] of Object.entries(clip.tracks ?? {})) {
+        if (soloId && id !== soloId) continue;
+        for (const p of Object.keys(campos)) tracks = moverClave(tracks, id, p, t0, t) ?? tracks;
+      }
+      return [{ op: 'set', target: clip.id, props: { tracks } }];
+    };
+    const mover = (ev) => {
+      if (Math.abs(ev.clientX - x0) < 3 && nuevo === t0) return;
+      nuevo = Math.max(0, Math.min(duracion, ajustarACuadro(t0 + ((ev.clientX - x0) / zona.width) * duracion)));
+      try {
+        previsualizar(ops(nuevo));
+      } catch {
+        previsualizar(null);
+      }
+      fijar({ tiempo: nuevo });
+    };
+    window.addEventListener('pointermove', mover);
+    window.addEventListener('pointerup', () => {
+      window.removeEventListener('pointermove', mover);
+      if (mismoTiempo(nuevo, t0)) return previsualizar(null);
+      let lote;
+      try {
+        lote = ops(nuevo);
+      } catch (error) {
+        previsualizar(null);
+        return avisar(error.message, true);
+      }
+      elegida = null;
+      ejecutar(lote, `${clip.id}: move ${soloId ? `${soloId} keys` : 'keys'} ${n(t0)} → ${n(nuevo)} s`);
     }, { once: true });
   }
 
