@@ -449,10 +449,13 @@ export function crearHuesos(ctx) {
     rotar(e, id);
   }
 
-  /** Arrastrar en un lugar vacío: elige los huesos que toca el recuadro (con Ctrl o Shift, los suma). Clic: suelta todo. */
-  function recuadroDeHuesos(e, sumar) {
+  /**
+   * Arrastrar en un lugar vacío: elige los huesos que toca el recuadro (con Ctrl o Shift, los suma). Clic: suelta
+   * todo. Con `conFormas` (en una pose o un clip) también elige las formas que toca, para keyar varias a la vez.
+   */
+  function recuadroDeHuesos(e, sumar, conFormas = false) {
     const doc = docVisible();
-    const base = sumar ? estado.seleccionados.filter(esHueso) : [];
+    const base = sumar ? (conFormas ? [...estado.seleccionados] : estado.seleccionados.filter(esHueso)) : [];
     const { posado } = evaluarEnPose(doc, esquema, poseVista(doc));
     const camara = ctx.matrizCamara();
     // Cada hueso como unos puntos a lo largo de su eje, en pantalla: lo toca el recuadro si alguno cae adentro.
@@ -461,6 +464,16 @@ export function crearHuesos(ctx) {
       const largo = leer(esquema, h, 'length');
       return { id: h.id, puntos: Array.from({ length: 13 }, (_, i) => aplicar(m, (largo * i) / 12, 0)) };
     });
+    // Formas visibles (no contenedores, como con el clic), con su caja en pantalla; las ocultas miden 0 y quedan afuera.
+    const CONTENEDORES = ['group', 'skeleton', 'switch'];
+    const formas = !conFormas ? [] : [...ctx.documentoG.querySelectorAll('[data-id]')]
+      .filter((el) => !CONTENEDORES.includes(buscar(doc, el.dataset.id)?.type))
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        const [x0, y0] = ctx.puntoPantalla({ clientX: r.left, clientY: r.top });
+        return r.width || r.height ? { id: el.dataset.id, caja: [x0, y0, x0 + r.width, y0 + r.height] } : null;
+      })
+      .filter(Boolean);
     const s0 = ctx.puntoPantalla(e);
     const caja = ctx.crear('rect', { class: 'recuadro' });
     let movio = false;
@@ -471,7 +484,10 @@ export function crearHuesos(ctx) {
         if (!movio && Math.hypot(s[0] - s0[0], s[1] - s0[1]) < 3) return;
         movio = true;
         const [x0, y0, x1, y1] = [Math.min(s0[0], s[0]), Math.min(s0[1], s[1]), Math.max(s0[0], s[0]), Math.max(s0[1], s[1])];
-        const tocados = huesos.filter((h) => h.puntos.some(([x, y]) => x >= x0 && x <= x1 && y >= y0 && y <= y1)).map((h) => h.id);
+        const tocados = [
+          ...formas.filter(({ caja: c }) => c[0] <= x1 && c[2] >= x0 && c[1] <= y1 && c[3] >= y0).map((f) => f.id),
+          ...huesos.filter((h) => h.puntos.some(([x, y]) => x >= x0 && x <= x1 && y >= y0 && y <= y1)).map((h) => h.id),
+        ];
         const ids = [...base, ...tocados.filter((t) => !base.includes(t))];
         if (ids.join() !== estado.seleccionados.join()) seleccionarVarios(ids, ids.at(-1) ?? null);
         for (const [k, v] of Object.entries({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 })) caja.setAttribute(k, v);
@@ -579,7 +595,7 @@ export function crearHuesos(ctx) {
     let id = e.target.closest('[data-hueso]')?.dataset.hueso;
     if (!id) {
       const g = e.target.closest('[data-id]');
-      if (!g || !ctx.documentoG.contains(g)) return seleccionar(null);
+      if (!g || !ctx.documentoG.contains(g)) return recuadroDeHuesos(e, e.ctrlKey || e.metaKey || e.shiftKey, true);
       id = huesoDe(estado.doc, g.dataset.id) ?? huesoCercanoDePuntos(g.dataset.id, ctx.puntoPantalla(e));
       if (!id) return e.ctrlKey || e.metaKey ? alternarSeleccion(g.dataset.id) : seleccionar(g.dataset.id);
     }

@@ -153,9 +153,9 @@ export function crearTransformar(ctx) {
     const base = sumar ? [...estado.seleccionados] : [];
     const s0 = ctx.puntoPantalla(e);
     const marco = ctx.crear('rect', { class: 'recuadro' });
-    // Cajas de las formas visibles (no grupos: se elige lo que se ve, como con el clic).
+    // Cajas de las formas visibles (no contenedores: se elige lo que se ve, como con el clic).
     const formas = [...ctx.documentoG.querySelectorAll('[data-id]')]
-      .filter((el) => buscar(estado.doc, el.dataset.id)?.type !== 'group')
+      .filter((el) => !['group', 'skeleton', 'switch'].includes(buscar(estado.doc, el.dataset.id)?.type))
       .map((el) => ({ id: el.dataset.id, caja: envolvente([esquinasDe(el) ?? []]) }))
       .filter((f) => f.caja);
     let movio = false;
