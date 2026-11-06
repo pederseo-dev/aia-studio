@@ -169,7 +169,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 #panel-derecho { grid-area: derecho; border-left: 1px solid var(--borde); display: flex; flex-direction: column; overflow: hidden; }
 #inspector { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 /* Alto fijo: el panel no crece ni se achica según cuánto contenido tenga; lo que sobra se desplaza. */
-#linea-de-tiempo { grid-area: tiempo; border-top: 1px solid var(--borde); height: 240px; overflow-y: auto; }
+#linea-de-tiempo { grid-area: tiempo; border-top: 1px solid var(--borde); height: clamp(260px, 38vh, 420px); overflow-y: auto; }
 /* Parameters, a la derecha (Animate y Puppet): nombre y control en una fila, los drivers debajo. */
 #seccion-parametros { flex: 0 1 auto; max-height: 34%; overflow-y: auto; border-bottom: 1px solid var(--borde); }
 #parametros { padding: 4px 10px 8px; display: flex; flex-direction: column; gap: 6px; }
@@ -406,16 +406,20 @@ body[data-modo="design"] #linea-de-tiempo { display: none; }
 .fila-pista .quitar-pista:hover { color: var(--error); }
 .aviso-drivers { color: var(--ia); cursor: help; }
 .fila-pista.seleccionada .nombre-pista { color: var(--texto); }
-.carril { position: relative; height: 100%; margin: 0 8px; border-bottom: 1px solid var(--borde); cursor: text; }
-.regla .carril { border-bottom-color: var(--tenue); }
-.marca { position: absolute; bottom: 2px; font-size: 10px; color: var(--tenue); transform: translateX(-50%); pointer-events: none; }
-.clave { position: absolute; top: 50%; width: 10px; height: 10px; background: var(--pose); border: 1px solid #0008; transform: translate(-50%, -50%) rotate(45deg); cursor: ew-resize; }
+.carril { position: relative; height: 100%; margin: 0 8px; border-bottom: 1px solid #3b3547; cursor: text; }
+/* Regla: franja más oscura, segundos legibles y una rayita en cada uno (como la regla de Rive). */
+.fila-pista.regla { height: 24px; }
+.regla .carril { background: var(--fondo); border-bottom-color: var(--suave); border-radius: 3px 3px 0 0; }
+.pistas > .fila-pista:nth-child(odd):not(.regla) .carril { background: #ffffff05; }
+.regla .marca { position: absolute; top: 3px; font-size: 11px; color: var(--suave); font-variant-numeric: tabular-nums; transform: translateX(-50%); pointer-events: none; }
+.regla .marca::after { content: ''; position: absolute; left: 50%; top: 15px; height: 6px; border-left: 1px solid var(--suave); }
+.clave { position: absolute; top: 50%; width: 11px; height: 11px; background: var(--pose); border: 1px solid #000a; box-shadow: 0 0 0 1px #ffffff26; transform: translate(-50%, -50%) rotate(45deg); cursor: ew-resize; }
 /* Siempre ◆ (como en Moho); el color dice la curva del tramo que sale de él. */
 .clave.curva-ease { background: #a99bff; }
 .clave.curva-step { background: var(--ia); }
 .clave.curva-bezier { background: #5fb8ff; }
 .clave.curva-mixta { background: var(--texto); }
-.clave.resumen { background: var(--tenue); width: 8px; height: 8px; cursor: pointer; }
+.clave.resumen { background: #b8b0c8; width: 9px; height: 9px; cursor: pointer; }
 /* Canales de lo seleccionado (Moho): los que no tienen keyframes se ven apagados, listos para keyar con ◇. */
 .fila-pista.resumen .nombre-pista { color: var(--tenue); }
 .fila-pista.vacia .nombre-pista { color: var(--tenue); }
