@@ -25,7 +25,6 @@ export const estado = {
   pose: null,
   params: null, // valores de los params en la vista Parámetros (null = no se mezcla nada)
   tiempo: 0, // playhead del clip abierto, en segundos
-  abajo: 'parametros', // pestaña del panel de abajo en Puppet: 'timeline' o 'parametros'
   reproduciendo: false,
   historial: { entradas: [], user: { deshacer: false, rehacer: false } },
 };

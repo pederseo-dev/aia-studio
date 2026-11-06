@@ -36,26 +36,21 @@ montarModos($('#modos'));
 montarClips($('#clips'), $('#lista-clips'), $('#nuevo-clip'));
 montarTimeline($('#timeline'));
 
-// Panel de abajo: Design no tiene; Animate y Puppet, la timeline del clip abierto o los params.
-for (const b of document.querySelectorAll('[data-abajo]')) b.addEventListener('click', () => fijar({ abajo: b.dataset.abajo }));
-function dibujarAbajo() {
-  // En Animate también se ven los params: una escena puede animar las expresiones del personaje (con la escena
-  // abierta, mover un control lo guarda como keyframe). Crear params es de Puppet.
-  const conTimeline = estado.abajo === 'timeline';
-  $('#timeline').hidden = !conTimeline;
-  $('#parametros').hidden = conTimeline;
-  $('#nuevo-param').hidden = conTimeline || estado.modo !== 'puppet';
-  for (const b of document.querySelectorAll('[data-abajo]')) b.setAttribute('aria-selected', String(b.dataset.abajo === (conTimeline ? 'timeline' : 'parametros')));
-  $('#ayuda-abajo').textContent = conTimeline
-    ? 'Move the playhead and change things on the canvas or in the inspector: each change is keyed at the playhead.'
-    : 'Moving a control shows the pose blend. With a clip open, it keys the parameter at the playhead.';
+// Abajo, la timeline ocupa todo el panel (Design no tiene). Los params van a la derecha, en Animate y en Puppet: una
+// escena puede animar las expresiones del personaje (con la escena abierta, mover un control lo guarda como
+// keyframe). Crear params es de Puppet.
+function dibujarParametros() {
+  // En Animate, sin params no hay nada que mostrar (se crean en Puppet).
+  const hay = estado.doc?.objects.some((o) => o.type === 'param');
+  $('#seccion-parametros').hidden = estado.modo === 'design' || (estado.modo === 'animate' && !hay);
+  $('#nuevo-param').hidden = estado.modo !== 'puppet';
 }
 suscribir((c) => {
-  if ('modo' in c || 'abajo' in c) dibujarAbajo();
+  if ('modo' in c || 'doc' in c) dibujarParametros();
   // Al abrir otro documento, el modo sigue: en Animate se abre su primera escena.
   if ('id' in c && estado.doc && estado.modo !== 'design') cambiarModo(estado.modo);
 });
-dibujarAbajo();
+dibujarParametros();
 
 // ---------- Menús desplegables (menú principal, zoom, grupos de herramientas) ----------
 

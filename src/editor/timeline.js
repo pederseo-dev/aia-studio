@@ -4,6 +4,7 @@
 // Un clip abierto se edita como una pose (estado.pose = id del clip): lo que se cambia en el lienzo o en el inspector
 // queda como keyframe en el tiempo del playhead (autokey, ver opsDePose en huesos.js).
 
+import { ICONOS } from './iconos.js';
 import { avisosDeClip, moverClave, ponerClave, quitarClave, redondearTiempo, tiempoLocal, tiemposDeClaves, valorAGuardar, valoresDeMontaje } from '../core/animacion.js';
 import { NOMBRES_DE_CURVA, errorDeCurva, mismoTiempo } from '../core/curvas.js';
 import { buscar } from '../core/documento.js';
@@ -36,7 +37,7 @@ function nuevoClip(usage) {
 
 function abrirClip(id) {
   detener();
-  fijar({ pose: id, tiempo: 0, edicion: null, vertice: null, abajo: 'timeline' });
+  fijar({ pose: id, tiempo: 0, edicion: null, vertice: null });
 }
 
 // ---------- Reproducción ----------
@@ -89,10 +90,10 @@ export function cambiarModo(modo) {
   if (modo === 'animate') {
     // Se abre la primera escena, si hay.
     const escena = doc?.objects.find((o) => o.type === 'animation' && leer(esquema, o, 'usage') === 'animate');
-    return fijar({ modo, pose: escena?.id ?? null, params: null, tiempo: 0, edicion: null, vertice: null, abajo: 'timeline' });
+    return fijar({ modo, pose: escena?.id ?? null, params: null, tiempo: 0, edicion: null, vertice: null });
   }
   // Puppet: se ve la mezcla de los params; los clips se abren desde la biblioteca de la derecha.
-  fijar({ modo, pose: null, params: estado.params ?? {}, tiempo: 0, edicion: null, vertice: null, abajo: 'parametros' });
+  fijar({ modo, pose: null, params: estado.params ?? {}, tiempo: 0, edicion: null, vertice: null });
 }
 
 // ---------- Biblioteca de clips (Puppet) ----------
@@ -170,33 +171,85 @@ export function montarTimeline(raiz) {
     p.className = 'ayuda';
     p.innerHTML =
       estado.modo === 'animate'
-        ? 'No scene yet. Create one with “＋ Scene”: then move the playhead and change things on the canvas or in the inspector — each change is keyed at the playhead.'
-        : 'Pick a clip on the right (or create one with “＋ Clip”) to edit its keyframes here.';
+        ? 'No scene yet. Create one with + (above): then move the playhead and change things on the canvas or in the inspector — each change is keyed at the playhead.'
+        : 'Pick a clip on the right (or create one with + above) to edit its keyframes here.';
     return p;
   }
 
-  function barra(doc, clip) {
-    const div = document.createElement('div');
-    div.className = 'barra-tiempo';
-    if (estado.modo === 'animate') {
-      const escenas = doc.objects.filter((o) => o.type === 'animation' && leer(esquema, o, 'usage') === 'animate');
-      const select = document.createElement('select');
-      select.title = 'Scene being edited';
-      select.append(...(escenas.length ? escenas.map((e) => new Option(e.id, e.id, false, e.id === clip?.id)) : [new Option('(no scenes)', '')]));
-      select.disabled = !escenas.length;
-      select.addEventListener('change', () => abrirClip(select.value));
-      div.append(select, boton('＋ Scene', 'New scene timeline', () => nuevoClip('animate')));
-    } else if (clip) {
-      div.append(Object.assign(document.createElement('strong'), { className: 'nombre-clip', textContent: clip.id, title: leer(esquema, clip, 'description') || 'Puppet clip' }));
+  /**
+   * Arriba, las pestañas como las de los documentos: en Animate, una por escena (× la borra, se puede deshacer); en
+   * Puppet, el clip abierto (× lo cierra). El + crea una escena o un clip.
+   */
+  function pestanas(doc, clip) {
+    const fila = document.createElement('div');
+    fila.className = 'pestanas-tiempo';
+    fila.setAttribute('role', 'tablist');
+    const animate = estado.modo === 'animate';
+    const lista = animate ? doc.objects.filter((o) => o.type === 'animation' && leer(esquema, o, 'usage') === 'animate') : clip ? [clip] : [];
+    for (const c of lista) {
+      const activa = c.id === clip?.id;
+      const p = document.createElement('div');
+      p.className = `pestana${activa ? ' activa' : ''}`;
+      p.setAttribute('role', 'tab');
+      p.setAttribute('aria-selected', String(activa));
+      p.title = leer(esquema, c, 'description') || c.id;
+      const cerrarTitulo = animate ? 'Delete this scene (undo brings it back)' : 'Close the clip';
+      p.innerHTML = `<span class="titulo"></span><button type="button" class="cerrar" title="${cerrarTitulo}">×</button>`;
+      p.querySelector('.titulo').textContent = c.id;
+      p.addEventListener('click', (e) => {
+        if (!e.target.closest('.cerrar')) return activa || abrirClip(c.id);
+        if (!animate) return cerrarClip();
+        if (!confirm(`Delete scene "${c.id}" and all its keyframes?`)) return;
+        detener();
+        const otra = lista.find((o) => o.id !== c.id);
+        ejecutar([{ op: 'delete', target: c.id }], `delete scene ${c.id}`);
+        if (activa) fijar({ pose: otra?.id ?? null, tiempo: 0 });
+      });
+      fila.append(p);
     }
-    if (!clip) return div;
+    const nueva = Object.assign(document.createElement('button'), { type: 'button', className: 'nueva-pestana', title: animate ? 'New scene' : 'New clip', innerHTML: ICONOS.agregar });
+    nueva.setAttribute('aria-label', nueva.title);
+    nueva.addEventListener('click', () => nuevoClip(animate ? 'animate' : 'puppet'));
+    fila.append(nueva);
+    return fila;
+  }
+
+  function cerrarClip() {
+    detener();
+    fijar({ pose: null, params: estado.params ?? {} });
+  }
+
+  /** « y »: el keyframe anterior o siguiente del clip (o el principio y el final, si no hay más). */
+  function saltar(clip, direccion) {
+    detener();
+    const tiempos = tiemposDeClaves(clip).filter((t) => !mismoTiempo(t, estado.tiempo) && (direccion < 0 ? t < estado.tiempo : t > estado.tiempo));
+    const t = direccion < 0 ? (tiempos.at(-1) ?? 0) : (tiempos[0] ?? leer(esquema, clip, 'duration'));
+    fijar({ tiempo: t });
+  }
+
+  function barra(doc, clip) {
+    const contenedor = document.createElement('div');
+    contenedor.className = 'cabeza-tiempo';
+    contenedor.append(pestanas(doc, clip));
+    if (!clip) return contenedor;
+    const fila = document.createElement('div');
+    fila.className = 'barra-tiempo';
+    const izquierda = document.createElement('div');
+    izquierda.className = 'zona izquierda';
+    const centro = document.createElement('div');
+    centro.className = 'zona centro';
+    const div = document.createElement('div');
+    div.className = 'zona derecha';
+    fila.append(izquierda, centro, div);
+    contenedor.append(fila);
 
     const duracion = leer(esquema, clip, 'duration');
-    div.append(
-      boton('⏮', 'Go to the start', () => fijar({ tiempo: 0 })),
+    centro.append(
+      boton('«', 'Previous keyframe (or the start)', () => saltar(clip, -1)),
       boton(estado.reproduciendo ? '⏸' : '▶', estado.reproduciendo ? 'Pause' : 'Play', () => (estado.reproduciendo ? detener() : reproducir()), 'play'),
-      Object.assign(document.createElement('span'), { className: 'reloj' }),
+      boton('»', 'Next keyframe (or the end)', () => saltar(clip, 1)),
     );
+    izquierda.append(Object.assign(document.createElement('span'), { className: 'reloj' }));
 
     const campoDuracion = Object.assign(document.createElement('input'), { type: 'number', min: 0.05, step: 0.1, value: n(duracion), title: 'Duration in seconds' });
     campoDuracion.addEventListener('change', () => {
@@ -218,7 +271,8 @@ export function montarTimeline(raiz) {
     for (const v of ['once', 'loop', 'pingpong']) loop.append(new Option(v, v, false, v === leer(esquema, clip, 'loop')));
     loop.addEventListener('change', () => ejecutar([{ op: 'set', target: clip.id, props: { loop: loop.value } }], `${clip.id} loop ${loop.value}`));
 
-    div.append(etiquetaDuracion, loop, boton('◆ Key', 'Key the selected object at the playhead: its animated properties (or, if it has none, its rotation and position)', () => clavarSeleccion(clip)));
+    izquierda.append(etiquetaDuracion, loop);
+    div.append(boton('◆ Key', 'Key the selected object at the playhead: its animated properties (or, if it has none, its rotation and position)', () => clavarSeleccion(clip)));
 
     // Una pose entera como keyframes en el playhead, y volver al montaje (lo mismo que pose y setup en set_keys).
     const poses = doc.objects.filter((o) => o.type === 'pose');
@@ -277,9 +331,9 @@ export function montarTimeline(raiz) {
     if (estado.modo === 'puppet') {
       const descripcion = Object.assign(document.createElement('input'), { type: 'text', className: 'descripcion', value: leer(esquema, clip, 'description'), placeholder: 'What it does (for the app’s AI)' });
       descripcion.addEventListener('change', () => ejecutar([{ op: 'set', target: clip.id, props: { description: descripcion.value } }], `${clip.id} description`));
-      div.append(descripcion);
+      izquierda.append(descripcion);
     }
-    return div;
+    return contenedor;
   }
 
   function boton(texto, titulo, accion, clase = '') {

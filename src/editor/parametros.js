@@ -1,4 +1,4 @@
-// Panel de parámetros (abajo): un control por param (deslizador, casilla o lista) y sus drivers. Mover un control
+// Panel de parámetros (a la derecha, en Animate y Puppet): un control por param (deslizador, casilla o lista) y sus drivers. Mover un control
 // pasa a la vista Parámetros: el lienzo muestra la mezcla de poses que dan los drivers. Los valores de los controles
 // son del editor (no se guardan); lo que se guarda son los params, los drivers y las poses.
 

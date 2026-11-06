@@ -290,8 +290,9 @@ Construido (2026-11-05):
   clip): girar huesos, el inspector, los puntos y los sliders de params guardan keyframes en el playhead (autokey).
   Timeline con regla, play/pausa (respeta `loop`), duración, loop, «◆ Key», keyframes que se eligen, se arrastran
   (con imán a los cuadros), cambian de curva y se borran con <kbd>Del</kbd>. Puppet: biblioteca de clips a la
-  derecha (clic = editar, ▶ = reproducir) y pestañas Timeline / Parameters abajo, con la descripción del clip.
-  Animate: selector de escenas y «＋ Scene».
+  derecha (clic = editar, ▶ = reproducir), Parameters también a la derecha y la timeline sola abajo, con la
+  descripción del clip. Animate: una pestaña por escena (+ crea, × borra), como las de los documentos. La
+  reproducción va al medio de la barra: «, ▶ y » (keyframe anterior y siguiente).
 - Prueba con IA: 8/8 sin rechazos ([resultados](pruebas-ia/fase-5.md)). Con lo que encontró: `setup: true` y
   momentos con solo `ease` en `set_keys`, y `undo`/`redo` por pista en los clips (como por clave en las poses).
 - Tercera auditoría (fase 5): en un loop, `t = duration` es el final; lo que no se suma (switch, colores,
