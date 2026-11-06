@@ -39,6 +39,7 @@ giro de cabeza y visemas de la fase 4). Pasar las tareas **una por una, tal cual
 | Fecha | Cliente y modelo | Logradas | Rechazos | Correcciones a mano | Notas |
 | --- | --- | --- | --- | --- | --- |
 | 2026-11-05 | Claude Code (subagente nuevo, solo con el MCP), Opus 5.5 | 8/8 | 0 | 0 | Tareas 1–5 de corrido; el retoque a mano de la tarea 6 se hizo por la API del editor (origen `user`); 6–8 en la misma conversación. Ver abajo. |
+| 2026-11-06 | Claude Code (sesión nueva, solo MCP), Opus 5.5 | 9/9 | 0 | 0 | Segunda ronda, después de la timeline nueva y de «params solo en Puppet». Ver «Segunda ronda». |
 
 **Cómo lo hizo:**
 - **Tarea 1:** `blink` (puppet, 0.2 s, once, con descripción). Aplasta `eye_*`/`pupil_*` (`height`) y apaga los
@@ -77,3 +78,50 @@ giro de cabeza y visemas de la fase 4). Pasar las tareas **una por una, tal cual
    - Leer un clip sin pedir el historial detallado (un resumen de keys por pista con valores).
    - Respirar escalando el cuerpo agranda la cabeza: falta que un hueso no herede la escala (o un consejo en la guía).
    - Una vista previa después de `undo`.
+
+## Segunda ronda (2026-11-06): timeline, escenas y clips de Puppet
+
+Después de rehacer la timeline y de decidir que los params son solo de Puppet (una escena se evalúa sin drivers), se
+repitió la prueba sobre «Gato expresiones» para que la IA usara todas las herramientas de animación. Las tareas se
+pasaron de a una, sin pistas:
+
+1. Una escena corta de 3 s: el gato se inclina hacia un lado y al final vuelve a quedar como estaba.
+2. En esa escena, que diga «a-o-a» entre el segundo 1 y el 2.
+3. Que a los 1.5 s ponga cara feliz.
+4. Que el cuerpo vuelva a su lugar de golpe, sin cambiar los tiempos.
+5. Correr la «o» una décima más tarde, sin mover nada más.
+6. Tres gestos para usar en vivo: parpadeo, un saludo que lo ponga contento y un reposo que se repita.
+7. Que el saludo dure 1 segundo.
+8. Sacar la cara feliz de la escena, sin tocar lo demás.
+9. Deshacer lo último.
+
+**Cómo lo hizo:**
+- **1:** `lean_side` (Animate, 3 s) en un solo `set_keys`. Cuerpo, cabeza, cola y orejas con `ease-in-out`, y la vuelta
+  exacta al montaje. Revisó con tiras de cuadros.
+- **2:** keyó `mouth.active` (rest, a, o, a, rest). No intentó usar params en la escena.
+- **3:** copió de la pose `happy` solo los ojos y la boca (sin la cola), de 1.2 a 1.5 s, sostenida hasta 2.4 s. Detalle:
+  la sonrisa está en `mouth_rest`, así que recién se ve después de 2 s, cuando termina el «a-o-a».
+- **4:** cambió solo la curva del tramo con un `cubic-bezier` propio, `[0.9, 0, 1, 0.1]`.
+- **5:** `move_keys` sobre la pista `mouth.active`: la «o» pasó de 1.33 a 1.43 s.
+- **6:** `blink` (0.25 s), `greet` (1.8 s, la pata saluda y `happiness` sube a 1) e `idle` (3 s, en loop), todos de
+  Puppet y con `description`. En `greet` corrigió la pata dos veces, porque el gato no tiene brazo.
+- **7:** acortó `greet` a 1 s con los momentos en proporción. Le llevó **7 lotes**, uno por momento con `move_keys` y
+  después `duration`, así que deshacerlo lleva 7 pasos.
+- **8:** `delete_keys` de las 14 pistas de la cara.
+- **9:** `undo` devolvió las 14 pistas, y nada más cambió.
+
+**Problemas encontrados** (por orden de importancia):
+
+1. **No hay forma de reescalar el tiempo de un clip.** Para acortar el saludo movió los momentos de a uno, y quedaron
+   7 entradas de deshacer. Pidió un `scale_time` (o `duration` con `scale: true`), y el editor necesita lo mismo.
+2. **Faltan avisos de lo que mueve un param.** En Puppet, `happiness` también mueve la pose `mirando_arriba`, por un
+   driver que hizo el usuario, y ninguna herramienta lo avisó: lo vio recién en la vista previa. `set_keys` y
+   `render_preview` podrían listar las poses que mueve cada param animado.
+3. **Copiar solo una parte de una pose:** pidió `pose` con un filtro de objetos en `set_keys`.
+4. **Valores relativos al montaje** («+14°») en `set_keys`.
+5. **Curvas:** no hay curvas fuertes con nombre ni forma de ver la curva de un tramo; para la vuelta de golpe adivinó
+   los números del cubic-bezier.
+6. **Antes del primer keyframe el clip usa el valor de ese keyframe:** tuvo que poner a mano la boca normal en 0 s.
+   Es lo esperado, pero conviene decirlo en la guía.
+7. **Rig:** sin brazo ni IK o pin, la pata del saludo flota. Esto es del personaje, no de la herramienta.
+
