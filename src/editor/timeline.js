@@ -5,9 +5,9 @@
 // queda como keyframe en el tiempo del playhead (autokey, ver opsDePose en huesos.js).
 
 import { ICONOS } from './iconos.js';
-import { avisosDeClip, esEscena, moverClave, ponerClave, quitarClave, redondearTiempo, tiempoLocal, tiemposDeClaves, valorAGuardar, valoresDeMontaje } from '../core/animacion.js';
-import { NOMBRES_DE_CURVA, errorDeCurva, mismoTiempo } from '../core/curvas.js';
-import { buscar } from '../core/documento.js';
+import { avisosDeClip, escalarTiempo, esEscena, moverClave, ponerClave, quitarClave, redondearTiempo, tiempoLocal, tiemposDeClaves, valorAGuardar, valoresDeMontaje } from '../core/animacion.js';
+import { NOMBRES_DE_CURVA, aplicarCurva, errorDeCurva, mismoTiempo } from '../core/curvas.js';
+import { buscar, subarbol } from '../core/documento.js';
 import { leer, leerMeta } from '../core/esquema.js';
 import { valorEfectivo } from '../core/estilos.js';
 import { avisar, ejecutar, esquema, estado, fijar, previsualizar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
@@ -146,6 +146,8 @@ export function montarTimeline(raiz) {
   let elegida = null;
   // Grupos de la timeline abiertos o cerrados a mano (id → true/false); si no se tocó, solo el principal va abierto.
   const plegados = new Map();
+  // «Scale keys» al cambiar Length: se recuerda mientras el editor está abierto.
+  let escalarClaves = false;
   raiz.tabIndex = -1;
 
   suscribir((c) => {
@@ -255,9 +257,22 @@ export function montarTimeline(raiz) {
     campoDuracion.addEventListener('change', () => {
       const v = Number(campoDuracion.value);
       if (!(v > 0)) return dibujar();
+      // Con «Scale keys», los keyframes se estiran o comprimen en proporción (lo mismo que scale_time del MCP).
+      if (escalarClaves && tiemposDeClaves(clip).length) {
+        let escalado;
+        try {
+          escalado = escalarTiempo(clip.tracks, duracion, { largo: v });
+        } catch (error) {
+          avisar(error.message, true);
+          return dibujar();
+        }
+        ejecutar([{ op: 'set', target: clip.id, props: { tracks: escalado.pistas, duration: escalado.duracion } }], `scale time of ${clip.id}: ${n(duracion)} → ${n(v)} s`);
+        fijar({ tiempo: redondearTiempo(Math.min(v, (estado.tiempo * v) / duracion)) });
+        return;
+      }
       const ultima = Math.max(0, ...Object.values(clip.tracks ?? {}).flatMap((c) => Object.values(c).flatMap((k) => k.map((x) => x.t))));
       if (v < ultima) {
-        avisar(`There are keyframes up to ${n(ultima)} s: move or delete them before shortening the clip`, true);
+        avisar(`There are keyframes up to ${n(ultima)} s: tick Scale keys to squeeze them into ${n(v)} s, or move or delete them first`, true);
         return dibujar();
       }
       ejecutar([{ op: 'set', target: clip.id, props: { duration: v } }], `${clip.id} duration ${v} s`);
@@ -265,22 +280,41 @@ export function montarTimeline(raiz) {
     });
     const etiquetaDuracion = Object.assign(document.createElement('label'), { className: 'campo-corto', textContent: 'Length' });
     etiquetaDuracion.append(campoDuracion, document.createTextNode('s'));
+    const escalar = Object.assign(document.createElement('input'), { type: 'checkbox', checked: escalarClaves });
+    escalar.addEventListener('change', () => (escalarClaves = escalar.checked));
+    const etiquetaEscalar = Object.assign(document.createElement('label'), { className: 'campo-corto', title: 'When on, changing Length stretches or squeezes every keyframe in proportion (one undo step)' });
+    etiquetaEscalar.append(escalar, document.createTextNode('Scale keys'));
 
     const loop = document.createElement('select');
     loop.title = 'once: plays once and holds the end · loop: starts over · pingpong: back and forth';
     for (const v of ['once', 'loop', 'pingpong']) loop.append(new Option(v, v, false, v === leer(esquema, clip, 'loop')));
     loop.addEventListener('change', () => ejecutar([{ op: 'set', target: clip.id, props: { loop: loop.value } }], `${clip.id} loop ${loop.value}`));
 
-    izquierda.append(etiquetaDuracion, loop);
+    izquierda.append(etiquetaDuracion, etiquetaEscalar, loop);
     div.append(boton('◆ Key', 'Key the selected object at the playhead: its animated properties (or, if it has none, its rotation and position)', () => clavarSeleccion(clip)));
 
     // Una pose entera como keyframes en el playhead, y volver al montaje (lo mismo que pose y setup en set_keys).
     const poses = doc.objects.filter((o) => o.type === 'pose');
     if (poses.length) {
       const conPose = document.createElement('select');
-      conPose.title = 'Key all the values of a pose at the playhead';
+      conPose.title = 'Key the values of a pose at the playhead: all of it, or only what is selected (like pose with only in set_keys)';
       conPose.append(new Option('◆ Pose…', ''), ...poses.map((p) => new Option(p.id, p.id)));
-      conPose.addEventListener('change', () => conPose.value && clavarValores(clip, structuredClone(buscar(estado.doc, conPose.value).values ?? {}), `pose ${conPose.value}`, false));
+      // Lo seleccionado y lo que cuelga de ello (un grupo o un skeleton valen por sus partes).
+      const elegidos = new Set(estado.seleccionados.flatMap((id) => subarbol(estado.doc, id)));
+      const parciales = poses.filter((p) => Object.keys(p.values ?? {}).some((id) => elegidos.has(id)));
+      if (parciales.length) {
+        const grupo = Object.assign(document.createElement('optgroup'), { label: 'Only the selection' });
+        grupo.append(...parciales.map((p) => new Option(`${p.id} (selection)`, `sel:${p.id}`)));
+        conPose.append(grupo);
+      }
+      conPose.addEventListener('change', () => {
+        if (!conPose.value) return;
+        const soloSeleccion = conPose.value.startsWith('sel:');
+        const id = conPose.value.replace(/^sel:/, '');
+        const valores = structuredClone(buscar(estado.doc, id).values ?? {});
+        if (soloSeleccion) for (const objeto of Object.keys(valores)) if (!elegidos.has(objeto)) delete valores[objeto];
+        clavarValores(clip, valores, soloSeleccion ? `pose ${id} (only ${Object.keys(valores).join(', ')})` : `pose ${id}`, false);
+      });
       div.append(conPose);
     }
     const ayudaSetup = esEscena(esquema, clip)
@@ -329,6 +363,7 @@ export function montarTimeline(raiz) {
       });
       const etiqueta = Object.assign(document.createElement('label'), { className: 'campo-corto', textContent: `${elegida.id} ${elegida.canal} @ ${n(elegida.t)} s` });
       etiqueta.append(curva);
+      if (actual !== 'mixed') etiqueta.append(formaDeCurva(primera ?? 'linear'));
       div.append(etiqueta, boton('Delete key', 'Delete this keyframe (Del)', () => borrarElegida(clip)));
     }
     if (estado.modo === 'puppet') {
@@ -501,6 +536,13 @@ export function montarTimeline(raiz) {
     const quitar = boton('×', `Delete the whole ${canal.nombre} track of ${obj.id} (all its keyframes)`, () => borrarCanal(clip, obj.id, canal), 'quitar-pista');
     if (!conPista) quitar.hidden = true;
     f.etiqueta.append(clavar, quitar);
+    // Un param mueve todas las poses de sus drivers (también las que no se ven en la timeline): se dice al lado.
+    if (obj.type === 'param') {
+      const poses = estado.doc.objects.filter((o) => o.type === 'driver' && o.param === obj.id && buscar(estado.doc, o.pose)?.type === 'pose');
+      const texto = poses.length ? `→ ${poses.map((d) => d.pose).join(', ')}` : '→ no driver';
+      const detalle = poses.map((d) => `${d.pose} (driver ${d.id}): ${Object.keys(buscar(estado.doc, d.pose).values ?? {}).join(', ') || 'empty'}`).join('\n');
+      f.etiqueta.append(Object.assign(document.createElement('span'), { className: 'poses-param', textContent: texto, title: poses.length ? `Animating ${obj.id} moves these poses (they all add up):\n${detalle}` : `${obj.id} has no driver: animating it moves nothing` }));
+    }
     for (const t of tiemposDelCanal(clip, obj.id, canal.props)) {
       const claves = clavesEn(clip, obj.id, canal.props, t);
       const rombo = document.createElement('span');
@@ -708,7 +750,23 @@ function claseDeCurva(claves) {
   const curvas = new Set(claves.map(([, c]) => (Array.isArray(c.ease) ? 'bezier' : (c.ease ?? 'linear'))));
   if (curvas.size > 1) return 'curva-mixta';
   const [curva] = curvas;
-  return `curva-${curva === 'ease-in' || curva === 'ease-out' || curva === 'ease-in-out' ? 'ease' : curva}`;
+  return `curva-${curva.startsWith('ease-') ? 'ease' : curva}`;
+}
+
+/** Un dibujito de la curva de un tramo (tiempo → avance), para ver la forma sin adivinar los números. */
+function formaDeCurva(ease) {
+  const [ancho, alto, margen] = [36, 20, 4];
+  const y = (v) => margen + (1 - v) * (alto - 2 * margen);
+  const puntos = Array.from({ length: 25 }, (_, i) => {
+    const f = i / 24;
+    return `${(f * ancho).toFixed(1)},${y(ease === 'step' ? (f < 1 ? 0 : 1) : aplicarCurva(ease, f)).toFixed(1)}`;
+  });
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${ancho} ${alto}`);
+  svg.setAttribute('class', 'forma-curva');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = `<line x1="0" y1="${y(0)}" x2="${ancho}" y2="${y(0)}"/><line x1="0" y1="${y(1)}" x2="${ancho}" y2="${y(1)}"/><polyline points="${puntos.join(' ')}"/>`;
+  return svg;
 }
 function nombreDeCurva(claves) {
   const nombres = [...new Set(claves.map(([, c]) => (Array.isArray(c.ease) ? `cubic-bezier(${c.ease.join(', ')})` : (c.ease ?? 'linear'))))];

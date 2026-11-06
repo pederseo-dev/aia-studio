@@ -408,6 +408,10 @@ body[data-modo="design"] #linea-de-tiempo { display: none; }
 .fila-pista:hover .quitar-pista { visibility: visible; }
 .fila-pista .quitar-pista:hover { color: var(--error); }
 .aviso-drivers { color: var(--ia); cursor: help; }
+.poses-param { color: var(--suave); font-size: 11px; cursor: help; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.forma-curva { width: 36px; height: 20px; flex: 0 0 auto; overflow: visible; vertical-align: middle; margin-left: 4px; }
+.forma-curva line { stroke: var(--borde); stroke-width: 1; }
+.forma-curva polyline { fill: none; stroke: #a99bff; stroke-width: 1.5; }
 .fila-pista.seleccionada .nombre-pista { color: var(--texto); }
 .carril { position: relative; height: 100%; margin: 0 8px; border-bottom: 1px solid #3b3547; cursor: text; }
 /* Regla: franja más oscura, segundos legibles y una rayita en cada uno (como la regla de Rive). */
