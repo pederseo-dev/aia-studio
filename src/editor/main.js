@@ -71,6 +71,22 @@ $('#plegar-historial').addEventListener('click', () => {
 suscribir((c) => 'modo' in c && plegarHistorial(historialPlegado()));
 plegarHistorial(historialPlegado());
 
+// Assets plegable (abierto por defecto); se recuerda lo que elija el usuario.
+function plegarRecursos(plegado) {
+  document.body.classList.toggle('recursos-plegado', plegado);
+  $('#plegar-recursos').setAttribute('aria-expanded', String(!plegado));
+}
+$('#plegar-recursos').addEventListener('click', () => {
+  const plegado = !document.body.classList.contains('recursos-plegado');
+  try {
+    localStorage.setItem('aia:recursos-plegado', plegado ? '1' : '0');
+  } catch {}
+  plegarRecursos(plegado);
+});
+try {
+  plegarRecursos(localStorage.getItem('aia:recursos-plegado') === '1');
+} catch {}
+
 // ---------- Menús desplegables (menú principal, zoom, grupos de herramientas) ----------
 
 function alternarMenu(menu, boton) {
