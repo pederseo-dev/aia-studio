@@ -101,8 +101,10 @@ kbd { font: 11px ui-monospace, monospace; color: var(--suave); border: 1px solid
 :is(#barra, .cabecera) .grupo-herramientas .principal { width: 32px; min-width: 0; padding: 0; border-radius: 5px; }
 .cabecera .grupo-herramientas .principal { width: 24px; }
 :is(#barra, .cabecera) .grupo-herramientas .elegir { width: 14px; padding: 0; margin-left: -1px; color: var(--tenue); }
-#barra .grupo-herramientas.activo .principal, #barra .grupo-herramientas.activo .elegir { background: none; color: var(--acento); }
-#barra .grupo-herramientas.activo .principal:hover { background: var(--panel-2); }
+/* La herramienta activa va rellena con el acento, como el botón elegido en Moho. */
+#barra .grupo-herramientas.activo .principal { background: var(--acento); color: var(--sobre-acento); }
+#barra .grupo-herramientas.activo .principal:hover { background: var(--acento); color: var(--sobre-acento); filter: brightness(1.08); }
+#barra .grupo-herramientas.activo .elegir { background: none; color: var(--acento); }
 :is(#barra, .cabecera) .grupo-herramientas .elegir[aria-expanded="true"] { color: var(--texto); }
 .cabecera .ico { width: 16px; height: 16px; }
 #barra .separador { margin: 6px 4px; }
@@ -376,7 +378,7 @@ body.historial-plegado #plegar-historial .ico-flecha { transform: rotate(-90deg)
 #modos button { border-radius: 0; padding: 3px 10px; background: none; color: var(--suave); margin-left: -1px; }
 #modos button:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
 #modos button:last-child { border-radius: 0 4px 4px 0; }
-#modos button[aria-selected="true"] { background: var(--panel-2); color: var(--texto); border-color: var(--acento); position: relative; }
+#modos button[aria-selected="true"] { background: var(--acento); color: var(--sobre-acento); border-color: var(--acento); position: relative; z-index: 1; }
 /* Las poses y los params son de Puppet; Design no tiene timeline. */
 body:not([data-modo="puppet"]) #modo { display: none; }
 body[data-modo="design"] #linea-de-tiempo { display: none; }
