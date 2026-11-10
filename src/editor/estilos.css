@@ -266,25 +266,25 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 .enlazado { fill: color-mix(in srgb, var(--pose) 8%, transparent); stroke: var(--pose); stroke-width: 1.2; stroke-dasharray: 4 2; }
 #lienzo.herramienta-enlazarCapa #vista *, #lienzo.herramienta-enlazarPuntos #vista * { cursor: copy; }
 #lienzo.herramienta-reparentar .hueso { cursor: alias; }
+/* Barra de opciones: en la fila de herramientas, entre las herramientas y los modos. Una sola línea; el texto se
+   corta con … y los botones quedan siempre a la vista. */
 .opciones {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  top: 10px;
-  z-index: 2;
+  flex: 0 1 auto;
+  min-width: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 6px;
-  width: fit-content;
-  max-width: calc(100% - 20px);
-  padding: 5px 8px;
-  border: 1px solid var(--borde);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
   color: var(--suave);
   font-size: 12px;
+  white-space: nowrap;
 }
+.opciones > * { flex: none; }
+.opciones > .texto { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .opciones .texto b { color: var(--texto); font-weight: 600; }
 .opciones kbd { font-size: 11px; }
 .opciones button, .opciones select { padding: 2px 8px; font-size: 12px; }

@@ -39,13 +39,12 @@
         <div class="grupo-herramientas desplegable" data-grupo="crear"></div>
         <div class="grupo-herramientas desplegable" data-grupo="esqueleto"></div>
         <span class="separador"></span>
-        <button id="deshacer" type="button" class="icono" title="Undo your last change (Ctrl+Z)" aria-label="Undo"></button>
-        <button id="rehacer" type="button" class="icono" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"></button>
-        <span class="separador"></span>
         <label id="modo" title="Setup: edit the artwork and its skeleton at rest. Pose: rotate bones and the bound artwork follows, without changing the setup.">
           <span>View</span>
           <select id="pose" data-requiere-doc></select>
         </label>
+        <!-- Opciones de la herramienta y lo seleccionado (como la barra de opciones de Moho); las llena opciones.js -->
+        <div id="opciones" class="opciones" hidden></div>
         <span class="espaciador"></span>
         <div id="modos" role="tablist" aria-label="Mode">
           <button type="button" role="tab" data-modo="design">Design</button>
@@ -137,7 +136,6 @@
           <p>No file is open.</p>
           <p class="ayuda">Create one with <b>+</b>, open one from the <b>☰ → Open…</b> menu, or ask the AI.</p>
         </div>
-        <div id="opciones" class="opciones" hidden></div>
         <svg id="vista">
           <g id="camara"><g id="documento"></g></g>
           <g id="superposicion"></g>

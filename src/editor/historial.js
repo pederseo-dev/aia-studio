@@ -2,15 +2,13 @@
 
 import { estado, suscribir } from './estado.js';
 
-export function montarHistorial(lista, botonDeshacer, botonRehacer) {
+export function montarHistorial(lista) {
   suscribir((c) => {
     if ('historial' in c) dibujar();
   });
 
   function dibujar() {
-    const { entradas, user } = estado.historial;
-    botonDeshacer.disabled = !user.deshacer;
-    botonRehacer.disabled = !user.rehacer;
+    const { entradas } = estado.historial;
 
     const porNumero = new Map(entradas.map((e) => [e.n, e]));
     const revertidas = new Set();

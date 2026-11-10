@@ -30,6 +30,8 @@ export function montarOpciones(raiz, acciones) {
     raiz.hidden = !doc;
     if (!doc) return;
     raiz.replaceChildren(...contenido(doc));
+    // En la barra el texto entra en una línea; entero, al pasar el mouse.
+    for (const t of raiz.querySelectorAll('.texto')) t.title = t.textContent;
     raiz.classList.toggle('en-pose', !!estado.pose);
     raiz.classList.toggle('enlazando', ['enlazarCapa', 'enlazarPuntos'].includes(estado.herramienta) && !estado.pose);
   }

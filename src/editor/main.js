@@ -20,15 +20,13 @@ import {
 } from './estado.js';
 
 const $ = (s) => document.querySelector(s);
-$('#deshacer').innerHTML = ICONOS.deshacer;
-$('#rehacer').innerHTML = ICONOS.rehacer;
 // Íconos fijos del HTML: data-icono los pone al principio del elemento y data-flecha es la flecha de un desplegable.
 for (const el of document.querySelectorAll('[data-icono]')) el.insertAdjacentHTML('afterbegin', ICONOS[el.dataset.icono]);
 for (const el of document.querySelectorAll('[data-flecha]')) el.innerHTML = FLECHA;
 
 montarArbol($('#arbol'), $('#recursos'));
 montarInspector($('#inspector'));
-montarHistorial($('#entradas'), $('#deshacer'), $('#rehacer'));
+montarHistorial($('#entradas'));
 const lienzo = montarLienzo($('#lienzo'));
 montarOpciones($('#opciones'), { agrupar: () => agruparSeleccion(), switch: () => nuevoSwitch(), esqueleto: () => nuevoEsqueleto(), enlazar: () => enlazarSeleccion(), enlazarTodo: enlazarPorCercania });
 montarParametros($('#parametros'), $('#nuevo-param'));
@@ -247,8 +245,6 @@ suscribir((c) => {
   }
 });
 
-$('#deshacer').addEventListener('click', deshacer);
-$('#rehacer').addEventListener('click', rehacer);
 $('#borrar').addEventListener('click', borrarSeleccion);
 $('#borrar-recurso').addEventListener('click', borrarRecursos);
 // Grupo, switch y skeleton: un solo botón (carpeta con +) que abre el menú para elegir qué crear.
