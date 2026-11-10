@@ -349,6 +349,14 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 /* ---------- Historial ---------- */
 
 #historial { border-top: 1px solid var(--borde); padding: 8px 10px; flex: 0 0 32%; min-height: 120px; overflow-y: auto; }
+#historial h2 { margin: 0; }
+#plegar-historial { display: flex; align-items: center; gap: 6px; width: 100%; padding: 0; border: none; background: none; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
+#plegar-historial:hover { color: var(--texto); }
+#plegar-historial .ico-flecha { transition: transform 0.15s; }
+/* Plegado: queda solo la cabecera y el inspector se lleva el resto del alto. */
+body.historial-plegado #historial { flex: 0 0 auto; min-height: 0; overflow: hidden; }
+body.historial-plegado #entradas { display: none; }
+body.historial-plegado #plegar-historial .ico-flecha { transform: rotate(-90deg); }
 #entradas { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px; }
 #entradas li { display: flex; gap: 6px; padding: 2px 0; color: var(--suave); }
 #entradas .quien { font-weight: 600; min-width: 22px; }

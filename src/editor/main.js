@@ -48,6 +48,30 @@ suscribir((c) => {
 });
 dibujarParametros();
 
+// History plegable: en Animate y Puppet arranca plegado para dejarle lugar al inspector y a los paneles de animación.
+// Lo que elija el usuario se recuerda por modo.
+const claveHistorial = () => `aia:historial-plegado:${estado.modo}`;
+function historialPlegado() {
+  try {
+    const guardado = localStorage.getItem(claveHistorial());
+    if (guardado !== null) return guardado === '1';
+  } catch {}
+  return estado.modo !== 'design';
+}
+function plegarHistorial(plegado) {
+  document.body.classList.toggle('historial-plegado', plegado);
+  $('#plegar-historial').setAttribute('aria-expanded', String(!plegado));
+}
+$('#plegar-historial').addEventListener('click', () => {
+  const plegado = !document.body.classList.contains('historial-plegado');
+  try {
+    localStorage.setItem(claveHistorial(), plegado ? '1' : '0');
+  } catch {}
+  plegarHistorial(plegado);
+});
+suscribir((c) => 'modo' in c && plegarHistorial(historialPlegado()));
+plegarHistorial(historialPlegado());
+
 // ---------- Menús desplegables (menú principal, zoom, grupos de herramientas) ----------
 
 function alternarMenu(menu, boton) {
