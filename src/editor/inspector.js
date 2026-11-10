@@ -4,7 +4,8 @@
 // campos donde los valores difieren se marcan como mixtos (muestran el valor del objeto principal).
 
 import { buscar, esqueletoDe } from '../core/documento.js';
-import { validarValor } from '../core/esquema.js';
+import { leerMeta, validarValor } from '../core/esquema.js';
+import { opsDeTamano } from '../core/tamano.js';
 import { valoresDeHueso } from '../core/esqueleto.js';
 import { origenDelValor, valorEfectivo } from '../core/estilos.js';
 import { clipAbierto, nombreDeEdicion, opsDePose, poseActiva } from './huesos.js';
@@ -40,7 +41,7 @@ export function montarInspector(raiz) {
     const propiedades = Object.entries(tipo.properties).filter(comun);
     contexto = { otros };
 
-    raiz.replaceChildren(otros.length ? tituloVarios(obj, otros) : obj ? titulo(obj, tipo) : Object.assign(document.createElement('h2'), { textContent: 'Document' }));
+    raiz.replaceChildren(otros.length ? tituloVarios(obj, otros) : obj ? titulo(obj, tipo) : Object.assign(document.createElement('h2'), { textContent: 'Artboard' }));
     if (otros.length && !propiedades.length) raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'No properties in common.' }));
     const pose = poseActiva();
     if (pose && obj && !otros.length && !tipo.resource) seccionDePose(obj, tipo, pose);
@@ -168,9 +169,14 @@ export function montarInspector(raiz) {
     label.title = `${prop}: ${p.help ?? ''}${p.default !== undefined ? `\nDefault: ${JSON.stringify(p.default)}` : ''}${deDonde}${mixto ? `\nMixed values: showing ${objetivo}.` : ''}`;
     const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Reset to default' });
     const nombre = otros.length ? `${objetivos.length} objects` : objetivo;
-    restablecer.addEventListener('click', () => ejecutar(objetivos.map((t) => ({ op: 'unset', target: t, props: [prop] })), `${nombre}.${prop} reset`));
 
-    const cambio = (v) => objetivos.map((t) => ({ op: 'set', target: t, props: { [prop]: v } }));
+    // El tamaño del lienzo cambia con el dibujo centrado, como la herramienta Artboard y Project Settings.
+    const tamano = objetivo === 'meta' && (prop === 'width' || prop === 'height');
+    const cambio = (v) =>
+      tamano
+        ? opsDeTamano(estado.doc, esquema, prop === 'width' ? v : leerMeta(esquema, estado.doc, 'width'), prop === 'height' ? v : leerMeta(esquema, estado.doc, 'height'))
+        : objetivos.map((t) => ({ op: 'set', target: t, props: { [prop]: v } }));
+    restablecer.addEventListener('click', () => ejecutar(tamano ? cambio(p.default) : objetivos.map((t) => ({ op: 'unset', target: t, props: [prop] })), `${nombre}.${prop} reset`));
     // Varios cambios seguidos de la misma propiedad (flechitas del campo, escribir y corregir) son un solo paso.
     const confirmar = (v) => {
       if (Object.is(v, valor) && !mixto) return previsualizar(null);

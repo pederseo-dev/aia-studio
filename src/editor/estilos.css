@@ -143,6 +143,14 @@ dialog { background: var(--panel); color: var(--texto); border: 1px solid var(--
 dialog::backdrop { background: #0008; }
 dialog h2 { margin-bottom: 10px; }
 dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
+.form-ajustes { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; justify-content: stretch; }
+.form-ajustes > label { display: contents; }
+.form-ajustes .ayuda { grid-column: 1 / -1; margin: 0; color: var(--tenue); font-size: 12px; }
+.form-ajustes .fila-fondo { display: flex; align-items: center; gap: 8px; }
+.form-ajustes .casilla { display: flex; align-items: center; gap: 4px; }
+.form-ajustes input[type="number"] { width: 90px; }
+.form-ajustes .botones { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.form-ajustes button.principal { border-color: var(--acento); }
 .lista-dialogo { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; }
 .lista-dialogo button { width: 100%; display: flex; justify-content: space-between; border: none; background: none; padding: 6px 8px; text-align: left; }
 .lista-dialogo button:hover { background: var(--panel-2); }
@@ -241,6 +249,8 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 #lienzo.paneando, #lienzo.paneando * { cursor: grabbing !important; }
 #superposicion { pointer-events: none; }
 .marco-documento { fill: none; stroke: #00000055; stroke-width: 1; }
+.marco-artboard { pointer-events: none; }
+.medida-artboard { fill: var(--texto); font-size: 11px; paint-order: stroke; stroke: var(--lienzo); stroke-width: 3px; }
 .seleccion { fill: none; stroke: var(--acento); stroke-width: 1.5; }
 .pivote { stroke: var(--acento); stroke-width: 1.5; fill: var(--lienzo); }
 .recuadro { fill: color-mix(in srgb, var(--acento) 10%, transparent); stroke: var(--acento); stroke-width: 1; stroke-dasharray: 4 3; }

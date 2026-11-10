@@ -12,6 +12,8 @@ export const ICONOS = {
   rotar: trazo('<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v4h-4"/>'),
   escalar: trazo('<rect x="4" y="11" width="9" height="9" rx="1"/><path d="M13 11l7-7M14.5 4H20v5.5"/>'),
   path: trazo('<path d="M12 3 7 11l2.5 7h5L17 11z"/><path d="M12 3v7"/><circle cx="12" cy="11.5" r="1.3"/><path d="M9.5 21h5"/>'),
+  // Marco con las líneas de corte de las esquinas: el lienzo (artboard).
+  artboard: trazo('<rect x="6.5" y="6.5" width="11" height="11"/><path d="M6.5 2.5v2M6.5 19.5v2M17.5 2.5v2M17.5 19.5v2M2.5 6.5h2M19.5 6.5h2M2.5 17.5h2M19.5 17.5h2"/>'),
   rect: trazo('<rect x="4" y="6" width="16" height="12" rx="1"/>'),
   ellipse: trazo('<ellipse cx="12" cy="12" rx="8" ry="6.5"/>'),
   // Hueso clásico en diagonal (dos nudos en cada punta) para que no se confunda con un pincel.

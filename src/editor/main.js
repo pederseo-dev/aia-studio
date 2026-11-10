@@ -2,7 +2,8 @@
 
 import { buscar, esqueletoDe, hijos, subarbol } from '../core/documento.js';
 import { aplicarOperaciones } from '../core/operaciones.js';
-import { leer } from '../core/esquema.js';
+import { leer, leerMeta } from '../core/esquema.js';
+import { opsDeTamano } from '../core/tamano.js';
 import { montarArbol } from './arbol.js';
 import { avisarSueltos, enlazarPorCercania, motivoParaNoEnlazar, soltarAlMover } from './huesos.js';
 import { montarHistorial } from './historial.js';
@@ -28,7 +29,7 @@ montarArbol($('#arbol'), $('#recursos'));
 montarInspector($('#inspector'));
 montarHistorial($('#entradas'));
 const lienzo = montarLienzo($('#lienzo'));
-montarOpciones($('#opciones'), { agrupar: () => agruparSeleccion(), switch: () => nuevoSwitch(), esqueleto: () => nuevoEsqueleto(), enlazar: () => enlazarSeleccion(), enlazarTodo: enlazarPorCercania });
+montarOpciones($('#opciones'), { ajustesDelProyecto: () => mostrarAjustes(), agrupar: () => agruparSeleccion(), switch: () => nuevoSwitch(), esqueleto: () => nuevoEsqueleto(), enlazar: () => enlazarSeleccion(), enlazarTodo: enlazarPorCercania });
 montarParametros($('#parametros'), $('#nuevo-param'));
 montarModos($('#modos'));
 montarClips($('#clips'), $('#lista-clips'), $('#nuevo-clip'));
@@ -115,7 +116,45 @@ const ACCIONES = {
     }
   },
   atajos: () => $('#dialogo-atajos').showModal(),
+  ajustes: () => mostrarAjustes(),
 };
+
+// ---------- Project Settings (como File → Project Settings de Moho) ----------
+
+/** Diálogo con las propiedades del documento. El tamaño cambia con el dibujo centrado, igual que la herramienta Artboard. */
+function mostrarAjustes() {
+  if (!estado.doc) return;
+  const f = $('#form-ajustes').elements;
+  const meta = (p) => leerMeta(esquema, estado.doc, p);
+  f.name.value = meta('name');
+  f.width.value = meta('width');
+  f.height.value = meta('height');
+  f.fps.value = meta('fps');
+  const fondo = meta('background');
+  f.transparente.checked = fondo == null;
+  f.background.value = fondo ?? esquema.meta.properties.background.default;
+  f.background.disabled = fondo == null;
+  $('#dialogo-ajustes').showModal();
+}
+$('#form-ajustes').elements.transparente.addEventListener('change', (e) => ($('#form-ajustes').elements.background.disabled = e.target.checked));
+$('#form-ajustes [data-cerrar]').addEventListener('click', () => $('#dialogo-ajustes').close());
+$('#form-ajustes').addEventListener('submit', () => {
+  const f = $('#form-ajustes').elements;
+  const doc = estado.doc;
+  if (!doc) return;
+  const meta = (p) => leerMeta(esquema, doc, p);
+  const ancho = Math.round(Number(f.width.value));
+  const alto = Math.round(Number(f.height.value));
+  const ops = ancho !== meta('width') || alto !== meta('height') ? opsDeTamano(doc, esquema, ancho, alto) : [];
+  const props = {};
+  const nombre = f.name.value.trim();
+  if (nombre && nombre !== meta('name')) props.name = nombre;
+  const fondo = f.transparente.checked ? null : f.background.value;
+  if (fondo !== meta('background')) props.background = fondo;
+  if (Number(f.fps.value) !== meta('fps')) props.fps = Number(f.fps.value);
+  if (Object.keys(props).length) ops.push({ op: 'set', target: 'meta', props });
+  if (ops.length) ejecutar(ops, 'project settings');
+});
 
 $('#menu-boton').addEventListener('click', () => alternarMenu($('#menu'), $('#menu-boton')));
 $('#menu').addEventListener('click', (e) => {
@@ -174,6 +213,7 @@ const GRUPOS = {
     { id: 'rotar', nombre: 'Rotate', atajo: 'T' },
     { id: 'escalar', nombre: 'Scale', atajo: 'S' },
   ],
+  lienzo: [{ id: 'artboard', nombre: 'Artboard', atajo: 'A' }],
   crear: [
     { id: 'path', nombre: 'Pen', atajo: 'P' },
     { id: 'rect', nombre: 'Rectangle', atajo: 'R' },
@@ -187,7 +227,7 @@ const GRUPOS = {
     { id: 'enlazarPuntos', nombre: 'Bind Points' },
   ],
 };
-const ultimaDelGrupo = { transformar: 'seleccionar', crear: 'path', esqueleto: 'hueso' };
+const ultimaDelGrupo = { transformar: 'seleccionar', lienzo: 'artboard', crear: 'path', esqueleto: 'hueso' };
 const ATAJOS = Object.fromEntries(Object.values(GRUPOS).flat().filter((h) => h.atajo).map((h) => [h.atajo.toLowerCase(), h.id]));
 
 function dibujarGrupos() {
@@ -197,7 +237,10 @@ function dibujarGrupos() {
     if (activa) ultimaDelGrupo[grupo] = activa.id;
     const visible = herramientas.find((h) => h.id === ultimaDelGrupo[grupo]);
     caja.classList.toggle('activo', !!activa);
-    caja.innerHTML = `<button type="button" class="principal" title="${visible.nombre}${visible.atajo ? ` (${visible.atajo})` : ''}" aria-label="${visible.nombre}">${ICONOS[visible.icono ?? visible.id]}</button><button type="button" class="elegir" aria-haspopup="menu" title="More tools">${FLECHA}</button><div class="menu" role="menu" hidden></div>`;
+    caja.innerHTML = `<button type="button" class="principal" title="${visible.nombre}${visible.atajo ? ` (${visible.atajo})` : ''}" aria-label="${visible.nombre}">${ICONOS[visible.icono ?? visible.id]}</button>${herramientas.length > 1 ? `<button type="button" class="elegir" aria-haspopup="menu" title="More tools">${FLECHA}</button><div class="menu" role="menu" hidden></div>` : ''}`;
+    caja.querySelector('.principal').addEventListener('click', () => fijar({ herramienta: visible.id }));
+    // Una herramienta sola (Artboard) no lleva menú.
+    if (herramientas.length === 1) continue;
     const menu = caja.querySelector('.menu');
     for (const h of herramientas) {
       const b = document.createElement('button');
@@ -211,7 +254,6 @@ function dibujarGrupos() {
       });
       menu.append(b);
     }
-    caja.querySelector('.principal').addEventListener('click', () => fijar({ herramienta: visible.id }));
     caja.querySelector('.elegir').addEventListener('click', (e) => alternarMenu(menu, e.currentTarget));
   }
 }
@@ -232,6 +274,8 @@ $('#menu-zoom').addEventListener('click', (e) => {
 suscribir((c) => {
   if ('pestanas' in c || 'id' in c || 'documentos' in c) dibujarPestanas();
   if ('herramienta' in c) dibujarGrupos();
+  // Con Artboard, lo elegido es el lienzo: el inspector muestra sus propiedades.
+  if ('herramienta' in c && estado.herramienta === 'artboard' && estado.seleccionados.length) seleccionar(null);
   if ('id' in c) {
     for (const b of document.querySelectorAll('[data-requiere-doc]')) b.disabled = !estado.id;
     $('#lienzo .sin-documento')?.toggleAttribute('hidden', !!estado.id);

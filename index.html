@@ -28,6 +28,8 @@
             <hr />
             <button type="button" role="menuitem" data-accion="importar" data-requiere-doc>Import SVG…</button>
             <hr />
+            <button type="button" role="menuitem" data-accion="ajustes" data-requiere-doc>Project Settings…</button>
+            <hr />
             <button type="button" role="menuitem" data-accion="cerrar" data-requiere-doc>Close tab <kbd>Alt+W</kbd></button>
             <button type="button" role="menuitem" data-accion="eliminar" data-requiere-doc class="peligro">Delete document…</button>
             <hr />
@@ -36,6 +38,7 @@
         </div>
         <span class="separador"></span>
         <div class="grupo-herramientas desplegable" data-grupo="transformar"></div>
+        <div class="grupo-herramientas desplegable" data-grupo="lienzo"></div>
         <div class="grupo-herramientas desplegable" data-grupo="crear"></div>
         <div class="grupo-herramientas desplegable" data-grupo="esqueleto"></div>
         <span class="separador"></span>
@@ -71,6 +74,22 @@
       <form method="dialog"><button>Close</button></form>
     </dialog>
 
+    <dialog id="dialogo-ajustes">
+      <h2>Project Settings</h2>
+      <form id="form-ajustes" method="dialog" class="form-ajustes">
+        <label>Name <input name="name" type="text" required /></label>
+        <label>Width <input name="width" type="number" min="1" step="1" required /></label>
+        <label>Height <input name="height" type="number" min="1" step="1" required /></label>
+        <p class="ayuda">Resizing keeps the drawing centered. You can also drag the artboard with the Artboard tool (<kbd>A</kbd>).</p>
+        <label>Background <span class="fila-fondo"><input name="background" type="color" /><label class="casilla"><input name="transparente" type="checkbox" /> Transparent</label></span></label>
+        <label>Frame rate <span class="fila-fondo"><input name="fps" type="number" min="1" max="120" step="1" required /> fps</span></label>
+        <div class="botones">
+          <button type="button" value="cancelar" data-cerrar>Cancel</button>
+          <button type="submit" value="ok" class="principal">OK</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="dialogo-atajos">
       <h2>Keyboard shortcuts</h2>
       <table class="atajos">
@@ -78,6 +97,7 @@
         <tr><td><kbd>V</kbd></td><td>Move (select and drag)</td></tr>
         <tr><td><kbd>T</kbd></td><td>Rotate around the pivot (Shift: 15° steps)</td></tr>
         <tr><td><kbd>S</kbd></td><td>Scale from the pivot</td></tr>
+        <tr><td><kbd>A</kbd></td><td>Artboard: drag its handles to resize; the drawing stays centered (Shift: keep proportions)</td></tr>
         <tr><th colspan="2">Create</th></tr>
         <tr><td><kbd>P</kbd></td><td>Pen (Enter or Esc to finish)</td></tr>
         <tr><td><kbd>R</kbd> / <kbd>E</kbd></td><td>Rectangle / ellipse (Shift: square or circle)</td></tr>

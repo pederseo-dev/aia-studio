@@ -2,9 +2,10 @@
 // y ofrece como botones las acciones que tienen atajo. Así no hace falta saberse los atajos para descubrir qué sigue.
 
 import { buscar, esqueletoDe, huesosDe } from '../core/documento.js';
-import { leer } from '../core/esquema.js';
+import { leer, leerMeta } from '../core/esquema.js';
 import { enlacesPorCercania, huesoDe, repartirEntreHuesos } from '../core/esqueleto.js';
 import { paramsDeSwitch } from '../core/mezcla.js';
+import { opsDeTamano } from '../core/tamano.js';
 import { avisar, ejecutar, esquema, estado, fijar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 import { colorDeHueso, elegirVariante, esqueletoActivo, opsDePose, planDeReparentar, varianteDe, variantesAMostrar } from './huesos.js';
 
@@ -12,6 +13,16 @@ import { colorDeHueso, elegirVariante, esqueletoActivo, opsDePose, planDeReparen
  * `acciones`: lo que vive en main.js y la barra también ofrece (agrupar, enlazar la selección, enlazar todo por
  * cercanía...).
  */
+// Tamaños comunes del lienzo: [nombre, ancho, alto].
+const TAMANOS = [
+  ['Square', 512, 512],
+  ['Square', 800, 800],
+  ['Square', 1024, 1024],
+  ['HD', 1280, 720],
+  ['Full HD', 1920, 1080],
+  ['Vertical', 1080, 1920],
+];
+
 export function montarOpciones(raiz, acciones) {
   suscribir((c) => {
     if (['doc', 'seleccion', 'herramienta', 'pose', 'params', 'edicion', 'vertice', 'id', 'modo'].some((k) => k in c) || ('tiempo' in c && !estado.reproduciendo)) dibujar();
@@ -92,6 +103,8 @@ export function montarOpciones(raiz, acciones) {
     if (sel?.type === 'bone' && !varios) return opcionesDeHueso(doc, sel);
 
     switch (estado.herramienta) {
+      case 'artboard':
+        return opcionesDeArtboard(doc);
       case 'hueso': {
         const esqueleto = esqueletoActivo(doc);
         if (!esqueleto) return [texto('Add Bone: bones live in a skeleton (a bone layer). Pick one in Layers, or just drag on the canvas and a new skeleton is created for the bone.')];
@@ -176,6 +189,49 @@ export function montarOpciones(raiz, acciones) {
     }
 
     return [texto(huesos.length ? 'Click to select; drag on empty space for a marquee. Bones are picked on the canvas with Add Bone (B) or Manipulate Bones (M).' : 'Click to select; drag on empty space to marquee-select.')];
+  }
+
+  /**
+   * Artboard: arrastrar las manijas cambia el tamaño con el dibujo centrado (como Moho). Además, tamaños comunes,
+   * ajustar al contenido y el diálogo de Project Settings.
+   */
+  function opcionesDeArtboard(doc) {
+    const w = leerMeta(esquema, doc, 'width');
+    const h = leerMeta(esquema, doc, 'height');
+    const select = document.createElement('select');
+    select.title = 'Common sizes; the drawing stays centered';
+    select.append(new Option(`${w} × ${h}`, ''), ...TAMANOS.map(([nombre, a, b]) => new Option(`${nombre} · ${a} × ${b}`, `${a}x${b}`)));
+    select.addEventListener('change', () => {
+      if (!select.value) return;
+      const [a, b] = select.value.split('x').map(Number);
+      ejecutar(opsDeTamano(estado.doc, esquema, a, b), `artboard ${a} × ${b}`);
+    });
+    return [
+      texto(`Artboard ${codigo(`${w} × ${h}`)}: drag the handles to resize; the drawing stays centered (<kbd>Shift</kbd> keeps proportions). Name, background and fps are in the inspector.`),
+      select,
+      boton('Fit to content', 'Resize the artboard around the drawing, with a 20 px margin, and center it', () => ajustarAlContenido()),
+      boton('Project Settings…', 'All the document settings in a dialog', acciones.ajustesDelProyecto),
+    ];
+  }
+
+  /** Caja del dibujo (lo que se ve, en coordenadas del documento) más un margen; centra el contenido en el lienzo nuevo. */
+  function ajustarAlContenido(margen = 20) {
+    const marco = document.querySelector('#documento > .marco-documento')?.getBoundingClientRect();
+    if (!marco?.width) return;
+    const escala = marco.width / leerMeta(esquema, estado.doc, 'width');
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const el of document.querySelectorAll('#documento > [data-id]')) {
+      const r = el.getBoundingClientRect();
+      if (!r.width && !r.height) continue;
+      x0 = Math.min(x0, r.left); y0 = Math.min(y0, r.top); x1 = Math.max(x1, r.right); y1 = Math.max(y1, r.bottom);
+    }
+    if (x0 === Infinity) return avisar('Nothing to fit: the artboard is empty');
+    const caja = { x: (x0 - marco.left) / escala, y: (y0 - marco.top) / escala, w: (x1 - x0) / escala, h: (y1 - y0) / escala };
+    const ancho = Math.max(1, Math.ceil(caja.w + 2 * margen));
+    const alto = Math.max(1, Math.ceil(caja.h + 2 * margen));
+    // Corre el dibujo para que su caja quede en el medio del lienzo nuevo.
+    const corrimiento = [Math.round(ancho / 2 - (caja.x + caja.w / 2)), Math.round(alto / 2 - (caja.y + caja.h / 2))];
+    ejecutar(opsDeTamano(estado.doc, esquema, ancho, alto, corrimiento), `artboard fit to content (${ancho} × ${alto})`);
   }
 
   /**

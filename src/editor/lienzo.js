@@ -6,6 +6,7 @@ import { leerMeta } from '../core/esquema.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
 import { contenidoSvg } from '../render/svg.js';
 import { docVisible, ejecutar, esquema, estado, fijar, idLibre, padreParaNuevo, seleccionar, suscribir } from './estado.js';
+import { crearArtboard } from './artboard.js';
 import { clipAbierto, crearHuesos, variantesAMostrar } from './huesos.js';
 import { crearPluma } from './pluma.js';
 import { crearPuntos } from './puntos.js';
@@ -23,6 +24,7 @@ export function montarLienzo(contenedor) {
   let ajustadoPara = null;
   let espacio = false;
   let mostrando = '{}'; // variantes de switch que se muestran por la selección
+  let tamanoDibujado = null; // { id, w, h } del último dibujo: si cambia el tamaño, el centro queda quieto en pantalla
 
   // Lo que comparten las herramientas. "Pantalla" = píxeles dentro del lienzo, el espacio de la superposición.
   const ctx = {
@@ -47,6 +49,7 @@ export function montarLienzo(contenedor) {
   const pluma = crearPluma(ctx);
   const puntos = crearPuntos(ctx);
   const huesos = crearHuesos(ctx);
+  const artboard = crearArtboard(ctx);
 
   suscribir((c) => {
     if ('pose' in c) contenedor.classList.toggle('modo-pose', !!estado.pose);
@@ -77,6 +80,13 @@ export function montarLienzo(contenedor) {
     if (!doc) return documentoG.replaceChildren();
     const w = leerMeta(esquema, doc, 'width');
     const h = leerMeta(esquema, doc, 'height');
+    // El tamaño cambia anclado al centro (core/tamano.js): la cámara se corre para que el centro no salte.
+    if (tamanoDibujado?.id === estado.id && (tamanoDibujado.w !== w || tamanoDibujado.h !== h)) {
+      camara.x -= ((w - tamanoDibujado.w) / 2) * camara.zoom;
+      camara.y -= ((h - tamanoDibujado.h) / 2) * camara.zoom;
+      camaraG.setAttribute('transform', `translate(${camara.x} ${camara.y}) scale(${camara.zoom})`);
+    }
+    tamanoDibujado = { id: estado.id, w, h };
     // Lo que se ve: la pose que se edita, la mezcla de los params (vista Parámetros) o el montaje.
     const clip = clipAbierto(doc);
     const vista = clip ? { animation: clip.id, time: estado.tiempo, params: estado.params ?? {} } : estado.pose ? { pose: estado.pose } : estado.params ? { params: estado.params } : {};
@@ -108,6 +118,7 @@ export function montarLienzo(contenedor) {
     }
     huesos.dibujar();
     pluma.dibujar();
+    if (estado.herramienta === 'artboard') artboard.dibujar();
   }
 
   // ---------- Cámara ----------
@@ -194,6 +205,9 @@ export function montarLienzo(contenedor) {
     if (e.button !== 0) return;
     const manija = e.target.closest('[data-manija]')?.dataset.manija;
     if (manija?.startsWith('hueso-')) return huesos.manija(e, manija);
+    if (manija?.startsWith('artboard-')) return artboard.manija(e, manija);
+    // Artboard: el lienzo queda elegido (el inspector muestra sus propiedades); fuera de las manijas no hace nada.
+    if (estado.herramienta === 'artboard') return estado.seleccion && seleccionar(null);
     if (manija) return estado.edicion ? puntos.manija(e, manija) : transformar.manija(e, manija);
     // Con una pose activa, el lienzo posa: se giran huesos (o el dibujo a través de su hueso).
     if (estado.pose) return huesos.pointerdownPose(e);

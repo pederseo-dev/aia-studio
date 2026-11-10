@@ -196,3 +196,24 @@ test('cada tipo y propiedad tiene una ayuda en inglés para el editor', () => {
   }
   assert.deepEqual(sinAyuda, []);
 });
+
+test('opsDeTamano cambia el lienzo con el dibujo anclado al centro (raíz, poses y clips)', async () => {
+  const { opsDeTamano } = await import('../src/core/tamano.js');
+  const doc = op(
+    crearDocumento({ width: 600, height: 400 }),
+    { op: 'create', type: 'group', id: 'body', props: { x: 300, y: 200 } },
+    { op: 'create', type: 'rect', id: 'torso', parent: 'body', props: { x: 5, width: 10, height: 10 } },
+    { op: 'create', type: 'style', id: 'piel' },
+    { op: 'create', type: 'pose', id: 'salto', props: { values: { body: { y: 150, rotation: 5 }, torso: { x: 9 } } } },
+    { op: 'create', type: 'animation', id: 'paso', props: { duration: 1, tracks: { body: { x: [{ t: 0, value: 300 }, { t: 1, value: 320 }] } } } },
+  ).doc;
+  const r = aplicarOperaciones(doc, opsDeTamano(doc, esquema, 800, 500), esquema).doc;
+  const de = (id) => r.objects.find((o) => o.id === id);
+  assert.deepEqual([r.meta.width, r.meta.height], [800, 500]);
+  assert.deepEqual([de('body').x, de('body').y], [400, 250]);
+  assert.equal(de('torso').x, 5, 'lo anidado se mueve con su padre');
+  assert.deepEqual(de('salto').values, { body: { y: 200, rotation: 5 }, torso: { x: 9 } });
+  assert.deepEqual(de('paso').tracks.body.x.map((c) => c.value), [400, 420]);
+  // Mismo tamaño: solo width/height.
+  assert.equal(opsDeTamano(r, esquema, 800, 500).length, 1);
+});
