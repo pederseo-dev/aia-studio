@@ -14,8 +14,8 @@
   --ia: #7fd4ec; /* lo que hizo la IA: celeste, para no confundirse con el acento */
   --error: #ff8a80;
   --lienzo: #67635d;
-  --params: #c9a4ff; /* vista Parámetros: la mezcla de poses que dan los controles */
-  --pose: #6fe0ad; /* modo pose: el lienzo se enmarca en este color, como la línea de tiempo de Moho en una acción */
+  --params: #e88aa0; /* rosa viejo. Vista Parámetros: la mezcla de poses que dan los controles */
+  --pose: #f4d35e; /* amarillo. Modo pose: el lienzo se enmarca en este color, como la línea de tiempo de Moho en una acción */
   color-scheme: dark;
   font: 12px/1.4 system-ui, sans-serif;
 }
@@ -436,7 +436,7 @@ body[data-modo="design"] #linea-de-tiempo { display: none; }
 /* Siempre ◆ (como en Moho); el color dice la curva del tramo que sale de él. */
 .clave.curva-ease { background: var(--params); }
 .clave.curva-step { background: var(--ia); }
-.clave.curva-bezier { background: #5fb8ff; }
+.clave.curva-bezier { background: #9cc9d6; }
 .clave.curva-mixta { background: var(--texto); }
 .clave.resumen { background: #ded6ca; width: 8px; height: 8px; cursor: pointer; }
 /* Canales de lo seleccionado (Moho): los que no tienen keyframes se ven apagados, listos para keyar con ◇. */
