@@ -1,10 +1,15 @@
 // Herramienta de selección: seleccionar (clic, Ctrl/Shift + clic, recuadro), mover y las manijas para rotar, escalar
 // y mover el pivote. Con varios objetos, las manijas rodean a todos y giran o escalan desde el centro del conjunto.
+// En una pose o un clip abierto también sirve para lo que no sigue a un hueso: mover, rotar y escalar se guardan en la
+// pose (en un clip, como keyframes en el playhead) y el montaje no cambia. El pivote solo se mueve en el montaje.
 
 import { buscar, hijos } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { aplicar, invertir, matrizLocal, matrizMundo, multiplicar } from '../core/geometria.js';
 import { transformarVertices } from '../core/trazado.js';
+import { huesoDe } from '../core/esqueleto.js';
+import { aplicarPose } from '../core/mezcla.js';
+import { nombreDeEdicion, opsDePose, poseActiva } from './huesos.js';
 import { alternarSeleccion, ejecutar, esquema, estado, previsualizar, seleccionRaices, seleccionar, seleccionarVarios } from './estado.js';
 
 const redondear = (v, d = 10) => Math.round(v * d) / d;
@@ -12,7 +17,49 @@ const GRADOS = 180 / Math.PI;
 const RADIANES = Math.PI / 180;
 const FORMAS = 'path, rect, ellipse, circle, line, polyline, polygon';
 
+const EN_POSE = ['x', 'y', 'rotation', 'scaleX', 'scaleY'];
+
+/** Lo que no sigue a ningún hueso (ni por capa ni por puntos): en una pose se transforma como en el montaje. */
+export function esLibre(doc, id) {
+  const o = buscar(doc, id);
+  return !!o && o.type !== 'bone' && o.type !== 'skeleton' && !huesoDe(doc, id) && !(o.vertices ?? []).some((v) => v.bone);
+}
+
 export function crearTransformar(ctx) {
+  // ---------- Pose o montaje ----------
+
+  /** El documento como se ve: en una pose o clip, con sus valores aplicados (de ahí se leen x, rotación, escala…). */
+  const visto = () => {
+    const pose = estado.pose && poseActiva();
+    return pose ? aplicarPose(estado.doc, esquema, pose) : estado.doc;
+  };
+
+  /**
+   * En una pose, los `set` del dibujo pasan a la pose que se edita (en un clip, claves en el playhead), cada uno sobre
+   * lo que dejó el anterior. Fuera de una pose quedan como están.
+   */
+  function enPose(ops) {
+    if (!ops || !estado.pose) return ops;
+    const pose = poseActiva();
+    let doc = estado.doc;
+    let salida = [];
+    for (const op of ops) {
+      const campos = Object.fromEntries(Object.entries(op.props).filter(([k]) => EN_POSE.includes(k)));
+      if (!Object.keys(campos).length) continue;
+      salida = opsDePose(doc, pose.id, op.target, campos);
+      doc = { ...doc, objects: doc.objects.map((o) => (o.id === pose.id ? { ...o, ...salida[0].props } : o)) };
+    }
+    return salida.length ? salida : null;
+  }
+  const mostrar = (ops) => previsualizar(enPose(ops));
+  const guardar = (ops, nota) => {
+    const final = enPose(ops);
+    if (!final) return previsualizar(null);
+    ejecutar(final, estado.pose ? `${nombreDeEdicion()}: ${nota}` : nota);
+  };
+  /** Lo elegido que se transforma: en una pose, solo lo libre (los huesos y lo enlazado se posan con sus huesos). */
+  const raices = () => (estado.pose ? seleccionRaices().filter((id) => esLibre(estado.doc, id)) : seleccionRaices());
+
   // ---------- Cajas en pantalla ----------
 
   /** Las cuatro esquinas de la caja de un elemento, en pantalla (giradas con él). Null si no se ve. */
@@ -64,6 +111,7 @@ export function crearTransformar(ctx) {
   // ---------- Dibujo de la selección y sus manijas ----------
 
   function dibujar() {
+    if (estado.pose && !estado.seleccionados.every((id) => esLibre(estado.doc, id))) return;
     if (varios()) return dibujarVarios();
     const el = estado.seleccion && ctx.elemento(estado.seleccion);
     if (!el) return;
@@ -72,7 +120,7 @@ export function crearTransformar(ctx) {
     if (esquinas) manijasDeCaja(esquinas);
     const m = el.getCTM();
     const [px, py] = [m.e, m.f];
-    const movible = ['group', 'path', 'rect', 'ellipse'].includes(obj.type);
+    const movible = !estado.pose && ['group', 'path', 'rect', 'ellipse'].includes(obj.type);
     ctx.superposicion.append(
       ctx.crear('circle', { class: movible ? 'pivote manija' : 'pivote', 'data-manija': movible ? 'pivote' : '', cx: px, cy: py, r: 5 }, movible ? 'Move the pivot without moving the drawing' : 'Pivot'),
     );
@@ -117,9 +165,10 @@ export function crearTransformar(ctx) {
     else if (estado.seleccion !== id) seleccionarVarios(estado.seleccionados, id);
 
     const inicio = { x: e.clientX, y: e.clientY };
-    const objetos = seleccionRaices().map((oid) => {
-      const obj = buscar(estado.doc, oid);
-      const inversa = invertir(multiplicar(ctx.matrizCamara(), matrizMundo(estado.doc, esquema, obj.parent ?? null)));
+    const doc = visto();
+    const objetos = raices().map((oid) => {
+      const obj = buscar(doc, oid);
+      const inversa = invertir(multiplicar(ctx.matrizCamara(), matrizMundo(doc, esquema, obj.parent ?? null)));
       return { id: oid, inversa, x0: leer(esquema, obj, 'x'), y0: leer(esquema, obj, 'y'), l0: aplicar(inversa, ...ctx.puntoPantalla(e)) };
     });
     let ops = null;
@@ -136,10 +185,10 @@ export function crearTransformar(ctx) {
           const [lx, ly] = aplicar(o.inversa, ...s);
           return { op: 'set', target: o.id, props: { x: redondear(o.x0 + lx - o.l0[0]), y: redondear(o.y0 + ly - o.l0[1]) } };
         });
-        previsualizar(ops);
+        mostrar(ops);
       },
       () => {
-        if (ops) return ejecutar(ops, `move ${nombre(objetos)}`);
+        if (ops) return guardar(ops, `move ${nombre(objetos)}`);
         previsualizar(null);
         if (enGrupo) seleccionar(id);
       },
@@ -183,10 +232,12 @@ export function crearTransformar(ctx) {
   // ---------- Manijas ----------
 
   function manija(e, tipo) {
-    if (seleccionRaices().length > 1) return manijaVarios(e, tipo);
+    if (raices().length > 1) return manijaVarios(e, tipo);
     const id = estado.seleccion;
-    const obj = buscar(estado.doc, id);
-    const padre = multiplicar(ctx.matrizCamara(), matrizMundo(estado.doc, esquema, obj.parent ?? null));
+    if (estado.pose && (tipo === 'pivote' || !esLibre(estado.doc, id))) return;
+    const doc = visto();
+    const obj = buscar(doc, id);
+    const padre = multiplicar(ctx.matrizCamara(), matrizMundo(doc, esquema, obj.parent ?? null));
     const x0 = leer(esquema, obj, 'x');
     const y0 = leer(esquema, obj, 'y');
     const rot0 = leer(esquema, obj, 'rotation');
@@ -194,7 +245,7 @@ export function crearTransformar(ctx) {
     const sy0 = leer(esquema, obj, 'scaleY');
     const pivote = aplicar(padre, x0, y0); // en pantalla
     let ops = null;
-    const terminar = (nota) => () => (ops ? ejecutar(ops, nota) : previsualizar(null));
+    const terminar = (nota) => () => (ops ? guardar(ops, nota) : previsualizar(null));
 
     if (tipo === 'rotar') {
       const sentido = sentidoDe(padre);
@@ -206,7 +257,7 @@ export function crearTransformar(ctx) {
           let rot = rot0 + sentido * (angulo(ctx.puntoPantalla(ev)) - a0);
           rot = ev.shiftKey ? Math.round(rot / 15) * 15 : redondear(rot);
           ops = [{ op: 'set', target: id, props: { rotation: rot } }];
-          previsualizar(ops);
+          mostrar(ops);
         },
         terminar(`rotate ${id}`),
       );
@@ -221,7 +272,7 @@ export function crearTransformar(ctx) {
         (ev) => {
           const f = distancia(ctx.puntoPantalla(ev)) / d0;
           ops = [{ op: 'set', target: id, props: { scaleX: redondear(sx0 * f, 1000), scaleY: redondear(sy0 * f, 1000) } }];
-          previsualizar(ops);
+          mostrar(ops);
         },
         terminar(`scale ${id}`),
       );
@@ -242,7 +293,7 @@ export function crearTransformar(ctx) {
             [sx, sy] = [sx0 * f, sy0 * f];
           }
           ops = [{ op: 'set', target: id, props: { scaleX: redondear(sx, 1000), scaleY: redondear(sy, 1000) } }];
-          previsualizar(ops);
+          mostrar(ops);
         },
         terminar(`scale ${id}`),
       );
@@ -270,7 +321,7 @@ export function crearTransformar(ctx) {
               ops.push({ op: 'set', target: h.id, props: { x: redondear(leer(esquema, h, 'x') - dx, 100), y: redondear(leer(esquema, h, 'y') - dy, 100) } });
             }
           }
-          previsualizar(ops);
+          mostrar(ops);
         },
         terminar(`move pivot of ${id}`),
       );
@@ -285,13 +336,14 @@ export function crearTransformar(ctx) {
    * su pivote se desplaza alrededor del centro. Con varios, la escala siempre es proporcional.
    */
   function manijaVarios(e, tipo) {
-    const ids = seleccionRaices();
+    const ids = raices();
     const caja = envolvente(ids.map((id) => esquinasDe(ctx.elemento(id))).filter(Boolean));
     if (!caja) return;
     const c = caja.centro;
+    const doc = visto();
     const objetos = ids.map((id) => {
-      const obj = buscar(estado.doc, id);
-      const padre = multiplicar(ctx.matrizCamara(), matrizMundo(estado.doc, esquema, obj.parent ?? null));
+      const obj = buscar(doc, id);
+      const padre = multiplicar(ctx.matrizCamara(), matrizMundo(doc, esquema, obj.parent ?? null));
       const props = Object.fromEntries(['x', 'y', 'rotation', 'scaleX', 'scaleY'].map((p) => [p, leer(esquema, obj, p)]));
       return { id, padre, inversa: invertir(padre), props, pivote: aplicar(padre, props.x, props.y) };
     });
@@ -316,9 +368,9 @@ export function crearTransformar(ctx) {
             const p = posicion(o, [c[0] + dx * cos - dy * sin, c[1] + dx * sin + dy * cos]);
             return { op: 'set', target: o.id, props: { ...p, rotation: redondear(o.props.rotation + sentidoDe(o.padre) * delta) } };
           });
-          previsualizar(ops);
+          mostrar(ops);
         },
-        () => (ops ? ejecutar(ops, nota) : previsualizar(null)),
+        () => (ops ? guardar(ops, nota) : previsualizar(null)),
       );
     }
 
@@ -333,9 +385,9 @@ export function crearTransformar(ctx) {
             const p = posicion(o, [c[0] + (o.pivote[0] - c[0]) * f, c[1] + (o.pivote[1] - c[1]) * f]);
             return { op: 'set', target: o.id, props: { ...p, scaleX: redondear(o.props.scaleX * f, 1000), scaleY: redondear(o.props.scaleY * f, 1000) } };
           });
-          previsualizar(ops);
+          mostrar(ops);
         },
-        () => (ops ? ejecutar(ops, nota) : previsualizar(null)),
+        () => (ops ? guardar(ops, nota) : previsualizar(null)),
       );
     }
   }

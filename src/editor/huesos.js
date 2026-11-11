@@ -597,58 +597,12 @@ export function crearHuesos(ctx) {
       const g = e.target.closest('[data-id]');
       if (!g || !ctx.documentoG.contains(g)) return recuadroDeHuesos(e, e.ctrlKey || e.metaKey || e.shiftKey, true);
       id = huesoDe(estado.doc, g.dataset.id) ?? huesoCercanoDePuntos(g.dataset.id, ctx.puntoPantalla(e));
-      if (!id) {
-        if (e.ctrlKey || e.metaKey) return alternarSeleccion(g.dataset.id);
-        // Sin hueso: se elige y se arrastra para moverla; en un clip queda un keyframe de x/y en el playhead.
-        // Si ya estaba entre los elegidos, se mueven todos los que no siguen a un hueso.
-        const ids = estado.seleccionados.includes(g.dataset.id) ? estado.seleccionados.filter((s) => !esHueso(s) && !huesoDe(estado.doc, s)) : [g.dataset.id];
-        if (!estado.seleccionados.includes(g.dataset.id)) seleccionar(g.dataset.id);
-        return moverEnPose(e, ids);
-      }
+      if (!id) return e.ctrlKey || e.metaKey ? alternarSeleccion(g.dataset.id) : seleccionar(g.dataset.id);
     }
     // Ctrl + clic: suma o quita de la selección sin girar (para ver y keyar varios en la timeline).
     if (e.ctrlKey || e.metaKey) return alternarSeleccion(id);
     seleccionar(id);
     rotar(e, id);
-  }
-
-  /**
-   * Mover formas o grupos (que no siguen a un hueso) arrastrando, en la pose o el clip abierto: cambia su x/y ahí, no
-   * en el montaje. Se calcula en el marco del padre tal como se ve (con la pose aplicada a sus grupos).
-   */
-  function moverEnPose(e, ids) {
-    const doc = estado.doc;
-    const pose = poseActiva(doc);
-    if (!pose) return;
-    const visto = aplicarPose(doc, esquema, pose);
-    const camara = ctx.matrizCamara();
-    const s0 = ctx.puntoPantalla(e);
-    const piezas = ids
-      .map((id) => buscar(visto, id))
-      .filter((o) => o && leer(esquema, o, 'x') !== undefined)
-      .map((o) => {
-        const inversa = invertir(multiplicar(camara, marcoDeHijos(visto, esquema, o.parent)));
-        return { id: o.id, inversa, x: leer(esquema, o, 'x'), y: leer(esquema, o, 'y'), p0: aplicar(inversa, ...s0) };
-      });
-    if (!piezas.length) return;
-    let ops = null;
-    ctx.arrastrar(
-      e,
-      (ev) => {
-        let s1 = ctx.puntoPantalla(ev);
-        // Shift: solo en horizontal o en vertical, como en Design.
-        if (ev.shiftKey) s1 = Math.abs(s1[0] - s0[0]) > Math.abs(s1[1] - s0[1]) ? [s1[0], s0[1]] : [s0[0], s1[1]];
-        // Cada pieza suma su clave sobre lo que dejó la anterior (todas escriben en la misma pose o clip).
-        let d = doc;
-        for (const pz of piezas) {
-          const p = aplicar(pz.inversa, ...s1);
-          ops = opsDePose(d, pose.id, pz.id, { x: redondear(pz.x + p[0] - pz.p0[0]), y: redondear(pz.y + p[1] - pz.p0[1]) });
-          d = { ...d, objects: d.objects.map((o) => (o.id === pose.id ? { ...o, ...ops[0].props } : o)) };
-        }
-        previsualizar(ops);
-      },
-      () => (ops ? ejecutar(ops, nota(piezas.length > 1 ? `${piezas.length} objects` : piezas[0].id, 'move')) : previsualizar(null)),
-    );
   }
 
   /** Path enlazado por punto: el hueso (de los que siguen sus vértices) más cercano al clic, en la pose. */

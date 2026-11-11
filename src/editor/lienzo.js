@@ -10,7 +10,7 @@ import { crearArtboard } from './artboard.js';
 import { clipAbierto, crearHuesos, variantesAMostrar } from './huesos.js';
 import { crearPluma } from './pluma.js';
 import { crearPuntos } from './puntos.js';
-import { crearTransformar } from './transformar.js';
+import { crearTransformar, esLibre } from './transformar.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const redondear = (v) => Math.round(v * 10) / 10;
@@ -112,8 +112,8 @@ export function montarLienzo(contenedor) {
         }
       }
       puntos.dibujar();
-    } else if (!estado.pose) {
-      // En una pose no se transforma el dibujo: solo se posan huesos.
+    } else {
+      // En una pose, las manijas solo salen para lo que no sigue a un hueso (transformar.dibujar lo decide).
       transformar.dibujar();
     }
     huesos.dibujar();
@@ -210,7 +210,12 @@ export function montarLienzo(contenedor) {
     if (estado.herramienta === 'artboard') return estado.seleccion && seleccionar(null);
     if (manija) return estado.edicion ? puntos.manija(e, manija) : transformar.manija(e, manija);
     // Con una pose activa, el lienzo posa: se giran huesos (o el dibujo a través de su hueso).
-    if (estado.pose) return huesos.pointerdownPose(e);
+    // Lo que no sigue a un hueso se elige, mueve, gira y escala como en el montaje; queda en la pose (o en el clip).
+    if (estado.pose) {
+      const g = e.target.closest('[data-id]');
+      if (g && documentoG.contains(g) && !e.target.closest('[data-hueso]') && esLibre(estado.doc, g.dataset.id)) return transformar.seleccionarYMover(e);
+      return huesos.pointerdownPose(e);
+    }
     // En la vista Parámetros se mira la mezcla: un clic solo selecciona.
     if (estado.params) {
       const g = e.target.closest('[data-id]');

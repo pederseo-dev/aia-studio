@@ -61,7 +61,7 @@ export function montarOpciones(raiz, acciones) {
         texto(
           estado.edicion
             ? `Clip ${codigo(estado.pose)} at ${t} s: points you move are keyed at the playhead (with the same point count, they morph between keyframes).`
-            : `Clip ${codigo(estado.pose)} at ${t} s: drag a bone or its bound drawing to rotate it, or a free shape to move it; mouth, colors, switch… in the inspector. Every change is keyed at the playhead (autokey). <kbd>Enter</kbd> edits a path's points.`,
+            : `Clip ${codigo(estado.pose)} at ${t} s: drag a bone or its bound drawing to rotate it; a free shape gets the move, rotate and scale handles; mouth, colors, switch… in the inspector. Every change is keyed at the playhead (autokey). <kbd>Enter</kbd> edits a path's points.`,
         ),
       ];
       if (estado.edicion) partes.push(boton('Finish points', 'Exit point editing (Enter)', () => fijar({ edicion: null, vertice: null })));
@@ -75,7 +75,7 @@ export function montarOpciones(raiz, acciones) {
         texto(
           estado.edicion
             ? `Pose ${codigo(estado.pose)}: points you move are stored in the pose (with the same point count, params interpolate it). Setup is unchanged.`
-            : `Pose ${codigo(estado.pose)}: drag a bone or its bound drawing to rotate it, or a free shape to move it. Everything else (mouth, colors, switch...) is set in the inspector, which shows the pose values at the top; <kbd>Enter</kbd> edits a path's points in the pose.`,
+            : `Pose ${codigo(estado.pose)}: drag a bone or its bound drawing to rotate it; a free shape gets the move, rotate and scale handles. Everything else (mouth, colors, switch...) is set in the inspector, which shows the pose values at the top; <kbd>Enter</kbd> edits a path's points in the pose.`,
         ),
       ];
       if (sel && pose?.values?.[sel.id]) {
