@@ -65,7 +65,6 @@ export function montarOpciones(raiz, acciones) {
         ),
       ];
       if (estado.edicion) partes.push(boton('Finish points', 'Exit point editing (Enter)', () => fijar({ edicion: null, vertice: null })));
-      if (estado.modo === 'puppet') partes.push(boton('Close clip', 'Back to the parameter blend', () => fijar({ pose: null, params: estado.params ?? {}, edicion: null, vertice: null, reproduciendo: false }), 'principal'));
       return partes;
     }
 
@@ -82,15 +81,12 @@ export function montarOpciones(raiz, acciones) {
         partes.push(boton(`Remove ${sel.id} from pose`, 'Revert to its Setup state, in this pose only', () => ejecutar(opsDePose(doc, pose.id, sel.id, Object.fromEntries(Object.keys(pose.values[sel.id]).map((k) => [k, undefined]))), `pose ${pose.id}: ${sel.id} back to setup`)));
       }
       if (estado.edicion) partes.push(boton('Finish points', 'Exit point editing (Enter)', () => fijar({ edicion: null, vertice: null })));
-      partes.push(boton('Back to Setup', 'Edit the drawing and the skeleton at rest', () => fijar({ pose: null, edicion: null, vertice: null }), 'principal'));
       return partes;
     }
 
     if (estado.params) {
-      return [
-        texto('Parameters: the canvas shows the pose blend set by the controls below. Nothing is edited here; to change a pose, pick it under “View”.'),
-        boton('Back to Setup', 'Stop previewing the blend', () => fijar({ params: null }), 'principal'),
-      ];
+      // En Puppet, el cartel del lienzo ya dice que se ven los params (y cómo abrir una pose).
+      return estado.modo === 'puppet' ? [] : [texto('Parameters: the canvas shows the pose blend set by the controls on the right.')];
     }
 
     if (estado.edicion) {

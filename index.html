@@ -42,10 +42,6 @@
         <div class="grupo-herramientas desplegable" data-grupo="crear"></div>
         <div class="grupo-herramientas desplegable" data-grupo="esqueleto"></div>
         <span class="separador"></span>
-        <label id="modo" title="Setup: edit the artwork and its skeleton at rest. Pose: rotate bones and the bound artwork follows, without changing the setup.">
-          <span>View</span>
-          <select id="pose" data-requiere-doc></select>
-        </label>
         <!-- Opciones de la herramienta y lo seleccionado (como la barra de opciones de Moho); las llena opciones.js -->
         <div id="opciones" class="opciones" hidden></div>
         <span class="espaciador"></span>
@@ -152,6 +148,8 @@
       </aside>
 
       <section id="lienzo" tabindex="-1" aria-label="Canvas">
+        <!-- Puppet: qué se está editando o viendo (pose, clip, parámetros o Live), con el botón para salir -->
+        <div id="cartel" role="status" hidden></div>
         <div class="sin-documento">
           <p>No file is open.</p>
           <p class="ayuda">Create one with <b>+</b>, open one from the <b>☰ → Open…</b> menu, or ask the AI.</p>
@@ -163,21 +161,28 @@
       </section>
 
       <aside id="panel-derecho" class="panel">
-        <section id="clips" hidden>
+        <section id="clips" class="seccion-puppet" data-plegable="clips" hidden>
           <div class="cabecera">
-            <h2>Clips</h2>
+            <h2><button type="button" class="plegar-seccion" aria-expanded="true" title="Collapse or expand the clips">Clips<span data-flecha></span></button></h2>
             <button id="ver-manifiesto" type="button" title="Manifest: what the app’s AI will know about this puppet (parameters, clips, what each one overrides, problems)">AI view</button>
             <button id="live" type="button" class="live" aria-pressed="false">▶ Live</button>
             <button id="nuevo-clip" type="button" title="New clip: a short animation the app or its AI triggers (wave, blink, idle)">＋ Clip</button>
           </div>
           <div id="lista-clips"></div>
         </section>
-        <section id="seccion-parametros" hidden>
+        <section id="seccion-parametros" class="seccion-puppet" data-plegable="parametros" hidden>
           <div class="cabecera">
-            <h2>Parameters</h2>
-            <button id="nuevo-param" type="button" title="New parameter: a control (happy, turn, mouth…) that drives poses through drivers">＋ Parameter</button>
+            <h2><button type="button" class="plegar-seccion" aria-expanded="true" title="Collapse or expand the parameters: controls that blend poses">Parameters<span data-flecha></span></button></h2>
+            <button id="nuevo-param" type="button" title="New parameter: a control (happy, turn, mouth…) that blends poses through drivers">＋ Parameter</button>
           </div>
           <div id="parametros"></div>
+        </section>
+        <section id="seccion-poses" class="seccion-puppet" data-plegable="poses" hidden>
+          <div class="cabecera">
+            <h2><button type="button" class="plegar-seccion" aria-expanded="true" title="Collapse or expand the poses: still shapes of the puppet that parameters blend">Poses<span data-flecha></span></button></h2>
+            <button id="nueva-pose" type="button" title="New pose: a still shape of the puppet (happy, eyes closed, mouth O…) that a parameter can blend in">＋ Pose</button>
+          </div>
+          <div id="lista-poses"></div>
         </section>
         <section id="inspector"></section>
         <section id="historial">

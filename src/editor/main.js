@@ -14,6 +14,7 @@ import { montarLienzo } from './lienzo.js';
 import { montarOpciones } from './opciones.js';
 import { montarParametros } from './parametros.js';
 import { cambiarModo, montarClips, montarModos, montarTimeline } from './timeline.js';
+import { montarCartel, montarPoses } from './poses.js';
 import {
   abrir, agregarPestana, api, avisar, borradosAqui, cargarDocumentos, cerrarPestana, deshacer, ejecutar, eliminarDocumento,
   enviarPendiente, esquema, estado, fijar, hayPendiente, idLibre, mantenerPosicion, padreParaNuevo,
@@ -33,6 +34,28 @@ montarOpciones($('#opciones'), { ajustesDelProyecto: () => mostrarAjustes(), agr
 montarParametros($('#parametros'), $('#nuevo-param'));
 montarModos($('#modos'));
 montarClips($('#clips'), $('#lista-clips'), $('#nuevo-clip'), $('#live'), $('#ver-manifiesto'));
+montarPoses($('#seccion-poses'), $('#lista-poses'), $('#nueva-pose'));
+montarCartel($('#cartel'));
+
+// Clips, Parameters y Poses (Puppet) se pliegan con la flecha del título; se recuerda lo que elija el usuario.
+for (const seccion of document.querySelectorAll('[data-plegable]')) {
+  const clave = `aia:plegado:${seccion.dataset.plegable}`;
+  const boton = seccion.querySelector('.plegar-seccion');
+  const plegar = (plegada) => {
+    seccion.classList.toggle('plegada', plegada);
+    boton.setAttribute('aria-expanded', String(!plegada));
+  };
+  boton.addEventListener('click', () => {
+    const plegada = !seccion.classList.contains('plegada');
+    try {
+      localStorage.setItem(clave, plegada ? '1' : '0');
+    } catch {}
+    plegar(plegada);
+  });
+  try {
+    plegar(localStorage.getItem(clave) === '1');
+  } catch {}
+}
 montarTimeline($('#timeline'));
 
 // Abajo, la timeline ocupa todo el panel (Design no tiene). Los params son del muñeco: el panel Parameters, a la
@@ -461,49 +484,11 @@ function enlazarSeleccion() {
 
 // ---------- Montaje y poses ----------
 
-const NUEVA_POSE = '__nueva';
-const PARAMETROS = '__params';
-
-function dibujarPoses() {
-  const select = $('#pose');
-  const objetos = estado.doc?.objects ?? [];
-  const poses = objetos.filter((o) => o.type === 'pose');
-  const conParams = objetos.some((o) => o.type === 'param');
-  select.replaceChildren(
-    new Option('Setup', ''),
-    ...(conParams ? [new Option('Parameters (blend)', PARAMETROS)] : []),
-    ...poses.map((p) => new Option(`Pose: ${p.id}`, p.id)),
-    new Option('＋ New pose…', NUEVA_POSE),
-  );
-  // Un clip abierto (Puppet) se nombra en la lista, aunque se elija desde la biblioteca de clips.
-  const clip = estado.pose && buscar(estado.doc, estado.pose)?.type === 'animation' ? estado.pose : null;
-  if (clip) select.append(new Option(`Clip: ${clip}`, clip));
-  select.value = estado.pose ?? (estado.params && conParams ? PARAMETROS : '');
-  $('#modo').classList.toggle('en-pose', !!estado.pose);
-  $('#modo').classList.toggle('en-params', !estado.pose && !!estado.params);
-}
-
-$('#pose').addEventListener('change', (e) => {
-  const valor = e.target.value;
-  if (valor === PARAMETROS) return fijar({ pose: null, params: estado.params ?? {} });
-  // Montaje deja de mezclar; una pose se ve sola (los valores de los params quedan para cuando se vuelva).
-  if (valor !== NUEVA_POSE) return fijar(valor ? { pose: valor } : { pose: null, params: null });
-  const base = prompt('Pose name (e.g. wave, look_up):', '')?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
-  if (!base) return dibujarPoses();
-  const id = /^[a-z]/.test(base) ? base : `pose_${base}`;
-  if (buscar(estado.doc, id)) {
-    avisar(`"${id}" already exists`, true);
-    return dibujarPoses();
-  }
-  ejecutar([{ op: 'create', type: 'pose', id }], `create pose ${id}`);
-  fijar({ pose: id });
-});
-
+// Las poses se abren desde su lista en Puppet (poses.js); antes había un desplegable «View» arriba.
 suscribir((c) => {
-  if ('doc' in c || 'pose' in c || 'params' in c || 'id' in c) {
-    // Si la pose activa desapareció (deshacer, la IA la borró), se vuelve al montaje.
-    if (estado.pose && !['pose', 'animation'].includes(buscar(estado.doc ?? { objects: [] }, estado.pose)?.type)) return fijar({ pose: null });
-    dibujarPoses();
+  // Si la pose o el clip abierto desapareció (deshacer, la IA lo borró), se vuelve a la vista de params o al montaje.
+  if (('doc' in c || 'pose' in c || 'id' in c) && estado.pose && !['pose', 'animation'].includes(buscar(estado.doc ?? { objects: [] }, estado.pose)?.type)) {
+    fijar({ pose: null, ...(estado.modo === 'puppet' ? { params: estado.params ?? {} } : {}) });
   }
 });
 

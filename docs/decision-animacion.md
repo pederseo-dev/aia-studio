@@ -15,7 +15,7 @@ El editor se divide en tres modos, por **para qué** es lo que se hace:
 | Exporta a | — | Video, Lottie, SVG/CSS (horneado) | `.aia` + runtime (vivo) |
 
 - **Design ya no tiene poses.** Las poses, los params y los drivers son los controles del muñeco: pasan a **Puppet**.
-  Design queda para dibujo y rig puros (lo que hoy es «View: Setup»).
+  Design queda para dibujo y rig puros (lo que era «View: Setup»).
 - **Puppet** tiene los controles: expresiones (params → poses), clips (gestos, loops, reacciones) y, en la fase 6, el
   comportamiento (state machine). Cada clip es un **botón** del panel derecho:
   - clic → la timeline de abajo pasa a ese clip (como «entrar» a una acción en Moho; el marco cambia de color);
@@ -248,3 +248,18 @@ pedir una base que está saliendo la retoma; `stop` de un id que no existe o de 
 
 State machine (en pausa), máscaras por región explícitas (hoy un clip ya pisa solo sus pistas), grabar una actuación
 (● Rec), atajos de teclado por botón y el lip-sync desde el audio (fase 7: es un param que la app mueve).
+
+## 10. La UI de Puppet: tres piezas en un solo panel (2026-11-12)
+
+El usuario confundía el desplegable «View» de arriba (Setup / Parameters (blend) / Pose: …) con un atajo de los
+clips: las tres piezas de Puppet estaban en tres lugares y con metáforas distintas, y no se veía que **los params
+mezclan poses**. Se acordó (como las listas de animaciones e inputs de Rive y las acciones de Moho como recursos):
+
+- **Un panel derecho con las tres piezas, apiladas y plegables:** Clips (lo que hace el muñeco; arriba, porque es lo que
+  más se usa y lo que se dispara en Live), Parameters (perillas que mezclan poses) y **Poses** (fotos fijas). Las poses
+  son una lista como la de clips: clic abre la pose para editarla (amarillo) y cada fila dice qué param la mueve
+  (← happiness). Se descartaron las pestañas: ocupan menos, pero esconden la relación.
+- **Sin el desplegable «View».** Un **cartel arriba del lienzo** dice qué se edita o se ve, en el color del marco, con
+  el botón para salir: «Editing pose happy · Done», «Editing clip wave at 0.5 s · Close clip», «Previewing
+  parameters · Reset» o «● Live · ■ Stop Live» (como el aviso de Moho al editar una acción).
+- Lo que se pliega se recuerda por sección. El MCP no cambia: es solo la interfaz.
