@@ -108,6 +108,7 @@ export const PROPS_EN_VIVO = ['fade', 'next', 'blend', 'auto', 'repeat_min', 're
  * se pasa otro). `remove` ("objeto.propiedad" o un id) saca pistas enteras antes de agregar. Crea el clip si no existe
  * y alarga la duración si un keyframe la pasa; una `duration` más corta que los keyframes es un error.
  */
+/** @param {any} doc @param {any} esquema @param {string} animacion @param {Record<string, any>} [opciones] keys, usage, duration, loop, description, remove y lo de Live */
 export function planSetKeys(doc, esquema, animacion, { keys = [], usage, duration, loop, description, remove = [], ...vivo } = {}) {
   const existente = buscar(doc, animacion);
   if (existente && existente.type !== 'animation') throw new Error(`"${animacion}" already exists and is a ${existente.type}; choose another id for the animation`);
@@ -166,6 +167,7 @@ export function planSetKeys(doc, esquema, animacion, { keys = [], usage, duratio
  * delete_keys: quita keyframes de un clip. `times` (segundos) elige los momentos; `targets` ("objeto.propiedad" o
  * un id) elige las pistas; sin times, la pista entera; sin targets, todas. Una pista que queda vacía sale.
  */
+/** @param {any} doc @param {string} animacion @param {{ times?: number[], targets?: string[] }} [opciones] */
 export function planDeleteKeys(doc, animacion, { times, targets } = {}) {
   const clip = clipDe(doc, animacion);
   if (!times?.length && !targets?.length) throw new Error('pass times, targets or both (to delete the whole clip, use apply_ops with delete)');
@@ -186,6 +188,7 @@ export function planDeleteKeys(doc, animacion, { times, targets } = {}) {
  * `targets` (o en todas). Falla si en `to` ya hay un keyframe en alguna de esas pistas (lo borraría) o si `to` pasa
  * la duración.
  */
+/** @param {any} doc @param {any} esquema @param {string} animacion @param {{ from?: number, to?: number, targets?: string[] }} [opciones] */
 export function planMoveKeys(doc, esquema, animacion, { from, to, targets } = {}) {
   const clip = clipDe(doc, animacion);
   const duracion = leer(esquema, clip, 'duration');
@@ -268,6 +271,7 @@ export function planVistaDeClip(doc, esquema, { region, bones, params, animation
 }
 
 /** Por qué una combinación de opciones de render_preview no sirve (null si sirve). */
+/** @param {Record<string, any>} [opciones] pose, animation, time, times, live */
 export function errorDeVistaPrevia({ pose, animation, time, times, live } = {}) {
   if (live && (animation || pose || time != null)) return 'live runs a script on the live puppet (its clips with fades); it does not go with animation, pose or time. To see one clip by itself use animation; for frames of the script use times';
   if (animation && pose) return 'pass either pose or animation, not both: a clip already sets its own values (to see a pose at some moment of a clip, key it there with set_keys and pose)';
@@ -280,6 +284,7 @@ export function errorDeVistaPrevia({ pose, animation, time, times, live } = {}) 
  * (o `factor` veces lo que dura). Los keyframes de después del tramo se corren y la duración del clip cambia lo mismo.
  * Un solo paso de deshacer.
  */
+/** @param {any} doc @param {any} esquema @param {string} animacion @param {{ duration?: number, factor?: number, from?: number, to?: number }} [opciones] */
 export function planScaleTime(doc, esquema, animacion, { duration, factor, from, to } = {}) {
   const clip = clipDe(doc, animacion);
   const total = leer(esquema, clip, 'duration');
@@ -324,6 +329,7 @@ export function textoDePosesDeParams(doc, esquema, clip) {
  * devuelve la tira de cuadros en `times` (por defecto, cada 0.25 s hasta 0.5 s después del último evento; como mucho
  * 24), con el texto de qué suena en cada cuadro. Devuelve { svg, ancho, texto }.
  */
+/** @param {any} doc @param {any} esquema @param {Record<string, any>} opciones live, times, until, auto, params, region, bones */
 export function planVistaEnVivo(doc, esquema, { live, times, until, auto, params, region, bones }) {
   for (const [i, e] of live.entries()) {
     const verbos = ['play', 'stop', 'set'].filter((k) => e[k] !== undefined);

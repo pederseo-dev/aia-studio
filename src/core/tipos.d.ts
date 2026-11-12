@@ -27,3 +27,18 @@ export interface Operacion {
   target?: string;
   [campo: string]: any;
 }
+
+/** Opciones de lo que se dibuja (render/svg.js y las vistas previas del MCP). */
+export interface OpcionesDeVista {
+  /** Pose que se ve encima del montaje (un objeto pose o sus valores ya resueltos). */
+  pose?: any;
+  params?: Record<string, number>;
+  animation?: any;
+  time?: number;
+  times?: number[];
+  poses?: any[];
+  mostrar?: any;
+  region?: { x: number; y: number; width: number; height: number };
+  huesos?: boolean;
+  columnas?: number;
+}

@@ -141,6 +141,7 @@ export function resolverPose(doc, esquema, pose, params, animation = null, time 
  * poses que dan los drivers; `animation` + `time`: un clip en ese tiempo (en segundos), con los params encima; sin
  * nada, el montaje.
  */
+/** @param {any} montaje @param {any} esquema @param {import('../core/tipos.js').OpcionesDeVista} [opciones] */
 export function contenidoSvg(montaje, esquema, { pose, params, animation, time, mostrar } = {}) {
   const poseActiva = resolverPose(montaje, esquema, pose, params, animation, time);
   // Lo que no es hueso toma los valores de la pose; los huesos se mueven por el esqueleto (con su delta).
@@ -162,6 +163,7 @@ export function contenidoSvg(montaje, esquema, { pose, params, animation, time, 
  * El esqueleto dibujado encima, con el id de cada hueso: para revisar dónde quedaron (en el editor se ven en su
  * superposición; esto es para las vistas previas de la IA).
  */
+/** @param {any} doc @param {any} esquema @param {import('../core/tipos.js').OpcionesDeVista} opciones */
 function svgHuesos(doc, esquema, { pose, params, animation, time }) {
   const huesos = doc.objects.filter((o) => o.type === 'bone');
   if (!huesos.length) return '';
@@ -184,6 +186,7 @@ function svgHuesos(doc, esquema, { pose, params, animation, time }) {
  * SVG completo. `region` ({ x, y, width, height }) recorta una parte del documento; `huesos: true` dibuja el
  * esqueleto encima.
  */
+/** @param {any} doc @param {any} esquema @param {import('../core/tipos.js').OpcionesDeVista} [opciones] */
 export function svgDocumento(doc, esquema, { region, huesos, ...opciones } = {}) {
   const r = region ?? { x: 0, y: 0, width: leerMeta(esquema, doc, 'width'), height: leerMeta(esquema, doc, 'height') };
   const encima = huesos ? svgHuesos(doc, esquema, opciones) : '';
@@ -195,6 +198,7 @@ export function svgDocumento(doc, esquema, { region, huesos, ...opciones } = {})
  * Sirve para ver el movimiento en una sola imagen (la vista previa de la IA). Acepta las mismas opciones que
  * svgDocumento (`region`, `huesos`, `params`) más `animation` y `times`, o `times` con `poses` (una por cuadro).
  */
+/** @param {any} doc @param {any} esquema @param {import('../core/tipos.js').OpcionesDeVista} [opciones] */
 export function svgTira(doc, esquema, { times, poses, columnas = 4, region, huesos, ...opciones } = {}) {
   const r = region ?? { x: 0, y: 0, width: leerMeta(esquema, doc, 'width'), height: leerMeta(esquema, doc, 'height') };
   const cols = Math.min(columnas, times.length);

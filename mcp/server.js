@@ -229,6 +229,7 @@ const region = z
   .describe('recorte del documento, en sus coordenadas (para ver un detalle de cerca)');
 
 /** PNG del documento (opcionalmente posado, animado y recortado) como resultado de herramienta. */
+/** @param {any} doc @param {Record<string, any>} opciones @param {string} [encabezado] */
 function vistaPrevia(doc, { width, pose, region, bones, params, animation, time, times, live, until, auto }, encabezado) {
   const error = errorDeVistaPrevia({ pose, animation, time, times, live });
   if (error) throw new Error(error);

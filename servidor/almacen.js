@@ -127,7 +127,9 @@ function comunes(a, b) {
 
 export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
   // Las escrituras de este proceso van en fila para no pisarse entre sí.
+  /** @type {Promise<any>} */
   let fila = Promise.resolve();
+  /** @template T @param {() => Promise<T>} fn @returns {Promise<T>} */
   const enFila = (fn) => (fila = fila.then(fn, fn));
 
   const ruta = (id, archivo) => {
@@ -283,6 +285,7 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
     },
 
     /** Crea un documento vacío o, con `copiarDe`, una copia de otro (sin su historial). */
+    /** @param {string} id @param {Record<string, any>} meta @param {{ origen: string, nota?: string, copiarDe?: string }} opciones */
     crear: (id, meta, { origen, nota, copiarDe }) =>
       enFila(async () => {
         try {

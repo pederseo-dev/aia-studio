@@ -12,5 +12,5 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["node"]
   },
-  "include": ["src/core/**/*.js"]
+  "include": ["src/core/**/*.js", "src/render/**/*.js", "mcp/**/*.js", "servidor/**/*.js"]
 }
