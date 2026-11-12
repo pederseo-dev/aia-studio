@@ -173,3 +173,70 @@ seleccionado, con o sin keys). Para no saturar la interfaz, **se empieza como Mo
   los botones de keyar y la curva.
 - Sigue abierta la otra mitad de Rive: ver todo lo animado sin seleccionarlo (hoy, sin selección, la timeline lista
   los objetos animados para elegirlos).
+
+## 9. Puppet en vivo (fase 6, 2026-11-11)
+
+Se debatió hacer una state machine como la de Rive (estados, transiciones con condiciones sobre params, exit time,
+blend 1D). **Decisión del usuario: queda en pausa.** En una app con un LLM, el LLM ya decide el estado («estoy
+hablando» → `play("talking")`) y lo que pasa cuadro a cuadro (boca con el audio, parpadeo, respiración) no necesita
+estados. La state machine sirve más a juegos o apps sin IA; se retoma si aparece ese caso. Lo de abajo equivale a una
+state machine de Rive con transiciones desde *Any State*, así que no cierra la puerta ni pierde nada al exportar.
+
+### El runtime (`src/core/vivo.js`)
+
+Es «el muñeco en marcha» y el mismo que exporta la fase 7. No depende del DOM y avanza con `avanzar(dt)` (pruebas y
+guiones con tiempos fijos). La app le habla con tres verbos:
+
+- **`play(clip)`**:
+  - un clip en `loop` o `pingpong` pasa a ser **la base** (reposo, escuchando, hablando) y reemplaza a la anterior
+    con un fundido cruzado;
+  - un clip `once` es un **gesto**: entra con un fundido **encima** de la base, pisa solo las pistas que tiene (el
+    saludo mueve el brazo y deja la boca de «talking») y sale solo con otro fundido al final. Volver a dispararlo lo
+    reinicia. Varios gestos se apilan en el orden en que se dispararon.
+- **`set(param, valor)`**: el valor de la app (los que falten, su valor inicial).
+- **`stop(clip)`** (o `stop()` todo): el clip sale con su fundido.
+
+Datos nuevos del clip (`animation`, solo en Puppet):
+
+| Propiedad | Qué hace |
+|---|---|
+| `fade` | Segundos del fundido al entrar y al salir (por defecto 0.2; 0 = de golpe, para el parpadeo). La curva del fundido es suave (ease-in-out). |
+| `next` | Clip que se dispara cuando este `once` empieza a salir: `start_talking` → `talking`, `surprised` → `idle`. |
+| `blend` | `override` (por defecto) pisa lo que hay debajo con su peso; `additive` **suma** la diferencia con el montaje (respiración: `scaleY` 1.02 suma 0.02 a lo que haya). Lo que no es número no se suma. |
+| `auto` | Capas procedurales, dato del personaje: `off` (por defecto, lo dispara la app), `repeat` (el runtime lo dispara solo cada `repeat_min`…`repeat_max` segundos al azar: el parpadeo) o `always` (suena siempre en loop: la respiración, normalmente aditiva). La app no los dispara. |
+
+### Cómo se mezcla (cada cuadro)
+
+```
+montaje → bases (fundido cruzado) → gestos en orden → capas auto → aditivos suman → drivers con los params mezclados
+```
+
+- Cada capa pisa lo de abajo **con su peso**: números en línea, colores por canal, vértices como el morph, lo
+  discreto (el hijo de un switch, booleanos) cambia cuando el peso pasa de 0.5.
+- **Params de la app contra un clip que los anima:** se mezclan igual, con el peso del clip. Mientras suena a peso 1
+  gana el clip; al salir, el param vuelve **suave** al valor de la app (si la app lo cambió mientras tanto, aparece
+  el nuevo). Los drivers se calculan **una vez**, con los params ya mezclados: no se mezclan poses dos veces.
+- Las capas `auto` van encima de los gestos: el parpadeo se ve también durante un saludo.
+
+### En el editor: «▶ Live» (Puppet)
+
+Un interruptor arriba de la biblioteca de clips. Con Live encendido el documento no se edita: los botones de los
+clips **disparan** (los `auto` se muestran pero suenan solos), los sliders de Parameters son los valores de la app
+(no se guardan ni van al historial), la timeline muestra qué suena con su peso y el canvas es lo que verá la app.
+Al apagarlo se vuelve a lo que estaba abierto.
+
+### Para la IA
+
+- **Edición (MCP):** `set_keys` acepta `fade`, `next`, `blend`, `auto`, `repeat_min` y `repeat_max` (o `apply_ops`).
+  `render_preview` con **`live`** (un guion: `[{ t, play | stop | set }]`) y `times` devuelve la tira de cuadros de
+  lo que vería la app, con el estado de cada cuadro (qué suena y con qué peso). El azar del parpadeo usa una semilla
+  fija, así que el mismo guion da la misma tira.
+- **Manifiesto** (`get_manifest`, `manifiesto()` en `src/core/manifiesto.js`): lo que lee la IA de la app. Los params
+  (tipo, rango u opciones, valor inicial, descripción y **qué poses mueve cada uno**), los clips que se pueden
+  disparar (base o gesto, descripción, duración, `next`, qué params anima) y las capas automáticas (solo informativas).
+  El param gana `description` para esto. La fase 7 lo convierte en herramientas para el LLM (`play`, `set`, `stop`).
+
+### Queda para después
+
+State machine (en pausa), máscaras por región explícitas (hoy un clip ya pisa solo sus pistas), grabar una actuación
+(● Rec), atajos de teclado por botón y el lip-sync desde el audio (fase 7: es un param que la app mueve).

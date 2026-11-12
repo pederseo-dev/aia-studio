@@ -279,6 +279,22 @@ function erroresDeControl(doc, esquema, o) {
       }
     }
   }
+  // Lo de Live (fade, next, blend, auto) es de los clips de Puppet; una escena no se dispara en vivo.
+  if (o.type === 'animation') {
+    const puppet = leer(esquema, o, 'usage') === 'puppet';
+    const [next, blend, auto, rmin, rmax] = ['next', 'blend', 'auto', 'repeat_min', 'repeat_max'].map((k) => leer(esquema, o, k));
+    if (!puppet && (next != null || blend !== 'override' || auto !== 'off')) {
+      const cuales = [next != null && 'next', blend !== 'override' && 'blend', auto !== 'off' && 'auto'].filter(Boolean).join(', ');
+      errores.push(`${o.id}: ${cuales} only work in Puppet clips (played live), and "${o.id}" is a scene (Animate). Pass usage: "puppet", or leave ${cuales} at the default.`);
+    }
+    const destino = next != null ? buscar(doc, next) : null;
+    if (destino?.type === 'animation') {
+      if (leer(esquema, destino, 'usage') !== 'puppet') errores.push(`${o.id}.next: "${next}" is a scene (Animate); next must be a Puppet clip.`);
+      else if (leer(esquema, destino, 'auto') !== 'off') errores.push(`${o.id}.next: "${next}" is an auto clip (${leer(esquema, destino, 'auto')}), which plays by itself; next must be a clip the app plays.`);
+    }
+    if (puppet && next != null && leer(esquema, o, 'loop') !== 'once') errores.push(`${o.id}.next: only once clips end, and "${o.id}" is ${leer(esquema, o, 'loop')}. Set loop: "once" or remove next.`);
+    if (typeof rmin === 'number' && typeof rmax === 'number' && rmin > rmax) errores.push(`${o.id}: repeat_min (${rmin}) is greater than repeat_max (${rmax})`);
+  }
   return errores;
 }
 

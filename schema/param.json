@@ -9,6 +9,7 @@
     "max": { "type": "number", "default": 1, "group": "Parámetro", "help": "Maximum value (number).", "description": "Valor máximo (number)." },
     "default": { "type": "number", "default": 0, "group": "Parámetro", "help": "Initial value (number; for boolean, 0 or 1).", "description": "Valor inicial (number; en boolean, 0 o 1)." },
     "options": { "type": "strings", "default": [], "group": "Parámetro", "help": "Options of an enum, for example rest, a, e, o, m.", "description": "Opciones de un enum, por ejemplo [\"rest\", \"a\", \"e\", \"o\", \"m\"]." },
-    "initial": { "type": "string", "default": null, "nullable": true, "group": "Parámetro", "help": "Initial option of an enum (empty = the first one).", "description": "Opción inicial de un enum (null = la primera)." }
+    "initial": { "type": "string", "default": null, "nullable": true, "group": "Parámetro", "help": "Initial option of an enum (empty = the first one).", "description": "Opción inicial de un enum (null = la primera)." },
+    "description": { "type": "string", "default": "", "group": "Parámetro", "help": "What it controls, in a few words. The app's AI reads it in the manifest.", "description": "Qué controla, en pocas palabras (en inglés si la app es en inglés). La IA de la app la lee en el manifiesto." }
   }
 }
