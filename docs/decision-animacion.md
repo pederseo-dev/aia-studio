@@ -263,3 +263,7 @@ mezclan poses**. Se acordó (como las listas de animaciones e inputs de Rive y l
   el botón para salir: «Editing pose happy · Done», «Editing clip wave at 0.5 s · Close clip», «Previewing
   parameters · Reset» o «● Live · ■ Stop Live» (como el aviso de Moho al editar una acción).
 - Lo que se pliega se recuerda por sección. El MCP no cambia: es solo la interfaz.
+- **Una columna propia** (el mismo día, pedido del usuario): las tres piezas apiladas debajo del inspector lo dejaban
+  sin lugar. En Puppet, Clips, Parameters y Poses van en una columna entre el lienzo y el inspector (como la lista de
+  animaciones de Rive al lado del inspector), y el inspector conserva su columna entera. En Design y Animate esa
+  columna no está.
