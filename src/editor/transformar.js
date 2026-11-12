@@ -15,7 +15,7 @@ import { alternarSeleccion, ejecutar, esquema, estado, previsualizar, seleccionR
 const redondear = (v, d = 10) => Math.round(v * d) / d;
 const GRADOS = 180 / Math.PI;
 const RADIANES = Math.PI / 180;
-const FORMAS = 'path, rect, ellipse, circle, line, polyline, polygon';
+const FORMAS = 'path, rect, ellipse, circle, line, polyline, polygon, image';
 
 const EN_POSE = ['x', 'y', 'rotation', 'scaleX', 'scaleY'];
 
@@ -120,7 +120,7 @@ export function crearTransformar(ctx) {
     if (esquinas) manijasDeCaja(esquinas);
     const m = el.getCTM();
     const [px, py] = [m.e, m.f];
-    const movible = !estado.pose && ['group', 'path', 'rect', 'ellipse'].includes(obj.type);
+    const movible = !estado.pose && ['group', 'path', 'rect', 'ellipse', 'image'].includes(obj.type);
     ctx.superposicion.append(
       ctx.crear('circle', { class: movible ? 'pivote manija' : 'pivote', 'data-manija': movible ? 'pivote' : '', cx: px, cy: py, r: 5 }, movible ? 'Move the pivot without moving the drawing' : 'Pivot'),
     );
@@ -311,7 +311,7 @@ export function crearTransformar(ctx) {
           ops = [{ op: 'set', target: id, props: { x, y } }];
           if (obj.type === 'path') {
             ops[0].props.vertices = transformarVertices(leer(esquema, obj, 'vertices'), [1, 0, 0, 1, -dx, -dy]);
-          } else if (obj.type === 'rect' || obj.type === 'ellipse') {
+          } else if (obj.type === 'rect' || obj.type === 'ellipse' || obj.type === 'image') {
             // La forma se corre dentro de su marco: el pivote pasa a otra fracción del ancho y del alto.
             const [w, h] = [leer(esquema, obj, 'width'), leer(esquema, obj, 'height')];
             if (w && Math.abs(dx) > 1e-6) ops[0].props.originX = redondear(leer(esquema, obj, 'originX') + dx / w, 10000);

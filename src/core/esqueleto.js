@@ -182,7 +182,7 @@ export function cajaDe(doc, esquema, id) {
   const recorrer = (o) => {
     if (o.type === 'bone' || esquema.tipos.get(o.type)?.resource) return;
     const m = matrizMundo(doc, esquema, o.id);
-    if (o.type === 'rect' || o.type === 'ellipse') {
+    if (o.type === 'rect' || o.type === 'ellipse' || o.type === 'image') {
       const [w, h] = [leer(esquema, o, 'width'), leer(esquema, o, 'height')];
       const [x0, y0] = [-w * leer(esquema, o, 'originX'), -h * leer(esquema, o, 'originY')];
       for (const [x, y] of [[x0, y0], [x0 + w, y0], [x0, y0 + h], [x0 + w, y0 + h]]) sumar(m, x, y);

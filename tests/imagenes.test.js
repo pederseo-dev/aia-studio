@@ -9,6 +9,7 @@ import { crearAlmacen } from '../servidor/almacen.js';
 import { incrustarImagenes, svgAPng } from '../servidor/png.js';
 import { buscar, crearDocumento, validar } from '../src/core/documento.js';
 import { validarValor } from '../src/core/esquema.js';
+import { cajaDe } from '../src/core/esqueleto.js';
 import { assetsUsados, leerImagen, nombreDeAsset, nombreLibre, planAgregarImagen } from '../src/core/imagenes.js';
 import { guiaParaIA } from '../src/core/guia.js';
 import { aplicarOperaciones } from '../src/core/operaciones.js';
@@ -113,6 +114,8 @@ test('una image se pega a un hueso y se anima en poses y clips como las demás c
   assert.match(svgDocumento(doc, esquema, { pose: 'grande' }), /data-id="foto"[^>]*opacity="0\.5" display="none"><image href="foto\.png" x="-150" y="-50" width="300"/);
   assert.match(svgDocumento(doc, esquema, { animation: 'clip', time: 0.5 }), /<image href="foto\.png" x="-75" y="-50" width="150"/);
   assert.throws(() => op(doc, { op: 'set', target: 'grande', props: { values: { foto: { src: 'otra.png' } } } }), /src/);
+  // Su caja cuenta para enlazar por cercanía (como la de un rect): 100 × 100 centrada en el origen.
+  assert.deepEqual(cajaDe(doc, esquema, 'foto'), [-50, -50, 50, 50]);
 });
 
 test('almacén: guarda assets (reusa los iguales, renombra los distintos), los sirve, avisa los que faltan y los copia', () =>
