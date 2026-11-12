@@ -15,6 +15,7 @@ import { montarOpciones } from './opciones.js';
 import { montarParametros } from './parametros.js';
 import { cambiarModo, montarClips, montarModos, montarTimeline } from './timeline.js';
 import { montarCartel, montarPoses } from './poses.js';
+import { reiniciarParams } from './vivo.js';
 import {
   abrir, agregarPestana, api, avisar, borradosAqui, cargarDocumentos, cerrarPestana, deshacer, ejecutar, eliminarDocumento,
   enviarPendiente, esquema, estado, fijar, hayPendiente, idLibre, mantenerPosicion, padreParaNuevo,
@@ -35,6 +36,7 @@ montarParametros($('#parametros'), $('#nuevo-param'), $('#borrar-param'));
 montarModos($('#modos'));
 montarClips($('#clips'), $('#lista-clips'), $('#nuevo-clip'), $('#live'), $('#ver-manifiesto'), $('#borrar-clip'));
 montarPoses($('#seccion-poses'), $('#lista-poses'), $('#nueva-pose'), $('#borrar-pose'));
+$('#reset-params').addEventListener('click', reiniciarParams);
 montarCartel($('#cartel'));
 
 // Clips, Parameters y Poses (Puppet) se pliegan con la flecha del título; se recuerda lo que elija el usuario.

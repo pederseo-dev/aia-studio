@@ -165,11 +165,15 @@
       </section>
 
       <aside id="panel-derecho" class="panel">
+        <!-- Puppet: lo que se hace con todo el muñeco (no con una lista): volver los params al inicio, Live y AI view -->
+        <div id="barra-puppet" role="toolbar" aria-label="Puppet">
+          <button id="reset-params" type="button" title="Put every parameter back to its initial value">Reset</button>
+          <button id="live" type="button" class="live" aria-pressed="false">▶ Live</button>
+          <button id="ver-manifiesto" type="button" title="AI view: what the app’s AI will know about this puppet (parameters, clips, what each one overrides, problems)">AI view</button>
+        </div>
         <section id="clips" class="seccion-puppet" data-plegable="clips" hidden>
           <div class="cabecera">
             <h2><button type="button" class="plegar-seccion" aria-expanded="true" title="Collapse or expand the clips">Clips<span data-flecha></span></button></h2>
-            <button id="ver-manifiesto" type="button" title="AI view: what the app’s AI will know about this puppet (parameters, clips, what each one overrides, problems)">AI view</button>
-            <button id="live" type="button" class="live" aria-pressed="false">▶ Live</button>
             <button id="nuevo-clip" type="button" class="icono" title="New clip: a short animation the app or its AI triggers (wave, blink, idle)" aria-label="New clip" data-icono="agregar"></button>
             <button id="borrar-clip" type="button" class="icono" title="Delete the selected or open clip (undo brings it back)" aria-label="Delete clip" data-icono="borrar" disabled></button>
           </div>

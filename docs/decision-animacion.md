@@ -270,3 +270,6 @@ mezclan poses**. Se acordó (como las listas de animaciones e inputs de Rive y l
   como Layers y un fondo más oscuro para que se vea dónde empieza cada sección (el inspector no: es el mismo en todos los
   modos). Cada param en tres líneas: nombre y
   valor; el deslizador a todo el ancho; las poses que mezcla con su peso y un + para conectar otra.
+- **Una barra chica arriba de Clips:** «Reset · ▶ Live · AI view», lo que se hace con todo el muñeco y no con una lista
+  (en la cabecera de Clips rompían la estética). Reset vuelve los params al valor inicial (con Live, los de la app) y
+  sale del cartel de la vista de params.

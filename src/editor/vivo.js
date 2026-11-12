@@ -1,5 +1,5 @@
 // ▶ Live (Puppet): el muñeco en marcha dentro del editor, con el mismo runtime que la app (src/core/vivo.js). Con
-// Live encendido el documento no se edita: los botones de los clips los disparan, los controles de Parameters son
+// Live encendido el documento no se edita (▶ Live está en la barra de Puppet, arriba de Clips): los botones de los clips los disparan, los controles de Parameters son
 // los valores de la app (no se guardan) y el lienzo muestra lo que vería la app. Ver docs/decision-animacion.md §9.
 
 import { crearVivo } from '../core/vivo.js';
@@ -89,6 +89,16 @@ export function dispararClip(id, { parar = false } = {}) {
 }
 
 /** Un valor de la app (los controles de Parameters con Live encendido). */
+/** Reset: todos los params a su valor inicial (con Live, los de la app; si no, la vista de params). */
+export function reiniciarParams() {
+  if (!estado.doc) return;
+  if (!vivo) return fijar({ ...(estado.pose && buscar(estado.doc, estado.pose)?.type === 'pose' ? { pose: null } : {}), params: {} });
+  for (const p of estado.doc.objects.filter((o) => o.type === 'param')) {
+    vivo.set(p.id, leer(esquema, p, 'kind') === 'enum' ? (leer(esquema, p, 'initial') ?? leer(esquema, p, 'options')[0]) : leer(esquema, p, 'default'));
+  }
+  fijar({ params: {} });
+}
+
 export function ponerParamVivo(id, valor) {
   if (!vivo) return;
   try {

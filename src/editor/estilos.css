@@ -477,7 +477,11 @@ body[data-modo="design"] #linea-de-tiempo { display: none; }
 
 /* ▶ Live (Puppet): el muñeco en marcha. El lienzo se enmarca en verde y sin manijas (no se edita); cada clip muestra
    su peso con una barra; la timeline lista lo que suena. */
-#clips .cabecera .live[aria-pressed="true"] { border-color: var(--vivo); color: var(--sobre-acento); background: var(--vivo); }
+/* Barra chica arriba de Clips (Puppet): Reset · ▶ Live · AI view, para que las secciones tengan su lugar. */
+#barra-puppet { display: flex; gap: 4px; padding: 3px 8px; border-bottom: 1px solid var(--borde); }
+#barra-puppet button { flex: 1; height: 22px; min-height: 0; padding: 0 6px; font-size: 12px; }
+body:not([data-modo="puppet"]) #barra-puppet { display: none; }
+#live[aria-pressed="true"] { border-color: var(--vivo); color: var(--sobre-acento); background: var(--vivo); }
 #lienzo.en-vivo { box-shadow: inset 0 0 0 2px var(--vivo); }
 #lienzo.en-vivo #superposicion { display: none; }
 .clip.vivo .nombre { position: relative; }
@@ -540,6 +544,6 @@ dialog.manifiesto form { display: flex; justify-content: flex-end; }
 /* Contraste entre Clips, Poses y Parameters (el inspector queda como en los otros modos): cada cabecera con fondo más oscuro y una línea gruesa arriba,
    para ver dónde empieza y termina cada sección aunque estén todas abiertas. */
 #panel-derecho .seccion-puppet > .cabecera { background: var(--fondo); border-top: 2px solid var(--borde); border-bottom: 1px solid var(--borde); }
-#panel-derecho .seccion-puppet:first-child > .cabecera { border-top: none; }
+#panel-derecho #clips > .cabecera { border-top: none; }
 #panel-derecho .seccion-puppet .cabecera h2 { color: var(--texto); }
 #panel-derecho .seccion-puppet { border-bottom: none; }

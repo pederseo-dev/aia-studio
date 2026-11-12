@@ -101,11 +101,12 @@ export function montarCartel(el) {
       boton = ['Done', 'Stop editing the pose and go back to the parameter preview', () => abrirPose(abierto.id)];
     } else {
       [clase, texto] = ['params', 'Previewing <b>parameters</b>: the canvas shows the poses they blend. To change a pose, open it under Poses.'];
-      boton = ['Reset', 'Put every parameter back to its initial value', () => fijar({ params: {} })];
+      boton = null; // Reset está en la barra de Puppet, arriba de Clips
     }
     el.className = `cartel-${clase}`;
     el.innerHTML = `<span>${texto}</span>`;
     if (clase === 'clip' || clase === 'pose') el.querySelector('span b').textContent = abierto.id;
+    if (!boton) return;
     const b = Object.assign(document.createElement('button'), { type: 'button', textContent: boton[0], title: boton[1] });
     b.addEventListener('click', boton[2]);
     el.append(b);
