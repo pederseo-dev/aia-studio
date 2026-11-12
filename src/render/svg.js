@@ -193,9 +193,9 @@ export function svgDocumento(doc, esquema, { region, huesos, ...opciones } = {})
 /**
  * Tira de cuadros de un clip: un cuadro por tiempo, en filas de hasta `columnas`, con el tiempo debajo de cada uno.
  * Sirve para ver el movimiento en una sola imagen (la vista previa de la IA). Acepta las mismas opciones que
- * svgDocumento (`region`, `huesos`, `params`) más `animation` y `times`.
+ * svgDocumento (`region`, `huesos`, `params`) más `animation` y `times`, o `times` con `poses` (una por cuadro).
  */
-export function svgTira(doc, esquema, { times, columnas = 4, region, huesos, ...opciones } = {}) {
+export function svgTira(doc, esquema, { times, poses, columnas = 4, region, huesos, ...opciones } = {}) {
   const r = region ?? { x: 0, y: 0, width: leerMeta(esquema, doc, 'width'), height: leerMeta(esquema, doc, 'height') };
   const cols = Math.min(columnas, times.length);
   const filas = Math.ceil(times.length / cols);
@@ -204,7 +204,8 @@ export function svgTira(doc, esquema, { times, columnas = 4, region, huesos, ...
   const [ancho, alto] = [r.width + margen, r.height + rotulo + margen];
   const cuadros = times.map((time, i) => {
     const [x, y] = [(i % cols) * ancho, Math.floor(i / cols) * alto];
-    const o = { ...opciones, time };
+    // `poses`: una pose ya resuelta por cuadro (el runtime en vivo), en lugar de un clip en ese tiempo.
+    const o = poses ? { ...opciones, pose: poses[i] } : { ...opciones, time };
     const encima = huesos ? svgHuesos(doc, esquema, o) : '';
     const vista = `<svg x="${n(x)}" y="${n(y)}" width="${n(r.width)}" height="${n(r.height)}" viewBox="${n(r.x)} ${n(r.y)} ${n(r.width)} ${n(r.height)}" overflow="hidden">${contenidoSvg(doc, esquema, o)}${encima}</svg>`;
     const marco = `<rect x="${n(x)}" y="${n(y)}" width="${n(r.width)}" height="${n(r.height)}" fill="none" stroke="#999999" stroke-width="${n(r.width / 300)}"/>`;

@@ -312,6 +312,33 @@ ${DESCRIPCION_DE_CURVAS.map(([nombre, que]) => `  - \`${nombre}\`: ${que}.`).joi
 - Para Puppet, escribe \`description\` (qué hace el clip, en pocas palabras): la IA de la app la lee para elegir cuándo
   dispararlo. Los clips de puppet suelen ser cortos (parpadeo 0.2 s, saludo 1–1.5 s, reposo en loop 2–4 s).
 
+## Puppet en vivo
+
+Una app (o su IA) maneja el muñeco con tres verbos: \`play(clip)\`, \`set(param, valor)\` y \`stop(clip)\`. No hay state
+machine: la app decide qué toca. Cómo suena cada clip de Puppet lo dice el clip:
+
+- **Base o gesto** sale del \`loop\`: un clip en \`loop\`/\`pingpong\` (reposo, escuchando, pensando, hablando) es **la
+  base**: \`play\` la cambia con un fundido cruzado y se queda sonando. Un clip \`once\` (saludo, asentir, sorpresa) es
+  un **gesto**: entra **encima** de la base, pisa **solo las pistas que tiene** y sale solo al final. Por eso un gesto
+  no debe keyar lo que no le toca (un saludo que keya la boca tapa la boca de «hablando»).
+- \`fade\`: segundos del fundido al entrar y salir (0.2 por defecto; 0 para el parpadeo). Un gesto empieza a salir
+  \`fade\` segundos antes de su final.
+- \`next\` (clip \`once\`): qué se dispara cuando empieza a salir. Encadena: \`start_talking\` → \`talking\`,
+  \`surprised\` → \`idle\`. Si \`next\` es un clip en loop, pasa a ser la base.
+- \`auto\`: lo que el muñeco hace solo, sin que la app lo pida: \`repeat\` (cada \`repeat_min\`…\`repeat_max\` s al azar:
+  el parpadeo) o \`always\` (en loop siempre: la respiración). Van encima de los gestos. La app no los dispara.
+- \`blend: "additive"\`: el clip **suma** su diferencia con el montaje en vez de pisar (la respiración con \`scaleY\`
+  1.02 suma 0.02 a lo que haya). Solo los números se suman.
+- **Params:** el valor lo pone la app con \`set\`. Si un clip anima ese param, gana el clip mientras suena y, al salir,
+  vuelve suave al valor de la app. Escribe la \`description\` de cada param: la app la lee.
+
+Todo esto se pone con \`set_keys\` (\`fade\`, \`next\`, \`blend\`, \`auto\`, \`repeat_min\`, \`repeat_max\`) o con \`apply_ops\`.
+Para ver cómo lo verá la app, \`render_preview\` con \`live\`: un guion \`[{ "t": 0, "play": "idle" }, { "t": 1, "play":
+"wave" }, { "t": 1.2, "set": { "happiness": 1 } }]\` y \`times\` para los cuadros; el texto dice qué suena en cada cuadro y
+con qué peso. Al terminar un Puppet, lee **\`get_manifest\`**: es lo que recibe la IA de la app (params con qué poses
+mueven, clips con su descripción, lo automático). Una descripción vacía o un param que no mueve nada ahí es un
+problema para la app.
+
 ## Tipos
 
 ### \`meta\` (propiedades del documento, se cambian con \`target: "meta"\`)

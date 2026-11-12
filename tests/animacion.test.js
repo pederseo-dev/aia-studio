@@ -153,7 +153,7 @@ test('set_keys: momentos con values, pose y params; reemplaza en el mismo t, ala
   assert.throws(() => planSetKeys(doc, esquema, 'wave', { keys: [{ t: 0, pose: 'hapy' }] }), /there is no pose "hapy".*"happy"/);
   assert.throws(() => planSetKeys(doc, esquema, 'wave', { keys: [{ t: 0 }] }), /sets nothing/);
   assert.throws(() => planSetKeys(doc, esquema, 'face', {}), /is a ellipse/);
-  assert.match(resumenDeClip(esquema, buscar(doc, 'wave')), /^puppet, 1.5 s, once; anima arm_bone.rotation, happiness.value, face.fill; keys en 0, 0.5, 1.5$/);
+  assert.match(resumenDeClip(esquema, buscar(doc, 'wave')), /^puppet, 1.5 s, once, gesto, fade 0.2 s; anima arm_bone.rotation, happiness.value, face.fill; keys en 0, 0.5, 1.5$/);
   assert.match(esquemaDelArbol(doc, esquema), /- wave \(animation\) puppet, 1.5 s/);
   assert.deepEqual(tiemposParaTira(buscar(doc, 'wave')), [0, 0.5, 1.5]);
   // delete_keys: por tiempo y pista, o la pista entera.
@@ -302,7 +302,7 @@ test('MCP: duration corta, setup sin pistas, move_keys, delete_keys con tiempos 
   assert.deepEqual(borrado.ops[0].props.tracks.box.rotation.map((c) => c.t), [0, 0.31, 1]);
   // El árbol lista cada pista con sus keyframes.
   assert.deepEqual(lineasDePistas(buscar(doc, 'talk')), ['box.rotation: 0 = 0 · 0.3 = 5 · 0.31 = 6 · 1 = 10 ease-out']);
-  assert.match(esquemaDelArbol(doc, esquema), /- talk \(animation\) puppet, 2 s, loop; .*\n {4}box\.rotation: 0 = 0/);
+  assert.match(esquemaDelArbol(doc, esquema), /- talk \(animation\) puppet, 2 s, loop, base, fade 0.2 s; .*\n {4}box\.rotation: 0 = 0/);
 });
 
 test('render_preview con animation: tira, avisos de drivers y opciones incompatibles', async () => {

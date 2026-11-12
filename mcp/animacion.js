@@ -8,6 +8,7 @@ import { leer, sugerir } from '../src/core/esquema.js';
 import { valorEfectivo } from '../src/core/estilos.js';
 import { parsearD } from '../src/core/trazado.js';
 import { svgDocumento, svgTira } from '../src/render/svg.js';
+import { correrGuion } from '../src/core/vivo.js';
 
 const n = (t) => +t.toFixed(3);
 
@@ -96,6 +97,9 @@ function valoresDelMomento(doc, esquema, pistas, k, i) {
   return valores;
 }
 
+/** Propiedades de un clip de Puppet para Live, que set_keys acepta además de usage, loop y description. */
+export const PROPS_EN_VIVO = ['fade', 'next', 'blend', 'auto', 'repeat_min', 'repeat_max'];
+
 /**
  * set_keys: cada momento ({ t, values, params, pose, setup, ease, targets }) se vuelve keyframes del clip. `pose`
  * copia los valores de esa pose; `setup` pone el montaje en todo lo que el clip anima; `values` (como en set_pose,
@@ -104,7 +108,7 @@ function valoresDelMomento(doc, esquema, pistas, k, i) {
  * se pasa otro). `remove` ("objeto.propiedad" o un id) saca pistas enteras antes de agregar. Crea el clip si no existe
  * y alarga la duración si un keyframe la pasa; una `duration` más corta que los keyframes es un error.
  */
-export function planSetKeys(doc, esquema, animacion, { keys = [], usage, duration, loop, description, remove = [] } = {}) {
+export function planSetKeys(doc, esquema, animacion, { keys = [], usage, duration, loop, description, remove = [], ...vivo } = {}) {
   const existente = buscar(doc, animacion);
   if (existente && existente.type !== 'animation') throw new Error(`"${animacion}" already exists and is a ${existente.type}; choose another id for the animation`);
   let pistas = structuredClone(existente?.tracks ?? {});
@@ -149,7 +153,9 @@ export function planSetKeys(doc, esquema, animacion, { keys = [], usage, duratio
   const pedida = duration ?? leer(esquema, existente ?? { type: 'animation' }, 'duration');
   const final = Math.max(pedida, ultimo);
   const props = { tracks: pistas };
+  // Lo de Live (fade, next, blend, auto, repeat_min, repeat_max) pasa tal cual: la validación dice si no corresponde.
   for (const [k, v] of Object.entries({ usage, loop, description })) if (v !== undefined) props[k] = v;
+  for (const k of PROPS_EN_VIVO) if (vivo[k] !== undefined) props[k] = vivo[k];
   if (duration !== undefined || final !== pedida || !existente) props.duration = final;
   const ops = existente ? [{ op: 'set', target: animacion, props }] : [{ op: 'create', type: 'animation', id: animacion, props }];
   return { ops, duracion: final, alargadaDesde: final > pedida ? pedida : null };
@@ -205,7 +211,18 @@ export function resumenDeClip(esquema, clip) {
   const pistas = Object.entries(clip.tracks ?? {}).flatMap(([id, campos]) => Object.keys(campos).map((k) => `${id}.${k}`));
   const tiempos = tiemposDeClaves(clip);
   const base = `${leer(esquema, clip, 'usage')}, ${n(leer(esquema, clip, 'duration'))} s, ${leer(esquema, clip, 'loop')}`;
-  return `${base}; ${pistas.length ? `anima ${pistas.join(', ')}; keys en ${tiempos.map(n).join(', ')}` : 'sin keyframes'}`;
+  return `${base}${enVivo(esquema, clip)}; ${pistas.length ? `anima ${pistas.join(', ')}; keys en ${tiempos.map(n).join(', ')}` : 'sin keyframes'}`;
+}
+
+/** Lo de Live de un clip de Puppet, para el resumen: «, gesto, fade 0.2 s, next idle». Vacío en una escena. */
+function enVivo(esquema, clip) {
+  if (leer(esquema, clip, 'usage') !== 'puppet') return '';
+  const auto = leer(esquema, clip, 'auto');
+  const partes = [auto !== 'off' ? `auto ${auto}${auto === 'repeat' ? ` cada ${n(leer(esquema, clip, 'repeat_min'))}–${n(leer(esquema, clip, 'repeat_max'))} s` : ''}` : leer(esquema, clip, 'loop') === 'once' ? 'gesto' : 'base'];
+  partes.push(`fade ${n(leer(esquema, clip, 'fade'))} s`);
+  if (leer(esquema, clip, 'next')) partes.push(`next ${leer(esquema, clip, 'next')}`);
+  if (leer(esquema, clip, 'blend') === 'additive') partes.push('additive');
+  return `, ${partes.join(', ')}`;
 }
 
 /**
@@ -248,7 +265,8 @@ export function planVistaDeClip(doc, esquema, { region, bones, params, animation
 }
 
 /** Por qué una combinación de opciones de render_preview no sirve (null si sirve). */
-export function errorDeVistaPrevia({ pose, animation, time, times } = {}) {
+export function errorDeVistaPrevia({ pose, animation, time, times, live } = {}) {
+  if (live && (animation || pose || time != null)) return 'live runs a script on the live puppet (its clips with fades); it does not go with animation, pose or time. To see one clip by itself use animation; for frames of the script use times';
   if (animation && pose) return 'pass either pose or animation, not both: a clip already sets its own values (to see a pose at some moment of a clip, key it there with set_keys and pose)';
   if (!animation && (time != null || times?.length)) return 'time and times need animation (the id of a clip)';
   return null;
@@ -275,4 +293,31 @@ export function planScaleTime(doc, esquema, animacion, { duration, factor, from,
 export function textoDePosesDeParams(doc, esquema, clip) {
   const lineas = lineasDePosesDeParams(doc, esquema, clip);
   return lineas.length ? `Params animados y las poses que mueven (por sus drivers; todas se suman):\n${lineas.map((l) => `- ${l}`).join('\n')}` : '';
+}
+
+/**
+ * render_preview con live: corre un guion ([{ t, play | stop | set }]) en el runtime en vivo (el mismo de la app) y
+ * devuelve la tira de cuadros en `times` (por defecto, cada 0.25 s hasta 0.5 s después del último evento; como mucho
+ * 24), con el texto de qué suena en cada cuadro. Devuelve { svg, ancho, texto }.
+ */
+export function planVistaEnVivo(doc, esquema, { live, times, params, region, bones }) {
+  for (const [i, e] of live.entries()) {
+    const verbos = ['play', 'stop', 'set'].filter((k) => e[k] !== undefined);
+    if (verbos.length !== 1) throw new Error(`live[${i}] (t ${e.t}) needs exactly one of play, stop or set${verbos.length ? ` (it has ${verbos.join(' and ')}; split it into two events at the same t)` : ''}`);
+  }
+  const ultimo = Math.max(0, ...live.map((e) => e.t));
+  let tiempos = times?.length ? times : Array.from({ length: Math.min(24, Math.floor((ultimo + 0.5) / 0.25) + 1) }, (_, i) => i * 0.25);
+  tiempos = tiempos.slice(0, 24);
+  const cuadros = correrGuion(doc, esquema, live, tiempos, { params });
+  const opciones = { region, huesos: bones };
+  const svg = cuadros.length === 1 ? svgDocumento(doc, esquema, { ...opciones, pose: cuadros[0].pose }) : svgTira(doc, esquema, { ...opciones, times: tiempos, poses: cuadros.map((c) => c.pose) });
+  const pct = (w) => `${Math.round(w * 100)}%`;
+  const lineas = cuadros.map((c) => {
+    const sonando = c.estado.sonando.filter((s) => s.peso > 0).map((s) => `${s.clip} (${s.capa === 'gesto' ? 'gesto' : s.capa}, ${pct(s.peso)}${s.saliendo ? ', saliendo' : ''})`);
+    return `- t = ${n(c.t)} s: ${sonando.join(', ') || 'nada (montaje y params)'}`;
+  });
+  const conValor = Object.entries(cuadros.at(-1)?.estado.params ?? {}).map(([k, v]) => `${k} ${typeof v === 'number' ? n(v) : v}`);
+  const fin = conValor.length ? `\nParams al final (mezclados con los clips): ${conValor.join(', ')}` : '';
+  const texto = `En vivo (como lo vería la app), ${cuadros.length} cuadros:\n${lineas.join('\n')}${fin}`;
+  return { svg, ancho: cuadros.length === 1 ? 600 : 1000, texto };
 }

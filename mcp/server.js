@@ -16,7 +16,8 @@ import { crearAlmacen } from '../servidor/almacen.js';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { svgAPng } from '../servidor/png.js';
 import { NOMBRES_DE_CURVA } from '../src/core/curvas.js';
-import { errorDeVistaPrevia, planDeleteKeys, planMoveKeys, planScaleTime, planSetKeys, planVistaDeClip, resumenDeClip } from './animacion.js';
+import { errorDeVistaPrevia, planDeleteKeys, planMoveKeys, planScaleTime, planSetKeys, planVistaDeClip, planVistaEnVivo, resumenDeClip } from './animacion.js';
+import { manifiesto, textoDeManifiesto } from '../src/core/manifiesto.js';
 import { comprobarBorrado, esquemaDelArbol as arbol, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from './herramientas.js';
 
 const esquema = cargarEsquema();
@@ -208,9 +209,10 @@ const region = z
   .describe('recorte del documento, en sus coordenadas (para ver un detalle de cerca)');
 
 /** PNG del documento (opcionalmente posado, animado y recortado) como resultado de herramienta. */
-function vistaPrevia(doc, { width, pose, region, bones, params, animation, time, times }, encabezado) {
-  const error = errorDeVistaPrevia({ pose, animation, time, times });
+function vistaPrevia(doc, { width, pose, region, bones, params, animation, time, times, live }, encabezado) {
+  const error = errorDeVistaPrevia({ pose, animation, time, times, live });
   if (error) throw new Error(error);
+  if (live) return vistaDeClip(doc, { width, region, bones, params, live, times }, encabezado, planVistaEnVivo);
   if (animation) return vistaDeClip(doc, { width, region, bones, params, animation, time, times }, encabezado);
   if (pose && buscar(doc, pose)?.type !== 'pose') {
     const poses = doc.objects.filter((o) => o.type === 'pose').map((o) => o.id);
@@ -244,9 +246,9 @@ function vistaPrevia(doc, { width, pose, region, bones, params, animation, time,
   };
 }
 
-/** Vista previa de un clip como resultado de herramienta: el SVG y el texto salen de planVistaDeClip. */
-function vistaDeClip(doc, opciones, encabezado) {
-  const { svg, ancho, texto: resumen } = planVistaDeClip(doc, esquema, opciones);
+/** Vista previa de un clip (o de un guion en vivo) como resultado de herramienta: el SVG y el texto salen del plan. */
+function vistaDeClip(doc, opciones, encabezado, plan = planVistaDeClip) {
+  const { svg, ancho, texto: resumen } = plan(doc, esquema, opciones);
   const png = svgAPng(svg, opciones.width ?? ancho);
   return {
     content: [
@@ -263,7 +265,9 @@ servidor.registerTool(
       'Devuelve una imagen PNG del documento tal como lo ve el usuario. Úsala para revisar tus cambios. Con pose, ' +
       'muestra esa pose sola; con params, la mezcla de poses que dan los drivers con esos valores; con region, un ' +
       'recorte para ver un detalle; con bones, el esqueleto encima. Con animation, un clip: time = un cuadro; times (o ' +
-      'nada) = una tira de cuadros en una sola imagen, para ver el movimiento (por defecto, en los tiempos de sus keyframes).',
+      'nada) = una tira de cuadros en una sola imagen, para ver el movimiento (por defecto, en los tiempos de sus keyframes). ' +
+      'Con live, un guion en vivo como lo correría la app (play, stop, set sobre los clips de Puppet, con fundidos, ' +
+      'gestos encima de la base y las capas auto): times = los cuadros de la tira; params = los valores iniciales de la app.',
     inputSchema: {
       id,
       width: z.number().int().min(64).max(2048).optional().describe('ancho de la imagen en px (por defecto 600)'),
@@ -276,7 +280,18 @@ servidor.registerTool(
       bones: z.boolean().optional().describe('true = dibujar los huesos encima, con su id (en el editor siempre se ven)'),
       animation: z.string().optional().describe('id de un clip (animation): muestra el clip en time, o una tira de cuadros en times; en un clip de puppet, params se suman encima (una escena se ve sin params ni drivers y los rechaza)'),
       time: z.number().min(0).optional().describe('con animation: un solo cuadro, en segundos'),
-      times: z.array(z.number().min(0)).max(24).optional().describe('con animation: tiempos de la tira de cuadros, en segundos (por defecto, los de sus keyframes)'),
+      times: z.array(z.number().min(0)).max(24).optional().describe('con animation: tiempos de la tira de cuadros, en segundos (por defecto, los de sus keyframes); con live, los cuadros del guion (por defecto cada 0.25 s)'),
+      live: z
+        .array(
+          z.object({
+            t: z.number().min(0).describe('segundos desde el inicio'),
+            play: z.string().optional().describe('id de un clip de Puppet: uno en loop pasa a ser la base; uno once es un gesto encima'),
+            stop: z.union([z.string(), z.literal(true)]).optional().describe('id de un clip que sale con su fundido, o true para todos'),
+            set: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])).optional().describe('{ id_de_param: valor } que pone la app'),
+          }),
+        )
+        .optional()
+        .describe('guion en vivo: eventos con t y uno de play, stop o set; por ejemplo [{ "t": 0, "play": "idle" }, { "t": 0.5, "play": "wave" }, { "t": 1, "set": { "happiness": 1 } }]. No va con animation ni pose'),
     },
   },
   seguro(async ({ id, ...opciones }) => vistaPrevia(await almacen.leer(id), opciones)),
@@ -419,7 +434,8 @@ servidor.registerTool(
       'existe y alarga duration si un keyframe la pasa. Solo cambia las pistas que nombras: las demás (también los ' +
       'retoques del usuario) quedan como estaban, y undo va por pista. Para alargar un clip basta con duration. ' +
       'Devuelve una tira de cuadros del clip. usage: "puppet" para ' +
-      'clips del muñeco (saludo, parpadeo, reposo; escribe description), "animate" para una timeline de escena.',
+      'clips del muñeco (saludo, parpadeo, reposo; escribe description), "animate" para una timeline de escena. ' +
+      'En puppet, fade, next, blend y auto dicen cómo suena en vivo (ver get_guide y render_preview con live).',
     inputSchema: {
       id,
       animation: z.string().describe('id del clip, por ejemplo "wave", "blink" o "idle"'),
@@ -428,14 +444,20 @@ servidor.registerTool(
       duration: z.number().positive().optional().describe('duración en segundos'),
       loop: z.enum(['once', 'loop', 'pingpong']).optional(),
       description: z.string().optional().describe('qué hace el clip (para la IA de la app que lo dispara)'),
+      fade: z.number().min(0).optional().describe('solo puppet: segundos del fundido al entrar y salir en vivo (por defecto 0.2; 0 = de golpe, como un parpadeo)'),
+      next: z.string().nullable().optional().describe('solo puppet, clip once: el clip que se dispara cuando este empieza a salir (surprised → idle); null lo quita'),
+      blend: z.enum(['override', 'additive']).optional().describe('solo puppet: override (por defecto) pisa lo de abajo; additive suma su diferencia con el montaje (respiración)'),
+      auto: z.enum(['off', 'repeat', 'always']).optional().describe('solo puppet: off (lo dispara la app), repeat (solo, cada repeat_min…repeat_max s: parpadeo) o always (siempre en loop: respiración)'),
+      repeat_min: z.number().min(0).optional().describe('con auto repeat: espera mínima en segundos (por defecto 2)'),
+      repeat_max: z.number().min(0).optional().describe('con auto repeat: espera máxima en segundos (por defecto 6)'),
       remove: z.array(z.string()).optional().describe('pistas que salen del clip antes de agregar: "objeto.propiedad" o un id (todas las de ese objeto)'),
       note: z.string().optional().describe('qué hace, para el historial'),
       width: z.number().int().min(64).max(2048).optional().describe('ancho de la vista previa'),
       show_bones: z.boolean().optional().describe('true = la vista previa muestra el esqueleto'),
     },
   },
-  seguro(async ({ id, animation, keys, usage, duration, loop, description, remove, note, width, show_bones }) => {
-    const plan = planSetKeys(await almacen.leer(id), esquema, animation, { keys, usage, duration, loop, description, remove });
+  seguro(async ({ id, animation, keys, usage, duration, loop, description, remove, note, width, show_bones, ...vivo }) => {
+    const plan = planSetKeys(await almacen.leer(id), esquema, animation, { keys, usage, duration, loop, description, remove, ...vivo });
     const { doc, avisos } = await almacen.operar(id, plan.ops, { origen: ORIGEN, nota: note ?? `animation ${animation}` });
     const notas = [...avisos];
     if (plan.alargadaDesde != null) notas.push(`duration pasó de ${plan.alargadaDesde} a ${plan.duracion} s para que entren los keyframes`);
@@ -513,6 +535,22 @@ servidor.registerTool(
     const tramo = from == null && to == null ? '' : ` (tramo ${plan.desde}…${plan.hasta} s → ${plan.largo} s)`;
     const { doc } = await almacen.operar(id, plan.ops, { origen: ORIGEN, nota: note ?? `scale time of ${animation}: ${plan.antes} → ${plan.duracion} s` });
     return vistaPrevia(doc, { width, animation }, `${animation}: ${plan.antes} → ${plan.duracion} s${tramo}.`);
+  }),
+);
+
+servidor.registerTool(
+  'get_manifest',
+  {
+    description:
+      'El manifiesto del muñeco: lo que verá la IA de la app para manejarlo en vivo con play(clip), set(param, valor) ' +
+      'y stop(clip). Params (rango, valor inicial, descripción y qué poses mueve cada uno), clips que se disparan (base ' +
+      'o gesto, con su descripción) y capas automáticas. Revísalo al terminar un Puppet: lo que falte o confunda aquí ' +
+      '(una descripción vacía, un param que no mueve nada) es lo que confundirá a la app.',
+    inputSchema: { id, format: z.enum(['text', 'json']).optional().describe('text (por defecto) para leerlo; json, el objeto que recibe la app') },
+  },
+  seguro(async ({ id, format }) => {
+    const m = manifiesto(await almacen.leer(id), esquema);
+    return texto(format === 'json' ? m : textoDeManifiesto(m));
   }),
 );
 

@@ -152,3 +152,21 @@ test('el manifiesto dice params con sus poses, clips que se disparan y los autom
   assert.match(texto, /happiness \(0…1, initial 0\): How happy it looks → happy/);
   assert.match(texto, /talking \(base, 1 s, loop\) — no description/);
 });
+
+test('MCP: set_keys guarda lo de Live, render_preview con live corre el guion y el resumen lo dice', async () => {
+  const { planSetKeys, planVistaEnVivo, errorDeVistaPrevia, resumenDeClip } = await import('../mcp/animacion.js');
+  let doc = muñeco();
+  const plan = planSetKeys(doc, esquema, 'surprised', { usage: 'puppet', duration: 0.5, fade: 0.1, next: 'idle', keys: [{ t: 0, values: { arm_bone: { rotation: 30 } } }, { t: 0.5, values: { arm_bone: { rotation: 30 } } }] });
+  doc = op(doc, ...plan.ops);
+  const clip = doc.objects.find((o) => o.id === 'surprised');
+  assert.equal(clip.next, 'idle');
+  assert.equal(resumenDeClip(esquema, clip), 'puppet, 0.5 s, once, gesto, fade 0.1 s, next idle; anima arm_bone.rotation; keys en 0, 0.5');
+  const vista = planVistaEnVivo(doc, esquema, { live: [{ t: 0, play: 'talking' }, { t: 0.5, play: 'surprised' }], times: [0.25, 0.75, 1.5] });
+  assert.match(vista.svg, /^<svg/);
+  assert.match(vista.texto, /t = 0.25 s: talking \(base, 50%\)/);
+  assert.match(vista.texto, /t = 0.75 s: talking \(base, 100%\), surprised \(gesto, 100%\)/);
+  assert.match(vista.texto, /t = 1.5 s: idle \(base, 100%\)/);
+  assert.throws(() => planVistaEnVivo(doc, esquema, { live: [{ t: 0, play: 'idle', set: { happiness: 1 } }] }), /exactly one of play, stop or set/);
+  assert.throws(() => planVistaEnVivo(doc, esquema, { live: [{ t: 0, play: 'wav' }] }), /Clips you can play/);
+  assert.match(errorDeVistaPrevia({ live: [], animation: 'wave' }), /does not go with animation/);
+});
