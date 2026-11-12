@@ -157,3 +157,34 @@ test('el árbol dice qué params eligen la variante de un switch', () => {
   assert.match(arbol, /- mouth \(switch\) \(muestra el primero; lo elige el param viseme\)/);
   assert.match(arbol, /- eyes \(switch\) \(muestra el primero\)/);
 });
+
+test('lecturas del MCP sin el servidor: get_document, get_history y render_preview', async () => {
+  const { planVistaPrevia, resumenDeHistorial, textoDeDocumento } = await import('../mcp/herramientas.js');
+  const doc = op(
+    crearDocumento({}),
+    { op: 'create', type: 'rect', id: 'r', props: { x: 1 } },
+    { op: 'create', type: 'pose', id: 'up', props: { values: { r: { y: 5 } } } },
+    { op: 'create', type: 'param', id: 'p' },
+    { op: 'create', type: 'driver', id: 'd', props: { param: 'p', pose: 'up' } },
+  );
+  // get_document: árbol y JSON; sin JSON si se pide.
+  assert.match(textoDeDocumento(doc, esquema), /^Árbol \(del fondo al frente\):[\s\S]*JSON:\n\{/);
+  assert.doesNotMatch(textoDeDocumento(doc, esquema, { json: false }), /JSON:/);
+  // get_history: filtra por origen, corta y resume lo que tocó cada lote.
+  const entradas = [
+    { n: 1, origen: 'ai', nota: 'a', ops: [{ op: 'set', target: 'r', props: { x: 2, vertices: [1, 2, 3] } }], inversas: [] },
+    { n: 2, origen: 'user', nota: 'b', ops: [{ op: 'set', target: 'r', props: { y: 3 } }], inversas: [] },
+  ];
+  const resumen = resumenDeHistorial(entradas, { origin: 'ai' });
+  assert.equal(resumen.length, 1);
+  assert.deepEqual(resumen[0].valores, { 'r.x': 2, 'r.vertices': '(3 elementos)' });
+  assert.equal(resumen[0].inversas, undefined);
+  assert.deepEqual(resumenDeHistorial(entradas, { limit: 1, detail: true })[0].ops, entradas[1].ops);
+  // render_preview: el montaje, una pose, params con sus pesos, y errores claros.
+  assert.match(planVistaPrevia(doc, esquema).texto, /en el montaje/);
+  assert.match(planVistaPrevia(doc, esquema, { pose: 'up' }).texto, /en la pose "up"/);
+  assert.match(planVistaPrevia(doc, esquema, { params: { p: 1 } }).texto, /poses: up 100%/);
+  assert.equal(planVistaPrevia(doc, esquema).ancho, 600);
+  assert.throws(() => planVistaPrevia(doc, esquema, { pose: 'nada' }), /no existe la pose "nada"/);
+  assert.throws(() => planVistaPrevia(doc, esquema, { params: { q: 1 } }), /no existe el param "q"/);
+});

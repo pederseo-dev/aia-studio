@@ -7,18 +7,16 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { buscar } from '../src/core/documento.js';
-import { leerMeta, sugerir } from '../src/core/esquema.js';
-import { opsParaFijarPose, pesoDeDriver, valoresDeParams } from '../src/core/mezcla.js';
+import { opsParaFijarPose } from '../src/core/mezcla.js';
 import { guiaParaIA } from '../src/core/guia.js';
 import { resumirOperaciones } from '../src/core/operaciones.js';
-import { svgDocumento } from '../src/render/svg.js';
 import { crearAlmacen } from '../servidor/almacen.js';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { svgAPng } from '../servidor/png.js';
 import { NOMBRES_DE_CURVA } from '../src/core/curvas.js';
-import { avisosDeGiro, errorDeVistaPrevia, planDeleteKeys, planMoveKeys, planScaleTime, planSetKeys, planVistaDeClip, planVistaEnVivo, resumenDeClip } from './animacion.js';
+import { avisosDeGiro, planDeleteKeys, planMoveKeys, planScaleTime, planSetKeys, resumenDeClip } from './animacion.js';
 import { manifiesto, textoDeManifiesto } from '../src/core/manifiesto.js';
-import { comprobarBorrado, esquemaDelArbol as arbol, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from './herramientas.js';
+import { comprobarBorrado, esquemaDelArbol as arbol, planBindByProximity, planBindPoints, planReparentBone, planVistaPrevia, recortesDePose, resumenDeHistorial, textoDeDocumento } from './herramientas.js';
 
 const esquema = cargarEsquema();
 const almacen = crearAlmacen({ esquema });
@@ -38,8 +36,6 @@ const esquemaDelArbol = (doc, opciones) => arbol(doc, esquema, opciones);
 // Después de un cambio, el árbol va sin las pistas de los clips (con muchos clips eran miles de líneas en cada
 // respuesta): get_document las da enteras o de los clips que se pidan.
 const arbolCorto = (doc) => `${esquemaDelArbol(doc, { pistas: false })}\n(Clips resumidos: sus pistas, con get_document y clips.)`;
-// Más que esto no entra cómodo en la respuesta: get_document deja el JSON afuera si no se pidió.
-const MAXIMO_DE_RESPUESTA = 60000;
 
 const texto = (t) => ({ content: [{ type: 'text', text: typeof t === 'string' ? t : JSON.stringify(t, null, 2) }] });
 
@@ -51,19 +47,6 @@ const seguro = (fn) => async (args) => {
     return { isError: true, content: [{ type: 'text', text: e.message }] };
   }
 };
-
-/** Valor con el que quedó cada propiedad que un lote fijó con set (los largos, resumidos). */
-function valoresFinales(ops) {
-  const valores = {};
-  for (const op of ops) {
-    if (op.op !== 'set') continue;
-    for (const [k, v] of Object.entries(op.props)) {
-      const json = JSON.stringify(v);
-      valores[`${op.target}.${k}`] = Array.isArray(v) ? `(${v.length} elementos)` : json.length > 160 ? `${json.slice(0, 157)}...` : v;
-    }
-  }
-  return valores;
-}
 
 const id = z.string().describe('id del documento, por ejemplo "robot"');
 const objetivo = z.string().describe('id del objeto, o "meta" para las propiedades del documento');
@@ -123,16 +106,7 @@ servidor.registerTool(
       clips: z.array(z.string()).optional().describe('ids de clips cuyas pistas se listan en el árbol (por defecto, todos; [] = ninguno)'),
     },
   },
-  seguro(async ({ id, json, clips }) => {
-    const doc = await almacen.leer(id);
-    const arbolTexto = `Árbol (del fondo al frente):\n${esquemaDelArbol(doc, { pistas: clips ?? true })}`;
-    if (json === false) return texto(arbolTexto);
-    const completo = JSON.stringify(doc, null, 2);
-    if (json === undefined && arbolTexto.length + completo.length > MAXIMO_DE_RESPUESTA) {
-      return texto(`${arbolTexto}\n\n(JSON omitido: el documento pesa ${completo.length} caracteres. Pide json: true si de verdad lo necesitas; para leer clips, usa clips.)`);
-    }
-    return texto(`${arbolTexto}\n\nJSON:\n${completo}`);
-  }),
+  seguro(async ({ id, json, clips }) => texto(textoDeDocumento(await almacen.leer(id), esquema, { json, clips }))),
 );
 
 servidor.registerTool(
@@ -217,10 +191,7 @@ servidor.registerTool(
   },
   seguro(async ({ id, limit, origin, detail }) => {
     const { entradas } = await almacen.historial(id, 1000);
-    const elegidas = entradas.filter((e) => !origin || e.origen === origin).slice(-(limit ?? 20));
-    return texto(
-      elegidas.map(({ inversas, ops, ...e }) => ({ ...e, ...(detail ? { ops } : { toca: resumirOperaciones(ops), valores: valoresFinales(ops) }) })),
-    );
+    return texto(resumenDeHistorial(entradas, { limit, origin, detail }));
   }),
 );
 
@@ -228,53 +199,15 @@ const region = z
   .object({ x: z.number(), y: z.number(), width: z.number().positive(), height: z.number().positive() })
   .describe('recorte del documento, en sus coordenadas (para ver un detalle de cerca)');
 
-/** PNG del documento (opcionalmente posado, animado y recortado) como resultado de herramienta. */
-/** @param {any} doc @param {Record<string, any>} opciones @param {string} [encabezado] */
-function vistaPrevia(doc, { width, pose, region, bones, params, animation, time, times, live, until, auto }, encabezado) {
-  const error = errorDeVistaPrevia({ pose, animation, time, times, live });
-  if (error) throw new Error(error);
-  if (live) return vistaDeClip(doc, { width, region, bones, params, live, times, until, auto }, encabezado, planVistaEnVivo);
-  if (animation) return vistaDeClip(doc, { width, region, bones, params, animation, time, times }, encabezado);
-  if (pose && buscar(doc, pose)?.type !== 'pose') {
-    const poses = doc.objects.filter((o) => o.type === 'pose').map((o) => o.id);
-    throw new Error(`no existe la pose "${pose}". Poses: ${poses.join(', ') || 'ninguna'}`);
-  }
-  if (params) {
-    const ids = doc.objects.filter((o) => o.type === 'param').map((o) => o.id);
-    const raros = Object.keys(params).filter((k) => !ids.includes(k));
-    if (raros.length) throw new Error(`no existe el param "${raros[0]}".${sugerir(raros[0], ids)} Params: ${ids.join(', ') || 'ninguno'}`);
-  }
-  const png = svgAPng(svgDocumento(doc, esquema, { pose, params, region, huesos: bones }), width ?? 600);
-  const tamaño = region ? `recorte de ${region.width}×${region.height} en (${region.x}, ${region.y})` : `${leerMeta(esquema, doc, 'width')}×${leerMeta(esquema, doc, 'height')} px`;
-  let vista = 'en el montaje';
-  if (pose) vista = `en la pose "${pose}"`;
-  else if (params) {
-    // Qué quedó activo: ayuda a ver si los drivers hacen lo que se esperaba.
-    const valores = valoresDeParams(doc, esquema, params);
-    const pesos = doc.objects
-      .filter((o) => o.type === 'driver' && o.pose && o.param in valores)
-      .map((o) => [o.pose, pesoDeDriver(doc, esquema, o, valores[o.param])])
-      .filter(([, w]) => w > 0)
-      .map(([p, w]) => `${p} ${Math.round(w * 100)}%`);
-    vista = `con params ${JSON.stringify(valores)} (poses: ${pesos.join(', ') || 'ninguna'})`;
-  }
-  const resumen = `${tamaño}, ${doc.objects.length} objetos, ${vista}.`;
-  return {
-    content: [
-      { type: 'image', data: Buffer.from(png).toString('base64'), mimeType: 'image/png' },
-      { type: 'text', text: encabezado ? `${encabezado}\n${resumen}` : resumen },
-    ],
-  };
-}
-
-/** Vista previa de un clip (o de un guion en vivo) como resultado de herramienta: el SVG y el texto salen del plan. */
-function vistaDeClip(doc, opciones, encabezado, plan = planVistaDeClip) {
-  const { svg, ancho, texto: resumen } = plan(doc, esquema, opciones);
+/** PNG del documento (posado, animado, en vivo o recortado) como resultado de herramienta: el SVG y el texto salen del plan. */
+function vistaPrevia(doc, opciones, encabezado) {
+  const { svg, ancho, texto: resumen } = planVistaPrevia(doc, esquema, opciones);
   const png = svgAPng(svg, opciones.width ?? ancho);
   return {
     content: [
       { type: 'image', data: Buffer.from(png).toString('base64'), mimeType: 'image/png' },
-      { type: 'text', text: encabezado ? `${encabezado}\n${resumen}` : resumen },
+      { type: 'text', text: encabezado ? `${encabezado}
+${resumen}` : resumen },
     ],
   };
 }

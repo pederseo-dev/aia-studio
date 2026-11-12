@@ -4,11 +4,17 @@
 import { buscar, hijos, huesosDe } from '../src/core/documento.js';
 import { evaluarEsqueleto, planEnlazarPorCercania, huesoDe, limitarAngulo, puntaDe, reparentarHueso, repartirEntreHuesos } from '../src/core/esqueleto.js';
 import { aplicar } from '../src/core/geometria.js';
-import { leer } from '../src/core/esquema.js';
-import { paramsDeSwitch } from '../src/core/mezcla.js';
-import { lineasDePistas, resumenDeClip } from './animacion.js';
+import { leer, leerMeta, sugerir } from '../src/core/esquema.js';
+import { paramsDeSwitch, pesoDeDriver, valoresDeParams } from '../src/core/mezcla.js';
+import { resumirOperaciones } from '../src/core/operaciones.js';
+import { svgDocumento } from '../src/render/svg.js';
+import { errorDeVistaPrevia, lineasDePistas, planVistaDeClip, planVistaEnVivo, resumenDeClip } from './animacion.js';
 
-/** Árbol legible del documento: una línea por objeto, indentado por jerarquía, del fondo al frente. */
+/**
+ * Árbol legible del documento: una línea por objeto, indentado por jerarquía, del fondo al frente. `pistas`: true
+ * lista las pistas de todos los clips, false ninguna, o los ids de los clips a listar.
+ * @param {any} doc @param {any} esquema @param {{ pistas?: boolean | string[] }} [opciones]
+ */
 export function esquemaDelArbol(doc, esquema, { pistas = true } = {}) {
   const lineas = [];
   const { reposo } = evaluarEsqueleto(doc, esquema);
@@ -97,4 +103,84 @@ export function planReparentBone(doc, esquema, bone, parent, keepInPoses = false
   } else if (keepInPoses && compensadas.length) poses = ` En las poses quedó donde estaba (valores ajustados en ${[...new Set(compensadas)].join(', ')}).`;
   else poses = ' En las poses tampoco cambia de lugar.';
   return { ops, movidas, texto: `${bone} ahora cuelga de ${parent}; en el montaje quedó donde estaba.${poses}` };
+}
+
+// ---------- Lecturas: get_document, get_history y render_preview ----------
+
+// Más que esto no entra cómodo en la respuesta: get_document deja el JSON afuera si no se pidió.
+const MAXIMO_DE_RESPUESTA = 60000;
+
+/** get_document: el árbol (con las pistas de `clips`, o de todos) y el JSON, salvo que no se pida o pese demasiado. */
+/** @param {any} doc @param {any} esquema @param {{ json?: boolean, clips?: string[] }} [opciones] */
+export function textoDeDocumento(doc, esquema, { json, clips } = {}) {
+  const arbolTexto = `Árbol (del fondo al frente):
+${esquemaDelArbol(doc, esquema, { pistas: clips ?? true })}`;
+  if (json === false) return arbolTexto;
+  const completo = JSON.stringify(doc, null, 2);
+  if (json === undefined && arbolTexto.length + completo.length > MAXIMO_DE_RESPUESTA) {
+    return `${arbolTexto}
+
+(JSON omitido: el documento pesa ${completo.length} caracteres. Pide json: true si de verdad lo necesitas; para leer clips, usa clips.)`;
+  }
+  return `${arbolTexto}
+
+JSON:
+${completo}`;
+}
+
+/** Valor con el que quedó cada propiedad que un lote fijó con set (los largos, resumidos). */
+function valoresFinales(ops) {
+  const valores = {};
+  for (const op of ops) {
+    if (op.op !== 'set') continue;
+    for (const [k, v] of Object.entries(op.props)) {
+      const json = JSON.stringify(v);
+      valores[`${op.target}.${k}`] = Array.isArray(v) ? `(${v.length} elementos)` : json.length > 160 ? `${json.slice(0, 157)}...` : v;
+    }
+  }
+  return valores;
+}
+
+/** get_history: los últimos `limit` lotes (de `origin`, si se pide), resumidos o con sus operaciones (`detail`). */
+/** @param {any[]} entradas @param {{ limit?: number, origin?: string, detail?: boolean }} [opciones] */
+export function resumenDeHistorial(entradas, { limit, origin, detail } = {}) {
+  const elegidas = entradas.filter((e) => !origin || e.origen === origin).slice(-(limit ?? 20));
+  return elegidas.map(({ inversas, ops, ...e }) => ({ ...e, ...(detail ? { ops } : { toca: resumirOperaciones(ops), valores: valoresFinales(ops) }) }));
+}
+
+/**
+ * render_preview (y la vista de set_pose, set_keys…): el SVG, el ancho por defecto del PNG y el texto que lo resume.
+ * Un clip o un guion en vivo van a sus planes (mcp/animacion.js); lo demás es el documento en el montaje, en una pose
+ * o con params.
+ * @param {any} doc @param {any} esquema @param {Record<string, any>} [opciones]
+ */
+export function planVistaPrevia(doc, esquema, { pose, region, bones, params, animation, time, times, live, until, auto } = {}) {
+  const error = errorDeVistaPrevia({ pose, animation, time, times, live });
+  if (error) throw new Error(error);
+  if (live) return planVistaEnVivo(doc, esquema, { region, bones, params, live, times, until, auto });
+  if (animation) return planVistaDeClip(doc, esquema, { region, bones, params, animation, time, times });
+  if (pose && buscar(doc, pose)?.type !== 'pose') {
+    const poses = doc.objects.filter((o) => o.type === 'pose').map((o) => o.id);
+    throw new Error(`no existe la pose "${pose}". Poses: ${poses.join(', ') || 'ninguna'}`);
+  }
+  if (params) {
+    const ids = doc.objects.filter((o) => o.type === 'param').map((o) => o.id);
+    const raros = Object.keys(params).filter((k) => !ids.includes(k));
+    if (raros.length) throw new Error(`no existe el param "${raros[0]}".${sugerir(raros[0], ids)} Params: ${ids.join(', ') || 'ninguno'}`);
+  }
+  const svg = svgDocumento(doc, esquema, { pose, params, region, huesos: bones });
+  const tamaño = region ? `recorte de ${region.width}×${region.height} en (${region.x}, ${region.y})` : `${leerMeta(esquema, doc, 'width')}×${leerMeta(esquema, doc, 'height')} px`;
+  let vista = 'en el montaje';
+  if (pose) vista = `en la pose "${pose}"`;
+  else if (params) {
+    // Qué quedó activo: ayuda a ver si los drivers hacen lo que se esperaba.
+    const valores = valoresDeParams(doc, esquema, params);
+    const pesos = doc.objects
+      .filter((o) => o.type === 'driver' && o.pose && o.param in valores)
+      .map((o) => [o.pose, pesoDeDriver(doc, esquema, o, valores[o.param])])
+      .filter(([, w]) => w > 0)
+      .map(([p, w]) => `${p} ${Math.round(w * 100)}%`);
+    vista = `con params ${JSON.stringify(valores)} (poses: ${pesos.join(', ') || 'ninguna'})`;
+  }
+  return { svg, ancho: 600, texto: `${tamaño}, ${doc.objects.length} objetos, ${vista}.` };
 }
