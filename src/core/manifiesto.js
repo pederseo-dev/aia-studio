@@ -39,6 +39,12 @@ export function manifiesto(doc, esquema) {
       else Object.assign(base, { min: leer(esquema, p, 'min'), max: leer(esquema, p, 'max'), initial: leer(esquema, p, 'default') });
       return { ...base, moves: posesDeParam(doc, p.id) };
     });
+  const autos = doc.objects.filter((o) => o.type === 'animation' && leer(esquema, o, 'usage') === 'puppet' && leer(esquema, o, 'auto') !== 'off');
+  // Un param que anima un clip auto lo maneja el muñeco solo: si la app lo pone, el auto lo pisa cuando suena.
+  for (const p of params) {
+    const por = autos.filter((c) => queAnima(doc, c).params.includes(p.id)).map((c) => c.id);
+    if (por.length) p.drivenBy = por;
+  }
   const clips = clipsDisparables(doc, esquema).map((c) => {
     const anima = queAnima(doc, c);
     const next = leer(esquema, c, 'next');
@@ -48,21 +54,32 @@ export function manifiesto(doc, esquema) {
       description: leer(esquema, c, 'description'),
       duration: leer(esquema, c, 'duration'),
       loop: leer(esquema, c, 'loop'),
+      fade: leer(esquema, c, 'fade'),
       ...(next ? { next } : {}),
       ...(leer(esquema, c, 'blend') === 'additive' ? { blend: 'additive' } : {}),
       animates: anima.objects,
       ...(anima.params.length ? { animatesParams: anima.params } : {}),
     };
   });
-  const auto = doc.objects
-    .filter((o) => o.type === 'animation' && leer(esquema, o, 'usage') === 'puppet' && leer(esquema, o, 'auto') !== 'off')
-    .map((c) => ({
+  const auto = autos.map((c) => {
+    const anima = queAnima(doc, c);
+    return {
       id: c.id,
       auto: leer(esquema, c, 'auto'),
       ...(leer(esquema, c, 'auto') === 'repeat' ? { every: [leer(esquema, c, 'repeat_min'), leer(esquema, c, 'repeat_max')] } : {}),
+      ...(leer(esquema, c, 'blend') === 'additive' ? { blend: 'additive' } : {}),
       description: leer(esquema, c, 'description'),
-      animates: queAnima(doc, c).objects,
-    }));
+      animates: anima.objects,
+      ...(anima.params.length ? { animatesParams: anima.params } : {}),
+    };
+  });
+  // Lo que confundiría a la IA de la app: descripciones vacías y params que no mueven nada.
+  const problems = [];
+  const sinDescripcion = (lista) => lista.filter((x) => !x.description).map((x) => x.id);
+  if (sinDescripcion(params).length) problems.push(`params without description: ${sinDescripcion(params).join(', ')}`);
+  if (sinDescripcion(clips).length) problems.push(`clips without description: ${sinDescripcion(clips).join(', ')}`);
+  const quietos = params.filter((p) => !p.moves.length && !clips.some((c) => c.animatesParams?.includes(p.id))).map((p) => p.id);
+  if (quietos.length) problems.push(`params that move nothing (no driver): ${quietos.join(', ')}`);
   return {
     name: leerMeta(esquema, doc, 'name'),
     api: {
@@ -73,8 +90,12 @@ export function manifiesto(doc, esquema) {
     params,
     clips,
     auto,
+    problems,
   };
 }
+
+/** Una lista corta para el texto: hasta 6 ids y «…» si hay más. */
+const corta = (ids) => (ids.length > 6 ? `${ids.slice(0, 6).join(', ')}… (${ids.length})` : ids.join(', '));
 
 /** El manifiesto como texto corto, para leerlo de un vistazo (la IA que edita y las pruebas). */
 export function textoDeManifiesto(m) {
@@ -84,17 +105,28 @@ export function textoDeManifiesto(m) {
   for (const p of m.params) {
     const rango = p.kind === 'enum' ? `one of ${p.options.join(' | ')}` : p.kind === 'boolean' ? 'true/false' : `${p.min}…${p.max}`;
     const mueve = p.moves.length ? ` → ${p.moves.map((x) => `${x.pose}${x.when != null ? ` (= ${x.when})` : ''}`).join(', ')}` : ' → moves nothing (no driver)';
-    lineas.push(`- ${p.id} (${rango}, initial ${p.initial})${p.description ? `: ${p.description}` : ' — no description'}${mueve}`);
+    const auto = p.drivenBy ? ` [driven by auto ${p.drivenBy.join(', ')}: don't set it]` : '';
+    lineas.push(`- ${p.id} (${rango}, initial ${p.initial})${p.description ? `: ${p.description}` : ' — no description'}${mueve}${auto}`);
   }
   lineas.push('', 'Clips (play them):');
   if (!m.clips.length) lineas.push('- (none)');
   for (const c of m.clips) {
-    const extra = [c.role, `${c.duration} s`, c.loop, c.next && `then ${c.next}`, c.blend].filter(Boolean).join(', ');
+    const extra = [c.role, `${c.duration} s`, c.loop, `fade ${c.fade} s`, c.next && `then ${c.next}`, c.blend].filter(Boolean).join(', ');
     lineas.push(`- ${c.id} (${extra})${c.description ? `: ${c.description}` : ' — no description'}`);
+    // Lo que pisa: dos gestos que tocan lo mismo se tapan; un clip que anima un param le gana a la app mientras suena.
+    const pisa = [c.animatesParams?.length && `params ${c.animatesParams.join(', ')}`, c.animates.length && corta(c.animates)].filter(Boolean).join('; ');
+    if (pisa) lineas.push(`    overrides: ${pisa}`);
   }
   if (m.auto.length) {
     lineas.push('', 'Automatic (they play by themselves):');
-    for (const a of m.auto) lineas.push(`- ${a.id} (${a.auto}${a.every ? ` every ${a.every[0]}–${a.every[1]} s` : ''})${a.description ? `: ${a.description}` : ''}`);
+    for (const a of m.auto) {
+      const pisa = [a.animatesParams?.length && `params ${a.animatesParams.join(', ')}`, a.animates.length && corta(a.animates)].filter(Boolean).join('; ');
+      lineas.push(`- ${a.id} (${a.auto}${a.every ? ` every ${a.every[0]}–${a.every[1]} s` : ''}${a.blend ? `, ${a.blend}` : ''})${a.description ? `: ${a.description}` : ''}${pisa ? ` — ${pisa}` : ''}`);
+    }
+  }
+  if (m.problems.length) {
+    lineas.push('', 'Problems for the app’s AI:');
+    for (const p of m.problems) lineas.push(`- ${p}`);
   }
   return lineas.join('\n');
 }

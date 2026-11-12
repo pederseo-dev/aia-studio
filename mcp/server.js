@@ -16,7 +16,7 @@ import { crearAlmacen } from '../servidor/almacen.js';
 import { cargarEsquema } from '../servidor/esquema.js';
 import { svgAPng } from '../servidor/png.js';
 import { NOMBRES_DE_CURVA } from '../src/core/curvas.js';
-import { errorDeVistaPrevia, planDeleteKeys, planMoveKeys, planScaleTime, planSetKeys, planVistaDeClip, planVistaEnVivo, resumenDeClip } from './animacion.js';
+import { avisosDeGiro, errorDeVistaPrevia, planDeleteKeys, planMoveKeys, planScaleTime, planSetKeys, planVistaDeClip, planVistaEnVivo, resumenDeClip } from './animacion.js';
 import { manifiesto, textoDeManifiesto } from '../src/core/manifiesto.js';
 import { comprobarBorrado, esquemaDelArbol as arbol, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from './herramientas.js';
 
@@ -34,7 +34,12 @@ const servidor = new McpServer(
   },
 );
 
-const esquemaDelArbol = (doc) => arbol(doc, esquema);
+const esquemaDelArbol = (doc, opciones) => arbol(doc, esquema, opciones);
+// Después de un cambio, el árbol va sin las pistas de los clips (con muchos clips eran miles de líneas en cada
+// respuesta): get_document las da enteras o de los clips que se pidan.
+const arbolCorto = (doc) => `${esquemaDelArbol(doc, { pistas: false })}\n(Clips resumidos: sus pistas, con get_document y clips.)`;
+// Más que esto no entra cómodo en la respuesta: get_document deja el JSON afuera si no se pidió.
+const MAXIMO_DE_RESPUESTA = 60000;
 
 const texto = (t) => ({ content: [{ type: 'text', text: typeof t === 'string' ? t : JSON.stringify(t, null, 2) }] });
 
@@ -108,10 +113,25 @@ servidor.registerTool(
 
 servidor.registerTool(
   'get_document',
-  { description: 'Devuelve un documento: primero su árbol de objetos y después el JSON completo.', inputSchema: { id } },
-  seguro(async ({ id }) => {
+  {
+    description:
+      'Devuelve un documento: primero su árbol de objetos (cada clip con sus pistas y keyframes) y después el JSON ' +
+      'completo. En un documento grande, pide json: false y, con clips, solo las pistas de los clips que te interesan.',
+    inputSchema: {
+      id,
+      json: z.boolean().optional().describe('false = solo el árbol. Por defecto va, salvo que la respuesta pase de 60 000 caracteres'),
+      clips: z.array(z.string()).optional().describe('ids de clips cuyas pistas se listan en el árbol (por defecto, todos; [] = ninguno)'),
+    },
+  },
+  seguro(async ({ id, json, clips }) => {
     const doc = await almacen.leer(id);
-    return texto(`Árbol (del fondo al frente):\n${esquemaDelArbol(doc)}\n\nJSON:\n${JSON.stringify(doc, null, 2)}`);
+    const arbolTexto = `Árbol (del fondo al frente):\n${esquemaDelArbol(doc, { pistas: clips ?? true })}`;
+    if (json === false) return texto(arbolTexto);
+    const completo = JSON.stringify(doc, null, 2);
+    if (json === undefined && arbolTexto.length + completo.length > MAXIMO_DE_RESPUESTA) {
+      return texto(`${arbolTexto}\n\n(JSON omitido: el documento pesa ${completo.length} caracteres. Pide json: true si de verdad lo necesitas; para leer clips, usa clips.)`);
+    }
+    return texto(`${arbolTexto}\n\nJSON:\n${completo}`);
   }),
 );
 
@@ -131,7 +151,7 @@ servidor.registerTool(
   seguro(async ({ id, name, width, height, background, copy_from }) => {
     const meta = Object.fromEntries(Object.entries({ name, width, height, background }).filter(([, v]) => v !== undefined));
     const doc = await almacen.crear(id, meta, { origen: ORIGEN, copiarDe: copy_from });
-    return texto(`Documento "${id}" creado${copy_from ? ` como copia de "${copy_from}"` : ''}.\n\nÁrbol:\n${esquemaDelArbol(doc)}`);
+    return texto(`Documento "${id}" creado${copy_from ? ` como copia de "${copy_from}"` : ''}.\n\nÁrbol:\n${arbolCorto(doc)}`);
   }),
 );
 
@@ -151,7 +171,7 @@ servidor.registerTool(
     const { doc, avisos } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note });
     const partes = [`Aplicadas ${ops.length} operaciones.`];
     if (avisos.length) partes.push(`Avisos:\n${avisos.map((a) => `- ${a}`).join('\n')}`);
-    partes.push(`Árbol resultante (del fondo al frente):\n${esquemaDelArbol(doc)}`);
+    partes.push(`Árbol resultante (del fondo al frente):\n${arbolCorto(doc)}`);
     return texto(partes.join('\n\n'));
   }),
 );
@@ -162,7 +182,7 @@ const revertir = (tipo) =>
     const verbo = tipo === 'deshacer' ? 'Deshecho' : 'Rehecho';
     const tocaba = resumirOperaciones(entrada.lote).slice(0, 12).join(', ');
     const sigue = tipo === 'deshacer' ? ' Lo de los lotes anteriores sigue en pie.' : '';
-    return texto(`${verbo} el lote #${entrada.n} "${entrada.nota}" (${entrada.ops} operaciones: ${tocaba}).${sigue}\n\nÁrbol resultante:\n${esquemaDelArbol(doc)}`);
+    return texto(`${verbo} el lote #${entrada.n} "${entrada.nota}" (${entrada.ops} operaciones: ${tocaba}).${sigue}\n\nÁrbol resultante:\n${arbolCorto(doc)}`);
   });
 
 servidor.registerTool(
@@ -209,10 +229,10 @@ const region = z
   .describe('recorte del documento, en sus coordenadas (para ver un detalle de cerca)');
 
 /** PNG del documento (opcionalmente posado, animado y recortado) como resultado de herramienta. */
-function vistaPrevia(doc, { width, pose, region, bones, params, animation, time, times, live }, encabezado) {
+function vistaPrevia(doc, { width, pose, region, bones, params, animation, time, times, live, until, auto }, encabezado) {
   const error = errorDeVistaPrevia({ pose, animation, time, times, live });
   if (error) throw new Error(error);
-  if (live) return vistaDeClip(doc, { width, region, bones, params, live, times }, encabezado, planVistaEnVivo);
+  if (live) return vistaDeClip(doc, { width, region, bones, params, live, times, until, auto }, encabezado, planVistaEnVivo);
   if (animation) return vistaDeClip(doc, { width, region, bones, params, animation, time, times }, encabezado);
   if (pose && buscar(doc, pose)?.type !== 'pose') {
     const poses = doc.objects.filter((o) => o.type === 'pose').map((o) => o.id);
@@ -291,7 +311,9 @@ servidor.registerTool(
           }),
         )
         .optional()
-        .describe('guion en vivo: eventos con t y uno de play, stop o set; por ejemplo [{ "t": 0, "play": "idle" }, { "t": 0.5, "play": "wave" }, { "t": 1, "set": { "happiness": 1 } }]. No va con animation ni pose'),
+        .describe('guion en vivo: eventos con t y uno de play, stop o set; por ejemplo [{ "t": 0, "play": "idle" }, { "t": 0.5, "play": "wave" }, { "t": 1, "set": { "happiness": 1 } }]. No va con animation ni pose. El azar de los auto repeat usa una semilla fija: el mismo guion da la misma tira'),
+      until: z.number().positive().optional().describe('con live: hasta qué segundo dibujar la tira (por defecto, hasta que termina el último gesto disparado); como mucho 24 cuadros, repartidos'),
+      auto: z.boolean().optional().describe('con live: false apaga las capas auto (parpadeo, respiración) para comparar'),
     },
   },
   seguro(async ({ id, ...opciones }) => vistaPrevia(await almacen.leer(id), opciones)),
@@ -461,6 +483,7 @@ servidor.registerTool(
     const { doc, avisos } = await almacen.operar(id, plan.ops, { origen: ORIGEN, nota: note ?? `animation ${animation}` });
     const notas = [...avisos];
     if (plan.alargadaDesde != null) notas.push(`duration pasó de ${plan.alargadaDesde} a ${plan.duracion} s para que entren los keyframes`);
+    notas.push(...avisosDeGiro(doc, esquema, buscar(doc, animation)));
     // La vista del clip ya lista qué poses mueve cada param animado (planVistaDeClip).
     return vistaPrevia(doc, { width, animation, bones: show_bones }, notas.length ? `Avisos: ${notas.join('; ')}` : '');
   }),

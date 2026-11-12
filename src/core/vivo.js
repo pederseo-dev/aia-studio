@@ -38,9 +38,10 @@ export const esBase = (esquema, clip) => leer(esquema, clip, 'loop') !== 'once';
 
 /**
  * Crea el muñeco en marcha. `params`: valores iniciales de la app. `semilla`: para el azar de los clips auto repeat.
+ * `auto: false` apaga las capas auto (para comparar un guion con y sin parpadeo o respiración).
  * Devuelve { play, stop, set, avanzar, pose, estado, actualizar }.
  */
-export function crearVivo(doc, esquema, { params = {}, semilla = 1 } = {}) {
+export function crearVivo(doc, esquema, { params = {}, semilla = 1, auto = true } = {}) {
   let documento = doc;
   const aleatorio = azar(semilla);
   let reloj = 0;
@@ -62,7 +63,7 @@ export function crearVivo(doc, esquema, { params = {}, semilla = 1 } = {}) {
 
   /** Arranca las capas auto que falten y quita las de clips que ya no son auto. */
   function sincronizarAuto() {
-    const autos = documento.objects.filter((o) => o.type === 'animation' && leer(esquema, o, 'usage') === 'puppet' && leer(esquema, o, 'auto') !== 'off');
+    const autos = auto ? documento.objects.filter((o) => o.type === 'animation' && leer(esquema, o, 'usage') === 'puppet' && leer(esquema, o, 'auto') !== 'off') : [];
     const ids = new Set(autos.map((c) => c.id));
     entradas = entradas.filter((e) => e.capa !== 'auto' || ids.has(e.clip));
     for (const id of [...esperas.keys()]) if (!ids.has(id) || leer(esquema, clipDe(id), 'auto') !== 'repeat') esperas.delete(id);
@@ -232,10 +233,24 @@ export function crearVivo(doc, esquema, { params = {}, semilla = 1 } = {}) {
 
 /**
  * Corre un guion ([{ t, play | stop | set }]) y devuelve la pose y el estado en cada uno de `tiempos` (segundos).
- * `stop: true` para todo; `set: { param: valor }`. Avanza en pasos de 1/60 s, como un cuadro de la app.
+ * `stop: true` para todo; `set: { param: valor }`. Avanza en pasos de 1/60 s, como un cuadro de la app. El arreglo
+ * devuelto trae además `repeticiones`: cuándo sonó cada clip auto repeat ([{ clip, desde, hasta }]), porque un
+ * parpadeo corto suele caer entre dos cuadros.
  */
-export function correrGuion(doc, esquema, guion = [], tiempos = [], { params, semilla, paso = 1 / 60 } = {}) {
-  const vivo = crearVivo(doc, esquema, { params, semilla });
+export function correrGuion(doc, esquema, guion = [], tiempos = [], { params, semilla, auto, paso = 1 / 60 } = {}) {
+  const vivo = crearVivo(doc, esquema, { params, semilla, auto });
+  const repeticiones = [];
+  const abiertas = new Map();
+  const anotar = (t) => {
+    const ahora = new Set();
+    for (const s of vivo.estado().sonando) {
+      if (s.capa !== 'auto' || !(s.peso > 0) || leer(esquema, buscar(doc, s.clip), 'auto') !== 'repeat') continue;
+      ahora.add(s.clip);
+      if (!abiertas.has(s.clip)) abiertas.set(s.clip, repeticiones.push({ clip: s.clip, desde: t, hasta: t }) - 1);
+      else repeticiones[abiertas.get(s.clip)].hasta = t;
+    }
+    for (const id of [...abiertas.keys()]) if (!ahora.has(id)) abiertas.delete(id);
+  };
   const eventos = [...guion].map((e, i) => ({ ...e, i })).sort((a, b) => a.t - b.t || a.i - b.i);
   const pedidos = [...tiempos].map((t, i) => ({ t, i })).sort((a, b) => a.t - b.t);
   const cuadros = new Array(tiempos.length);
@@ -252,9 +267,10 @@ export function correrGuion(doc, esquema, guion = [], tiempos = [], { params, se
       const dt = Math.min(paso, pedido.t - ahora);
       vivo.avanzar(dt);
       ahora += dt;
+      anotar(ahora);
     }
     while (k < eventos.length && eventos[k].t <= ahora + 1e-9) aplicar(eventos[k++]);
     cuadros[pedido.i] = { t: pedido.t, pose: vivo.pose(), estado: vivo.estado() };
   }
-  return cuadros;
+  return Object.assign(cuadros, { repeticiones });
 }

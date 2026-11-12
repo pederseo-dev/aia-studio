@@ -304,6 +304,9 @@ ${DESCRIPCION_DE_CURVAS.map(([nombre, que]) => `  - \`${nombre}\`: ${que}.`).joi
   el montaje (\`"-=0.3"\` resta); se guarda el valor absoluto. Revisa el
   movimiento con \`render_preview\` y \`animation\` + \`times\` (una tira de cuadros en una sola imagen) o \`time\` (un
   cuadro). \`get_document\` lista cada pista de un clip con sus keyframes (\`t = valor curva\`), para leerlo sin el JSON.
+  En un documento con muchos clips, \`get_document\` con \`json: false\` y \`clips: ["wave"]\` da el árbol con las pistas
+  de solo esos clips (si la respuesta es muy grande, el JSON queda afuera solo). Las respuestas de \`apply_ops\` y
+  \`undo\` muestran los clips resumidos, sin sus pistas.
 - **Cambiar el ritmo:** \`scale_time\` estira o comprime en proporción todos los keyframes y la duración, en un solo paso
   de deshacer (\`duration: 1\` deja el clip en 1 s; \`factor: 0.5\`, el doble de rápido; con \`from\` y \`to\`, solo ese
   tramo, y lo de después se corre). No muevas los momentos de a uno con \`move_keys\` para eso.
@@ -330,12 +333,30 @@ machine: la app decide qué toca. Cómo suena cada clip de Puppet lo dice el cli
 - \`blend: "additive"\`: el clip **suma** su diferencia con el montaje en vez de pisar (la respiración con \`scaleY\`
   1.02 suma 0.02 a lo que haya). Solo los números se suman.
 - **Params:** el valor lo pone la app con \`set\`. Si un clip anima ese param, gana el clip mientras suena y, al salir,
-  vuelve suave al valor de la app. Escribe la \`description\` de cada param: la app la lee.
+  vuelve suave al valor de la app. Escribe la \`description\` de cada param (qué controla y qué hacen sus extremos,
+  por ejemplo «-1 looks at the viewer, 1 looks away»): la app la lee.
+- **Una base que anima un param se lo quita a la app** mientras suena, o sea casi siempre. Anima en una base solo lo
+  que es parte de ese estado (\`viseme\` en «hablando»); deja expresiones como \`happiness\` para la app o para gestos.
+- **Los ángulos se mezclan como números.** El fundido entre bases (o al entrar un gesto) interpola \`rotation\`: un
+  brazo en 140 cuando el montaje lo tiene en -178 da casi una vuelta entera, aunque en pantalla se vea parecido.
+  Escribe los ángulos cerca de los del montaje (-220 en vez de 140; \`"+=n"\` ayuda). \`set_keys\` avisa cuando una
+  rotación de un clip de Puppet queda a más de 180° del montaje.
+- **\`next\` reemplaza la base** si es un clip en loop: un gesto con \`next: "idle"\` disparado durante «hablando»
+  deja a Kiko en reposo. Úsalo para reacciones que cambian de estado; un gesto sin \`next\` vuelve solo a la base que
+  había.
+- **Parpadeo automático:** si ya había un parpadeo keyado dentro de una base (\`idle\`), sácalo al crear el auto
+  \`repeat\` (si no, parpadea dos veces). Un clip \`auto\` ya no lo dispara la app: si la app también necesita un
+  parpadeo a pedido, deja otro clip \`once\`. La primera vez suena al azar entre \`repeat_min\` y \`repeat_max\`
+  segundos desde que arranca.
+- \`fade\` se come el final de un gesto: el gesto empieza a salir \`fade\` segundos antes de terminar. Con un fade largo,
+  alarga el clip o deja quieto el final.
 
 Todo esto se pone con \`set_keys\` (\`fade\`, \`next\`, \`blend\`, \`auto\`, \`repeat_min\`, \`repeat_max\`) o con \`apply_ops\`.
 Para ver cómo lo verá la app, \`render_preview\` con \`live\`: un guion \`[{ "t": 0, "play": "idle" }, { "t": 1, "play":
-"wave" }, { "t": 1.2, "set": { "happiness": 1 } }]\` y \`times\` para los cuadros; el texto dice qué suena en cada cuadro y
-con qué peso. Al terminar un Puppet, lee **\`get_manifest\`**: es lo que recibe la IA de la app (params con qué poses
+"wave" }, { "t": 1.2, "set": { "happiness": 1 } }]\`. Por defecto la tira llega hasta que termina el último gesto
+disparado (cada 0.25 s, como mucho 24 cuadros); \`until\` dice hasta cuándo y \`times\` elige los cuadros. El texto dice
+qué suena en cada cuadro y con qué peso, y cuándo sonó cada auto \`repeat\` (un parpadeo suele caer entre cuadros). El
+azar usa una semilla fija (el mismo guion da la misma tira) y \`auto: false\` apaga las capas auto para comparar. Al terminar un Puppet, lee **\`get_manifest\`**: es lo que recibe la IA de la app (params con qué poses
 mueven, clips con su descripción, lo automático). Una descripción vacía o un param que no mueve nada ahí es un
 problema para la app.
 

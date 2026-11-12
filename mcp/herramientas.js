@@ -9,7 +9,7 @@ import { paramsDeSwitch } from '../src/core/mezcla.js';
 import { lineasDePistas, resumenDeClip } from './animacion.js';
 
 /** Árbol legible del documento: una línea por objeto, indentado por jerarquía, del fondo al frente. */
-export function esquemaDelArbol(doc, esquema) {
+export function esquemaDelArbol(doc, esquema, { pistas = true } = {}) {
   const lineas = [];
   const { reposo } = evaluarEsqueleto(doc, esquema);
   const r = (v) => Math.round(v);
@@ -40,7 +40,9 @@ export function esquemaDelArbol(doc, esquema) {
       }
       lineas.push(`${'  '.repeat(nivel)}- ${o.id} (${o.type})${detalle}`);
       // Las pistas de un clip, con sus keyframes: para leerlo sin el JSON entero.
-      if (o.type === 'animation') for (const l of lineasDePistas(o)) lineas.push(`${'  '.repeat(nivel + 2)}${l}`);
+      // `pistas`: true = todas; false = ninguna (solo el resumen); una lista = solo las de esos clips.
+      const conPistas = pistas === true || (Array.isArray(pistas) && pistas.includes(o.id));
+      if (o.type === 'animation' && conPistas) for (const l of lineasDePistas(o)) lineas.push(`${'  '.repeat(nivel + 2)}${l}`);
       recorrer(o.id, nivel + 1);
     }
   };

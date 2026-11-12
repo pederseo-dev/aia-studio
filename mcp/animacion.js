@@ -152,7 +152,8 @@ export function planSetKeys(doc, esquema, animacion, { keys = [], usage, duratio
   }
   const pedida = duration ?? leer(esquema, existente ?? { type: 'animation' }, 'duration');
   const final = Math.max(pedida, ultimo);
-  const props = { tracks: pistas };
+  // Sin momentos ni remove no se tocan las pistas (cambiar solo fade o loop no ensucia el historial con tracks).
+  const props = keys.length || remove.length || !existente ? { tracks: pistas } : {};
   // Lo de Live (fade, next, blend, auto, repeat_min, repeat_max) pasa tal cual: la validación dice si no corresponde.
   for (const [k, v] of Object.entries({ usage, loop, description })) if (v !== undefined) props[k] = v;
   for (const k of PROPS_EN_VIVO) if (vivo[k] !== undefined) props[k] = vivo[k];
@@ -257,7 +258,9 @@ export function planVistaDeClip(doc, esquema, { region, bones, params, animation
   const opciones = { animation, params: params ?? {}, region, huesos: bones };
   const svg = tiempos.length === 1 ? svgDocumento(doc, esquema, { ...opciones, time: tiempos[0] }) : svgTira(doc, esquema, { ...opciones, times: tiempos });
   const animados = Object.keys(evaluarClip(doc, esquema, clip, 0).params);
-  const cuadros = tiempos.length === 1 ? `cuadro en t = ${tiempos[0]} s` : `${tiempos.length} cuadros en t = ${tiempos.join(', ')} s`;
+  const todos = tiemposDeClaves(clip).length;
+  const recortada = time == null && !times?.length && todos > tiempos.length ? ` (${tiempos.length} de sus ${todos} tiempos de keyframes, repartidos; pasa times para ver otros)` : '';
+  const cuadros = tiempos.length === 1 ? `cuadro en t = ${tiempos[0]} s` : `${tiempos.length} cuadros en t = ${tiempos.join(', ')} s${recortada}`;
   const avisos = avisosDeClip(doc, esquema, clip, params ?? {});
   const poses = textoDePosesDeParams(doc, esquema, clip);
   const texto = `Clip "${animation}" (${resumenDeClip(esquema, clip)}): ${cuadros}${animados.length ? `; el clip anima los params ${animados.join(', ')}` : ''}.${poses ? `\n${poses}` : ''}${avisos.length ? `\nOjo, drivers que suman encima del clip:\n${avisos.map((a) => `- ${a}`).join('\n')}` : ''}`;
@@ -268,7 +271,7 @@ export function planVistaDeClip(doc, esquema, { region, bones, params, animation
 export function errorDeVistaPrevia({ pose, animation, time, times, live } = {}) {
   if (live && (animation || pose || time != null)) return 'live runs a script on the live puppet (its clips with fades); it does not go with animation, pose or time. To see one clip by itself use animation; for frames of the script use times';
   if (animation && pose) return 'pass either pose or animation, not both: a clip already sets its own values (to see a pose at some moment of a clip, key it there with set_keys and pose)';
-  if (!animation && (time != null || times?.length)) return 'time and times need animation (the id of a clip)';
+  if (!animation && (time != null || (times?.length && !live))) return 'time and times need animation (the id of a clip)';
   return null;
 }
 
@@ -289,6 +292,27 @@ export function planScaleTime(doc, esquema, animacion, { duration, factor, from,
   return { ops: [{ op: 'set', target: animacion, props: { tracks: pistas, duration: duracion } }], antes: total, duracion, desde, hasta: n(hasta), largo: n(largo) };
 }
 
+/**
+ * Rotaciones de un clip de Puppet que quedan a más de 180° del montaje: en vivo, el fundido interpola los números, así
+ * que un brazo en 140 cuando el montaje lo tiene en -178 da casi una vuelta entera al entrar o salir (aunque en
+ * pantalla se vea parecido). Devuelve una línea por pista.
+ */
+export function avisosDeGiro(doc, esquema, clip) {
+  if (leer(esquema, clip, 'usage') !== 'puppet') return [];
+  const avisos = [];
+  for (const [id, campos] of Object.entries(clip.tracks ?? {})) {
+    const obj = buscar(doc, id);
+    if (!obj || !Array.isArray(campos.rotation)) continue;
+    const montaje = valorEfectivo(esquema, doc, obj, 'rotation');
+    const lejos = campos.rotation.filter((c) => typeof c.value === 'number' && Math.abs(c.value - montaje) > 180);
+    if (!lejos.length) continue;
+    const ejemplo = lejos[0].value;
+    const cerca = ejemplo - 360 * Math.round((ejemplo - montaje) / 360);
+    avisos.push(`${id}.rotation: ${lejos.map((c) => `${n(c.value)} en t ${n(c.t)}`).join(', ')} queda a más de 180° del montaje (${n(montaje)}); en vivo, el fundido lo hace girar casi una vuelta. Para el mismo ángulo en pantalla usa ${n(cerca)}.`);
+  }
+  return avisos;
+}
+
 /** Las líneas «param → poses (objetos)» de un clip de Puppet, como texto para la IA (vacío si no anima params). */
 export function textoDePosesDeParams(doc, esquema, clip) {
   const lineas = lineasDePosesDeParams(doc, esquema, clip);
@@ -300,15 +324,25 @@ export function textoDePosesDeParams(doc, esquema, clip) {
  * devuelve la tira de cuadros en `times` (por defecto, cada 0.25 s hasta 0.5 s después del último evento; como mucho
  * 24), con el texto de qué suena en cada cuadro. Devuelve { svg, ancho, texto }.
  */
-export function planVistaEnVivo(doc, esquema, { live, times, params, region, bones }) {
+export function planVistaEnVivo(doc, esquema, { live, times, until, auto, params, region, bones }) {
   for (const [i, e] of live.entries()) {
     const verbos = ['play', 'stop', 'set'].filter((k) => e[k] !== undefined);
     if (verbos.length !== 1) throw new Error(`live[${i}] (t ${e.t}) needs exactly one of play, stop or set${verbos.length ? ` (it has ${verbos.join(' and ')}; split it into two events at the same t)` : ''}`);
   }
-  const ultimo = Math.max(0, ...live.map((e) => e.t));
-  let tiempos = times?.length ? times : Array.from({ length: Math.min(24, Math.floor((ultimo + 0.5) / 0.25) + 1) }, (_, i) => i * 0.25);
-  tiempos = tiempos.slice(0, 24);
-  const cuadros = correrGuion(doc, esquema, live, tiempos, { params });
+  // Hasta cuándo: `until` o, si no, hasta que termine lo último que se disparó (un gesto entero; una base, medio
+  // segundo más). Cada 0.25 s si entra en 24 cuadros; si no, 24 cuadros repartidos (el texto dice cada cuánto).
+  const fin =
+    until ??
+    Math.max(
+      0.5,
+      ...live.map((e) => {
+        const clip = e.play ? buscar(doc, e.play) : null;
+        return e.t + (clip?.type === 'animation' && leer(esquema, clip, 'loop') === 'once' ? leer(esquema, clip, 'duration') + 0.25 : 0.5);
+      }),
+    );
+  const paso = fin / 0.25 + 1 <= 24 ? 0.25 : fin / 23;
+  const tiempos = times?.length ? times : Array.from({ length: Math.floor(fin / paso + 1e-9) + 1 }, (_, i) => n(i * paso));
+  const cuadros = correrGuion(doc, esquema, live, tiempos, { params, auto });
   const opciones = { region, huesos: bones };
   const svg = cuadros.length === 1 ? svgDocumento(doc, esquema, { ...opciones, pose: cuadros[0].pose }) : svgTira(doc, esquema, { ...opciones, times: tiempos, poses: cuadros.map((c) => c.pose) });
   const pct = (w) => `${Math.round(w * 100)}%`;
@@ -317,7 +351,10 @@ export function planVistaEnVivo(doc, esquema, { live, times, params, region, bon
     return `- t = ${n(c.t)} s: ${sonando.join(', ') || 'nada (montaje y params)'}`;
   });
   const conValor = Object.entries(cuadros.at(-1)?.estado.params ?? {}).map(([k, v]) => `${k} ${typeof v === 'number' ? n(v) : v}`);
-  const fin = conValor.length ? `\nParams al final (mezclados con los clips): ${conValor.join(', ')}` : '';
-  const texto = `En vivo (como lo vería la app), ${cuadros.length} cuadros:\n${lineas.join('\n')}${fin}`;
+  const finParams = conValor.length ? `\nParams al final (mezclados con los clips): ${conValor.join(', ')}` : '';
+  const reparto = times?.length ? '' : ` (cada ${n(paso)} s hasta ${n(fin)} s${paso > 0.25 ? '; para ver más de cerca, pasa times o un until más corto' : ''})`;
+  const autos = cuadros.repeticiones.length ? `\nClips auto repeat que sonaron (pueden caer entre cuadros): ${cuadros.repeticiones.map((r) => `${r.clip} ${n(r.desde)}–${n(r.hasta)} s`).join(', ')}` : '';
+  const apagados = auto === false ? '\nCapas auto apagadas (auto: false).' : '';
+  const texto = `En vivo (como lo vería la app), ${cuadros.length} cuadros${reparto}:\n${lineas.join('\n')}${finParams}${autos}${apagados}`;
   return { svg, ancho: cuadros.length === 1 ? 600 : 1000, texto };
 }

@@ -150,7 +150,34 @@ test('el manifiesto dice params con sus poses, clips que se disparan y los autom
   assert.deepEqual(m.auto, [{ id: 'blink', auto: 'repeat', every: [2, 6], description: 'Blinks', animates: ['eye'] }]);
   const texto = textoDeManifiesto(m);
   assert.match(texto, /happiness \(0…1, initial 0\): How happy it looks → happy/);
-  assert.match(texto, /talking \(base, 1 s, loop\) — no description/);
+  assert.match(texto, /talking \(base, 1 s, loop, fade 0.5 s\) — no description\n {4}overrides: arm_bone, mouth/);
+  assert.match(texto, /wave \(gesture, 1 s, once, fade 0.2 s\): Waves\n {4}overrides: params happiness; arm_bone/);
+  assert.deepEqual(m.problems, ['clips without description: talking']);
+  assert.match(texto, /Problems for the app’s AI:\n- clips without description: talking/);
+});
+
+test('el manifiesto avisa del param que maneja un auto y lista sus params; render_preview live con times, until y auto: false', async () => {
+  const { planVistaEnVivo, errorDeVistaPrevia, avisosDeGiro } = await import('../mcp/animacion.js');
+  const doc = muñeco([
+    { op: 'create', type: 'param', id: 'blinking' },
+    { op: 'create', type: 'animation', id: 'blink', props: { usage: 'puppet', duration: 0.2, fade: 0, auto: 'repeat', repeat_min: 1, repeat_max: 1, tracks: { blinking: { value: quieto(1, 0.2) } } } },
+  ]);
+  const m = manifiesto(doc, esquema);
+  assert.deepEqual(m.auto[0].animatesParams, ['blinking']);
+  assert.deepEqual(m.params.find((p) => p.id === 'blinking').drivenBy, ['blink']);
+  assert.match(textoDeManifiesto(m), /blinking .*\[driven by auto blink: don't set it\]/);
+  assert.match(m.problems.join('\n'), /params without description: blinking/);
+  // live con times (antes, «time and times need animation») y la repetición del auto, que cae entre cuadros.
+  assert.equal(errorDeVistaPrevia({ live: [], times: [1] }), null);
+  const vista = planVistaEnVivo(doc, esquema, { live: [{ t: 0, play: 'idle' }], times: [0.5, 2] });
+  assert.match(vista.texto, /Clips auto repeat que sonaron .*blink 1–1\.1\d* s/);
+  assert.doesNotMatch(planVistaEnVivo(doc, esquema, { live: [{ t: 0, play: 'idle' }], auto: false, until: 2 }).texto, /sonaron|blink \(auto/);
+  // until largo: 24 cuadros repartidos y lo dice; por defecto, hasta el final del último gesto.
+  assert.match(planVistaEnVivo(doc, esquema, { live: [{ t: 0, play: 'idle' }], until: 9.2 }).texto, /24 cuadros \(cada 0.4 s hasta 9.2 s; para ver más de cerca/);
+  assert.match(planVistaEnVivo(doc, esquema, { live: [{ t: 0, play: 'idle' }, { t: 1, play: 'wave' }] }).texto, /cada 0.25 s hasta 2.25 s/);
+  // Un ángulo a más de 180° del montaje gira casi una vuelta en el fundido.
+  const giro = op(doc, { op: 'set', target: 'wave', props: { tracks: { arm_bone: { rotation: quieto(300) } } } });
+  assert.match(avisosDeGiro(giro, esquema, giro.objects.find((o) => o.id === 'wave')).join(), /arm_bone.rotation: 300 en t 0, 300 en t 1 queda a más de 180° del montaje \(0\).*usa -60/);
 });
 
 test('MCP: set_keys guarda lo de Live, render_preview con live corre el guion y el resumen lo dice', async () => {
