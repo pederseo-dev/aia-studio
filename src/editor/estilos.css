@@ -169,13 +169,6 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas: "objetos lienzo derecho" "tiempo tiempo tiempo";
 }
-/* En Puppet, una columna más entre el lienzo y el inspector: clips, parameters y poses (el inspector queda entero). */
-body[data-modo="puppet"] #espacio {
-  grid-template-columns: 210px minmax(0, 1fr) 250px 264px;
-  grid-template-areas: "objetos lienzo puppet derecho" "tiempo tiempo tiempo tiempo";
-}
-#panel-puppet { grid-area: puppet; border-left: 1px solid var(--borde); overflow-y: auto; scrollbar-gutter: stable; }
-body:not([data-modo="puppet"]) #panel-puppet { display: none; }
 .panel { background: var(--panel); overflow-y: auto; }
 #panel-objetos { grid-area: objetos; border-right: 1px solid var(--borde); display: flex; flex-direction: column; overflow: hidden; }
 /* La jerarquía ocupa el alto libre; los recursos quedan abajo, con su propio desplazamiento. */
@@ -192,7 +185,7 @@ body.recursos-plegado #plegar-recursos .ico-flecha { transform: rotate(-90deg); 
 /* Alto fijo: el panel no crece ni se achica según cuánto contenido tenga; lo que sobra se desplaza. */
 #linea-de-tiempo { grid-area: tiempo; border-top: 1px solid var(--borde); height: 240px; overflow-y: auto; }
 /* Parameters, a la derecha (Animate y Puppet): nombre y control en una fila, los drivers debajo. */
-#seccion-parametros { border-bottom: 1px solid var(--borde); }
+#seccion-parametros { flex: 0 1 auto; max-height: 30%; overflow-y: auto; border-bottom: 1px solid var(--borde); }
 #parametros { padding: 4px 8px 6px; display: flex; flex-direction: column; gap: 6px; }
 #parametros > .ayuda { margin: 4px 0; }
 .param { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 4px 8px; align-items: center; }
@@ -401,7 +394,7 @@ body.historial-plegado #plegar-historial .ico-flecha { transform: rotate(-90deg)
 body[data-modo="design"] #linea-de-tiempo { display: none; }
 
 /* Biblioteca de clips (Puppet): un botón por clip */
-#clips { border-bottom: 1px solid var(--borde); padding-bottom: 6px; }
+#clips { flex: 0 1 auto; max-height: 30%; overflow-y: auto; border-bottom: 1px solid var(--borde); padding-bottom: 6px; }
 /* La cabecera (con ▶ Live) queda a la vista aunque la lista de clips se desplace. */
 #clips > .cabecera { position: sticky; top: 0; z-index: 1; background: var(--panel); }
 #lista-clips { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px; }
@@ -511,7 +504,7 @@ dialog.manifiesto form { display: flex; justify-content: flex-end; }
 .seccion-puppet.plegada { flex: 0 0 auto; }
 
 /* Poses (Puppet): una fila por pose, como los clips; dice qué params la mezclan. Abierta, en amarillo. */
-#seccion-poses { border-bottom: 1px solid var(--borde); }
+#seccion-poses { flex: 0 1 auto; max-height: 22%; overflow-y: auto; border-bottom: 1px solid var(--borde); }
 #seccion-poses > .cabecera { position: sticky; top: 0; z-index: 1; background: var(--panel); }
 #lista-poses { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px; }
 #lista-poses > .ayuda { margin: 2px 0; }

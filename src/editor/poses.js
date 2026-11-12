@@ -1,4 +1,4 @@
-// Puppet: la lista de poses (en la columna de Puppet, debajo de Parameters) y el cartel arriba del lienzo que dice qué se está
+// Puppet: la lista de poses (a la derecha, debajo de Parameters) y el cartel arriba del lienzo que dice qué se está
 // editando. Las poses son fotos fijas del muñeco que los params mezclan; antes se elegían en un desplegable «View»
 // arriba, que parecía un modo de vista. Ver docs/decision-animacion.md §10.
 
