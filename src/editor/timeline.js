@@ -12,6 +12,7 @@ import { leer, leerMeta } from '../core/esquema.js';
 import { valorEfectivo } from '../core/estilos.js';
 import { avisar, ejecutar, esquema, estado, fijar, previsualizar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 import { clipAbierto, poseActiva } from './huesos.js';
+import { alternarLive, dispararClip } from './vivo.js';
 
 const MODOS = {
   design: 'Design: draw and rig the character (the setup).',
@@ -98,44 +99,98 @@ export function cambiarModo(modo) {
 
 // ---------- Biblioteca de clips (Puppet) ----------
 
-export function montarClips(raiz, lista, botonNuevo) {
+/** Cómo suena un clip en vivo, en pocas palabras: «base», «gesture», «auto: every 2–6 s», «auto: always». */
+function papelEnVivo(clip) {
+  const auto = leer(esquema, clip, 'auto');
+  if (auto === 'repeat') return `auto · every ${n(leer(esquema, clip, 'repeat_min'))}–${n(leer(esquema, clip, 'repeat_max'))} s`;
+  if (auto === 'always') return 'auto · always';
+  return leer(esquema, clip, 'loop') === 'once' ? 'gesture' : 'base';
+}
+
+export function montarClips(raiz, lista, botonNuevo, botonLive) {
   botonNuevo.addEventListener('click', () => nuevoClip('puppet'));
+  botonLive.addEventListener('click', () => {
+    detener();
+    alternarLive();
+  });
   suscribir((c) => {
-    if ('doc' in c || 'pose' in c || 'modo' in c || 'id' in c || 'reproduciendo' in c) dibujar();
+    if ('doc' in c || 'pose' in c || 'modo' in c || 'id' in c || 'reproduciendo' in c || 'vivo' in c) dibujar();
+    else if ('estadoVivo' in c) actualizarVivo();
   });
 
   function dibujar() {
     const doc = estado.doc;
     raiz.hidden = estado.modo !== 'puppet' || !doc;
+    raiz.classList.toggle('en-vivo', estado.vivo);
+    botonLive.textContent = estado.vivo ? '■ Live' : '▶ Live';
+    botonLive.setAttribute('aria-pressed', String(estado.vivo));
+    botonLive.title = estado.vivo
+      ? 'Stop Live and go back to editing'
+      : 'Live: play the puppet as the app will. Clip buttons trigger clips (with fades), Parameters are the app’s values, and nothing is saved.';
+    botonNuevo.disabled = estado.vivo;
     if (raiz.hidden) return;
     const clips = doc.objects.filter((o) => o.type === 'animation' && leer(esquema, o, 'usage') === 'puppet');
     if (!clips.length) {
       lista.innerHTML = '<p class="ayuda">No clips yet. A clip is a short animation the app or its AI triggers (wave, blink, idle). Create one with “＋ Clip”.</p>';
       return;
     }
-    lista.replaceChildren(
-      ...clips.map((clip) => {
-        const abierto = estado.pose === clip.id;
-        const fila = document.createElement('div');
-        fila.className = `clip${abierto ? ' abierto' : ''}`;
-        const boton = Object.assign(document.createElement('button'), { type: 'button', className: 'nombre' });
-        const descripcion = leer(esquema, clip, 'description');
-        boton.innerHTML = `<b></b><small></small>`;
-        boton.querySelector('b').textContent = clip.id;
-        boton.querySelector('small').textContent = `${n(leer(esquema, clip, 'duration'))} s · ${leer(esquema, clip, 'loop')}`;
-        boton.title = `${descripcion ? `${descripcion}\n` : ''}Click to edit it in the timeline`;
-        boton.addEventListener('click', () => (abierto ? fijar({ pose: null, params: estado.params ?? {} }) : abrirClip(clip.id)));
-        const play = Object.assign(document.createElement('button'), { type: 'button', className: 'play', textContent: abierto && estado.reproduciendo ? '■' : '▶' });
-        play.title = abierto && estado.reproduciendo ? 'Stop' : 'Play the clip';
-        play.addEventListener('click', () => {
-          if (abierto && estado.reproduciendo) return detener();
-          if (!abierto) abrirClip(clip.id);
-          reproducir();
-        });
-        fila.append(boton, play);
-        return fila;
-      }),
-    );
+    lista.replaceChildren(...clips.map((clip) => (estado.vivo ? filaEnVivo(clip) : filaParaEditar(clip))));
+    if (estado.vivo) actualizarVivo();
+  }
+
+  function filaParaEditar(clip) {
+    const abierto = estado.pose === clip.id;
+    const fila = document.createElement('div');
+    fila.className = `clip${abierto ? ' abierto' : ''}`;
+    const boton = Object.assign(document.createElement('button'), { type: 'button', className: 'nombre' });
+    const descripcion = leer(esquema, clip, 'description');
+    boton.innerHTML = `<b></b><small></small>`;
+    boton.querySelector('b').textContent = clip.id;
+    boton.querySelector('small').textContent = `${n(leer(esquema, clip, 'duration'))} s · ${leer(esquema, clip, 'loop')}`;
+    boton.title = `${descripcion ? `${descripcion}\n` : ''}${papelEnVivo(clip)}. Click to edit it in the timeline`;
+    boton.addEventListener('click', () => (abierto ? fijar({ pose: null, params: estado.params ?? {} }) : abrirClip(clip.id)));
+    const play = Object.assign(document.createElement('button'), { type: 'button', className: 'play', textContent: abierto && estado.reproduciendo ? '■' : '▶' });
+    play.title = abierto && estado.reproduciendo ? 'Stop' : 'Play the clip';
+    play.addEventListener('click', () => {
+      if (abierto && estado.reproduciendo) return detener();
+      if (!abierto) abrirClip(clip.id);
+      reproducir();
+    });
+    fila.append(boton, play);
+    return fila;
+  }
+
+  /** Con Live: el botón dispara el clip (los auto suenan solos); ■ lo saca. La barra de abajo es su peso. */
+  function filaEnVivo(clip) {
+    const auto = leer(esquema, clip, 'auto') !== 'off';
+    const fila = document.createElement('div');
+    fila.className = `clip vivo${auto ? ' auto' : ''}`;
+    fila.dataset.clip = clip.id;
+    const boton = Object.assign(document.createElement('button'), { type: 'button', className: 'nombre', disabled: auto });
+    const descripcion = leer(esquema, clip, 'description');
+    boton.innerHTML = `<b></b><small></small><span class="peso"></span>`;
+    boton.querySelector('b').textContent = clip.id;
+    boton.querySelector('small').textContent = papelEnVivo(clip);
+    boton.title = `${descripcion ? `${descripcion}\n` : ''}${auto ? 'Plays by itself (auto)' : leer(esquema, clip, 'loop') === 'once' ? 'Click: play this gesture on top of the base' : 'Click: make this the base (crossfade)'}`;
+    boton.addEventListener('click', () => dispararClip(clip.id));
+    const parar = Object.assign(document.createElement('button'), { type: 'button', className: 'play', textContent: '■', title: 'Fade this clip out', disabled: true });
+    parar.addEventListener('click', () => dispararClip(clip.id, { parar: true }));
+    if (auto) parar.hidden = true;
+    fila.append(boton, parar);
+    return fila;
+  }
+
+  /** Cada cuadro: el peso de cada clip que suena, sin rehacer los botones (un clic no se perdería a mitad). */
+  function actualizarVivo() {
+    const sonando = estado.estadoVivo?.sonando ?? [];
+    for (const fila of lista.querySelectorAll('.clip.vivo')) {
+      const s = sonando.filter((x) => x.clip === fila.dataset.clip);
+      const peso = Math.max(0, ...s.map((x) => x.peso));
+      fila.style.setProperty('--peso', `${Math.round(peso * 100)}%`);
+      fila.classList.toggle('sonando', peso > 0);
+      const parar = fila.querySelector('.play');
+      parar.disabled = !s.some((x) => !x.saliendo && x.capa !== 'auto');
+    }
   }
 }
 
@@ -151,6 +206,8 @@ export function montarTimeline(raiz) {
   raiz.tabIndex = -1;
 
   suscribir((c) => {
+    if ('vivo' in c || (estado.vivo && 'estadoVivo' in c)) return dibujar();
+    if (estado.vivo) return;
     if ('doc' in c || 'previa' in c || 'pose' in c || 'modo' in c || 'id' in c || 'seleccion' in c || 'reproduciendo' in c) dibujar();
     else if ('tiempo' in c) moverPlayhead();
   });
@@ -162,10 +219,49 @@ export function montarTimeline(raiz) {
   function dibujar() {
     const doc = estado.doc;
     if (!doc) return raiz.replaceChildren();
+    if (estado.vivo) return raiz.replaceChildren(enVivo(doc));
     const clip = clipVisible();
     if (elegida && !clavesEn(clip, elegida.id, elegida.props, elegida.t).length) elegida = null;
     raiz.replaceChildren(barra(doc, clip), clip ? pistas(clip) : vacio());
     moverPlayhead();
+  }
+
+  /**
+   * Con Live encendido, la timeline muestra qué suena: una fila por clip (base, gestos, auto) con su peso (la barra) y
+   * por dónde va (la marca). Se rehace en cada cuadro; no tiene nada que se pueda tocar.
+   */
+  function enVivo(doc) {
+    const caja = document.createElement('div');
+    caja.className = 'tiempo-vivo';
+    const titulo = document.createElement('p');
+    titulo.className = 'ayuda';
+    titulo.textContent = 'Live: what the app sees. Click clips on the right to play them, move Parameters, ■ Live to edit again.';
+    caja.append(titulo);
+    const sonando = estado.estadoVivo?.sonando ?? [];
+    const nombres = { base: 'base', gesto: 'gesture', auto: 'auto' };
+    for (const s of sonando) {
+      const clip = buscar(doc, s.clip);
+      if (!clip) continue;
+      const d = leer(esquema, clip, 'duration');
+      const avance = Math.min(1, tiempoLocal(esquema, clip, s.t) / d);
+      const fila = document.createElement('div');
+      fila.className = `fila-vivo capa-${s.capa}${s.saliendo ? ' saliendo' : ''}`;
+      fila.innerHTML = '<span class="nombre"></span><span class="capa"></span><span class="barra"><span class="lleno"></span><span class="avance"></span></span><span class="valor"></span>';
+      fila.querySelector('.nombre').textContent = s.clip;
+      fila.querySelector('.capa').textContent = `${nombres[s.capa]}${s.saliendo ? ' · out' : ''}`;
+      fila.querySelector('.lleno').style.width = `${Math.round(s.peso * 100)}%`;
+      fila.querySelector('.avance').style.left = `${avance * 100}%`;
+      fila.querySelector('.valor').textContent = `${Math.round(s.peso * 100)}%`;
+      fila.title = `${s.clip}: weight ${Math.round(s.peso * 100)}%, at ${n(tiempoLocal(esquema, clip, s.t))} of ${n(d)} s`;
+      caja.append(fila);
+    }
+    if (!sonando.length) {
+      const p = document.createElement('p');
+      p.className = 'ayuda';
+      p.textContent = 'Nothing is playing: the setup with the parameters. Click a base clip (loop) to start.';
+      caja.append(p);
+    }
+    return caja;
   }
 
   function vacio() {

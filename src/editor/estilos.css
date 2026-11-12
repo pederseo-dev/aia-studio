@@ -16,6 +16,7 @@
   --lienzo: #67635d;
   --params: #e88aa0; /* rosa viejo. Vista Parámetros: la mezcla de poses que dan los controles */
   --pose: #f4d35e; /* amarillo. Modo pose: el lienzo se enmarca en este color, como la línea de tiempo de Moho en una acción */
+  --vivo: #7ed492; /* verde. ▶ Live (Puppet): el muñeco en marcha, como lo verá la app */
   color-scheme: dark;
   font: 12px/1.4 system-ui, sans-serif;
 }
@@ -398,6 +399,8 @@ body[data-modo="design"] #linea-de-tiempo { display: none; }
 
 /* Biblioteca de clips (Puppet): un botón por clip */
 #clips { flex: 0 0 auto; max-height: 38%; overflow-y: auto; border-bottom: 1px solid var(--borde); padding-bottom: 6px; }
+/* La cabecera (con ▶ Live) queda a la vista aunque la lista de clips se desplace. */
+#clips > .cabecera { position: sticky; top: 0; z-index: 1; background: var(--panel); }
 #lista-clips { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px; }
 #lista-clips > .ayuda { margin: 2px 0; }
 .clip { display: grid; grid-template-columns: minmax(0, 1fr) 30px; gap: 4px; }
@@ -470,3 +473,23 @@ body[data-modo="design"] #linea-de-tiempo { display: none; }
 .ayuda-canales .chip { padding: 0 6px; font-size: 11px; }
 .clave.elegida { outline: 2px solid var(--texto); outline-offset: 1px; }
 .playhead { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--error); pointer-events: none; }
+
+/* ▶ Live (Puppet): el muñeco en marcha. El lienzo se enmarca en verde y sin manijas (no se edita); cada clip muestra
+   su peso con una barra; la timeline lista lo que suena. */
+#clips .cabecera .live[aria-pressed="true"] { border-color: var(--vivo); color: var(--sobre-acento); background: var(--vivo); }
+#lienzo.en-vivo { box-shadow: inset 0 0 0 2px var(--vivo); }
+#lienzo.en-vivo #superposicion { display: none; }
+.clip.vivo .nombre { position: relative; }
+.clip.vivo .nombre .peso { position: absolute; left: 0; bottom: 0; height: 2px; width: var(--peso, 0%); background: var(--vivo); }
+.clip.vivo.sonando .nombre { border-color: var(--vivo); }
+.clip.vivo.auto .nombre { opacity: 0.75; cursor: default; }
+.tiempo-vivo { padding: 4px 8px; display: flex; flex-direction: column; gap: 3px; }
+.tiempo-vivo .ayuda { margin: 2px 0 4px; }
+.fila-vivo { display: grid; grid-template-columns: 140px 90px minmax(0, 1fr) 40px; align-items: center; gap: 8px; height: 20px; }
+.fila-vivo .nombre { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fila-vivo .capa, .fila-vivo .valor { color: var(--suave); }
+.fila-vivo .valor { text-align: right; }
+.fila-vivo .barra { position: relative; height: 10px; border: 1px solid var(--borde); border-radius: 3px; overflow: hidden; }
+.fila-vivo .lleno { position: absolute; inset: 0 auto 0 0; background: var(--vivo); opacity: 0.55; }
+.fila-vivo .avance { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--texto, #fff); }
+.fila-vivo.saliendo .lleno { opacity: 0.3; }

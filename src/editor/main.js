@@ -32,7 +32,7 @@ const lienzo = montarLienzo($('#lienzo'));
 montarOpciones($('#opciones'), { ajustesDelProyecto: () => mostrarAjustes(), agrupar: () => agruparSeleccion(), switch: () => nuevoSwitch(), esqueleto: () => nuevoEsqueleto(), enlazar: () => enlazarSeleccion(), enlazarTodo: enlazarPorCercania });
 montarParametros($('#parametros'), $('#nuevo-param'));
 montarModos($('#modos'));
-montarClips($('#clips'), $('#lista-clips'), $('#nuevo-clip'));
+montarClips($('#clips'), $('#lista-clips'), $('#nuevo-clip'), $('#live'));
 montarTimeline($('#timeline'));
 
 // Abajo, la timeline ocupa todo el panel (Design no tiene). Los params son del muñeco: el panel Parameters, a la

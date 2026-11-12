@@ -100,6 +100,8 @@ const GRADOS = 180 / Math.PI;
  * del playhead (con el id del clip, para que los cambios vayan a sus keyframes).
  */
 export function poseActiva(doc = estado.doc) {
+  // Con Live encendido no se edita nada: no hay pose ni clip que reciba cambios.
+  if (estado.vivo) return null;
   const p = estado.pose && buscar(doc, estado.pose);
   if (p?.type === 'animation') return { ...poseDeClip(doc, esquema, p, estado.tiempo, estado.params ?? {}), id: p.id };
   return p?.type === 'pose' ? p : null;
@@ -118,6 +120,7 @@ export function clipAbierto(doc = estado.doc) {
 
 /** Lo que se ve: la pose que se edita, la mezcla de los params (vista Parámetros) o null (el montaje). */
 export function poseVista(doc = estado.doc) {
+  if (estado.vivo) return estado.poseViva;
   return poseActiva(doc) ?? (estado.params ? mezclarPoses(doc, esquema, estado.params) : null);
 }
 

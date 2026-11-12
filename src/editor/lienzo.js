@@ -54,12 +54,13 @@ export function montarLienzo(contenedor) {
   suscribir((c) => {
     if ('pose' in c) contenedor.classList.toggle('modo-pose', !!estado.pose);
     if ('params' in c) contenedor.classList.toggle('modo-params', !!estado.params && !estado.pose);
-    if ('doc' in c || 'previa' in c || 'pose' in c || 'params' in c || 'tiempo' in c) dibujarDocumento();
+    if ('vivo' in c) contenedor.classList.toggle('en-vivo', estado.vivo);
+    if ('doc' in c || 'previa' in c || 'pose' in c || 'params' in c || 'tiempo' in c || 'poseViva' in c) dibujarDocumento();
     // Seleccionar una variante oculta de un switch la muestra (solo en la vista): hay que redibujar el documento.
     else if ('seleccion' in c && JSON.stringify(variantesAMostrar()) !== mostrando) dibujarDocumento();
     else if ('seleccion' in c || 'edicion' in c || 'vertice' in c) dibujarSuperposicion();
     if ('herramienta' in c) {
-      contenedor.className = `herramienta-${estado.herramienta}${estado.pose ? ' modo-pose' : ''}`;
+      contenedor.className = `herramienta-${estado.herramienta}${estado.pose ? ' modo-pose' : ''}${estado.vivo ? ' en-vivo' : ''}`;
       if (estado.herramienta !== 'path' && pluma.activa()) pluma.terminar(false);
       if (estado.herramienta !== 'seleccionar' && estado.edicion) fijar({ edicion: null, vertice: null });
       dibujarSuperposicion();
@@ -89,8 +90,9 @@ export function montarLienzo(contenedor) {
     tamanoDibujado = { id: estado.id, w, h };
     // Lo que se ve: la pose que se edita, la mezcla de los params (vista Parámetros) o el montaje.
     const clip = clipAbierto(doc);
-    const vista = clip ? { animation: clip.id, time: estado.tiempo, params: estado.params ?? {} } : estado.pose ? { pose: estado.pose } : estado.params ? { params: estado.params } : {};
-    const mostrar = estado.params && !estado.pose ? {} : variantesAMostrar(doc);
+    // Con Live encendido, lo que da el runtime en este cuadro (como lo vería la app).
+    const vista = estado.vivo ? { pose: estado.poseViva } : clip ? { animation: clip.id, time: estado.tiempo, params: estado.params ?? {} } : estado.pose ? { pose: estado.pose } : estado.params ? { params: estado.params } : {};
+    const mostrar = estado.vivo || (estado.params && !estado.pose) ? {} : variantesAMostrar(doc);
     mostrando = JSON.stringify(mostrar);
     documentoG.innerHTML = `${contenidoSvg(doc, esquema, { ...vista, mostrar })}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
     dibujarSuperposicion();

@@ -26,6 +26,11 @@ export const estado = {
   params: null, // valores de los params en la vista Parámetros (null = no se mezcla nada)
   tiempo: 0, // playhead del clip abierto, en segundos
   reproduciendo: false,
+  // ▶ Live (Puppet): el muñeco en marcha (src/editor/vivo.js). poseViva = lo que se ve en este cuadro; estadoVivo =
+  // qué suena y con qué peso. Con Live encendido el documento no se edita.
+  vivo: false,
+  poseViva: null,
+  estadoVivo: null,
   historial: { entradas: [], user: { deshacer: false, rehacer: false } },
 };
 
@@ -150,6 +155,7 @@ export async function refrescarHistorial() {
 /** Muestra un cambio sin guardarlo (null lo descarta). Si el cambio no es válido, simplemente no se muestra. */
 export function previsualizar(ops) {
   if (!ops) return estado.previa && fijar({ previa: null });
+  if (estado.vivo) return;
   try {
     fijar({ previa: aplicarOperaciones(estado.doc, ops, esquema).doc });
   } catch {
@@ -181,6 +187,10 @@ export function enviarPendiente() {
  * seguidos con la misma clave se juntan hasta que pasa un momento sin cambios.
  */
 export function ejecutar(ops, nota, { agrupar } = {}) {
+  if (estado.vivo) {
+    avisar('Live is on: turn it off (■ Live) to edit the document.', true);
+    return Promise.resolve(false);
+  }
   let resultado;
   try {
     resultado = aplicarOperaciones(estado.doc, ops, esquema);

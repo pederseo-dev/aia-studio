@@ -8,10 +8,11 @@ import { leer } from '../core/esquema.js';
 import { pesoDeDriver, valoresDeParams } from '../core/mezcla.js';
 import { avisar, ejecutar, esquema, estado, fijar, idLibre, seleccionar, suscribir } from './estado.js';
 import { clipAbierto, opsDePose, poseActiva } from './huesos.js';
+import { ponerParamVivo } from './vivo.js';
 
 export function montarParametros(raiz, botonNuevo) {
   suscribir((c) => {
-    if ('doc' in c || 'seleccion' in c || 'id' in c || 'pose' in c || 'modo' in c) return dibujar();
+    if ('doc' in c || 'seleccion' in c || 'id' in c || 'pose' in c || 'modo' in c || 'vivo' in c) return dibujar();
     if ('tiempo' in c && clipAbierto()) return raiz.contains(document.activeElement) ? actualizarPesos() : dibujar();
     // Mientras se arrastra un control, no se rehace el panel (se cortaría el arrastre): solo se actualizan los pesos.
     if ('params' in c) raiz.contains(document.activeElement) ? actualizarPesos() : dibujar();
@@ -40,7 +41,7 @@ export function montarParametros(raiz, botonNuevo) {
 
   function dibujar() {
     const doc = estado.doc;
-    botonNuevo.disabled = !doc;
+    botonNuevo.disabled = !doc || estado.vivo;
     // Solo Puppet tiene params (en una escena no hay valores de params que mostrar).
     if (!doc || estado.modo !== 'puppet') return raiz.replaceChildren();
     const params = doc.objects.filter((o) => o.type === 'param');
@@ -57,6 +58,8 @@ export function montarParametros(raiz, botonNuevo) {
    * como keyframe del param en el tiempo del playhead (autokey).
    */
   const mover = (id, v) => {
+    // Con Live encendido, el control es el valor de la app: va al runtime y no se guarda.
+    if (estado.vivo) return ponerParamVivo(id, v);
     const clip = clipAbierto();
     if (!clip) return fijar({ pose: null, params: { ...(estado.params ?? {}), [id]: v } });
     ejecutar(opsDePose(estado.doc, clip.id, id, { value: v }), `${clip.id}: ${id} at ${+estado.tiempo.toFixed(3)} s`, { agrupar: `clip:${clip.id}.${id}.${estado.tiempo}` });
