@@ -22,8 +22,8 @@ import { buscar, esqueletoDe, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { enlacesPorCercania, evaluarEnPose, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, reparentarVarios, soltarEnlacesAjenos, valoresDeHueso } from '../core/esqueleto.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
-import { ponerClave, poseDeClip, quitarClave, valorAGuardar } from '../core/animacion.js';
-import { aplicarPose, mezclarPoses } from '../core/mezcla.js';
+import { opsParaClavesEnClip, poseDeClip } from '../core/animacion.js';
+import { aplicarPose, mezclarPoses, opsParaFijarPose } from '../core/mezcla.js';
 import { alternarSeleccion, avisar, docVisible, ejecutar, esquema, estado, idLibre, previsualizar, seleccionar, seleccionarVarios } from './estado.js';
 
 const redondear = (v, d = 10) => Math.round(v * d) / d;
@@ -128,22 +128,12 @@ export function poseVista(doc = estado.doc) {
 
 /**
  * Lote que fija propiedades de un objeto dentro de una pose (conserva lo demás; undefined quita la propiedad). En un
- * clip, cada propiedad queda como keyframe en el tiempo del playhead (autokey); undefined quita ese keyframe.
+ * clip, cada propiedad queda como keyframe en el tiempo del playhead (autokey); undefined quita ese keyframe. La
+ * lógica está en el núcleo, la misma que usa el MCP.
  */
 export function opsDePose(doc, poseId, id, campos) {
-  const destino = buscar(doc, poseId);
-  if (destino?.type === 'animation') {
-    let tracks = destino.tracks ?? {};
-    // Lo que se ve trae lo que suman los drivers: se guarda el valor sin ese aporte (si no, se sumaría dos veces).
-    const params = estado.params ?? {};
-    for (const [k, v] of Object.entries(campos)) tracks = v === undefined ? quitarClave(tracks, id, k, estado.tiempo) : ponerClave(tracks, id, k, estado.tiempo, valorAGuardar(doc, esquema, destino, estado.tiempo, params, id, k, v));
-    return [{ op: 'set', target: poseId, props: { tracks } }];
-  }
-  const values = structuredClone(buscar(doc, poseId).values ?? {});
-  values[id] = { ...values[id], ...campos };
-  for (const [k, v] of Object.entries(values[id])) if (v === undefined) delete values[id][k];
-  if (!Object.keys(values[id]).length) delete values[id];
-  return [{ op: 'set', target: poseId, props: { values } }];
+  if (buscar(doc, poseId)?.type === 'animation') return opsParaClavesEnClip(doc, esquema, poseId, id, campos, estado.tiempo, estado.params ?? {});
+  return opsParaFijarPose(doc, poseId, { [id]: campos });
 }
 
 /** Variante que muestra un switch: la de la pose que se edita, si la fija; si no, la del montaje (o la primera). */

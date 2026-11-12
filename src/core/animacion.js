@@ -154,6 +154,21 @@ export function valorAGuardar(doc, esquema, clip, t, params, id, prop, visto) {
 }
 
 /**
+ * El lote que deja `campos` ({ propiedad: valor }) de un objeto como keyframes del clip en el tiempo `t` (autokey del
+ * editor). Cada valor es lo que se quiere ver, con los params en `params`: se guarda sin lo que suman los drivers
+ * (valorAGuardar). Un valor undefined quita el keyframe de esa propiedad en `t`.
+ * @param {import('./tipos.js').Documento} doc @param {any} esquema @param {string} clipId @param {string} id
+ * @param {Record<string, any>} campos @param {number} t @param {Record<string, any>} [params]
+ * @returns {import('./tipos.js').Operacion[]}
+ */
+export function opsParaClavesEnClip(doc, esquema, clipId, id, campos, t, params = {}) {
+  const clip = buscar(doc, clipId);
+  let tracks = clip.tracks ?? {};
+  for (const [k, v] of Object.entries(campos)) tracks = v === undefined ? quitarClave(tracks, id, k, t) : ponerClave(tracks, id, k, t, valorAGuardar(doc, esquema, clip, t, params, id, k, v));
+  return [{ op: 'set', target: clipId, props: { tracks } }];
+}
+
+/**
  * Los valores del montaje de todo lo que el clip anima (y de lo que fija `pose`, si se pasa: el id de una pose o sus
  * values ya filtrados), con los params en su valor inicial: { objeto: { propiedad: valor } }. Es «Key setup» del
  * editor y `setup: true` de set_keys.

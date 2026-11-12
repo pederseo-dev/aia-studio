@@ -8,7 +8,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { buscar } from '../src/core/documento.js';
 import { leerMeta, sugerir } from '../src/core/esquema.js';
-import { pesoDeDriver, valoresDeParams } from '../src/core/mezcla.js';
+import { opsParaFijarPose, pesoDeDriver, valoresDeParams } from '../src/core/mezcla.js';
 import { guiaParaIA } from '../src/core/guia.js';
 import { resumirOperaciones } from '../src/core/operaciones.js';
 import { svgDocumento } from '../src/render/svg.js';
@@ -18,7 +18,7 @@ import { svgAPng } from '../servidor/png.js';
 import { NOMBRES_DE_CURVA } from '../src/core/curvas.js';
 import { avisosDeGiro, errorDeVistaPrevia, planDeleteKeys, planMoveKeys, planScaleTime, planSetKeys, planVistaDeClip, planVistaEnVivo, resumenDeClip } from './animacion.js';
 import { manifiesto, textoDeManifiesto } from '../src/core/manifiesto.js';
-import { comprobarBorrado, esquemaDelArbol as arbol, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from './herramientas.js';
+import { comprobarBorrado, esquemaDelArbol as arbol, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from './herramientas.js';
 
 const esquema = cargarEsquema();
 const almacen = crearAlmacen({ esquema });
@@ -418,7 +418,7 @@ servidor.registerTool(
     },
   },
   seguro(async ({ id, pose, values, replace, remove, note, width, show_bones }) => {
-    const ops = opsDeSetPose(await almacen.leer(id), pose, values ?? {}, replace, remove ?? []);
+    const ops = opsParaFijarPose(await almacen.leer(id), pose, values ?? {}, replace, remove ?? []);
     const { doc, avisos } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `pose ${pose}` });
     const guardada = buscar(doc, pose).values;
     const lista = Object.entries(guardada).map(([h, c]) => `${h} ${JSON.stringify(c, (k, v) => (k === 'vertices' ? `(${v.length} vértices)` : v))}`).join(', ') || 'vacía';

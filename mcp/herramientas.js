@@ -50,31 +50,6 @@ export function esquemaDelArbol(doc, esquema, { pistas = true } = {}) {
   return lineas.length ? lineas.join('\n') : '(vacío)';
 }
 
-/**
- * set_pose: los valores nuevos de la pose. Por defecto se suman a los que ya tenía (por objeto, propiedad a
- * propiedad); un objeto con {} sale de la pose entero; con `replace`, la pose queda solo con estos. Un "d" nuevo
- * reemplaza los vértices que la pose ya tenía para ese path. `quitar` (["mouth.active", "brow_l"]) saca de la pose
- * una sola propiedad de un objeto, o el objeto entero; se aplica antes que `values`.
- */
-export function fusionarPose(existentes, values = {}, replace = false, quitar = []) {
-  const valores = replace ? {} : structuredClone(existentes ?? {});
-  for (const nombre of quitar) {
-    const [objeto, prop, ...sobra] = String(nombre).split('.');
-    if (!objeto || sobra.length || prop === '') throw new Error(`remove: "${nombre}" should be "object.property" (for example "mouth.active") or an object id`);
-    if (prop === undefined) delete valores[objeto];
-    else if (valores[objeto]) {
-      delete valores[objeto][prop === 'd' ? 'vertices' : prop];
-      if (!Object.keys(valores[objeto]).length) delete valores[objeto];
-    }
-  }
-  for (const [objeto, campos] of Object.entries(values)) {
-    const previos = campos.d !== undefined ? (({ vertices, ...resto }) => resto)(valores[objeto] ?? {}) : valores[objeto];
-    if (Object.keys(campos).length) valores[objeto] = { ...previos, ...campos };
-    else delete valores[objeto];
-  }
-  return valores;
-}
-
 /** delete_document: el confirm tiene que repetir el id (borrar no se puede deshacer). */
 export function comprobarBorrado(id, confirm) {
   if (confirm !== id) throw new Error(`To delete the document, confirm has to be "${id}" (the same id). Deleting can't be undone.`);
@@ -88,14 +63,6 @@ export function recortesDePose(doc, esquema, valores) {
     const visto = limitarAngulo(esquema, hueso, c.rotation);
     return visto !== c.rotation ? [`${h}.rotation ${c.rotation} queda en ${visto} por minAngle/maxAngle`] : [];
   });
-}
-
-/** set_pose: el lote que crea o actualiza la pose. */
-export function opsDeSetPose(doc, pose, values, replace = false, quitar = []) {
-  const existente = buscar(doc, pose);
-  if (existente && existente.type !== 'pose') throw new Error(`"${pose}" ya existe y es un ${existente.type}; elige otro id para la pose`);
-  const valores = fusionarPose(existente?.values, values, replace, quitar);
-  return existente ? [{ op: 'set', target: pose, props: { values: valores } }] : [{ op: 'create', type: 'pose', id: pose, props: { values: valores } }];
 }
 
 /** bind_points: el lote y el reparto "hueso [índices]". */

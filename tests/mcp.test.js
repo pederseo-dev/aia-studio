@@ -5,7 +5,8 @@ import { buscar, crearDocumento, validar } from '../src/core/documento.js';
 import { evaluarEnPose, puntaDe } from '../src/core/esqueleto.js';
 import { guiaParaIA } from '../src/core/guia.js';
 import { aplicarOperaciones } from '../src/core/operaciones.js';
-import { comprobarBorrado, esquemaDelArbol, fusionarPose, opsDeSetPose, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from '../mcp/herramientas.js';
+import { fusionarPose, opsParaFijarPose as opsDeSetPose } from '../src/core/mezcla.js';
+import { comprobarBorrado, esquemaDelArbol, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from '../mcp/herramientas.js';
 
 const esquema = cargarEsquema();
 const op = (doc, ...ops) => aplicarOperaciones(doc, ops, esquema).doc;
@@ -45,7 +46,7 @@ test('set_pose suma a lo que habÃ­a, saca objetos con {} y un d reemplaza los vÃ
   // El lote: create si no existe, set si existe; y no pisa un objeto que no es pose.
   const doc = op(crearDocumento({}), { op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'path', id: 'smile', props: { d: 'M0 0 L10 0' } });
   assert.equal(opsDeSetPose(doc, 'happy', { r: { x: 1 } })[0].op, 'create');
-  assert.throws(() => opsDeSetPose(doc, 'r', {}), /ya existe y es un rect/);
+  assert.throws(() => opsDeSetPose(doc, 'r', {}), /already exists and is a rect/);
   const conPose = op(doc, ...opsDeSetPose(doc, 'happy', { smile: { d: 'M0 5 L10 5' } }));
   assert.deepEqual(buscar(conPose, 'happy').values.smile.vertices.map((v) => v.y), [5, 5]);
 });

@@ -118,3 +118,28 @@ test('la mezcla parte del valor que se ve, con el estilo', () => {
   );
   assert.deepEqual(mezclarPoses(doc, esquema, { p: 0.5 }).values, { face: { fill: '#ff0000', strokeWidth: 10 } });
 });
+
+test('escribir en una pose: el mismo lote para el editor y para set_pose', async () => {
+  const { fusionarPose, opsParaFijarPose } = await import('../src/core/mezcla.js');
+  const previos = { a: { x: 1, y: 2 }, b: { rotation: 5 } };
+  // Lo que manda el editor: un objeto y sus campos; undefined saca la propiedad y, si no queda nada, el objeto.
+  assert.deepEqual(fusionarPose(previos, { a: { x: 3 } }), { a: { x: 3, y: 2 }, b: { rotation: 5 } });
+  assert.deepEqual(fusionarPose(previos, { a: { y: undefined } }), { a: { x: 1 }, b: { rotation: 5 } });
+  assert.deepEqual(fusionarPose(previos, { b: { rotation: undefined } }), { a: { x: 1, y: 2 } });
+  assert.deepEqual(fusionarPose(previos, { c: { opacity: undefined } }), previos);
+  // No toca lo que recibe.
+  assert.deepEqual(previos, { a: { x: 1, y: 2 }, b: { rotation: 5 } });
+  const doc = op(crearDocumento({}), ...['a', 'b', 'r'].map((id) => ({ op: 'create', type: 'rect', id })), { op: 'create', type: 'pose', id: 'p', props: { values: previos } });
+  assert.deepEqual(opsParaFijarPose(doc, 'p', { r: { x: 4 } }), [{ op: 'set', target: 'p', props: { values: { ...previos, r: { x: 4 } } } }]);
+});
+
+test('autokey: opsParaClavesEnClip pone y quita keyframes en el tiempo pedido', async () => {
+  const { opsParaClavesEnClip } = await import('../src/core/animacion.js');
+  let doc = op(crearDocumento({}), { op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'animation', id: 'c', props: { duration: 2 } });
+  doc = op(doc, ...opsParaClavesEnClip(doc, esquema, 'c', 'r', { x: 10, opacity: 0.5 }, 1));
+  assert.deepEqual(buscar(doc, 'c').tracks.r.x.map((k) => [k.t, k.value]), [[1, 10]]);
+  assert.deepEqual(buscar(doc, 'c').tracks.r.opacity.map((k) => [k.t, k.value]), [[1, 0.5]]);
+  doc = op(doc, ...opsParaClavesEnClip(doc, esquema, 'c', 'r', { x: undefined }, 1));
+  assert.equal(buscar(doc, 'c').tracks.r.x, undefined);
+  assert.ok(buscar(doc, 'c').tracks.r.opacity);
+});

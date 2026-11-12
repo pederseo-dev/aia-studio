@@ -163,3 +163,53 @@ export function aplicarPose(doc, esquema, pose) {
     }),
   };
 }
+
+// ---------- Escribir en una pose ----------
+// Lo usan los dos lados: el editor (cada cambio a mano dentro de una pose) y el MCP (set_pose).
+
+/**
+ * Los valores nuevos de una pose. Por defecto se suman a los que ya tenía (por objeto, propiedad a propiedad); un
+ * objeto con {} sale de la pose entero; con `replace`, la pose queda solo con estos. Un "d" nuevo reemplaza los
+ * vértices que la pose ya tenía para ese path. Una propiedad en undefined sale de la pose (y el objeto, si queda
+ * vacío). `quitar` (["mouth.active", "brow_l"]) saca de la pose una sola propiedad de un objeto, o el objeto entero;
+ * se aplica antes que `values`.
+ * @param {Record<string, Record<string, any>>} [existentes] @param {Record<string, Record<string, any>>} [values]
+ * @param {boolean} [replace] @param {string[]} [quitar]
+ */
+export function fusionarPose(existentes, values = {}, replace = false, quitar = []) {
+  const valores = replace ? {} : structuredClone(existentes ?? {});
+  for (const nombre of quitar) {
+    const [objeto, prop, ...sobra] = String(nombre).split('.');
+    if (!objeto || sobra.length || prop === '') throw new Error(`remove: "${nombre}" should be "object.property" (for example "mouth.active") or an object id`);
+    if (prop === undefined) delete valores[objeto];
+    else if (valores[objeto]) {
+      delete valores[objeto][prop === 'd' ? 'vertices' : prop];
+      if (!Object.keys(valores[objeto]).length) delete valores[objeto];
+    }
+  }
+  for (const [objeto, campos] of Object.entries(values)) {
+    const previos = campos.d !== undefined ? (({ vertices, ...resto }) => resto)(valores[objeto] ?? {}) : valores[objeto];
+    if (!Object.keys(campos).length) {
+      delete valores[objeto];
+      continue;
+    }
+    const juntos = { ...previos, ...campos };
+    for (const [k, v] of Object.entries(juntos)) if (v === undefined) delete juntos[k];
+    if (Object.keys(juntos).length) valores[objeto] = juntos;
+    else delete valores[objeto];
+  }
+  return valores;
+}
+
+/**
+ * El lote que escribe `values` en la pose `pose` (ver fusionarPose): la crea si no existe y no pisa un objeto que no
+ * es pose.
+ * @param {import('./tipos.js').Documento} doc @param {string} pose @param {Record<string, Record<string, any>>} values
+ * @param {boolean} [replace] @param {string[]} [quitar] @returns {import('./tipos.js').Operacion[]}
+ */
+export function opsParaFijarPose(doc, pose, values, replace = false, quitar = []) {
+  const existente = buscar(doc, pose);
+  if (existente && existente.type !== 'pose') throw new Error(`"${pose}" already exists and is a ${existente.type}; pick another id for the pose`);
+  const valores = fusionarPose(existente?.values, values, replace, quitar);
+  return existente ? [{ op: 'set', target: pose, props: { values: valores } }] : [{ op: 'create', type: 'pose', id: pose, props: { values: valores } }];
+}
