@@ -2,7 +2,7 @@
 // guardan), para poder probarlas sin levantar el servidor. Los textos que devuelven los lee la IA.
 
 import { buscar, hijos, huesosDe } from '../src/core/documento.js';
-import { enlacesPorCercania, evaluarEsqueleto, huesoDe, limitarAngulo, puntaDe, reparentarHueso, repartirEntreHuesos } from '../src/core/esqueleto.js';
+import { evaluarEsqueleto, planEnlazarPorCercania, huesoDe, limitarAngulo, puntaDe, reparentarHueso, repartirEntreHuesos } from '../src/core/esqueleto.js';
 import { aplicar } from '../src/core/geometria.js';
 import { leer } from '../src/core/esquema.js';
 import { paramsDeSwitch } from '../src/core/mezcla.js';
@@ -77,11 +77,11 @@ export function planBindPoints(doc, esquema, path, bones) {
 
 /** bind_by_proximity: el lote (vacío si no hay nada que enlazar) y el reparto "hueso ← piezas". */
 export function planBindByProximity(doc, esquema, skeleton) {
-  const enlaces = enlacesPorCercania(doc, esquema, skeleton);
+  const { ops, enlaces } = planEnlazarPorCercania(doc, esquema, skeleton);
   const porHueso = {};
   for (const e of enlaces) (porHueso[e.bone] ??= []).push(e.id);
   const reparto = Object.entries(porHueso).map(([h, ids]) => `${h} ← ${ids.join(', ')}`).join('; ');
-  return { ops: enlaces.map(({ id, bone }) => ({ op: 'set', target: id, props: { bone } })), enlaces, reparto };
+  return { ops, enlaces, reparto };
 }
 
 /** reparent_bone: el lote y el texto que explica qué pasa en las poses. */

@@ -18,9 +18,9 @@
 // En el montaje esos ajustes cambian el reposo. Con una pose activa, cualquier herramienta posa: arrastrar un hueso (o
 // el dibujo enlazado a él) lo gira dentro de la pose y el origen lo desplaza.
 
-import { buscar, esqueletoDe, subarbol } from '../core/documento.js';
+import { buscar, esqueletoDe } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
-import { enlacesPorCercania, evaluarEnPose, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, reparentarVarios, soltarEnlacesAjenos, valoresDeHueso } from '../core/esqueleto.js';
+import { evaluarEnPose, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, motivoParaNoEnlazar, opsParaSoltarAlMover, planEnlazarPorCercania, planReparentarHuesos, valoresDeHueso } from '../core/esqueleto.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
 import { opsParaClavesEnClip, poseDeClip } from '../core/animacion.js';
 import { aplicarPose, mezclarPoses, opsParaFijarPose } from '../core/mezcla.js';
@@ -51,44 +51,7 @@ const huesoElegido = (doc = estado.doc) => {
  * { sueltos, ops } para «Clear parent» (los elegidos que no son raíz).
  */
 export function planDeReparentar(doc = estado.doc) {
-  const elegidos = estado.seleccionados.map((id) => buscar(doc, id)).filter((o) => o?.type === 'bone');
-  const padre = elegidos.find((h) => h.id === estado.seleccion) ?? null;
-  const hijos = elegidos.filter((h) => h !== padre);
-  // Se arma paso a paso: cada hueso se cuelga sobre el documento como quedó con el anterior. `movidas`: poses en las
-  // que algún hueso queda en otro lugar (ahora sigue a otro padre); con `conservar`, esas poses se compensan.
-  const encadenar = (pasos, conservar = false) => {
-    const { ops, movidas } = reparentarVarios(doc, esquema, pasos, { conservarEnPoses: conservar });
-    return Object.assign(ops, { movidas });
-  };
-  let problema = null;
-  if (padre) {
-    for (const h of hijos) {
-      if (esqueletoDe(doc, h.id) !== esqueletoDe(doc, padre.id)) problema = `${h.id} is in another skeleton than ${padre.id}`;
-      else if (subarbol(doc, h.id).includes(padre.id)) problema = `${padre.id} hangs from ${h.id}: pick a parent outside its chain`;
-    }
-  }
-  /** @type {any} */
-  let ops = [];
-  let opsConservando = () => [];
-  if (padre && hijos.length && !problema) {
-    try {
-      ops = encadenar(hijos.map((h) => [h.id, padre.id]));
-      opsConservando = () => encadenar(hijos.map((h) => [h.id, padre.id]), true);
-    } catch {
-      problema = `can’t hang them from ${padre.id} without distorting them`;
-    }
-  }
-  const sueltos = elegidos.filter((h) => buscar(doc, h.parent)?.type === 'bone');
-  /** @type {any} */
-  let opsSoltar = [];
-  const pasosSoltar = sueltos.map((h) => [h.id, esqueletoDe(doc, h.id)]);
-  const opsSoltarConservando = () => encadenar(pasosSoltar, true);
-  try {
-    opsSoltar = encadenar(pasosSoltar);
-  } catch {
-    opsSoltar = [];
-  }
-  return { padre, hijos, ops, opsConservando, problema, sueltos, opsSoltar, opsSoltarConservando };
+  return planReparentarHuesos(doc, esquema, estado.seleccionados, estado.seleccion);
 }
 
 /** El hueso al que enlaza Bind Layer: el elegido, con esa herramienta activa (y fuera de una pose). */
@@ -173,13 +136,8 @@ export function esqueletoActivo(doc = estado.doc) {
   return sel.type === 'skeleton' ? sel.id : esqueletoDe(doc, sel.id);
 }
 
-/** Por qué un objeto no puede seguir a un hueso (texto para el usuario), o null si puede. */
-export function motivoParaNoEnlazar(doc, id, hueso) {
-  const propio = esqueletoDe(doc, id);
-  const delHueso = esqueletoDe(doc, hueso);
-  if (propio === delHueso) return null;
-  return propio ? `${id} is in skeleton ${propio}; it can only follow bones of that skeleton` : `${id} is not in skeleton ${delHueso}: move it inside (Layers) to bind it to its bones`;
-}
+// Lo usan el árbol y main.js; vive en el núcleo.
+export { motivoParaNoEnlazar };
 
 /** Pega un objeto al hueso o, si ya estaba pegado a ese, lo suelta. */
 export function alternarEnlace(id, hueso) {
@@ -193,17 +151,15 @@ export function alternarEnlace(id, hueso) {
 
 /** «Bind all by proximity»: el dibujo del skeleton que no sigue a ningún hueso va al más cercano. */
 export function enlazarPorCercania(esqueletoId) {
-  let enlaces;
+  let plan;
   try {
-    enlaces = enlacesPorCercania(estado.doc, esquema, esqueletoId);
+    plan = planEnlazarPorCercania(estado.doc, esquema, esqueletoId);
   } catch {
     return avisar(`Skeleton ${esqueletoId} has no bones yet: create them with Add Bone (B)`, true);
   }
+  const { ops, enlaces } = plan;
   if (!enlaces.length) return avisar(`All the drawing in ${esqueletoId} already follows a bone`);
-  ejecutar(
-    enlaces.map(({ id, bone }) => ({ op: 'set', target: id, props: { bone } })),
-    `bind all by proximity in ${esqueletoId} (${enlaces.length})`,
-  );
+  ejecutar(ops, `bind all by proximity in ${esqueletoId} (${enlaces.length})`);
   avisar(`Bound ${enlaces.length}: ${enlaces.map((e) => `${e.id} → ${e.bone}`).join(', ')}`);
 }
 
@@ -212,9 +168,7 @@ export function enlazarPorCercania(esqueletoId) {
  * hueso, o huesos que se van a otro skeleton). Va en el mismo lote, antes del move.
  */
 export function soltarAlMover(doc, id, padre) {
-  const copia = structuredClone(doc);
-  buscar(copia, id).parent = padre;
-  return soltarEnlacesAjenos(copia, esquema);
+  return opsParaSoltarAlMover(doc, esquema, id, padre);
 }
 
 /** Aviso para lo que soltarAlMover soltó. */

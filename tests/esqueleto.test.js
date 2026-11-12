@@ -369,3 +369,29 @@ test('reparentar varios huesos seguidos conservando las poses (Reparent Bone con
   assert.deepEqual([buscar(despues, 'b').parent, buscar(despues, 'c').parent], ['z', 'z']);
   for (const id of ['b', 'c']) assert.deepEqual(mundo(despues, id), mundo(doc, id));
 });
+
+test('planes compartidos: reparentar varios, enlazar por cercanía, soltar al mover y por qué no se enlaza', async () => {
+  const { motivoParaNoEnlazar, opsParaSoltarAlMover, planEnlazarPorCercania, planReparentarHuesos } = await import('../src/core/esqueleto.js');
+  const doc = op(brazo(), { op: 'create', type: 'bone', id: 'finger', parent: 'rig', props: { x: 190, y: 100, length: 10 } }, { op: 'create', type: 'skeleton', id: 'otro' }, { op: 'create', type: 'bone', id: 'tail_bone', parent: 'otro' });
+  // Colgar finger de lower (el principal): un lote que aplica sin errores y lo deja como hijo.
+  const plan = planReparentarHuesos(doc, esquema, ['finger', 'lower'], 'lower');
+  assert.equal(plan.padre.id, 'lower');
+  assert.deepEqual(plan.hijos.map((h) => h.id), ['finger']);
+  assert.equal(plan.problema, null);
+  assert.equal(buscar(op(doc, ...plan.ops), 'finger').parent, 'lower');
+  assert.ok(Array.isArray(plan.ops.movidas));
+  // lower cuelga de upper: se puede soltar a la raíz del skeleton.
+  assert.deepEqual(plan.sueltos.map((h) => h.id), ['lower']);
+  assert.equal(buscar(op(doc, ...plan.opsSoltar), 'lower').parent, 'rig');
+  // Problemas: otro skeleton, o el padre cuelga del hijo.
+  assert.match(planReparentarHuesos(doc, esquema, ['tail_bone', 'lower'], 'lower').problema, /another skeleton/);
+  assert.match(planReparentarHuesos(doc, esquema, ['upper', 'lower'], 'lower').problema, /lower hangs from upper/);
+  // Enlazar por cercanía: finger y hand ya están cubiertos o se enlazan; el lote es de set bone.
+  const enlazar = planEnlazarPorCercania(op(doc, { op: 'create', type: 'rect', id: 'chip', parent: 'rig', props: { x: 120, y: 100, width: 4, height: 4 } }), esquema, 'rig');
+  assert.deepEqual(enlazar.ops, enlazar.enlaces.map(({ id, bone }) => ({ op: 'set', target: id, props: { bone } })));
+  assert.ok(enlazar.enlaces.some((e) => e.id === 'chip' && e.bone === 'upper'));
+  // Sacar la mano del skeleton suelta su hueso; por qué no se puede enlazar algo de afuera.
+  assert.deepEqual(opsParaSoltarAlMover(doc, esquema, 'hand', null), [{ op: 'unset', target: 'hand', props: ['bone'] }]);
+  assert.equal(motivoParaNoEnlazar(doc, 'hand', 'lower'), null);
+  assert.match(motivoParaNoEnlazar(doc, 'hand', 'tail_bone'), /hand is in skeleton rig/);
+});

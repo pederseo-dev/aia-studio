@@ -9,7 +9,7 @@
 // lleva al hueso de su lugar en el montaje a su lugar en la pose. En el montaje el delta es la identidad, así que
 // enlazar no mueve nada; recién al posar, el dibujo acompaña.
 
-import { buscar, esqueletoDe, hijos, huesosDe } from './documento.js';
+import { buscar, esqueletoDe, hijos, huesosDe, subarbol } from './documento.js';
 import { leer } from './esquema.js';
 import { IDENTIDAD, aplicar, invertir, matrizMundo, multiplicar } from './geometria.js';
 import { aplicarPose } from './mezcla.js';
@@ -427,4 +427,81 @@ export function reparentarHueso(doc, esquema, huesoId, padreId, { conservarEnPos
   if (!compensar.length) return { ops, movidas };
   final = despues([...ops, ...compensar]);
   return { ops: [...ops, ...compensar], movidas: queSeMueven(final) };
+}
+
+// ---------- Planes que usan el editor y el MCP ----------
+
+/** Por qué un objeto no puede seguir a un hueso (texto para el usuario), o null si puede. */
+export function motivoParaNoEnlazar(doc, id, hueso) {
+  const propio = esqueletoDe(doc, id);
+  const delHueso = esqueletoDe(doc, hueso);
+  if (propio === delHueso) return null;
+  return propio ? `${id} is in skeleton ${propio}; it can only follow bones of that skeleton` : `${id} is not in skeleton ${delHueso}: move it inside (Layers) to bind it to its bones`;
+}
+
+/**
+ * Antes de mover `id` a `padre`: lo que suelta los enlaces que dejarían de valer (dibujo que sale del skeleton de su
+ * hueso, o huesos que se van a otro skeleton). Va en el mismo lote, antes del move.
+ */
+export function opsParaSoltarAlMover(doc, esquema, id, padre) {
+  const copia = structuredClone(doc);
+  buscar(copia, id).parent = padre;
+  return soltarEnlacesAjenos(copia, esquema);
+}
+
+/**
+ * «Bind all by proximity» del editor y bind_by_proximity del MCP: el dibujo del skeleton que no sigue a ningún hueso
+ * va al más cercano. Devuelve el lote y los enlaces ([{ id, bone }]).
+ */
+export function planEnlazarPorCercania(doc, esquema, esqueletoId) {
+  const enlaces = enlacesPorCercania(doc, esquema, esqueletoId);
+  return { ops: enlaces.map(({ id, bone }) => ({ op: 'set', target: id, props: { bone } })), enlaces };
+}
+
+/**
+ * Reparentar varios huesos a la vez (la barra de opciones del editor): `ids` son los elegidos y `principal`, el que
+ * será el padre. Devuelve el lote para colgarlos del principal (`ops`), el que además compensa las poses
+ * (`opsConservando()`), por qué no se puede (`problema`), y lo mismo para soltarlos a la raíz del skeleton (`sueltos`,
+ * `opsSoltar`, `opsSoltarConservando()`). Cada lote trae `movidas`: las poses en que algún hueso queda en otro lugar.
+ * @param {import('./tipos.js').Documento} doc @param {any} esquema @param {string[]} ids @param {string | null} principal
+ */
+export function planReparentarHuesos(doc, esquema, ids, principal) {
+  const elegidos = ids.map((id) => buscar(doc, id)).filter((o) => o?.type === 'bone');
+  const padre = elegidos.find((h) => h.id === principal) ?? null;
+  const hijosElegidos = elegidos.filter((h) => h !== padre);
+  // Se arma paso a paso: cada hueso se cuelga sobre el documento como quedó con el anterior. `movidas`: poses en las
+  // que algún hueso queda en otro lugar (ahora sigue a otro padre); con `conservar`, esas poses se compensan.
+  const encadenar = (pasos, conservar = false) => {
+    const { ops, movidas } = reparentarVarios(doc, esquema, pasos, { conservarEnPoses: conservar });
+    return Object.assign(ops, { movidas });
+  };
+  let problema = null;
+  if (padre) {
+    for (const h of hijosElegidos) {
+      if (esqueletoDe(doc, h.id) !== esqueletoDe(doc, padre.id)) problema = `${h.id} is in another skeleton than ${padre.id}`;
+      else if (subarbol(doc, h.id).includes(padre.id)) problema = `${padre.id} hangs from ${h.id}: pick a parent outside its chain`;
+    }
+  }
+  /** @type {any} */
+  let ops = [];
+  let opsConservando = () => [];
+  if (padre && hijosElegidos.length && !problema) {
+    try {
+      ops = encadenar(hijosElegidos.map((h) => [h.id, padre.id]));
+      opsConservando = () => encadenar(hijosElegidos.map((h) => [h.id, padre.id]), true);
+    } catch {
+      problema = `can’t hang them from ${padre.id} without distorting them`;
+    }
+  }
+  const sueltos = elegidos.filter((h) => buscar(doc, h.parent)?.type === 'bone');
+  /** @type {any} */
+  let opsSoltar = [];
+  const pasosSoltar = sueltos.map((h) => [h.id, esqueletoDe(doc, h.id)]);
+  const opsSoltarConservando = () => encadenar(pasosSoltar, true);
+  try {
+    opsSoltar = encadenar(pasosSoltar);
+  } catch {
+    opsSoltar = [];
+  }
+  return { padre, hijos: hijosElegidos, ops, opsConservando, problema, sueltos, opsSoltar, opsSoltarConservando };
 }
