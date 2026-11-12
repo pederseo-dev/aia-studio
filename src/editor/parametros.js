@@ -8,7 +8,7 @@ import { buscar } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { pesoDeDriver, valoresDeParams } from '../core/mezcla.js';
 import { avisar, ejecutar, esquema, estado, fijar, idLibre, seleccionar, suscribir } from './estado.js';
-import { clipAbierto, opsDePose, poseActiva } from './huesos.js';
+import { clipAbierto, opsDePose, poseActiva } from './edicion.js';
 import { ponerParamVivo } from './vivo.js';
 
 export function montarParametros(raiz, botonNuevo, botonBorrar) {

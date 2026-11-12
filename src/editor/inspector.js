@@ -8,7 +8,7 @@ import { leer, leerMeta, validarValor } from '../core/esquema.js';
 import { opsDeTamano } from '../core/tamano.js';
 import { valoresDeHueso } from '../core/esqueleto.js';
 import { origenDelValor, valorEfectivo } from '../core/estilos.js';
-import { clipAbierto, nombreDeEdicion, opsDePose, poseActiva } from './huesos.js';
+import { clipAbierto, nombreDeEdicion, opsDePose, poseActiva } from './edicion.js';
 import { ejecutar, esquema, estado, fijar, previsualizar, seleccionar, suscribir } from './estado.js';
 
 const ORDEN_DE_GRUPOS = ['General', 'Forma', 'Transformación', 'Apariencia', 'Degradado', 'Lienzo', 'Tiempo'];

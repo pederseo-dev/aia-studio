@@ -11,7 +11,7 @@ import { buscar, subarbol } from '../core/documento.js';
 import { leer, leerMeta } from '../core/esquema.js';
 import { valorEfectivo } from '../core/estilos.js';
 import { avisar, ejecutar, esquema, estado, fijar, previsualizar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
-import { clipAbierto, poseActiva } from './huesos.js';
+import { clipAbierto, poseActiva } from './edicion.js';
 import { alternarLive, dispararClip, mostrarManifiesto, pararTodo } from './vivo.js';
 
 const MODOS = {

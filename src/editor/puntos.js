@@ -8,7 +8,7 @@ import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.j
 import { aplicarPose } from '../core/mezcla.js';
 import { conHueso, dividirTramo, manijas, muestrearTramo, tangentes, verticeDesdeTangentes } from '../core/trazado.js';
 import { docVisible, ejecutar, esquema, estado, fijar, previsualizar } from './estado.js';
-import { nombreDeEdicion, opsDePose, poseActiva } from './huesos.js';
+import { nombreDeEdicion, opsDePose, poseActiva } from './edicion.js';
 
 const CERCA_DEL_CONTORNO = 8; // px
 

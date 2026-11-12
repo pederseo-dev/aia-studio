@@ -7,7 +7,8 @@ import { enlacesPorCercania, huesoDe, repartirEntreHuesos } from '../core/esquel
 import { paramsDeSwitch } from '../core/mezcla.js';
 import { opsDeTamano } from '../core/tamano.js';
 import { avisar, ejecutar, esquema, estado, fijar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
-import { colorDeHueso, elegirVariante, esqueletoActivo, opsDePose, planDeReparentar, varianteDe, variantesAMostrar } from './huesos.js';
+import { colorDeHueso, esqueletoActivo, planDeReparentar } from './huesos.js';
+import { elegirVariante, opsDePose, varianteDe, variantesAMostrar } from './edicion.js';
 
 /**
  * `acciones`: lo que vive en main.js y la barra también ofrece (agrupar, enlazar la selección, enlazar todo por

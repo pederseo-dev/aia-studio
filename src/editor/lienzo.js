@@ -7,7 +7,8 @@ import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.j
 import { contenidoSvg } from '../render/svg.js';
 import { docVisible, ejecutar, esquema, estado, fijar, idLibre, padreParaNuevo, seleccionar, suscribir } from './estado.js';
 import { crearArtboard } from './artboard.js';
-import { clipAbierto, crearHuesos, variantesAMostrar } from './huesos.js';
+import { crearHuesos } from './huesos.js';
+import { clipAbierto, variantesAMostrar } from './edicion.js';
 import { crearPluma } from './pluma.js';
 import { crearPuntos } from './puntos.js';
 import { crearTransformar, esLibre } from './transformar.js';

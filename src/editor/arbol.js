@@ -7,7 +7,8 @@ import { ICONO_DE_TIPO, ICONOS } from './iconos.js';
 import { buscar, hijos, subarbol } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { aplicarOperaciones } from '../core/operaciones.js';
-import { alternarEnlace, avisarSueltos, elegirVariante, huesoParaEnlazar, soltarAlMover, varianteDe, variantesAMostrar } from './huesos.js';
+import { alternarEnlace, avisarSueltos, huesoParaEnlazar, soltarAlMover } from './huesos.js';
+import { elegirVariante, varianteDe, variantesAMostrar } from './edicion.js';
 import { alternarSeleccion, ejecutar, esquema, estado, mantenerPosicion, seleccionRaices, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 
 const esRecurso = (o) => esquema.tipos.get(o.type)?.resource;

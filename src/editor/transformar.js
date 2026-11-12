@@ -9,7 +9,7 @@ import { aplicar, invertir, matrizLocal, matrizMundo, multiplicar } from '../cor
 import { transformarVertices } from '../core/trazado.js';
 import { huesoDe } from '../core/esqueleto.js';
 import { aplicarPose } from '../core/mezcla.js';
-import { nombreDeEdicion, opsDePose, poseActiva } from './huesos.js';
+import { nombreDeEdicion, opsDePose, poseActiva } from './edicion.js';
 import { alternarSeleccion, ejecutar, esquema, estado, previsualizar, seleccionRaices, seleccionar, seleccionarVarios } from './estado.js';
 
 const redondear = (v, d = 10) => Math.round(v * d) / d;
