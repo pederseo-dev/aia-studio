@@ -96,6 +96,22 @@ $('#plegar-historial').addEventListener('click', () => {
 suscribir((c) => 'modo' in c && plegarHistorial(historialPlegado()));
 plegarHistorial(historialPlegado());
 
+// Layers plegable (abierto por defecto), como Assets; se recuerda lo que elija el usuario.
+function plegarCapas(plegado) {
+  document.body.classList.toggle('capas-plegado', plegado);
+  $('#plegar-capas').setAttribute('aria-expanded', String(!plegado));
+}
+$('#plegar-capas').addEventListener('click', () => {
+  const plegado = !document.body.classList.contains('capas-plegado');
+  try {
+    localStorage.setItem('aia:capas-plegado', plegado ? '1' : '0');
+  } catch {}
+  plegarCapas(plegado);
+});
+try {
+  plegarCapas(localStorage.getItem('aia:capas-plegado') === '1');
+} catch {}
+
 // Assets plegable (abierto por defecto); se recuerda lo que elija el usuario.
 function plegarRecursos(plegado) {
   document.body.classList.toggle('recursos-plegado', plegado);
