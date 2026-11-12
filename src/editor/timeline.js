@@ -290,8 +290,8 @@ export function montarTimeline(raiz) {
       fila.innerHTML = '<span class="nombre"></span><span class="capa"></span><span class="barra"><span class="lleno"></span><span class="avance"></span></span><span class="valor"></span>';
       fila.querySelector('.nombre').textContent = s.clip;
       fila.querySelector('.capa').textContent = `${nombres[s.capa]}${s.saliendo ? ' · out' : ''}`;
-      fila.querySelector('.lleno').style.width = `${Math.round(s.peso * 100)}%`;
-      fila.querySelector('.avance').style.left = `${avance * 100}%`;
+      (/** @type {HTMLElement} */ (fila.querySelector('.lleno'))).style.width = `${Math.round(s.peso * 100)}%`;
+      (/** @type {HTMLElement} */ (fila.querySelector('.avance'))).style.left = `${avance * 100}%`;
       fila.querySelector('.valor').textContent = `${Math.round(s.peso * 100)}%`;
       fila.title = `${s.clip}: weight ${Math.round(s.peso * 100)}%, at ${n(tiempoLocal(esquema, clip, s.t))} of ${n(d)} s`;
       caja.append(fila);
@@ -335,7 +335,7 @@ export function montarTimeline(raiz) {
       p.innerHTML = `<span class="titulo"></span><button type="button" class="cerrar" title="${cerrarTitulo}">×</button>`;
       p.querySelector('.titulo').textContent = c.id;
       p.addEventListener('click', (e) => {
-        if (!e.target.closest('.cerrar')) return activa || abrirClip(c.id);
+        if (!(/** @type {Element} */ (e.target)).closest('.cerrar')) return activa || abrirClip(c.id);
         if (!animate) return cerrarClip();
         if (!confirm(`Delete scene "${c.id}" and all its keyframes?`)) return;
         detener();
@@ -479,6 +479,7 @@ export function montarTimeline(raiz) {
       if (actual === 'custom') curva.append(new Option(`cubic-bezier(${primera.join(', ')})`, 'custom', false, true));
       curva.append(new Option('cubic-bezier…', 'editar'));
       curva.addEventListener('change', () => {
+        /** @type {any} */
         let ease = curva.value;
         if (ease === 'custom' || ease === 'mixed') return;
         if (ease === 'editar') {
@@ -644,7 +645,7 @@ export function montarTimeline(raiz) {
         dibujar();
       }, 'plegar');
       cabeza.etiqueta.prepend(flecha);
-      const nombre = cabeza.etiqueta.querySelector('.nombre-pista');
+      const nombre = /** @type {HTMLElement} */ (cabeza.etiqueta.querySelector('.nombre-pista'));
       nombre.style.cursor = 'pointer';
       nombre.addEventListener('click', () => seleccionarVarios(estado.seleccionados, obj.id));
       const props = canales.flatMap((c) => c.props);
@@ -846,6 +847,7 @@ export function montarTimeline(raiz) {
 }
 
 // Canales como en Moho: la posición (x, y) y la escala (scaleX, scaleY) van juntas en una fila; un param, su valor.
+/** @type {[string, string[]][]} */
 const JUNTAS = [['Position', ['x', 'y']], ['Rotation', ['rotation']], ['Scale', ['scaleX', 'scaleY']]];
 const ETIQUETAS_DE_CANAL = { opacity: 'Opacity', visible: 'Visible', fill: 'Fill', stroke: 'Stroke', strokeWidth: 'Stroke width', vertices: 'Points', active: 'Switch', width: 'Width', height: 'Height', length: 'Length', cornerRadius: 'Corner radius' };
 

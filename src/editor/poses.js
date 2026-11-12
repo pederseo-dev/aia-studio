@@ -89,6 +89,7 @@ export function montarCartel(el) {
     const abierto = estado.pose && buscar(doc, estado.pose);
     let clase;
     let texto;
+    /** @type {[string, string, () => void] | null} */
     let boton;
     if (estado.vivo) {
       [clase, texto] = ['vivo', '<b>● Live</b>: the puppet as the app sees it. Nothing is saved.'];

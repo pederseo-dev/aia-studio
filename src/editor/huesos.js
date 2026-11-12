@@ -67,6 +67,7 @@ export function planDeReparentar(doc = estado.doc) {
       else if (subarbol(doc, h.id).includes(padre.id)) problema = `${padre.id} hangs from ${h.id}: pick a parent outside its chain`;
     }
   }
+  /** @type {any} */
   let ops = [];
   let opsConservando = () => [];
   if (padre && hijos.length && !problema) {
@@ -78,6 +79,7 @@ export function planDeReparentar(doc = estado.doc) {
     }
   }
   const sueltos = elegidos.filter((h) => buscar(doc, h.parent)?.type === 'bone');
+  /** @type {any} */
   let opsSoltar = [];
   const pasosSoltar = sueltos.map((h) => [h.id, esqueletoDe(doc, h.id)]);
   const opsSoltarConservando = () => encadenar(pasosSoltar, true);

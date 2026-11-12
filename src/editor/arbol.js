@@ -75,7 +75,7 @@ export function montarArbol(raiz, raizRecursos) {
           ${o.type === 'switch' ? '<span class="desplegable variante-switch"><button type="button" class="variante" title="Variant shown (in a pose, saved to the pose)"></button><div class="menu" role="menu" hidden></div></span>' : ''}
           ${conOjo ? `<button type="button" class="ojo${visible ? '' : ' oculto'}" title="${visible ? 'Hide' : 'Show'}">${visible ? '◉' : '○'}</button>` : ''}`;
         fila.querySelector('.nombre').textContent = o.id;
-        if (o.bone) fila.querySelector('.enlace').title = `Follows bone ${o.bone}`;
+        if (o.bone) (/** @type {HTMLElement} */ (fila.querySelector('.enlace'))).title = `Follows bone ${o.bone}`;
         if (o.type === 'switch') fila.querySelector('.variante').textContent = `▾ ${varianteDe(doc, o) ?? 'empty'}`;
         li.append(fila);
         const subrama = plegado ? [] : rama(doc, o.id, nivel + 1);

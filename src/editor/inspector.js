@@ -29,7 +29,7 @@ export function montarInspector(raiz) {
   function dibujar() {
     const doc = estado.doc;
     if (!doc) return raiz.replaceChildren();
-    const enFoco = raiz.contains(document.activeElement) ? document.activeElement.closest('[data-prop]')?.dataset.prop : null;
+    const enFoco = raiz.contains(document.activeElement) ? (/** @type {HTMLElement} */ (document.activeElement.closest('[data-prop]')))?.dataset.prop : null;
 
     const obj = estado.seleccion ? buscar(doc, estado.seleccion) : null;
     const tipo = obj ? esquema.tipos.get(obj.type) : esquema.meta;

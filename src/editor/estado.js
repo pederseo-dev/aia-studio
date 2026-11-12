@@ -71,7 +71,7 @@ export const api = {
 
 let temporizador;
 export function avisar(texto, esError = false) {
-  const aviso = document.querySelector('#aviso');
+  const aviso = /** @type {HTMLElement} */ (document.querySelector('#aviso'));
   aviso.textContent = texto;
   aviso.title = texto;
   aviso.classList.toggle('error', esError);
@@ -164,6 +164,7 @@ export function previsualizar(ops) {
 }
 
 // Los lotes se envían en orden, uno detrás de otro.
+/** @type {Promise<any>} */
 let fila = Promise.resolve();
 
 // Cambios seguidos sobre lo mismo (flechas, flechitas de un campo numérico) se juntan en un solo lote:
@@ -186,6 +187,7 @@ export function enviarPendiente() {
  * Aplica un lote al instante en pantalla y lo guarda. Con `agrupar` (una clave como "flechas:head"), los lotes
  * seguidos con la misma clave se juntan hasta que pasa un momento sin cambios.
  */
+/** @param {any[]} ops @param {string} [nota] @param {{ agrupar?: string }} [opciones] */
 export function ejecutar(ops, nota, { agrupar } = {}) {
   if (estado.vivo) {
     avisar('Live is on: turn it off (■ Live) to edit the document.', true);

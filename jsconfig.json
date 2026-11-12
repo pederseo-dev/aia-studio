@@ -9,8 +9,8 @@
     "strict": false,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": ["node"]
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"]
   },
-  "include": ["src/core/**/*.js", "src/render/**/*.js", "mcp/**/*.js", "servidor/**/*.js"]
+  "include": ["src/**/*.js", "mcp/**/*.js", "servidor/**/*.js", "scripts/**/*.js"]
 }

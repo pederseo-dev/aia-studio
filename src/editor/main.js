@@ -24,7 +24,7 @@ import {
 
 const $ = (s) => document.querySelector(s);
 // Íconos fijos del HTML: data-icono los pone al principio del elemento y data-flecha es la flecha de un desplegable.
-for (const el of document.querySelectorAll('[data-icono]')) el.insertAdjacentHTML('afterbegin', ICONOS[el.dataset.icono]);
+for (const el of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-icono]'))) el.insertAdjacentHTML('afterbegin', ICONOS[el.dataset.icono]);
 for (const el of document.querySelectorAll('[data-flecha]')) el.innerHTML = FLECHA;
 
 montarArbol($('#arbol'), $('#recursos'));
@@ -40,7 +40,7 @@ $('#reset-params').addEventListener('click', reiniciarParams);
 montarCartel($('#cartel'));
 
 // Clips, Parameters y Poses (Puppet) se pliegan con la flecha del título; se recuerda lo que elija el usuario.
-for (const seccion of document.querySelectorAll('[data-plegable]')) {
+for (const seccion of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-plegable]'))) {
   const clave = `aia:plegado:${seccion.dataset.plegable}`;
   const boton = seccion.querySelector('.plegar-seccion');
   const plegar = (plegada) => {
@@ -146,12 +146,12 @@ function alternarMenu(menu, boton) {
 addEventListener('resize', cerrarMenus);
 
 function cerrarMenus() {
-  document.querySelectorAll('.menu').forEach((m) => (m.hidden = true));
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.menu')).forEach((m) => (m.hidden = true));
   document.querySelectorAll('[aria-expanded]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
 }
 
 document.addEventListener('pointerdown', (e) => {
-  if (!e.target.closest('.desplegable')) cerrarMenus();
+  if (!(/** @type {Element} */ (e.target)).closest('.desplegable')) cerrarMenus();
 });
 
 // ---------- Menú principal ----------
@@ -254,7 +254,7 @@ function dibujarPestanas() {
       pestana.title = id;
       pestana.innerHTML = '<span class="titulo"></span><button type="button" class="cerrar" title="Close tab (the document is not deleted)">×</button>';
       pestana.querySelector('.titulo').textContent = d?.name ?? id;
-      pestana.addEventListener('click', (e) => (e.target.closest('.cerrar') ? cerrarPestana(id) : id !== estado.id && abrir(id)));
+      pestana.addEventListener('click', (e) => ((/** @type {Element} */ (e.target)).closest('.cerrar') ? cerrarPestana(id) : id !== estado.id && abrir(id)));
       // Clic con la rueda también cierra, como en el navegador.
       pestana.addEventListener('auxclick', (e) => e.button === 1 && cerrarPestana(id));
       return pestana;
@@ -334,7 +334,7 @@ suscribir((c) => {
   // Con Artboard, lo elegido es el lienzo: el inspector muestra sus propiedades.
   if ('herramienta' in c && estado.herramienta === 'artboard' && estado.seleccionados.length) seleccionar(null);
   if ('id' in c) {
-    for (const b of document.querySelectorAll('[data-requiere-doc]')) b.disabled = !estado.id;
+    for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('[data-requiere-doc]'))) b.disabled = !estado.id;
     $('#lienzo .sin-documento')?.toggleAttribute('hidden', !!estado.id);
   }
   if ('seleccion' in c || 'doc' in c) $('#borrar').disabled = $('#duplicar').disabled = !estado.seleccionados.length;
@@ -461,6 +461,7 @@ function agruparSeleccion(tipo = 'group') {
   const hermanos = hijos(estado.doc, padre);
   const frente = Math.max(...raices.map((id) => hermanos.findIndex((o) => o.id === id)));
   const grupo = idLibre(tipo);
+  /** @type {any[]} */
   const ops = [{ op: 'create', type: tipo, id: grupo, parent: padre, ...(frente >= 0 ? { index: frente + 1 } : {}) }];
   let doc = aplicarOperaciones(estado.doc, ops, esquema).doc;
   const sueltos = [];
@@ -534,7 +535,7 @@ async function nuevoDocumento(copiarDe) {
 const salirDeEdicion = () => fijar({ edicion: null, vertice: null });
 
 window.addEventListener('keydown', (e) => {
-  if (e.target.closest?.('input, select, textarea, dialog')) return;
+  if ((/** @type {Element} */ (e.target)).closest?.('input, select, textarea, dialog')) return;
   const mod = e.ctrlKey || e.metaKey;
   const tecla = e.key.toLowerCase();
   if (e.key === 'Escape' && document.querySelector('.menu:not([hidden])')) return cerrarMenus();

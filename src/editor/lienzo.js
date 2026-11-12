@@ -173,7 +173,7 @@ export function montarLienzo(contenedor) {
   );
 
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && !e.target.closest('input, select, textarea')) {
+    if (e.code === 'Space' && !(/** @type {Element} */ (e.target)).closest('input, select, textarea')) {
       espacio = true;
       e.preventDefault();
     }

@@ -27,8 +27,12 @@ export function invertir([a, b, c, d, e, f]) {
   return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det];
 }
 
-/** @param {Matriz} m @param {number} x @param {number} y @returns {Punto} */
-export function aplicar(m, x, y) {
+/**
+ * Aplica la matriz al punto (x, y). Se puede llamar con el punto desplegado: aplicar(m, ...[x, y]).
+ * @param {Matriz} m @param {...number} punto x, y @returns {Punto}
+ */
+export function aplicar(m, ...punto) {
+  const [x, y] = punto;
   return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 }
 
