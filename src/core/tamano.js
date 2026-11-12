@@ -17,6 +17,7 @@ const redondear = (v) => Math.round(v * 1000) / 1000;
  */
 export function opsDeTamano(doc, esquema, ancho, alto, corrimiento = null) {
   const [dx, dy] = (corrimiento ?? [(ancho - leerMeta(esquema, doc, 'width')) / 2, (alto - leerMeta(esquema, doc, 'height')) / 2]).map(redondear);
+  /** @type {import('./tipos.js').Operacion[]} */
   const ops = [{ op: 'set', target: 'meta', props: { width: ancho, height: alto } }];
   if (!dx && !dy) return ops;
 

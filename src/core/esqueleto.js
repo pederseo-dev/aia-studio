@@ -20,6 +20,7 @@ import { tangentes } from './trazado.js';
 export const CAMPOS_DE_POSE = ['x', 'y', 'rotation', 'scaleX', 'scaleY'];
 
 /** translate · rotate · scale a partir de valores sueltos. */
+/** @param {Record<string, any>} valores x, y, rotation, scaleX, scaleY */
 function matriz({ x, y, rotation, scaleX, scaleY }) {
   const r = (rotation * Math.PI) / 180;
   const c = Math.cos(r);
@@ -317,6 +318,7 @@ export function opsParaReparentar(doc, esquema, huesoId, padreId) {
   // Los límites de ángulo usan la misma referencia que rotation.
   const giro = nuevos.rotation - montaje.rotation;
   for (const k of ['minAngle', 'maxAngle']) if (hueso[k] != null && giro) props[k] = r4(hueso[k] + giro);
+  /** @type {import('./tipos.js').Operacion[]} */
   const ops = [{ op: 'move', target: huesoId, parent: padreId }, { op: 'set', target: huesoId, props }];
   for (const pose of doc.objects.filter((p) => p.type === 'pose' && p.values?.[huesoId])) {
     const fijados = pose.values[huesoId];
@@ -336,10 +338,11 @@ export function opsParaReparentar(doc, esquema, huesoId, padreId) {
  */
 export function expandirDesdeHasta(doc, esquema, padreId, props, actual = {}) {
   if (props?.from === undefined && props?.to === undefined) return props;
+  /** @returns {import('./tipos.js').Punto} */
   const punto = (nombre) => {
     const p = props[nombre];
     if (!Array.isArray(p) || p.length !== 2 || !p.every((n) => typeof n === 'number' && Number.isFinite(n))) throw new Error(`${nombre} debe ser [x, y] en coordenadas del documento`);
-    return p;
+    return [p[0], p[1]];
   };
   const { from, to, ...resto } = props;
   const valores = { ...actual, ...resto };
@@ -350,6 +353,7 @@ export function expandirDesdeHasta(doc, esquema, padreId, props, actual = {}) {
   const r1 = (v) => Math.round(v * 10) / 10 || 0;
   const salida = { ...resto };
   // Origen actual en el documento, si solo se da `to`.
+  /** @type {import('./tipos.js').Punto} */
   const origenLocal = from !== undefined ? aplicar(invertir(padre), ...punto('from')) : [valores.x ?? 0, valores.y ?? 0];
   if (from !== undefined) [salida.x, salida.y] = origenLocal.map(r1);
   if (to !== undefined) {

@@ -331,6 +331,7 @@ function aplicarUna(doc, op, esquema) {
       doc.objects.splice(posAnterior, 1);
       obj.parent = padre;
       insertar(doc, obj, padre, op.index);
+      /** @type {import('./tipos.js').Operacion[]} */
       const inversas = [{ op: '_place', target: obj.id, parent: padreAnterior, pos: posAnterior }];
       if (posicion) {
         const anteriores = Object.fromEntries(['x', 'y'].filter((k) => k in obj).map((k) => [k, obj[k]]));

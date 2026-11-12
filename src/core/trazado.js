@@ -24,7 +24,9 @@ const KAPPA = 0.5523; // control de una cubic que aproxima un cuarto de círculo
 const r2 = (v) => Math.round(v * 100) / 100 || 0;
 const n = (v) => +v.toFixed(3);
 const polar = (angulo, dist) => [Math.cos(angulo * RAD) * dist, Math.sin(angulo * RAD) * dist];
+/** @param {number[]} v */
 const largo = ([x, y]) => Math.hypot(x, y);
+/** @param {number[]} v */
 const anguloDe = ([x, y]) => r2(Math.atan2(y, x) / RAD);
 const normalizarAngulo = (a) => ((((a + 180) % 360) + 360) % 360) - 180;
 
@@ -139,6 +141,7 @@ export function parsearD(d) {
     return c === '1';
   };
   const subtrazados = [];
+  /** @type {any} */
   let actual = null;
   let pos = [0, 0];
   let inicio = [0, 0];
@@ -315,6 +318,7 @@ export function transformarVertices(vertices, m) {
   const escala = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
   return vertices.map((v) => {
     const { entrada, salida } = tangentes(v);
+    /** @param {number[]} p */
     const lineal = ([x, y]) => [m[0] * x + m[2] * y, m[1] * x + m[3] * y];
     const extra = v.radius ? { radius: r2(v.radius * escala) } : {};
     return conHueso(v, verticeDesdeTangentes(m[0] * v.x + m[2] * v.y + m[4], m[1] * v.x + m[3] * v.y + m[5], lineal(entrada), lineal(salida), extra));

@@ -3,8 +3,12 @@
 import { buscar } from './documento.js';
 import { leer } from './esquema.js';
 
+/** @typedef {import('./tipos.js').Matriz} Matriz @typedef {import('./tipos.js').Punto} Punto */
+
+/** @type {Matriz} */
 export const IDENTIDAD = [1, 0, 0, 1, 0, 0];
 
+/** @param {Matriz} m @param {Matriz} n @returns {Matriz} */
 export function multiplicar(m, n) {
   return [
     m[0] * n[0] + m[2] * n[1],
@@ -16,12 +20,14 @@ export function multiplicar(m, n) {
   ];
 }
 
+/** @param {Matriz} m @returns {Matriz} */
 export function invertir([a, b, c, d, e, f]) {
   const det = a * d - b * c;
   if (!det) return IDENTIDAD;
   return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det];
 }
 
+/** @param {Matriz} m @param {number} x @param {number} y @returns {Punto} */
 export function aplicar(m, x, y) {
   return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 }

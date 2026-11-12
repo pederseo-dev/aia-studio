@@ -301,6 +301,10 @@ export function crearVivo(doc, esquema, { params = {}, semilla = 1, auto = true 
  * devuelto trae además `repeticiones`: cuándo sonó cada clip auto repeat ([{ clip, desde, hasta }]), porque un
  * parpadeo corto suele caer entre dos cuadros.
  */
+/**
+ * @param {any} doc @param {any} esquema @param {any[]} [guion] @param {number[]} [tiempos]
+ * @param {{ params?: Record<string, number>, semilla?: number, auto?: boolean, paso?: number }} [opciones]
+ */
 export function correrGuion(doc, esquema, guion = [], tiempos = [], { params, semilla, auto, paso = 1 / 60 } = {}) {
   const vivo = crearVivo(doc, esquema, { params, semilla, auto });
   const repeticiones = [];
