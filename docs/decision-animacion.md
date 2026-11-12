@@ -222,8 +222,16 @@ montaje → bases (fundido cruzado) → gestos en orden → capas auto → aditi
 
 Un interruptor arriba de la biblioteca de clips. Con Live encendido el documento no se edita: los botones de los
 clips **disparan** (los `auto` se muestran pero suenan solos), los sliders de Parameters son los valores de la app
-(no se guardan ni van al historial), la timeline muestra qué suena con su peso y el canvas es lo que verá la app.
-Al apagarlo se vuelve a lo que estaba abierto.
+(no se guardan ni van al historial), la timeline muestra qué suena con su peso («■ Stop all» = `stop()`) y el canvas
+es lo que verá la app. Al apagarlo se vuelve a lo que estaba abierto, con los valores de Parameters de antes. «Live
+no se edita» vale para la persona: los cambios de la IA por MCP y deshacer sí cambian el documento, y el muñeco sigue
+con el nuevo. «AI view» (también fuera de Live) muestra el manifiesto, como `get_manifest`.
+
+**Ajustes de la auditoría (2026-11-11):** las bases se promedian entre sí durante el fundido cruzado y esa mezcla pisa
+el montaje con el peso total (antes, dos bases iguales dejaban asomar el montaje a mitad del fundido); el fundido de un
+clip `once` no pasa de la mitad de su duración; un `auto: "always"` suena en loop aunque el clip diga `once`; volver a
+pedir una base que está saliendo la retoma; `stop` de un id que no existe o de un auto da error; `next` en un clip
+`auto` es un error de validación.
 
 ### Para la IA
 

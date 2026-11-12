@@ -12,7 +12,7 @@ import { leer, leerMeta } from '../core/esquema.js';
 import { valorEfectivo } from '../core/estilos.js';
 import { avisar, ejecutar, esquema, estado, fijar, previsualizar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
 import { clipAbierto, poseActiva } from './huesos.js';
-import { alternarLive, dispararClip } from './vivo.js';
+import { alternarLive, dispararClip, mostrarManifiesto, pararTodo } from './vivo.js';
 
 const MODOS = {
   design: 'Design: draw and rig the character (the setup).',
@@ -107,8 +107,9 @@ function papelEnVivo(clip) {
   return leer(esquema, clip, 'loop') === 'once' ? 'gesture' : 'base';
 }
 
-export function montarClips(raiz, lista, botonNuevo, botonLive) {
+export function montarClips(raiz, lista, botonNuevo, botonLive, botonManifiesto) {
   botonNuevo.addEventListener('click', () => nuevoClip('puppet'));
+  botonManifiesto.addEventListener('click', mostrarManifiesto);
   botonLive.addEventListener('click', () => {
     detener();
     alternarLive();
@@ -206,8 +207,9 @@ export function montarTimeline(raiz) {
   raiz.tabIndex = -1;
 
   suscribir((c) => {
-    if ('vivo' in c || (estado.vivo && 'estadoVivo' in c)) return dibujar();
-    if (estado.vivo) return;
+    if ('vivo' in c) return dibujar();
+    // Con Live, cada cuadro solo rehace las filas (el botón «Stop all» no se rehace: un clic no se perdería a mitad).
+    if (estado.vivo) return 'estadoVivo' in c || 'doc' in c ? filasEnVivo() : undefined;
     if ('doc' in c || 'previa' in c || 'pose' in c || 'modo' in c || 'id' in c || 'seleccion' in c || 'reproduciendo' in c) dibujar();
     else if ('tiempo' in c) moverPlayhead();
   });
@@ -236,8 +238,27 @@ export function montarTimeline(raiz) {
     const titulo = document.createElement('p');
     titulo.className = 'ayuda';
     titulo.textContent = 'Live: what the app sees. Click clips on the right to play them, move Parameters, ■ Live to edit again.';
-    caja.append(titulo);
+    const parar = Object.assign(document.createElement('button'), { type: 'button', className: 'parar-todo', textContent: '■ Stop all', title: 'Fade out everything the app played (auto clips keep playing), like stop() in the app' });
+    parar.addEventListener('click', pararTodo);
+    const cabeza = document.createElement('div');
+    cabeza.className = 'cabeza-vivo';
+    cabeza.append(titulo, parar);
+    const filas = document.createElement('div');
+    filas.className = 'filas-vivo';
+    caja.append(cabeza, filas);
+    queueMicrotask(filasEnVivo);
+    return caja;
+  }
+
+  /** Las filas de lo que suena (Live), en su lugar; y si hay algo que parar. */
+  function filasEnVivo() {
+    const doc = estado.doc;
+    const caja = raiz.querySelector('.filas-vivo');
+    if (!caja || !doc) return;
+    caja.replaceChildren();
     const sonando = estado.estadoVivo?.sonando ?? [];
+    const parar = raiz.querySelector('.parar-todo');
+    if (parar) parar.disabled = !sonando.some((s) => s.capa !== 'auto' && !s.saliendo);
     const nombres = { base: 'base', gesto: 'gesture', auto: 'auto' };
     for (const s of sonando) {
       const clip = buscar(doc, s.clip);
@@ -261,7 +282,6 @@ export function montarTimeline(raiz) {
       p.textContent = 'Nothing is playing: the setup with the parameters. Click a base clip (loop) to start.';
       caja.append(p);
     }
-    return caja;
   }
 
   function vacio() {

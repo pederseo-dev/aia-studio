@@ -55,7 +55,14 @@ export function crearVivo(doc, esquema, { params = {}, semilla = 1, auto = true 
     const c = buscar(documento, id);
     return c?.type === 'animation' ? c : null;
   };
-  const fadeDe = (clip) => Math.max(0, leer(esquema, clip, 'fade'));
+  // Un clip once no puede fundirse más de la mitad de lo que dura: si no, empezaría a salir antes de terminar de
+  // entrar y nunca llegaría al 100%.
+  const fadeDe = (clip) => {
+    const fade = Math.max(0, leer(esquema, clip, 'fade'));
+    return leer(esquema, clip, 'loop') === 'once' ? Math.min(fade, leer(esquema, clip, 'duration') / 2) : fade;
+  };
+  /** El clip con el que se evalúa una entrada: un auto always suena siempre en loop, aunque el clip diga once. */
+  const comoSuena = (clip, e) => (e.capa === 'auto' && leer(esquema, clip, 'auto') === 'always' && leer(esquema, clip, 'loop') === 'once' ? { ...clip, loop: 'loop' } : clip);
   const espera = (clip) => {
     const [a, b] = [leer(esquema, clip, 'repeat_min'), leer(esquema, clip, 'repeat_max')];
     return a + aleatorio() * Math.max(0, b - a);
@@ -86,9 +93,12 @@ export function crearVivo(doc, esquema, { params = {}, semilla = 1, auto = true 
     if (esBase(esquema, clip)) {
       const actual = entradas.find((e) => e.capa === 'base' && e.objetivo === 1);
       if (actual?.clip === id) return;
-      // La base anterior sale al ritmo de la nueva (fundido cruzado).
+      // La base anterior sale al ritmo de la nueva (fundido cruzado). Si la pedida estaba saliendo, vuelve a entrar
+      // desde donde estaba (sin saltar de fase).
       for (const e of entradas) if (e.capa === 'base') Object.assign(e, { objetivo: 0, fade });
-      entradas.push({ clip: id, t: 0, peso: fade > 0 ? 0 : 1, objetivo: 1, fade, capa: 'base' });
+      const saliendo = entradas.find((e) => e.capa === 'base' && e.clip === id);
+      if (saliendo) Object.assign(saliendo, { objetivo: 1 });
+      else entradas.push({ clip: id, t: 0, peso: fade > 0 ? 0 : 1, objetivo: 1, fade, capa: 'base' });
       return;
     }
     const existente = entradas.find((e) => e.capa === 'gesto' && e.clip === id);
@@ -97,6 +107,14 @@ export function crearVivo(doc, esquema, { params = {}, semilla = 1, auto = true 
   }
 
   function stop(id) {
+    if (id != null) {
+      const clip = clipDe(id);
+      if (!clip || leer(esquema, clip, 'usage') !== 'puppet') {
+        const ids = clipsDisparables(documento, esquema).map((c) => c.id);
+        throw new Error(`there is no clip "${id}". Clips you can stop: ${ids.join(', ') || 'none'}`);
+      }
+      if (leer(esquema, clip, 'auto') !== 'off') throw new Error(`"${id}" is an auto clip (${leer(esquema, clip, 'auto')}): it plays by itself and can't be stopped`);
+    }
     for (const e of entradas) if (e.capa !== 'auto' && (id == null || e.clip === id)) e.objetivo = 0;
   }
 
@@ -171,40 +189,78 @@ export function crearVivo(doc, esquema, { params = {}, semilla = 1, auto = true 
     const values = {};
     const P = valoresDeParams(documento, esquema, app);
     const montaje = (id, prop) => valorEfectivo(esquema, documento, buscar(documento, id), prop);
-    const orden = { base: 0, gesto: 1, auto: 2 };
-    const capas = entradas.map((e, i) => [e, i]).sort(([a, i], [b, j]) => orden[a.capa] - orden[b.capa] || i - j).map(([e]) => e);
-    for (const e of capas) {
-      const clip = clipDe(e.clip);
-      const w = suave(e.peso);
-      if (!clip || w <= 0) continue;
-      const suma = leer(esquema, clip, 'blend') === 'additive';
-      const ev = evaluarClip(documento, esquema, clip, e.t);
-      for (const [id, campos] of Object.entries(ev.values)) {
-        const props = esquema.tipos.get(buscar(documento, id).type).properties;
+    const tipoDe = (id, prop) => esquema.tipos.get(buscar(documento, id).type).properties[prop].type;
+    const numero = (id) => leer(esquema, buscar(documento, id), 'kind') === 'number';
+
+    /** Pisa `actual` con `v` por el peso w, según el tipo (lo que no se interpola cambia en w ≥ 0.5). */
+    const pisar = (tipo, actual, v, w) => {
+      if (w >= 1) return v;
+      if (tipo === 'number' && typeof v === 'number' && typeof actual === 'number') return actual + (v - actual) * w;
+      if (tipo === 'color') return mezclarColor(actual, v, w);
+      if (tipo === 'vertices' && Array.isArray(actual) && Array.isArray(v)) return mezclarVertices(actual, v, w);
+      return w >= 0.5 ? v : undefined;
+    };
+    /** Una capa (lo que fija un clip, o la mezcla de las bases) encima de lo que hay, con su peso. */
+    const aplicar = ({ values: vs, params: ps }, w, suma) => {
+      for (const [id, campos] of Object.entries(vs)) {
         for (const [prop, v] of Object.entries(campos)) {
-          const tipo = props[prop].type;
+          const tipo = tipoDe(id, prop);
           const actual = values[id]?.[prop] ?? montaje(id, prop);
           let nuevo;
           if (suma) {
             if (tipo !== 'number' || typeof v !== 'number') continue;
             nuevo = actual + w * (v - montaje(id, prop));
-          } else if (w >= 1) nuevo = v;
-          else if (tipo === 'number' && typeof v === 'number' && typeof actual === 'number') nuevo = actual + (v - actual) * w;
-          else if (tipo === 'color') nuevo = mezclarColor(actual, v, w);
-          else if (tipo === 'vertices' && Array.isArray(actual) && Array.isArray(v)) nuevo = mezclarVertices(actual, v, w);
-          else if (w >= 0.5) nuevo = v;
-          else continue;
-          (values[id] ??= {})[prop] = nuevo;
+          } else nuevo = pisar(tipo, actual, v, w);
+          if (nuevo !== undefined) (values[id] ??= {})[prop] = nuevo;
         }
       }
-      for (const [id, v] of Object.entries(ev.params)) {
-        const param = buscar(documento, id);
-        const numero = leer(esquema, param, 'kind') === 'number';
+      for (const [id, v] of Object.entries(ps)) {
         if (suma) {
-          if (numero) P[id] += w * (v - leer(esquema, param, 'default'));
-        } else if (numero) P[id] = w >= 1 ? v : P[id] + (v - P[id]) * w;
-        else if (w >= 0.5) P[id] = v;
+          if (numero(id)) P[id] += w * (v - leer(esquema, buscar(documento, id), 'default'));
+        } else {
+          const nuevo = pisar(numero(id) ? 'number' : 'discreto', P[id], v, w);
+          if (nuevo !== undefined) P[id] = nuevo;
+        }
       }
+    };
+    const evaluada = (e) => {
+      const clip = clipDe(e.clip);
+      return clip ? { clip, w: suave(e.peso), ev: evaluarClip(documento, esquema, comoSuena(clip, e), e.t) } : null;
+    };
+
+    // 1. Las bases (override) se promedian entre sí por sus pesos, y esa mezcla pisa el montaje con el peso total de
+    // la capa: en un fundido cruzado entre dos bases que dejan el brazo en 30, el brazo se queda en 30 (el montaje no
+    // se cuela), y la primera base entra desde el montaje.
+    const bases = entradas.filter((e) => e.capa === 'base').map(evaluada).filter((b) => b && b.w > 0);
+    const pisan = bases.filter((b) => leer(esquema, b.clip, 'blend') !== 'additive');
+    const total = pisan.reduce((s, b) => s + b.w, 0);
+    if (total > 0) {
+      const capa = { values: {}, params: {} };
+      let acumulado = 0;
+      for (const b of pisan) {
+        acumulado += b.w;
+        const r = b.w / acumulado; // peso relativo: el promedio ponderado de las bases, de a una
+        for (const [id, campos] of Object.entries(b.ev.values)) {
+          for (const [prop, v] of Object.entries(campos)) {
+            const antes = capa.values[id]?.[prop];
+            const nuevo = antes === undefined ? v : pisar(tipoDe(id, prop), antes, v, r);
+            if (nuevo !== undefined) (capa.values[id] ??= {})[prop] = nuevo;
+          }
+        }
+        for (const [id, v] of Object.entries(b.ev.params)) {
+          const antes = capa.params[id];
+          const nuevo = antes === undefined ? v : pisar(numero(id) ? 'number' : 'discreto', antes, v, r);
+          if (nuevo !== undefined) capa.params[id] = nuevo;
+        }
+      }
+      aplicar(capa, Math.min(1, total), false);
+    }
+    for (const b of bases.filter((x) => !pisan.includes(x))) aplicar(b.ev, b.w, true);
+
+    // 2. Gestos y capas auto, de a uno y en orden, cada uno encima de lo de abajo.
+    for (const e of entradas.filter((x) => x.capa === 'gesto').concat(entradas.filter((x) => x.capa === 'auto'))) {
+      const c = evaluada(e);
+      if (c && c.w > 0) aplicar(c.ev, c.w, leer(esquema, c.clip, 'blend') === 'additive');
     }
     return mezclarPoses(documento, esquema, P, values);
   }
@@ -220,10 +276,18 @@ export function crearVivo(doc, esquema, { params = {}, semilla = 1, auto = true 
     };
   }
 
-  /** Cambia el documento (el editor, al editar con Live apagado y volver): conserva lo que suena si sigue existiendo. */
+  /**
+   * Cambia el documento (lo edita la IA por MCP, o se deshace algo, con Live encendido): sigue sonando lo que todavía
+   * existe y todavía es de su capa (una base que pasó a once, o un clip que pasó a Animate, sale).
+   */
   function actualizar(nuevo) {
     documento = nuevo;
-    entradas = entradas.filter((e) => clipDe(e.clip));
+    entradas = entradas.filter((e) => {
+      const c = clipDe(e.clip);
+      if (!c || leer(esquema, c, 'usage') !== 'puppet') return false;
+      if (e.capa === 'auto') return true; // sincronizarAuto decide
+      return leer(esquema, c, 'auto') === 'off' && esBase(esquema, c) === (e.capa === 'base');
+    });
     for (const id of Object.keys(app)) if (buscar(documento, id)?.type !== 'param') delete app[id];
   }
 

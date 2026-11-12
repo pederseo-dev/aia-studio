@@ -350,8 +350,14 @@ export function planVistaEnVivo(doc, esquema, { live, times, until, auto, params
     const sonando = c.estado.sonando.filter((s) => s.peso > 0).map((s) => `${s.clip} (${s.capa === 'gesto' ? 'gesto' : s.capa}, ${pct(s.peso)}${s.saliendo ? ', saliendo' : ''})`);
     return `- t = ${n(c.t)} s: ${sonando.join(', ') || 'nada (montaje y params)'}`;
   });
-  const conValor = Object.entries(cuadros.at(-1)?.estado.params ?? {}).map(([k, v]) => `${k} ${typeof v === 'number' ? n(v) : v}`);
-  const finParams = conValor.length ? `\nParams al final (mezclados con los clips): ${conValor.join(', ')}` : '';
+  // En el último cuadro: el valor que se ve (mezclado con los clips que animan params) y, si difiere, el de la app.
+  const ultimo = cuadros.at(-1);
+  const valor = (v) => (typeof v === 'number' ? n(v) : v);
+  const conValor = Object.entries(ultimo?.pose.params ?? {}).map(([k, v]) => {
+    const app = ultimo.estado.params[k];
+    return `${k} ${valor(v)}${valor(app) !== valor(v) ? ` (la app: ${valor(app)})` : ''}`;
+  });
+  const finParams = conValor.length ? `\nParams en el último cuadro (mezclados con los clips): ${conValor.join(', ')}` : '';
   const reparto = times?.length ? '' : ` (cada ${n(paso)} s hasta ${n(fin)} s${paso > 0.25 ? '; para ver más de cerca, pasa times o un until más corto' : ''})`;
   const autos = cuadros.repeticiones.length ? `\nClips auto repeat que sonaron (pueden caer entre cuadros): ${cuadros.repeticiones.map((r) => `${r.clip} ${n(r.desde)}–${n(r.hasta)} s`).join(', ')}` : '';
   const apagados = auto === false ? '\nCapas auto apagadas (auto: false).' : '';

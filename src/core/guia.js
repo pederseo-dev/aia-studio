@@ -342,14 +342,18 @@ machine: la app decide qué toca. Cómo suena cada clip de Puppet lo dice el cli
   Escribe los ángulos cerca de los del montaje (-220 en vez de 140; \`"+=n"\` ayuda). \`set_keys\` avisa cuando una
   rotación de un clip de Puppet queda a más de 180° del montaje.
 - **\`next\` reemplaza la base** si es un clip en loop: un gesto con \`next: "idle"\` disparado durante «hablando»
-  deja a Kiko en reposo. Úsalo para reacciones que cambian de estado; un gesto sin \`next\` vuelve solo a la base que
+  deja al personaje en reposo. Úsalo para reacciones que cambian de estado; un gesto sin \`next\` vuelve solo a la base que
   había.
 - **Parpadeo automático:** si ya había un parpadeo keyado dentro de una base (\`idle\`), sácalo al crear el auto
   \`repeat\` (si no, parpadea dos veces). Un clip \`auto\` ya no lo dispara la app: si la app también necesita un
   parpadeo a pedido, deja otro clip \`once\`. La primera vez suena al azar entre \`repeat_min\` y \`repeat_max\`
   segundos desde que arranca.
 - \`fade\` se come el final de un gesto: el gesto empieza a salir \`fade\` segundos antes de terminar. Con un fade largo,
-  alarga el clip o deja quieto el final.
+  alarga el clip o deja quieto el final. En un clip \`once\` el fundido no pasa de la mitad de lo que dura (si no, el
+  gesto nunca llegaría a verse entero). Un clip \`auto: "always"\` suena siempre en loop aunque su \`loop\` diga \`once\`.
+- \`stop\` con un clip que no suena no hace nada; con un id que no existe o un clip \`auto\`, da error. Con Live
+  encendido en el editor, la persona no edita a mano, pero tus cambios por MCP (y deshacer) se aplican y el muñeco
+  sigue con el documento nuevo.
 
 Todo esto se pone con \`set_keys\` (\`fade\`, \`next\`, \`blend\`, \`auto\`, \`repeat_min\`, \`repeat_max\`) o con \`apply_ops\`.
 Para ver cómo lo verá la app, \`render_preview\` con \`live\`: un guion \`[{ "t": 0, "play": "idle" }, { "t": 1, "play":

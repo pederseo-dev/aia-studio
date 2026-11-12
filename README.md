@@ -29,9 +29,10 @@ npm test        # pruebas del núcleo
 npm run mcp     # servidor MCP por stdio (normalmente lo arranca el cliente de IA)
 ```
 
-> Estado: **fase 5** del [plan](docs/plan.md) (animación: modos Design, Animate y Puppet, clips con keyframes y
-> timeline), sobre las expresiones de la fase 4 (poses, params, drivers y switch), los huesos de la fase 3 y el dibujo
-> de la fase 2. El prototipo que probó la idea quedó en la etiqueta de git `prototipo-0`.
+> Estado: **fase 6** del [plan](docs/plan.md) (Puppet en vivo: ▶ Live, clips de base y gestos con fundidos, capas
+> automáticas como el parpadeo y la respiración, y el manifiesto para la IA de la app), sobre la animación de la
+> fase 5 (modos Design, Animate y Puppet, clips con keyframes y timeline), las expresiones de la fase 4 (poses, params,
+> drivers y switch), los huesos de la fase 3 y el dibujo de la fase 2. El prototipo que probó la idea quedó en la etiqueta de git `prototipo-0`.
 
 ### Editor
 
@@ -59,7 +60,8 @@ muestra las demás herramientas.
 | Doblar con varios huesos | Editando los puntos de un path: «Distribute among bones» (o el hueso de cada punto) en la barra de opciones. En las poses, el path se dobla siguiendo la cadena. |
 | Expresiones (Puppet) | Una pose puede cambiar cualquier cosa animable: en la pose, el inspector muestra arriba lo de la pose y Enter edita los puntos de la boca (morph). A la derecha, en Parameters, «＋ Parameter» crea un control y «＋ Pose…» lo conecta a una pose; mover el control muestra la mezcla («View» → «Parameters (blend)»). Un switch muestra un solo hijo (`active`). |
 | Poses (Puppet) | «View» (solo en Puppet): «Setup» o una pose (o «＋ New pose…»). En una pose, arrastrar un hueso o el dibujo enlazado lo gira sin tocar el montaje. |
-| Clips (Puppet) | A la derecha, la biblioteca de clips: «＋ Clip» crea uno, clic en un clip lo abre en la timeline y ▶ lo reproduce. Abajo, el clip abierto es una pestaña (× lo cierra, + crea otro) y al lado va su descripción (para la IA de la app). |
+| Clips (Puppet) | A la derecha, la biblioteca de clips: «＋ Clip» crea uno, clic en un clip lo abre en la timeline y ▶ lo reproduce. Abajo, el clip abierto es una pestaña (× lo cierra, + crea otro) y al lado va su descripción (para la IA de la app). En el inspector del clip, el grupo Live: `fade`, `next`, `blend` y `auto` (con la espera de `repeat`). |
+| ▶ Live (Puppet) | El muñeco como lo verá la app: un clip en loop es la base (fundido cruzado), uno `once` es un gesto encima que sale solo, y los `auto` (parpadeo, respiración) suenan solos. Los botones de clips los disparan (■ saca uno), Parameters son los valores de la app (no se guardan), la timeline muestra qué suena con su peso y «■ Stop all» saca todo. El documento no se edita a mano. «AI view» muestra el manifiesto que recibe la IA de la app, con sus problemas. Ver [docs/decision-animacion.md §9](docs/decision-animacion.md). |
 | Escenas (Animate) | Abajo, una pestaña por escena, como las de los documentos: clic la abre, + crea otra y × la borra (pide confirmar; se puede deshacer). Una escena se ve sin params ni drivers (montaje + keyframes, como se exporta): una expresión se copia con «◆ Pose…» y una variante se elige keyando el switch. |
 | Timeline (Animate y Puppet) | Con un clip o escena abierto, todo lo que cambias (girar un hueso, el inspector, los puntos y, en Puppet, los sliders de Parameters) queda como keyframe en el playhead (autokey; en Puppet, lo que suman los drivers no se guarda dos veces). La timeline muestra «All keys» (todos los keyframes del clip) y un grupo plegable por cada cosa seleccionada (Ctrl + clic en Layers o sobre los huesos del lienzo suma más; ▸/▾ abre o cierra; abierto va solo el principal): la fila del grupo resume sus keyframes y, abierto, muestra sus canales como en Moho, también los vacíos: ◇ keya un canal en el playhead; Position (x, y) y Scale van en una fila. Clic o arrastre en la regla mueve el playhead; al medio, « y » saltan al keyframe anterior o siguiente y ▶ reproduce según `loop`. «◆ Key» keya todo lo seleccionado, «◆ Pose…» una pose entera (o, en «Only the selection», solo lo seleccionado) y «◆ Setup» vuelve al montaje. Con «Scale keys», cambiar Length estira o comprime todos los keyframes en proporción. Un ◆ se elige con clic, se arrastra en el tiempo (con imán a los cuadros; no se suelta encima de otro), cambia de curva (`linear`, `ease-*` con las fuertes `-quad`, `-cubic`, `-expo` y `-back`, `step` o `cubic-bezier…`; el color del ◆ la muestra y al lado se dibuja su forma) y se borra con Supr; × en un canal lo borra entero. Arrastrar un ◆ gris de «All keys» (o de la fila de un objeto) mueve ese momento entero: todos sus keyframes del clip (o del objeto). ⚠ avisa si un driver suma encima de una pista, y en Puppet el canal de un param dice qué poses mueve (→ happy, …). |
 | Switch | En Layers, ▾ junto al botón de grupo → «Switch» (o `Shift+G`): mete la selección en un switch (cada objeto es una variante y se ve una a la vez; las ocultas aparecen en cursiva). El botón de variante de su fila en Layers (o la barra de opciones) elige cuál se ve, en el montaje o, en una pose, dentro de la pose. Al seleccionar una variante oculta, el lienzo la muestra mientras está seleccionada para poder editarla. Para que la elija un param, se arma a mano: un param (lista), una pose por variante que fija cuál se ve y un driver por opción. |
@@ -93,16 +95,19 @@ queda en el historial para que la IA lo respete.
 
 - **Otros clientes MCP** (Cursor, etc.): el mismo comando, `node <ruta>/mcp/server.js`, por stdio.
 
-Herramientas: `get_guide` (la guía del formato, generada desde el esquema), `list_documents`, `get_document`,
+Herramientas: `get_guide` (la guía del formato, generada desde el esquema), `list_documents`, `get_document` (con
+`json: false` y `clips` para leer un documento grande por partes),
 `create_document`, `delete_document` (borra un documento con su historial; pide repetir el id en `confirm`),
 `apply_ops`, `undo`, `redo`, `get_history`, `set_pose` (crea o ajusta una pose con nombre; `remove` saca propiedades
 sueltas), `bind_points` (reparte los puntos de un path entre los huesos de su skeleton), `reparent_bone` (cambia el
 padre de un hueso sin moverlo en el montaje; con `keep_in_poses`, tampoco en las poses), `bind_by_proximity` (enlaza
 al hueso más cercano todo el dibujo de un skeleton que todavía no sigue a ninguno) y
-`set_keys` (crea o ajusta un clip por momentos: `values` (también relativos al montaje, `"+=14"`), `pose` (entera o una parte, con `only`/`except`), `params` (solo en clips de Puppet), `setup` para volver al montaje, `ease` con curvas fuertes con nombre),
+`set_keys` (crea o ajusta un clip por momentos; en Puppet, también `fade`, `next`, `blend` y `auto` para Live: `values` (también relativos al montaje, `"+=14"`), `pose` (entera o una parte, con `only`/`except`), `params` (solo en clips de Puppet), `setup` para volver al montaje, `ease` con curvas fuertes con nombre),
 `delete_keys` (quita keyframes por tiempo o pista), `move_keys` (mueve los keyframes de un momento a otro), `scale_time` (estira o comprime el tiempo del clip o de un tramo, en un paso de deshacer) y
 `render_preview` (devuelve un PNG para que la IA vea lo que hizo; con `pose`, `params`, `region` o `bones`, y con
-`animation` + `time` un cuadro de un clip, o `times` una tira de cuadros).
+`animation` + `time` un cuadro de un clip, o `times` una tira de cuadros; con `live`, un guion `play`/`stop`/`set` como
+lo correría la app, con `until` y `auto: false`) y `get_manifest` (lo que verá la IA de la app: params, clips, lo que
+pisa cada uno y los problemas).
 
 ## Estructura
 

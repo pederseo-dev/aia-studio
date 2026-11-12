@@ -292,7 +292,8 @@ function erroresDeControl(doc, esquema, o) {
       if (leer(esquema, destino, 'usage') !== 'puppet') errores.push(`${o.id}.next: "${next}" is a scene (Animate); next must be a Puppet clip.`);
       else if (leer(esquema, destino, 'auto') !== 'off') errores.push(`${o.id}.next: "${next}" is an auto clip (${leer(esquema, destino, 'auto')}), which plays by itself; next must be a clip the app plays.`);
     }
-    if (puppet && next != null && leer(esquema, o, 'loop') !== 'once') errores.push(`${o.id}.next: only once clips end, and "${o.id}" is ${leer(esquema, o, 'loop')}. Set loop: "once" or remove next.`);
+    if (puppet && next != null && auto !== 'off') errores.push(`${o.id}.next: "${o.id}" is an auto clip and plays by itself; next only works on clips the app plays. Remove next.`);
+    else if (puppet && next != null && leer(esquema, o, 'loop') !== 'once') errores.push(`${o.id}.next: only once clips end, and "${o.id}" is ${leer(esquema, o, 'loop')}. Set loop: "once" or remove next.`);
     if (typeof rmin === 'number' && typeof rmax === 'number' && rmin > rmax) errores.push(`${o.id}: repeat_min (${rmin}) is greater than repeat_max (${rmax})`);
   }
   return errores;

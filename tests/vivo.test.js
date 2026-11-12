@@ -197,3 +197,55 @@ test('MCP: set_keys guarda lo de Live, render_preview con live corre el guion y 
   assert.throws(() => planVistaEnVivo(doc, esquema, { live: [{ t: 0, play: 'wav' }] }), /Clips you can play/);
   assert.match(errorDeVistaPrevia({ live: [], animation: 'wave' }), /does not go with animation/);
 });
+
+test('auditoría: fundido entre bases iguales, always con loop once, fade largo, stop desconocido, volver a una base y actualizar', () => {
+  const doc = muñeco([
+    { op: 'create', type: 'animation', id: 'a', props: { usage: 'puppet', loop: 'loop', fade: 0.5, tracks: { arm_bone: { rotation: quieto(30) } } } },
+    { op: 'create', type: 'animation', id: 'b', props: { usage: 'puppet', loop: 'loop', fade: 0.5, tracks: { arm_bone: { rotation: quieto(30) } } } },
+    { op: 'create', type: 'animation', id: 'breath', props: { usage: 'puppet', duration: 1, auto: 'always', blend: 'additive', tracks: { head_bone: { rotation: [clave(0, 0), clave(0.5, 10), clave(1, 0)] } } } },
+    { op: 'create', type: 'animation', id: 'corto', props: { usage: 'puppet', duration: 0.3, fade: 0.2, tracks: { arm_bone: { rotation: quieto(-60, 0.3) } } } },
+  ]);
+  // 1. Dos bases con el brazo en 30: el fundido cruzado no deja asomar el montaje (antes bajaba a 23).
+  const vivo = crearVivo(doc, esquema, { auto: false });
+  vivo.play('a');
+  vivo.avanzar(1);
+  vivo.play('b');
+  for (let i = 0; i < 6; i++) {
+    vivo.avanzar(0.1);
+    cerca(rot(vivo.pose(), 'arm_bone'), 30);
+  }
+  // 7. a → b → a dentro del fundido reutiliza la entrada de a (no hay dos a).
+  vivo.play('a');
+  vivo.avanzar(0.1);
+  vivo.play('b');
+  vivo.play('a');
+  assert.equal(vivo.estado().sonando.filter((s) => s.clip === 'a').length, 1);
+  cerca(rot(vivo.pose(), 'arm_bone'), 30);
+  // 6. stop con un id que no existe o un auto: error que dice qué hay.
+  assert.throws(() => vivo.stop('idel'), /Clips you can stop: .*idle/);
+  assert.throws(() => crearVivo(doc, esquema).stop('breath'), /can't be stopped/);
+  // 2. auto always con el loop por defecto (once) sigue sonando en loop.
+  const respira = correrGuion(doc, esquema, [], [0.25, 0.5, 1.25, 1.5]).map((c) => rot(c.pose, 'head_bone'));
+  respira.forEach((r, i) => cerca(r, [5, 10, 5, 10][i], 1e-6));
+  // 4. Un gesto con fade ≥ duración/2 llega igual al 100% (el fundido se acorta a la mitad).
+  const g = crearVivo(doc, esquema, { auto: false });
+  g.play('corto');
+  g.avanzar(0.15);
+  cerca(rot(g.pose(), 'arm_bone'), -60);
+  // 9. actualizar: un clip borrado sale; una base que pasa a once sale de la capa de bases.
+  const v = crearVivo(doc, esquema, { auto: false });
+  v.play('a');
+  v.play('wave');
+  v.avanzar(0.3);
+  v.actualizar(op(doc, { op: 'delete', target: 'wave' }, { op: 'set', target: 'a', props: { loop: 'once' } }));
+  assert.deepEqual(v.estado().sonando, []);
+});
+
+test('auditoría: next en un auto es un error; set_keys sin momentos no toca tracks; live dice el param mezclado y el de la app', async () => {
+  const { planSetKeys, planVistaEnVivo } = await import('../mcp/animacion.js');
+  const doc = muñeco([{ op: 'create', type: 'animation', id: 'blink', props: { usage: 'puppet', duration: 0.2, auto: 'repeat', tracks: { eye: { scaleY: quieto(0.1, 0.2) } } } }]);
+  assert.throws(() => op(doc, { op: 'set', target: 'blink', props: { next: 'idle' } }), /auto clip and plays by itself/);
+  assert.deepEqual(planSetKeys(doc, esquema, 'wave', { fade: 0.4 }).ops, [{ op: 'set', target: 'wave', props: { fade: 0.4 } }]);
+  const vista = planVistaEnVivo(doc, esquema, { live: [{ t: 0, play: 'wave' }], times: [0.5], auto: false });
+  assert.match(vista.texto, /Params en el último cuadro \(mezclados con los clips\): happiness 1 \(la app: 0\)/);
+});
