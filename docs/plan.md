@@ -315,11 +315,19 @@ Animate; retocar timing a mano y pedirle a la IA que siga sin pisarlo.
 
 ## Fase 6: comportamiento (Puppet en vivo)
 
-- **Live** en Puppet: los botones disparan clips, con fundidos entre ellos y params moviéndose a la vez.
-- State machine por capas: estados (clip, blend 1D, any, entry, exit) y transiciones con condiciones sobre params,
-  duración de mezcla y exit time. Límite de cambios por frame *(de Rive)*. Clips por región del cuerpo (máscaras) y
-  clips aditivos.
-- Editor: vista de la state machine y previsualización en vivo moviendo params.
+Decisión en [decision-animacion.md §9](decision-animacion.md): **sin state machine por ahora** (en pausa: en una
+app con un LLM, el LLM decide el estado).
+
+- ✅ Runtime en vivo `src/core/vivo.js` (el que exporta la fase 7): `play(clip)`, `set(param, valor)` y
+  `stop(clip)`. Un clip en loop es la **base** (fundido cruzado); uno `once` es un **gesto** encima que pisa solo sus
+  pistas y sale solo. Los params de la app se mezclan con el peso del clip que los anima.
+- ✅ Datos del clip de Puppet: `fade`, `next` (encadenar), `blend` (`additive`) y `auto` (`repeat` cada
+  `repeat_min`…`repeat_max` s, como el parpadeo; `always`, como la respiración). El param gana `description`.
+- ✅ Editor: **▶ Live** en Puppet (los botones disparan clips, Parameters son los valores de la app, la timeline muestra
+  qué suena con su peso; el documento no se edita) y el grupo Live del inspector.
+- ✅ MCP: `set_keys` con lo de Live, `render_preview` con un guion `live` y `get_manifest` (el manifiesto que recibe la
+  IA de la app: `src/core/manifiesto.js`). Guía al día.
+- En pausa: state machine (estados, transiciones con condiciones, blend 1D, exit time), máscaras explícitas.
 
 **Prueba con IA:** comportamiento de asistente (reposo, escuchando, pensando, hablando, reacción).
 
