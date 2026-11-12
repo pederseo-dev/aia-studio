@@ -399,10 +399,10 @@ body.historial-plegado #plegar-historial .ico-flecha { transform: rotate(-90deg)
 body[data-modo="design"] #linea-de-tiempo { display: none; }
 
 /* Biblioteca de clips (Puppet): un botón por clip */
-#clips { flex: 0 1 auto; max-height: 30%; overflow-y: auto; border-bottom: 1px solid var(--borde); padding-bottom: 6px; }
+#clips { flex: 0 1 auto; max-height: 30%; overflow-y: auto; border-bottom: 1px solid var(--borde); }
 /* La cabecera (con ▶ Live) queda a la vista aunque la lista de clips se desplace. */
 #clips > .cabecera { position: sticky; top: 0; z-index: 1; background: var(--panel); }
-#lista-clips { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px; }
+#lista-clips { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px; }
 #lista-clips > .ayuda { margin: 2px 0; }
 .clip { display: grid; grid-template-columns: minmax(0, 1fr) 30px; gap: 4px; }
 .clip .nombre { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; text-align: left; overflow: hidden; }
