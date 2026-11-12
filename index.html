@@ -145,6 +145,10 @@
           <button id="borrar-recurso" type="button" class="icono" title="Delete selected asset (Del). Shapes that used it keep their own colors" aria-label="Delete asset" data-icono="borrar" disabled></button>
         </div>
         <ul id="recursos" class="arbol"></ul>
+        <section id="historial">
+          <h2><button id="plegar-historial" type="button" class="plegar-seccion" aria-expanded="true" aria-controls="entradas" title="Collapse or expand the history">History<span data-flecha></span></button></h2>
+          <ol id="entradas"></ol>
+        </section>
       </aside>
 
       <section id="lienzo" tabindex="-1" aria-label="Canvas">
@@ -185,10 +189,6 @@
           <div id="lista-poses"></div>
         </section>
         <section id="inspector"></section>
-        <section id="historial">
-          <h2><button id="plegar-historial" type="button" class="plegar-seccion" aria-expanded="true" aria-controls="entradas" title="Collapse or expand the history">History<span data-flecha></span></button></h2>
-          <ol id="entradas"></ol>
-        </section>
       </aside>
 
       <footer id="linea-de-tiempo" class="panel">

@@ -179,7 +179,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
 body.recursos-plegado #recursos { display: none; }
 body.recursos-plegado .cabecera-recursos { border-bottom: none; }
 body.recursos-plegado #plegar-recursos .ico-flecha { transform: rotate(-90deg); }
-/* Inspector e historial con alto propio y su desplazamiento: cambiar de selección no hace saltar al otro. */
+/* El inspector con alto propio y su desplazamiento. */
 #panel-derecho { grid-area: derecho; border-left: 1px solid var(--borde); display: flex; flex-direction: column; overflow: hidden; }
 #inspector { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 /* Alto fijo: el panel no crece ni se achica según cuánto contenido tenga; lo que sobra se desplaza. */
@@ -363,7 +363,8 @@ body.recursos-plegado #plegar-recursos .ico-flecha { transform: rotate(-90deg); 
 
 /* ---------- Historial ---------- */
 
-#historial { border-top: 1px solid var(--borde); padding: 5px 8px; flex: 0 0 32%; min-height: 120px; overflow-y: auto; }
+/* Historial: abajo del panel izquierdo, debajo de Assets (a la derecha quedan Clips, Parameters e inspector). */
+#historial { border-top: 1px solid var(--borde); padding: 5px 8px; flex: 0 0 26%; min-height: 100px; overflow-y: auto; }
 #historial h2 { margin: 0; }
 /* Cabecera que pliega su sección (History, Assets): el título con la flecha. */
 .plegar-seccion { display: flex; align-items: center; gap: 6px; width: 100%; padding: 0; border: none; background: none; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
