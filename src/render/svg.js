@@ -36,6 +36,15 @@ export const DIBUJAR = {
     const d = verticesAD(v('vertices'), v('closed'));
     return d ? `<path d="${d}"${pintura(v)} stroke-linejoin="round" stroke-linecap="round"/>` : '';
   },
+  // El href lo decide la vista (`assets`): una URL del servidor en el editor; sin nada, el nombre del archivo (el MCP
+  // lo cambia por los bytes al pasar a PNG). Estirada a width × height, como un rect.
+  image: (v) => {
+    const [w, h] = [v('width'), v('height')];
+    const src = v('src');
+    const href = v.assets ? v.assets(src) : src;
+    const suavizado = v('pixelated') ? ' style="image-rendering:pixelated"' : '';
+    return `<image href="${atributo(href)}" x="${n(-w * v('originX'))}" y="${n(-h * v('originY'))}" width="${n(w)}" height="${n(h)}" preserveAspectRatio="none"${suavizado}/>`;
+  },
 };
 
 // Recursos que generan algo en <defs>.
@@ -65,7 +74,7 @@ function transformacion(v) {
   return partes.length ? ` transform="${partes.join(' ')}"` : '';
 }
 
-const lector = (doc, esquema, obj) => Object.assign((prop) => valorEfectivo(esquema, doc, obj, prop), { doc });
+const lector = (doc, esquema, obj, assets = null) => Object.assign((prop) => valorEfectivo(esquema, doc, obj, prop), { doc, assets });
 
 /**
  * Con una pose, un objeto que sigue a otro hueso que su padre recibe una matriz completa: la que lo deja donde el
@@ -97,12 +106,12 @@ function verticesEnPose(doc, esquema, obj, vertices, delta, ctx) {
 }
 
 function nodo(doc, esquema, obj, ctx) {
-  let v = lector(doc, esquema, obj);
+  let v = lector(doc, esquema, obj, ctx.assets);
   const { delta, atributo: transformar } = ctx.esqueleto ? transformacionEnPose(doc, esquema, obj, v, ctx) : { delta: IDENTIDAD, atributo: transformacion(v) };
   if (ctx.esqueleto && obj.type === 'path') {
     const base = v;
     const deformados = verticesEnPose(doc, esquema, obj, base('vertices'), delta, ctx);
-    v = Object.assign((prop) => (prop === 'vertices' ? deformados : base(prop)), { doc: base.doc });
+    v = Object.assign((prop) => (prop === 'vertices' ? deformados : base(prop)), { doc: base.doc, assets: base.assets });
   }
   const atributos = [
     ` data-id="${obj.id}"`,
@@ -142,7 +151,7 @@ export function resolverPose(doc, esquema, pose, params, animation = null, time 
  * nada, el montaje.
  */
 /** @param {any} montaje @param {any} esquema @param {import('../core/tipos.js').OpcionesDeVista} [opciones] */
-export function contenidoSvg(montaje, esquema, { pose, params, animation, time, mostrar } = {}) {
+export function contenidoSvg(montaje, esquema, { pose, params, animation, time, mostrar, assets } = {}) {
   const poseActiva = resolverPose(montaje, esquema, pose, params, animation, time);
   // Lo que no es hueso toma los valores de la pose; los huesos se mueven por el esqueleto (con su delta).
   const doc = aplicarPose(montaje, esquema, poseActiva);
@@ -154,7 +163,8 @@ export function contenidoSvg(montaje, esquema, { pose, params, animation, time, 
   const defs = definiciones.length ? `<defs>${definiciones.join('')}</defs>` : '';
   const rect = fondo == null ? '' : `<rect data-fondo="" width="${w}" height="${h}" fill="${atributo(fondo)}"/>`;
   // `mostrar`: { id_de_switch: id_de_hijo } para ver una variante sin cambiarla (el editor, al seleccionarla).
-  const ctx = { esqueleto: poseActiva ? evaluarEsqueleto(doc, esquema, poseActiva) : null, deltaPadre: IDENTIDAD, mostrar };
+  // `assets`: src → href de las capas image (el editor da la URL del servidor).
+  const ctx = { esqueleto: poseActiva ? evaluarEsqueleto(doc, esquema, poseActiva) : null, deltaPadre: IDENTIDAD, mostrar, assets };
   const objetos = raiz.filter((o) => DIBUJAR[o.type]).map((o) => nodo(doc, esquema, o, ctx));
   return defs + rect + objetos.join('');
 }

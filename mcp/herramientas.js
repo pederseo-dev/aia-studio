@@ -1,7 +1,10 @@
 // Lógica de las herramientas del MCP, sin el transporte: funciones puras sobre un documento (más el almacén cuando
 // guardan), para poder probarlas sin levantar el servidor. Los textos que devuelven los lee la IA.
 
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { buscar, hijos, huesosDe } from '../src/core/documento.js';
+import { MAXIMO_DE_IMAGEN } from '../src/core/imagenes.js';
 import { evaluarEsqueleto, planEnlazarPorCercania, huesoDe, limitarAngulo, puntaDe, reparentarHueso, repartirEntreHuesos } from '../src/core/esqueleto.js';
 import { aplicar } from '../src/core/geometria.js';
 import { leer, leerMeta, sugerir } from '../src/core/esquema.js';
@@ -26,6 +29,7 @@ export function esquemaDelArbol(doc, esquema, { pistas = true } = {}) {
       // Dibujo de un skeleton que no sigue a ningún hueso: en las poses queda quieto.
       else if (buscar(doc, o.parent)?.type === 'skeleton' && o.type !== 'bone' && !huesoDe(doc, o.id) && !o.vertices?.some((v) => v.bone)) detalle = ' (sin hueso: queda quieto en las poses)';
       if (o.type === 'skeleton') detalle += ` [${huesosDe(doc, o.id).length} huesos]`;
+      if (o.type === 'image') detalle += ` [${leer(esquema, o, 'src')}, ${r(leer(esquema, o, 'width'))}×${r(leer(esquema, o, 'height'))}]`;
       if (o.type === 'pose') detalle = ` [${Object.keys(o.values ?? {}).join(', ') || 'vacía'}]`;
       if (o.type === 'animation') detalle = ` ${resumenDeClip(esquema, o)}`;
       if (o.type === 'switch') {
@@ -183,4 +187,35 @@ export function planVistaPrevia(doc, esquema, { pose, region, bones, params, ani
     vista = `con params ${JSON.stringify(valores)} (poses: ${pesos.join(', ') || 'ninguna'})`;
   }
   return { svg, ancho: 600, texto: `${tamaño}, ${doc.objects.length} objetos, ${vista}.` };
+}
+
+// ---------- add_image ----------
+
+/**
+ * Bytes y nombre de un archivo de imagen para add_image: una ruta local (absoluta) o una URL http(s). Lanza si no se
+ * puede leer o pasa del máximo; si es una imagen válida lo decide después el almacén (leerImagen).
+ * @param {{ path?: string, url?: string }} origen
+ * @returns {Promise<{ bytes: Uint8Array, nombre: string }>}
+ */
+export async function bytesDeImagen({ path: ruta, url }) {
+  if (!!ruta === !!url) throw new Error('Give exactly one of path (a local file) or url');
+  if (ruta) {
+    if (!path.isAbsolute(ruta)) throw new Error(`path must be absolute (received "${ruta}")`);
+    const info = await fs.stat(ruta).catch(() => null);
+    if (!info?.isFile()) throw new Error(`No file at "${ruta}"`);
+    if (info.size > MAXIMO_DE_IMAGEN) throw new Error(`The image is too big (${Math.round(info.size / 1048576)} MB; at most ${MAXIMO_DE_IMAGEN / 1048576} MB)`);
+    return { bytes: new Uint8Array(await fs.readFile(ruta)), nombre: path.basename(ruta) };
+  }
+  let direccion;
+  try {
+    direccion = new URL(url);
+  } catch {
+    throw new Error(`Invalid url "${url}"`);
+  }
+  if (!['http:', 'https:'].includes(direccion.protocol)) throw new Error('url must be http or https');
+  const respuesta = await fetch(direccion, { signal: AbortSignal.timeout(30000) });
+  if (!respuesta.ok) throw new Error(`Couldn't download ${url}: HTTP ${respuesta.status}`);
+  if (Number(respuesta.headers.get('content-length')) > MAXIMO_DE_IMAGEN) throw new Error(`The image is too big (at most ${MAXIMO_DE_IMAGEN / 1048576} MB)`);
+  const bytes = new Uint8Array(await respuesta.arrayBuffer());
+  return { bytes, nombre: decodeURIComponent(direccion.pathname.split('/').pop() || 'image') };
 }

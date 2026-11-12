@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { ErrorDeValidacion, crearDocumento, validar } from '../src/core/documento.js';
 import { migrarEscenasConParams } from '../src/core/migracion.js';
 import { aplicarOperaciones } from '../src/core/operaciones.js';
+import { ARCHIVO_DE_ASSET } from '../src/core/esquema.js';
+import { FORMATOS_DE_IMAGEN, assetsUsados, leerImagen, mimeDeAsset, nombreDeAsset, nombreLibre } from '../src/core/imagenes.js';
 
 export const CARPETA_PERSONAJES = fileURLToPath(new URL('../personajes/', import.meta.url));
 const ID_DOCUMENTO = /^[a-z][a-z0-9_-]*$/;
@@ -136,6 +138,31 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
     if (!ID_DOCUMENTO.test(id ?? '')) throw new Error(`id de documento inválido "${id}": minúsculas, números, _ y -`);
     return path.join(carpeta, id, archivo);
   };
+
+  // Archivos de las capas image: personajes/<id>/assets/<src>. No entran en el historial (deshacer quita la capa, no
+  // el archivo).
+  const rutaAsset = (id, src) => {
+    if (!ARCHIVO_DE_ASSET.test(src ?? '')) throw new Error(`Invalid asset name "${src}"`);
+    return ruta(id, path.join('assets', src));
+  };
+  const existe = (archivo) => fs.access(archivo).then(() => true, () => false);
+
+  async function listarAssets(id) {
+    try {
+      return (await fs.readdir(path.dirname(rutaAsset(id, 'x.png')))).filter((a) => ARCHIVO_DE_ASSET.test(a)).sort();
+    } catch (e) {
+      if (e.code === 'ENOENT') return [];
+      throw e;
+    }
+  }
+
+  /** Avisos de capas image del lote cuyo archivo no está en assets/. */
+  async function avisosDeAssets(id, doc, ops) {
+    const tocados = new Set(ops.filter((o) => o.op === 'create' || o.op === 'set').map((o) => o.op === 'create' ? o.id : o.target));
+    const faltan = [];
+    for (const o of doc.objects) if (o.type === 'image' && tocados.has(o.id) && !(await existe(rutaAsset(id, o.src ?? 'missing.png')))) faltan.push(`${o.id} (${o.src ?? 'missing.png'})`);
+    return faltan.length ? [`Image file not found in the document's assets: ${faltan.join(', ')}. Add the file with add_image (or the editor's Image option); until then the layer draws nothing.`] : [];
+  }
 
   async function leer(id) {
     let doc;
@@ -303,6 +330,8 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
         const { errores } = validar(doc, esquema);
         if (errores.length) throw new ErrorDeValidacion(errores);
         await fs.mkdir(path.dirname(ruta(id, 'documento.json')), { recursive: true });
+        // La copia lleva también los archivos de sus imágenes.
+        if (copiarDe && (await listarAssets(copiarDe)).length) await fs.cp(path.dirname(rutaAsset(copiarDe, 'x.png')), path.dirname(rutaAsset(id, 'x.png')), { recursive: true });
         await escribir(id, doc);
         await registrar(id, { origen, tipo: 'crear', nota: nota ?? 'document created', ops: [], inversas: [] });
         return doc;
@@ -314,7 +343,7 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
         const { doc, inversas, avisos } = aplicarOperaciones(await leer(id), ops, esquema);
         await escribir(id, doc);
         await registrar(id, { origen, tipo: 'cambio', nota: nota || `${ops.length} ${ops.length === 1 ? 'change' : 'changes'}`, ops, inversas });
-        return { doc, avisos };
+        return { doc, avisos: [...avisos, ...(await avisosDeAssets(id, doc, ops))] };
       }),
 
     /** Borra el documento y su historial. No se puede deshacer. */
@@ -323,6 +352,51 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
         await leer(id);
         await fs.rm(path.dirname(ruta(id, 'documento.json')), { recursive: true });
       }),
+
+    /**
+     * Guarda un archivo de imagen en assets/ y devuelve { src, ancho, alto, formato, reusado }. El nombre sale del
+     * original; si ya hay un archivo con los mismos bytes, se reusa ese, y si el nombre está ocupado por otro, se le
+     * agrega _2, _3...
+     * @param {string} id @param {string} original @param {Uint8Array} bytes
+     */
+    guardarAsset: (id, original, bytes) =>
+      enFila(async () => {
+        await leer(id);
+        const { formato, ancho, alto } = leerImagen(bytes);
+        const igual = async (src) => Buffer.from(bytes).equals(await fs.readFile(rutaAsset(id, src)));
+        for (const src of await listarAssets(id)) if (mimeDeAsset(src) === FORMATOS_DE_IMAGEN[formato].mime && (await igual(src))) return { src, ancho, alto, formato, reusado: true };
+        const ocupados = new Set(await listarAssets(id));
+        const src = nombreLibre(nombreDeAsset(original, formato), (n) => ocupados.has(n));
+        await fs.mkdir(path.dirname(rutaAsset(id, src)), { recursive: true });
+        await fs.writeFile(rutaAsset(id, src), bytes);
+        return { src, ancho, alto, formato, reusado: false };
+      }),
+
+    /** Bytes y tipo MIME de un asset. */
+    async leerAsset(id, src) {
+      try {
+        return { bytes: await fs.readFile(rutaAsset(id, src)), mime: mimeDeAsset(src) };
+      } catch (e) {
+        if (e.code === 'ENOENT') throw new Error(`The document "${id}" has no asset "${src}"`);
+        throw e;
+      }
+    },
+
+    listarAssets,
+
+    /** Los archivos de las imágenes que usa el documento (src → bytes), para dibujarlo fuera del navegador. */
+    async imagenesDe(id, doc) {
+      const mapa = new Map();
+      for (const src of assetsUsados(doc)) {
+        if (!ARCHIVO_DE_ASSET.test(src)) continue;
+        try {
+          mapa.set(src, await fs.readFile(rutaAsset(id, src)));
+        } catch (e) {
+          if (e.code !== 'ENOENT') throw e;
+        }
+      }
+      return mapa;
+    },
 
     deshacer: (id, origen) => enFila(() => revertir(id, origen, 'deshacer')),
     rehacer: (id, origen) => enFila(() => revertir(id, origen, 'rehacer')),

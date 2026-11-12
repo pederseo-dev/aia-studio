@@ -7,6 +7,7 @@ import { FORMATO } from './formato.js';
 function rango(p) {
   if (p.type === 'enum') return p.values.join(' \\| ');
   if (p.type === 'ref' && p.refTypes) return `id de ${p.refTypes.join(' o ')}`;
+  if (p.type === 'asset') return 'archivo de assets/';
   if (p.min == null && p.max == null) return '';
   return `${p.min ?? '−∞'} … ${p.max ?? '∞'}`;
 }
@@ -107,6 +108,33 @@ polares (ángulo en grados con Y hacia abajo: 0 = derecha, 90 = abajo; distancia
 \`angle\`/\`outAngle\` es la dirección de la tangente que sale hacia el vértice siguiente; la de entrada apunta hacia
 el anterior (en mirrored y asymmetric es \`angle + 180\`). Para retocar un vértice suelto puedes leer \`vertices\`,
 cambiar ese elemento y reenviar la lista completa con \`set\`.
+
+## Imágenes (\`image\`)
+
+Una capa \`image\` dibuja un archivo PNG, JPG, WebP o SVG (el SVG entero, sin poder editar sus formas; para formas
+editables, el usuario tiene Import SVG en el editor). El archivo vive en la carpeta \`assets/\` del documento y \`src\`
+es su nombre.
+
+- **Agregar:** \`add_image\` con \`path\` (ruta absoluta de un archivo que te indicó el usuario) o \`url\`. Copia el
+  archivo a \`assets/\` y crea la capa centrada en el lienzo, de su tamaño natural (achicada si no entra), o donde y del
+  tamaño que digas (\`x\`, \`y\`, \`width\` o \`height\`; con uno solo, el otro va en proporción). Devuelve la vista previa.
+- **Reusar un archivo** que ya está en \`assets/\` (por ejemplo, la misma imagen dos veces): \`create\` con \`apply_ops\` y
+  su \`src\`. Un \`src\` que no está en \`assets/\` se acepta pero no se dibuja, y apply_ops avisa.
+- Se comporta como cualquier capa: está centrada en \`x\`/\`y\` (\`originX\`/\`originY\` mueven el pivote), va dentro de
+  grupos, switches y skeletons, se pega a un hueso con \`bone\` y en poses y clips se animan su posición, giro, escala,
+  \`opacity\`, \`visible\`, \`width\` y \`height\`. \`width\`/\`height\` la estiran: para no deformarla, cámbialos en
+  proporción o usa \`scaleX\`/\`scaleY\`.
+- Para cambiar de imagen en una animación (bocas, ojos dibujados), pon una \`image\` por variante dentro de un
+  \`switch\`.
+- Deshacer quita la capa, pero el archivo queda en \`assets/\`.
+- En \`render_preview\` una imagen WebP sale como un recuadro gris con una cruz (en su lugar y tamaño): esa vista
+  no sabe dibujar WebP. El usuario la ve bien. PNG, JPG y SVG se ven tal cual.
+
+\`\`\`json
+[
+  { "op": "create", "type": "image", "id": "sun_copy", "props": { "src": "sun.png", "x": 600, "y": 120, "width": 80, "height": 80, "opacity": 0.6 } }
+]
+\`\`\`
 
 ## Estilos y degradados (recursos)
 

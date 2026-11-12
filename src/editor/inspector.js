@@ -10,10 +10,11 @@ import { valoresDeHueso } from '../core/esqueleto.js';
 import { origenDelValor, valorEfectivo } from '../core/estilos.js';
 import { clipAbierto, nombreDeEdicion, opsDePose, poseActiva } from './edicion.js';
 import { ejecutar, esquema, estado, fijar, previsualizar, seleccionar, suscribir } from './estado.js';
+import { reemplazarImagen, soloImagenes, tamanoNatural, urlDeAsset } from './imagenes.js';
 
-const ORDEN_DE_GRUPOS = ['General', 'Forma', 'Transformación', 'Apariencia', 'Degradado', 'Lienzo', 'Tiempo'];
+const ORDEN_DE_GRUPOS = ['General', 'Imagen', 'Forma', 'Transformación', 'Apariencia', 'Degradado', 'Lienzo', 'Tiempo'];
 // Nombres de grupo del esquema, como se muestran (el esquema sigue en español).
-const NOMBRES_DE_GRUPO = { General: 'General', Forma: 'Shape', Transformación: 'Transform', Apariencia: 'Appearance', Degradado: 'Gradient', Lienzo: 'Canvas', Tiempo: 'Time', Driver: 'Driver', Esqueleto: 'Skeleton', Hueso: 'Bone', Límites: 'Limits', Parámetro: 'Parameter', Pose: 'Pose', Switch: 'Switch', Tramo: 'Range', Otros: 'Other' };
+const NOMBRES_DE_GRUPO = { General: 'General', Imagen: 'Image', Forma: 'Shape', Transformación: 'Transform', Apariencia: 'Appearance', Degradado: 'Gradient', Lienzo: 'Canvas', Tiempo: 'Time', Driver: 'Driver', Esqueleto: 'Skeleton', Hueso: 'Bone', Límites: 'Limits', Parámetro: 'Parameter', Pose: 'Pose', Switch: 'Switch', Tramo: 'Range', Otros: 'Other' };
 const PARES = { x: 'y', scaleX: 'scaleY', width: 'height', originX: 'originY', x1: 'y1', x2: 'y2', cx: 'cy' };
 // En una fila de par, el nombre de la fila va en la columna de etiquetas y cada mitad lleva solo su letra (como Rive).
 const NOMBRES_DE_PAR = { x: 'Position', scaleX: 'Scale', width: 'Size', originX: 'Pivot', x1: 'Start', x2: 'End', cx: 'Center' };
@@ -386,6 +387,29 @@ const CONTROLES = {
     agregar.addEventListener('click', () => confirmar([...valor, { offset: 1, color: valor.at(-1)?.color ?? '#ffffff' }].sort((a, b) => a.offset - b.offset)));
     lista.append(agregar);
     return lista;
+  },
+
+  // El archivo de una capa image: miniatura, nombre, cambiarlo por otro y volver a su tamaño natural.
+  asset({ valor, objetivo }) {
+    const caja = document.createElement('div');
+    caja.className = 'campo-asset';
+    const miniatura = Object.assign(document.createElement('img'), { src: urlDeAsset(valor), alt: '' });
+    miniatura.addEventListener('error', () => caja.classList.add('falta'), { once: true });
+    const nombre = Object.assign(document.createElement('span'), { className: 'nombre-asset', textContent: valor, title: `${valor} (missing from the document's assets if crossed out)` });
+    const archivo = Object.assign(document.createElement('input'), { type: 'file', hidden: true, accept: 'image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg' });
+    archivo.addEventListener('change', () => {
+      const [elegido] = soloImagenes(archivo.files);
+      if (elegido) reemplazarImagen(objetivo, elegido);
+    });
+    const cambiar = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Replace…', title: 'Use another image file (keeps the width)' });
+    cambiar.addEventListener('click', () => archivo.click());
+    const natural = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Original size', title: 'Set width and height to the file’s own size' });
+    natural.addEventListener('click', () => tamanoNatural(objetivo));
+    const botones = document.createElement('div');
+    botones.className = 'botones-asset';
+    botones.append(cambiar, natural);
+    caja.append(miniatura, nombre, botones, archivo);
+    return caja;
   },
 
   ref({ p, valor, confirmar, objetivo }) {

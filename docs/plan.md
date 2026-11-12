@@ -331,11 +331,29 @@ app con un LLM, el LLM decide el estado).
 
 **Prueba con IA:** comportamiento de asistente (reposo, escuchando, pensando, hablando, reacción).
 
+## Imágenes como capa ✅ (2026-11-12)
+
+- ✅ Tipo `image` (`schema/image.json`): `src` (tipo de propiedad nuevo `asset`: el nombre de un archivo de la carpeta
+  `assets/` del documento), `width`/`height` animables, pivote `originX`/`originY` como `rect` y `pixelated`. Hereda
+  posición, giro, escala, opacidad, `visible` y `bone`: va en grupos, switches y skeletons, se pega a huesos y se anima
+  en poses y clips. Para cambiar de imagen, un `switch` con una por variante.
+- ✅ Archivos en `personajes/<doc>/assets/` (no embebidos: el JSON y el historial quedan livianos). PNG, JPG, WebP y SVG
+  (entero, sin editar sus formas; para formas editables sigue Import SVG). Tamaño leído de la cabecera en
+  `src/core/imagenes.js`; los mismos bytes se reusan y un nombre ocupado lleva `_2`. Deshacer quita la capa, no el
+  archivo. Copiar un documento copia sus assets. El servidor los sirve en `/api/documentos/<id>/assets/<archivo>`
+  (los SVG con CSP) y los recibe por POST.
+- ✅ Un solo plan para crear la capa (`planAgregarImagen`): centrada, de tamaño natural o achicada para entrar.
+- ✅ Editor: **Image…** en el menú de capas (junto a Group, Switch y Skeleton, como en Moho), soltar archivos sobre el
+  lienzo o pegarlos con Ctrl+V; en el inspector, miniatura, **Replace…** y **Original size**.
+- ✅ MCP: `add_image` (ruta local o URL) y `render_preview` con las imágenes. resvg no lee WebP: en la vista previa de
+  la IA una WebP sale como un recuadro gris con una cruz y el texto lo dice. Guía al día.
+
 ## Fase 7: exportación y uso
 
 - **Prioridad: `.aia` + runtime JS** (`src/core` + `src/render`, sin dependencias) con manifiesto para la IA de la
   app: params, clips de Puppet con su ficha y estados → herramientas para el LLM. Ver
-  [decision-animacion.md §5](decision-animacion.md).
+  [decision-animacion.md §5](decision-animacion.md). El `.aia` lleva también los archivos de `assets/` y el runtime
+  recibe cómo resolver el `src` de cada imagen (la opción `assets` de `contenidoSvg`).
 - **Video** (mp4/webm/gif, PNG por cuadro) muestreando el mismo evaluador con resvg y ffmpeg.
 - **Lottie y SVG/CSS**: pistas simples directas; huesos y mezclas horneados cuadro a cuadro.
 - Demo: un avatar en una página, controlado por un LLM, con lip-sync desde el audio.
@@ -349,5 +367,5 @@ elastic/bounce/«a dos». Detalle en [decision-animacion.md §7](decision-animac
 ## Después
 
 Deformación por pesos (máximo 4 huesos por vértice), IK de dos huesos, constraints de copiar transformación con
-factor y retardo, dinámica secundaria, morph entre formas con igual número de vértices, imágenes rígidas por hueso y
-mallas de imagen en una capa canvas.
+factor y retardo, dinámica secundaria, morph entre formas con igual número de vértices y mallas de imagen (una imagen que se
+deforma con varios huesos) en una capa canvas.

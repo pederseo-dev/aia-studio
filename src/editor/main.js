@@ -9,6 +9,7 @@ import { avisarSueltos, enlazarPorCercania, motivoParaNoEnlazar, soltarAlMover }
 import { montarHistorial } from './historial.js';
 import { FLECHA, ICONOS } from './iconos.js';
 import { operacionesDeImportar } from './importar.js';
+import { agregarImagenes, soloImagenes } from './imagenes.js';
 import { montarInspector } from './inspector.js';
 import { montarLienzo } from './lienzo.js';
 import { montarOpciones } from './opciones.js';
@@ -353,6 +354,7 @@ const CONTENEDORES = {
   group: () => (estado.seleccionados.length > 1 ? agruparSeleccion() : nuevoGrupo()),
   switch: () => nuevoSwitch(),
   skeleton: () => nuevoEsqueleto(),
+  image: () => $('#archivo-imagen').click(),
 };
 $('#nuevo-grupo').addEventListener('click', (e) => alternarMenu($('#crear-grupo .menu'), e.currentTarget));
 $('#crear-grupo .menu').addEventListener('click', (e) => {
@@ -364,6 +366,18 @@ $('#crear-grupo .menu').addEventListener('click', (e) => {
 $('#duplicar').addEventListener('click', duplicarSeleccion);
 $('#nuevo-estilo').addEventListener('click', () => nuevoRecurso('style', 'style', { fill: '#c8c2d4', stroke: '#2b2135' }));
 $('#nuevo-degradado').addEventListener('click', () => nuevoRecurso('linear_gradient', 'gradient'));
+$('#archivo-imagen').addEventListener('change', (e) => {
+  const archivos = soloImagenes(e.target.files);
+  e.target.value = '';
+  agregarImagenes(archivos);
+});
+// Pegar una imagen (Ctrl+V) la agrega como capa, salvo que se esté escribiendo en un campo.
+document.addEventListener('paste', (e) => {
+  const archivos = soloImagenes(e.clipboardData?.files);
+  if (!archivos.length || !estado.doc || (/** @type {Element} */ (e.target)).closest?.('input, textarea, [contenteditable]')) return;
+  e.preventDefault();
+  agregarImagenes(archivos);
+});
 $('#archivo-svg').addEventListener('change', async (e) => {
   const archivo = e.target.files[0];
   e.target.value = '';

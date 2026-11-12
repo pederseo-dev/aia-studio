@@ -12,11 +12,12 @@ import { guiaParaIA } from '../src/core/guia.js';
 import { resumirOperaciones } from '../src/core/operaciones.js';
 import { crearAlmacen } from '../servidor/almacen.js';
 import { cargarEsquema } from '../servidor/esquema.js';
-import { svgAPng } from '../servidor/png.js';
+import { SIN_VISTA_PREVIA, svgAPng } from '../servidor/png.js';
 import { NOMBRES_DE_CURVA } from '../src/core/curvas.js';
 import { avisosDeGiro, planDeleteKeys, planMoveKeys, planScaleTime, planSetKeys, resumenDeClip } from './animacion.js';
 import { manifiesto, textoDeManifiesto } from '../src/core/manifiesto.js';
-import { comprobarBorrado, esquemaDelArbol as arbol, planBindByProximity, planBindPoints, planReparentBone, planVistaPrevia, recortesDePose, resumenDeHistorial, textoDeDocumento } from './herramientas.js';
+import { assetsUsados, mimeDeAsset, planAgregarImagen } from '../src/core/imagenes.js';
+import { bytesDeImagen, comprobarBorrado, esquemaDelArbol as arbol,planBindByProximity, planBindPoints, planReparentBone, planVistaPrevia, recortesDePose, resumenDeHistorial, textoDeDocumento } from './herramientas.js';
 
 const esquema = cargarEsquema();
 const almacen = crearAlmacen({ esquema });
@@ -200,17 +201,57 @@ const region = z
   .describe('recorte del documento, en sus coordenadas (para ver un detalle de cerca)');
 
 /** PNG del documento (posado, animado, en vivo o recortado) como resultado de herramienta: el SVG y el texto salen del plan. */
-function vistaPrevia(doc, opciones, encabezado) {
+async function vistaPrevia(id, doc, opciones, encabezado) {
   const { svg, ancho, texto: resumen } = planVistaPrevia(doc, esquema, opciones);
-  const png = svgAPng(svg, opciones.width ?? ancho);
+  // Las capas image se dibujan con los archivos de assets/; las que no lo tienen no se ven y se avisa.
+  const imagenes = await almacen.imagenesDe(id, doc);
+  const faltan = assetsUsados(doc).filter((src) => !imagenes.has(src));
+  const png = svgAPng(svg, opciones.width ?? ancho, imagenes);
+  const sinVista = [...imagenes.keys()].filter((src) => SIN_VISTA_PREVIA.has(mimeDeAsset(src)));
+  let nota = faltan.length ? `\nFaltan en assets/ (esas capas image no se ven): ${faltan.join(', ')}. Agrégalas con add_image.` : '';
+  if (sinVista.length) nota += `\n${sinVista.join(', ')}: WebP, que esta vista previa no sabe dibujar; sale como un recuadro gris con una cruz en su lugar y tamaño (el usuario la ve bien en el editor).`;
   return {
     content: [
       { type: 'image', data: Buffer.from(png).toString('base64'), mimeType: 'image/png' },
-      { type: 'text', text: encabezado ? `${encabezado}
-${resumen}` : resumen },
+      { type: 'text', text: (encabezado ? `${encabezado}\n${resumen}` : resumen) + nota },
     ],
   };
 }
+
+servidor.registerTool(
+  'add_image',
+  {
+    description:
+      'Agrega una imagen (PNG, JPG, WebP o SVG) como capa: copia el archivo a la carpeta assets/ del documento y crea ' +
+      'un objeto image que lo usa, y devuelve cómo se ve. Por defecto va centrada en el lienzo, de su tamaño natural ' +
+      '(achicada si no entra). Un SVG entra como imagen entera (sus formas no se editan). Para usar otra vez un ' +
+      'archivo que ya está en assets/, crea el image con apply_ops y su src.',
+    inputSchema: {
+      id,
+      path: z.string().optional().describe('ruta absoluta de un archivo local que indicó el usuario'),
+      url: z.string().optional().describe('o una URL http(s) de la imagen'),
+      layer: z.string().optional().describe('id de la capa nueva (por defecto, sale del nombre del archivo)'),
+      parent: z.string().nullable().optional().describe('contenedor padre (group, switch o skeleton); omitido = raíz'),
+      index: z.number().int().optional().describe('posición entre hermanos: 0 = al fondo; omitido = al frente'),
+      x: z.number().optional().describe('x del centro (del pivote), relativa al padre; por defecto, el centro del lienzo'),
+      y: z.number().optional().describe('y del centro, relativa al padre'),
+      width: z.number().positive().optional().describe('ancho en px; solo width = alto en proporción'),
+      height: z.number().positive().optional().describe('alto en px; solo height = ancho en proporción'),
+      props: props.optional().describe('otras propiedades de la capa, por ejemplo { "opacity": 0.5, "originY": 1 }'),
+      note: z.string().optional().describe('qué es, para el historial'),
+    },
+  },
+  seguro(async ({ id, path, url, layer, parent, index, x, y, width, height, props: extra, note }) => {
+    const { bytes, nombre } = await bytesDeImagen({ path, url });
+    const { src, ancho, alto, formato, reusado } = await almacen.guardarAsset(id, nombre, bytes);
+    const { id: capa, ops } = planAgregarImagen(await almacen.leer(id), esquema, { src, ancho, alto, id: layer, parent: parent ?? null, index, x, y, width, height });
+    if (extra) Object.assign(ops[0].props, extra);
+    const { doc, avisos } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `add image ${capa}` });
+    const o = buscar(doc, capa);
+    const archivo = `${src} (${formato.toUpperCase()}, ${ancho}×${alto} px${reusado ? ', ya estaba en assets/' : ''})`;
+    return vistaPrevia(id, doc, {}, `Capa image "${capa}" con ${archivo}: x ${o.x}, y ${o.y}, ${o.width}×${o.height}.${avisos.length ? `\nAvisos: ${avisos.join('; ')}` : ''}`);
+  }),
+);
 
 servidor.registerTool(
   'render_preview',
@@ -250,7 +291,7 @@ servidor.registerTool(
       auto: z.boolean().optional().describe('con live: false apaga las capas auto (parpadeo, respiración) para comparar'),
     },
   },
-  seguro(async ({ id, ...opciones }) => vistaPrevia(await almacen.leer(id), opciones)),
+  seguro(async ({ id, ...opciones }) => vistaPrevia(id, await almacen.leer(id), opciones)),
 );
 
 servidor.registerTool(
@@ -356,7 +397,7 @@ servidor.registerTool(
     const guardada = buscar(doc, pose).values;
     const lista = Object.entries(guardada).map(([h, c]) => `${h} ${JSON.stringify(c, (k, v) => (k === 'vertices' ? `(${v.length} vértices)` : v))}`).join(', ') || 'vacía';
     const notas = [...avisos, ...recortesDePose(doc, esquema, guardada)];
-    return vistaPrevia(doc, { width, pose, bones: show_bones }, `Pose "${pose}": ${lista}.${notas.length ? `\nAvisos: ${notas.join('; ')}` : ''}`);
+    return vistaPrevia(id, doc, { width, pose, bones: show_bones }, `Pose "${pose}": ${lista}.${notas.length ? `\nAvisos: ${notas.join('; ')}` : ''}`);
   }),
 );
 
@@ -419,7 +460,7 @@ servidor.registerTool(
     if (plan.alargadaDesde != null) notas.push(`duration pasó de ${plan.alargadaDesde} a ${plan.duracion} s para que entren los keyframes`);
     notas.push(...avisosDeGiro(doc, esquema, buscar(doc, animation)));
     // La vista del clip ya lista qué poses mueve cada param animado (planVistaDeClip).
-    return vistaPrevia(doc, { width, animation, bones: show_bones }, notas.length ? `Avisos: ${notas.join('; ')}` : '');
+    return vistaPrevia(id, doc, { width, animation, bones: show_bones }, notas.length ? `Avisos: ${notas.join('; ')}` : '');
   }),
 );
 
@@ -465,7 +506,7 @@ servidor.registerTool(
   seguro(async ({ id, animation, from, to, targets, note, width }) => {
     const { ops, movidas } = planMoveKeys(await almacen.leer(id), esquema, animation, { from, to, targets });
     const { doc } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `move keys in ${animation} ${from} → ${to} s` });
-    return vistaPrevia(doc, { width, animation }, `Movidos de ${from} a ${to} s: ${movidas.join(', ')}.`);
+    return vistaPrevia(id, doc, { width, animation }, `Movidos de ${from} a ${to} s: ${movidas.join(', ')}.`);
   }),
 );
 
@@ -491,7 +532,7 @@ servidor.registerTool(
     const plan = planScaleTime(await almacen.leer(id), esquema, animation, { duration, factor, from, to });
     const tramo = from == null && to == null ? '' : ` (tramo ${plan.desde}…${plan.hasta} s → ${plan.largo} s)`;
     const { doc } = await almacen.operar(id, plan.ops, { origen: ORIGEN, nota: note ?? `scale time of ${animation}: ${plan.antes} → ${plan.duracion} s` });
-    return vistaPrevia(doc, { width, animation }, `${animation}: ${plan.antes} → ${plan.duracion} s${tramo}.`);
+    return vistaPrevia(id, doc, { width, animation }, `${animation}: ${plan.antes} → ${plan.duracion} s${tramo}.`);
   }),
 );
 

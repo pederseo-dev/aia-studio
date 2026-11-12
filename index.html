@@ -62,6 +62,7 @@
         </div>
       </div>
       <input id="archivo-svg" type="file" accept=".svg,image/svg+xml" hidden />
+      <input id="archivo-imagen" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg" multiple hidden />
     </header>
 
     <dialog id="dialogo-abrir">
@@ -100,6 +101,7 @@
         <tr><td><kbd>G</kbd></td><td>New empty group</td></tr>
         <tr><td><kbd>Shift+G</kbd></td><td>Switch: wraps the selection as variants (no selection: an empty one)</td></tr>
         <tr><th colspan="2">Skeleton</th></tr>
+        <tr><td>Drop or <kbd>Ctrl+V</kbd> an image</td><td>New image layer (PNG, JPG, WebP, SVG)</td></tr>
         <tr><td><kbd>B</kbd></td><td>Bone: drag on empty space to create (child of the selected one; from its tip, chained), drag a bone to rotate it</td></tr>
         <tr><td><kbd>Ctrl+B</kbd></td><td>Bind the selection to the selected bone (no bone: unbind)</td></tr>
         <tr><td>In a pose</td><td>Dragging a bone or its bound artwork rotates the bone; a free shape gets the move, rotate and scale handles. In a clip, it's keyed at the playhead</td></tr>
@@ -127,11 +129,12 @@
         <div class="cabecera">
           <h2><button id="plegar-capas" type="button" class="plegar-seccion" aria-expanded="true" aria-controls="arbol" title="Collapse or expand the layers">Layers<span data-flecha></span></button></h2>
           <div id="crear-grupo" class="grupo-herramientas desplegable">
-            <button id="nuevo-grupo" type="button" class="principal icono" aria-haspopup="menu" aria-expanded="false" title="New group, switch or skeleton" aria-label="New container" data-icono="carpetaMas"></button>
+            <button id="nuevo-grupo" type="button" class="principal icono" aria-haspopup="menu" aria-expanded="false" title="New group, switch, skeleton or image layer" aria-label="New layer" data-icono="carpetaMas"></button>
             <div class="menu" role="menu" hidden>
               <button type="button" role="menuitem" data-tipo="group" title="Container: its children move together. With several selected, groups them"><span class="con-icono" data-icono="group">Group</span><kbd>G</kbd></button>
               <button type="button" role="menuitem" data-tipo="switch" title="Group that shows one child at a time (mouths, visemes). With something selected, wraps it as variants"><span class="con-icono" data-icono="switch">Switch</span><kbd>Shift+G</kbd></button>
               <button type="button" role="menuitem" data-tipo="skeleton" title="Bone layer (as in Moho): holds the bones and the drawing they move. With something selected, wraps it"><span class="con-icono" data-icono="skeleton">Skeleton</span><kbd>K</kbd></button>
+              <button type="button" role="menuitem" data-tipo="image" title="Image layer from a PNG, JPG, WebP or SVG file (kept whole; to edit an SVG’s shapes use Import SVG). You can also drop or paste images on the canvas"><span class="con-icono" data-icono="image">Image…</span></button>
             </div>
           </div>
           <button id="duplicar" type="button" class="icono" title="Duplicate selection with its children (Ctrl+D)" data-icono="duplicar"></button>

@@ -5,7 +5,8 @@ import { buscar } from '../core/documento.js';
 import { leerMeta } from '../core/esquema.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
 import { contenidoSvg } from '../render/svg.js';
-import { docVisible, ejecutar, esquema, estado, fijar, idLibre, padreParaNuevo, seleccionar, suscribir } from './estado.js';
+import { avisar, docVisible, ejecutar, esquema, estado, fijar, idLibre, padreParaNuevo, seleccionar, suscribir } from './estado.js';
+import { agregarImagenes, soloImagenes, urlDeAsset } from './imagenes.js';
 import { crearArtboard } from './artboard.js';
 import { crearHuesos } from './huesos.js';
 import { clipAbierto, variantesAMostrar } from './edicion.js';
@@ -73,6 +74,20 @@ export function montarLienzo(contenedor) {
     if ('id' in c && estado.doc && ajustadoPara !== estado.id) ajustar();
   });
 
+  // Soltar imágenes sobre el lienzo: una capa image por archivo, donde se soltó.
+  vista.addEventListener('dragover', (e) => {
+    if (!estado.doc || !e.dataTransfer?.types.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+  vista.addEventListener('drop', (e) => {
+    const archivos = soloImagenes(e.dataTransfer?.files);
+    if (!estado.doc || !e.dataTransfer?.types.includes('Files')) return;
+    e.preventDefault();
+    if (!archivos.length) return avisar('Only PNG, JPG, WebP or SVG images can be dropped here.', true);
+    agregarImagenes(archivos, aplicar(invertir(ctx.matrizCamara()), ...ctx.puntoPantalla(e)));
+  });
+
   new ResizeObserver(() => estado.doc && (ajustadoPara === estado.id ? aplicarCamara() : ajustar())).observe(contenedor);
 
   // ---------- Dibujo ----------
@@ -95,7 +110,7 @@ export function montarLienzo(contenedor) {
     const vista = estado.vivo ? { pose: estado.poseViva } : clip ? { animation: clip.id, time: estado.tiempo, params: estado.params ?? {} } : estado.pose ? { pose: estado.pose } : estado.params ? { params: estado.params } : {};
     const mostrar = estado.vivo || (estado.params && !estado.pose) ? {} : variantesAMostrar(doc);
     mostrando = JSON.stringify(mostrar);
-    documentoG.innerHTML = `${contenidoSvg(doc, esquema, { ...vista, mostrar })}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
+    documentoG.innerHTML = `${contenidoSvg(doc, esquema, { ...vista, mostrar, assets: (src) => urlDeAsset(src) })}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
     dibujarSuperposicion();
   }
 

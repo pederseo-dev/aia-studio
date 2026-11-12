@@ -43,11 +43,13 @@ export const ICONOS = {
   param: trazo('<path d="M4 12h16"/><circle cx="14" cy="12" r="2.5" fill="currentColor"/>'),
   driver: trazo('<path d="M4 17c4 0 4-10 8-10s4 10 8 10"/><circle cx="12" cy="7" r="1.3" fill="currentColor"/>'),
   animation: trazo('<path d="M4 19h16"/><path d="M9 6v8l6-4z"/>'),
+  // Marco con una montaña y un sol: la capa de imagen.
+  image: trazo('<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><path d="m3.5 16.5 5-5 4 4 2.5-2.5 5.5 5"/><circle cx="15.5" cy="9.5" r="1.5"/>'),
 };
 
 // Ícono de cada tipo de objeto, para la jerarquía y los recursos.
 export const ICONO_DE_TIPO = {
-  group: ICONOS.group, switch: ICONOS.switch, skeleton: ICONOS.skeleton, rect: ICONOS.rect, ellipse: ICONOS.ellipse, path: ICONOS.path,
+  group: ICONOS.group, switch: ICONOS.switch, skeleton: ICONOS.skeleton, rect: ICONOS.rect, ellipse: ICONOS.ellipse, path: ICONOS.path, image: ICONOS.image,
   bone: ICONOS.hueso, style: ICONOS.estilo, linear_gradient: ICONOS.degradado, radial_gradient: ICONOS.radial,
   pose: ICONOS.pose, param: ICONOS.param, driver: ICONOS.driver, animation: ICONOS.animation,
 };

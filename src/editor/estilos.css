@@ -365,6 +365,18 @@ body.capas-plegado #plegar-capas .ico-flecha { transform: rotate(-90deg); }
 .campo .color label { color: var(--suave); font-size: 12px; white-space: nowrap; }
 .campo .color.vertices span { flex: 1; min-width: 0; color: var(--suave); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .campo .color.vertices button { white-space: nowrap; flex: none; }
+/* Archivo de una capa image: miniatura con damero (para ver la transparencia), nombre y botones */
+.campo-asset { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 2px 6px; align-items: center; }
+.campo-asset img {
+  grid-row: span 2; width: 44px; height: 44px; object-fit: contain; border: 1px solid var(--borde); border-radius: 3px;
+  background: repeating-conic-gradient(#8882 0 25%, transparent 0 50%) 0 0 / 10px 10px;
+}
+.campo-asset .nombre-asset { color: var(--suave); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.campo-asset.falta .nombre-asset { text-decoration: line-through; color: var(--error); }
+.campo-asset .botones-asset { display: flex; flex-wrap: wrap; gap: 4px; }
+.campo-asset .botones-asset button { white-space: nowrap; padding-inline: 6px; }
+/* El archivo no vuelve «a su valor por defecto»: se cambia con Replace… */
+#inspector .campo:has(.campo-asset) .restablecer { visibility: hidden; }
 .campo.por-defecto input:not([type=checkbox]):not([type=color]), .campo.por-defecto select { color: var(--tenue); }
 .campo .restablecer { border: none; background: none; padding: 0; color: var(--suave); visibility: hidden; }
 .campo:not(.por-defecto) .restablecer { visibility: visible; }

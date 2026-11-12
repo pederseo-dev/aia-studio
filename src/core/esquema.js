@@ -4,9 +4,11 @@
 import { MISMO_TIEMPO, errorDeCurva } from './curvas.js';
 import { erroresDeVertice } from './trazado.js';
 
-const TIPOS_DE_PROPIEDAD = new Set(['number', 'string', 'strings', 'boolean', 'color', 'enum', 'ref', 'vertices', 'stops', 'pose', 'tracks']);
+const TIPOS_DE_PROPIEDAD = new Set(['number', 'string', 'strings', 'boolean', 'color', 'enum', 'ref', 'asset', 'vertices', 'stops', 'pose', 'tracks']);
 const ID_DE_POSE = /^[a-z][a-z0-9_]*$/;
 const COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+// Nombre de un archivo de la carpeta assets/ del documento (ver src/core/imagenes.js): sin carpetas ni rarezas.
+export const ARCHIVO_DE_ASSET = /^[a-z0-9][a-z0-9_.-]*\.(png|jpg|jpeg|webp|svg)$/;
 
 /** @param {object[]} defs contenido de schema/*.json */
 export function crearEsquema(defs) {
@@ -72,6 +74,8 @@ export function validarValor(p, valor) {
       return p.values.includes(valor) ? null : `debe ser uno de: ${p.values.join(', ')}`;
     case 'ref':
       return typeof valor === 'string' ? null : 'debe ser el id de un objeto';
+    case 'asset':
+      return typeof valor === 'string' && ARCHIVO_DE_ASSET.test(valor) ? null : `must be the file name of an asset of the document, like "sun.png" (lowercase; .png, .jpg, .webp or .svg; received ${JSON.stringify(valor)})`;
     case 'vertices': {
       if (!Array.isArray(valor)) return 'debe ser una lista de vértices';
       const errores = valor.flatMap((v, i) => erroresDeVertice(v).map((e) => `[${i}] ${e}`));

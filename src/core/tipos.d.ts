@@ -38,6 +38,8 @@ export interface OpcionesDeVista {
   times?: number[];
   poses?: any[];
   mostrar?: any;
+  /** src de una capa image → href con que se dibuja (el editor: la URL del servidor). */
+  assets?: (src: string) => string;
   region?: { x: number; y: number; width: number; height: number };
   huesos?: boolean;
   columnas?: number;

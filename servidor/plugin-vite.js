@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { CARPETA_PERSONAJES, crearAlmacen } from './almacen.js';
 import { cargarEsquema } from './esquema.js';
+import { MAXIMO_DE_IMAGEN } from '../src/core/imagenes.js';
 
 const ORIGEN = 'user';
 
@@ -14,10 +15,31 @@ function responder(res, estado, datos) {
   res.end(JSON.stringify(datos));
 }
 
+async function leerBytes(req) {
+  const trozos = [];
+  let total = 0;
+  for await (const trozo of req) {
+    total += trozo.length;
+    if (total > MAXIMO_DE_IMAGEN) throw new Error(`The image is too big (at most ${MAXIMO_DE_IMAGEN / 1048576} MB)`);
+    trozos.push(trozo);
+  }
+  return new Uint8Array(Buffer.concat(trozos));
+}
+
 async function leerCuerpo(req) {
   let texto = '';
   for await (const trozo of req) texto += trozo;
   return JSON.parse(texto || '{}');
+}
+
+function servirAsset(res, { bytes, mime }) {
+  res.statusCode = 200;
+  res.setHeader('Content-Type', mime);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'no-cache');
+  // Un SVG abierto suelto no puede correr scripts ni cargar nada de afuera (dentro de <image> ya no puede).
+  if (mime === 'image/svg+xml') res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
+  res.end(bytes);
 }
 
 export function aiaDocumentos() {
@@ -30,6 +52,13 @@ export function aiaDocumentos() {
         try {
           const [id, accion, ...resto] = req.url.split('?')[0].split('/').filter(Boolean).map(decodeURIComponent);
           const metodo = req.method;
+          // Imágenes: GET /api/documentos/<id>/assets/<archivo> lo sirve; POST /api/documentos/<id>/assets?name=<original>
+          // con los bytes en el cuerpo lo guarda y devuelve { src, ancho, alto, formato, reusado }.
+          if (accion === 'assets' && metodo === 'GET' && resto.length === 1) return servirAsset(res, await almacen.leerAsset(id, resto[0]));
+          if (accion === 'assets' && metodo === 'POST' && !resto.length) {
+            const original = new URL(req.url, 'http://x').searchParams.get('name') ?? 'image';
+            return responder(res, 200, await almacen.guardarAsset(id, original, await leerBytes(req)));
+          }
           if (resto.length) return responder(res, 404, { error: 'Ruta desconocida' });
 
           if (!id && metodo === 'GET') return responder(res, 200, await almacen.listar());
