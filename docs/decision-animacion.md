@@ -266,6 +266,7 @@ mezclan poses**. Se acordó (como las listas de animaciones e inputs de Rive y l
 - **El inspector también se pliega**, en todos los modos (flecha del título «Inspector»; se recuerda). Se probó poner
   Clips, Parameters y Poses en una columna propia al lado del inspector y el usuario prefirió volver atrás: con el
   inspector plegable, cada uno decide cuánto lugar le da a cada cosa.
-- **Orden y aspecto** (también pedido del usuario): Clips → Poses → Parameters → Inspector; cada cabecera con + y 🗑
-  como Layers y un fondo más oscuro para que se vea dónde empieza cada sección. Cada param en tres líneas: nombre y
+- **Orden y aspecto** (también pedido del usuario): Clips → Poses → Parameters → Inspector; cada cabecera de Puppet con + y 🗑
+  como Layers y un fondo más oscuro para que se vea dónde empieza cada sección (el inspector no: es el mismo en todos los
+  modos). Cada param en tres líneas: nombre y
   valor; el deslizador a todo el ancho; las poses que mezcla con su peso y un + para conectar otra.

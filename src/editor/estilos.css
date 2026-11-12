@@ -537,9 +537,9 @@ dialog.manifiesto form { display: flex; justify-content: flex-end; }
 #cartel.cartel-vivo b { color: var(--vivo); }
 #seccion-parametros > .cabecera { position: sticky; top: 0; z-index: 1; background: var(--panel); }
 
-/* Contraste entre Clips, Poses, Parameters e Inspector: cada cabecera con fondo más oscuro y una línea gruesa arriba,
+/* Contraste entre Clips, Poses y Parameters (el inspector queda como en los otros modos): cada cabecera con fondo más oscuro y una línea gruesa arriba,
    para ver dónde empieza y termina cada sección aunque estén todas abiertas. */
-#panel-derecho .seccion-puppet > .cabecera, #seccion-inspector > .cabecera { background: var(--fondo); border-top: 2px solid var(--borde); border-bottom: 1px solid var(--borde); }
+#panel-derecho .seccion-puppet > .cabecera { background: var(--fondo); border-top: 2px solid var(--borde); border-bottom: 1px solid var(--borde); }
 #panel-derecho .seccion-puppet:first-child > .cabecera { border-top: none; }
-#panel-derecho .seccion-puppet .cabecera h2, #seccion-inspector .cabecera h2 { color: var(--texto); }
+#panel-derecho .seccion-puppet .cabecera h2 { color: var(--texto); }
 #panel-derecho .seccion-puppet { border-bottom: none; }
