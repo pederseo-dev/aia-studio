@@ -168,25 +168,28 @@
         <section id="clips" class="seccion-puppet" data-plegable="clips" hidden>
           <div class="cabecera">
             <h2><button type="button" class="plegar-seccion" aria-expanded="true" title="Collapse or expand the clips">Clips<span data-flecha></span></button></h2>
-            <button id="ver-manifiesto" type="button" title="Manifest: what the app’s AI will know about this puppet (parameters, clips, what each one overrides, problems)">AI view</button>
+            <button id="ver-manifiesto" type="button" title="AI view: what the app’s AI will know about this puppet (parameters, clips, what each one overrides, problems)">AI view</button>
             <button id="live" type="button" class="live" aria-pressed="false">▶ Live</button>
-            <button id="nuevo-clip" type="button" title="New clip: a short animation the app or its AI triggers (wave, blink, idle)">＋ Clip</button>
+            <button id="nuevo-clip" type="button" class="icono" title="New clip: a short animation the app or its AI triggers (wave, blink, idle)" aria-label="New clip" data-icono="agregar"></button>
+            <button id="borrar-clip" type="button" class="icono" title="Delete the selected or open clip (undo brings it back)" aria-label="Delete clip" data-icono="borrar" disabled></button>
           </div>
           <div id="lista-clips"></div>
-        </section>
-        <section id="seccion-parametros" class="seccion-puppet" data-plegable="parametros" hidden>
-          <div class="cabecera">
-            <h2><button type="button" class="plegar-seccion" aria-expanded="true" title="Collapse or expand the parameters: controls that blend poses">Parameters<span data-flecha></span></button></h2>
-            <button id="nuevo-param" type="button" title="New parameter: a control (happy, turn, mouth…) that blends poses through drivers">＋ Parameter</button>
-          </div>
-          <div id="parametros"></div>
         </section>
         <section id="seccion-poses" class="seccion-puppet" data-plegable="poses" hidden>
           <div class="cabecera">
             <h2><button type="button" class="plegar-seccion" aria-expanded="true" title="Collapse or expand the poses: still shapes of the puppet that parameters blend">Poses<span data-flecha></span></button></h2>
-            <button id="nueva-pose" type="button" title="New pose: a still shape of the puppet (happy, eyes closed, mouth O…) that a parameter can blend in">＋ Pose</button>
+            <button id="nueva-pose" type="button" class="icono" title="New pose: a still shape of the puppet (happy, eyes closed, mouth O…) that a parameter can blend in" aria-label="New pose" data-icono="agregar"></button>
+            <button id="borrar-pose" type="button" class="icono" title="Delete the selected or open pose (undo brings it back)" aria-label="Delete pose" data-icono="borrar" disabled></button>
           </div>
           <div id="lista-poses"></div>
+        </section>
+        <section id="seccion-parametros" class="seccion-puppet" data-plegable="parametros" hidden>
+          <div class="cabecera">
+            <h2><button type="button" class="plegar-seccion" aria-expanded="true" title="Collapse or expand the parameters: controls that blend poses">Parameters<span data-flecha></span></button></h2>
+            <button id="nuevo-param" type="button" class="icono" title="New parameter: a control (happy, turn, mouth…) that blends poses through drivers" aria-label="New parameter" data-icono="agregar"></button>
+            <button id="borrar-param" type="button" class="icono" title="Delete the selected parameter and its drivers (undo brings them back)" aria-label="Delete parameter" data-icono="borrar" disabled></button>
+          </div>
+          <div id="parametros"></div>
         </section>
         <!-- El inspector se pliega con la flecha del título, en todos los modos; se recuerda lo que elija el usuario -->
         <div id="seccion-inspector" class="seccion-plegable" data-plegable="inspector">

@@ -107,7 +107,27 @@ function papelEnVivo(clip) {
   return leer(esquema, clip, 'loop') === 'once' ? 'gesture' : 'base';
 }
 
-export function montarClips(raiz, lista, botonNuevo, botonLive, botonManifiesto) {
+export function montarClips(raiz, lista, botonNuevo, botonLive, botonManifiesto, botonBorrar) {
+  // 🗑 borra el clip de Puppet seleccionado (en Assets) o, si no, el abierto.
+  const elegido = () => {
+    const doc = estado.doc;
+    if (!doc) return null;
+    const esClip = (id) => buscar(doc, id)?.type === 'animation' && leer(esquema, buscar(doc, id), 'usage') === 'puppet';
+    if (esClip(estado.seleccion)) return estado.seleccion;
+    return esClip(estado.pose) ? estado.pose : null;
+  };
+  botonBorrar.addEventListener('click', () => {
+    const id = elegido();
+    if (!id) return;
+    if (estado.pose === id) {
+      detener();
+      fijar({ pose: null, params: estado.params ?? {}, edicion: null, vertice: null });
+    }
+    ejecutar([{ op: 'delete', target: id }], `delete clip ${id}`);
+  });
+  suscribir((c) => {
+    if ('doc' in c || 'seleccion' in c || 'pose' in c || 'vivo' in c) botonBorrar.disabled = !elegido() || estado.vivo;
+  });
   botonNuevo.addEventListener('click', () => nuevoClip('puppet'));
   botonManifiesto.addEventListener('click', mostrarManifiesto);
   botonLive.addEventListener('click', () => {
@@ -132,7 +152,7 @@ export function montarClips(raiz, lista, botonNuevo, botonLive, botonManifiesto)
     if (raiz.hidden) return;
     const clips = doc.objects.filter((o) => o.type === 'animation' && leer(esquema, o, 'usage') === 'puppet');
     if (!clips.length) {
-      lista.innerHTML = '<p class="ayuda">No clips yet. A clip is a short animation the app or its AI triggers (wave, blink, idle). Create one with “＋ Clip”.</p>';
+      lista.innerHTML = '<p class="ayuda">No clips yet. A clip is a short animation the app or its AI triggers (wave, blink, idle). Create one with + above.</p>';
       return;
     }
     lista.replaceChildren(...clips.map((clip) => (estado.vivo ? filaEnVivo(clip) : filaParaEditar(clip))));

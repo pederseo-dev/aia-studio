@@ -31,10 +31,10 @@ montarInspector($('#inspector'));
 montarHistorial($('#entradas'));
 const lienzo = montarLienzo($('#lienzo'));
 montarOpciones($('#opciones'), { ajustesDelProyecto: () => mostrarAjustes(), agrupar: () => agruparSeleccion(), switch: () => nuevoSwitch(), esqueleto: () => nuevoEsqueleto(), enlazar: () => enlazarSeleccion(), enlazarTodo: enlazarPorCercania });
-montarParametros($('#parametros'), $('#nuevo-param'));
+montarParametros($('#parametros'), $('#nuevo-param'), $('#borrar-param'));
 montarModos($('#modos'));
-montarClips($('#clips'), $('#lista-clips'), $('#nuevo-clip'), $('#live'), $('#ver-manifiesto'));
-montarPoses($('#seccion-poses'), $('#lista-poses'), $('#nueva-pose'));
+montarClips($('#clips'), $('#lista-clips'), $('#nuevo-clip'), $('#live'), $('#ver-manifiesto'), $('#borrar-clip'));
+montarPoses($('#seccion-poses'), $('#lista-poses'), $('#nueva-pose'), $('#borrar-pose'));
 montarCartel($('#cartel'));
 
 // Clips, Parameters y Poses (Puppet) se pliegan con la flecha del título; se recuerda lo que elija el usuario.

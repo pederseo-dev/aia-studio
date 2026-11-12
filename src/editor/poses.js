@@ -16,7 +16,23 @@ export function abrirPose(id) {
   fijar({ pose: id, edicion: null, vertice: null, reproduciendo: false });
 }
 
-export function montarPoses(raiz, lista, botonNueva) {
+export function montarPoses(raiz, lista, botonNueva, botonBorrar) {
+  // 🗑 borra la pose seleccionada (en Assets) o, si no, la abierta. Sus drivers quedan sin pose (no mueven nada).
+  const elegida = () => {
+    const doc = estado.doc;
+    if (!doc) return null;
+    if (buscar(doc, estado.seleccion)?.type === 'pose') return estado.seleccion;
+    return buscar(doc, estado.pose)?.type === 'pose' ? estado.pose : null;
+  };
+  botonBorrar.addEventListener('click', () => {
+    const id = elegida();
+    if (!id) return;
+    if (estado.pose === id) fijar({ pose: null, params: estado.params ?? {}, edicion: null, vertice: null });
+    ejecutar([{ op: 'delete', target: id }], `delete pose ${id}`);
+  });
+  suscribir((c) => {
+    if ('doc' in c || 'seleccion' in c || 'pose' in c || 'vivo' in c) botonBorrar.disabled = !elegida() || estado.vivo;
+  });
   botonNueva.addEventListener('click', () => {
     if (!estado.doc) return;
     const base = prompt('Pose name (e.g. happy, eyes_closed, mouth_o):', '')?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
@@ -37,7 +53,7 @@ export function montarPoses(raiz, lista, botonNueva) {
     if (raiz.hidden) return;
     const poses = doc.objects.filter((o) => o.type === 'pose');
     if (!poses.length) {
-      lista.innerHTML = '<p class="ayuda">No poses yet. A pose is a still shape of the puppet (happy, eyes closed, mouth O…). Create one with “＋ Pose”, change it on the canvas, then blend it with a parameter.</p>';
+      lista.innerHTML = '<p class="ayuda">No poses yet. A pose is a still shape of the puppet (happy, eyes closed, mouth O…). Create one with + above, change it on the canvas, then blend it with a parameter.</p>';
       return;
     }
     lista.replaceChildren(
@@ -49,7 +65,7 @@ export function montarPoses(raiz, lista, botonNueva) {
         fila.querySelector('b').textContent = pose.id;
         fila.querySelector('small').textContent = params.length ? `← ${params.join(', ')}` : 'no parameter';
         const objetos = Object.keys(pose.values ?? {});
-        fila.title = `${abierta ? 'Click to stop editing this pose' : 'Click to edit this pose'}. It sets: ${objetos.join(', ') || 'nothing yet'}.${params.length ? ` Blended by: ${params.join(', ')}.` : ' No parameter blends it yet: connect one with “＋ Pose…” under a parameter.'}`;
+        fila.title = `${abierta ? 'Click to stop editing this pose' : 'Click to edit this pose'}. It sets: ${objetos.join(', ') || 'nothing yet'}.${params.length ? ` Blended by: ${params.join(', ')}.` : ' No parameter blends it yet: connect one with + under a parameter.'}`;
         fila.addEventListener('click', () => abrirPose(pose.id));
         return fila;
       }),

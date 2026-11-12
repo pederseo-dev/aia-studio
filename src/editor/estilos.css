@@ -186,19 +186,24 @@ body.recursos-plegado #plegar-recursos .ico-flecha { transform: rotate(-90deg); 
 #linea-de-tiempo { grid-area: tiempo; border-top: 1px solid var(--borde); height: 240px; overflow-y: auto; }
 /* Parameters, a la derecha (Animate y Puppet): nombre y control en una fila, los drivers debajo. */
 #seccion-parametros { flex: 0 1 auto; max-height: 30%; overflow-y: auto; border-bottom: 1px solid var(--borde); }
-#parametros { padding: 4px 8px 6px; display: flex; flex-direction: column; gap: 6px; }
+#parametros { padding: 0 8px 4px; display: flex; flex-direction: column; }
 #parametros > .ayuda { margin: 4px 0; }
-.param { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 4px 8px; align-items: center; }
-.param .drivers { grid-column: 1 / -1; }
-.param .nombre { text-align: left; border-color: transparent; background: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.param.seleccionado .nombre { color: var(--texto); border-color: var(--acento); }
-.param .deslizador { display: flex; align-items: center; gap: 8px; }
-.param .deslizador input { flex: 1; accent-color: var(--params); }
-.param .valor { width: 40px; text-align: right; color: var(--suave); font-variant-numeric: tabular-nums; }
-.param .drivers { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.param .driver { font-size: 12px; padding: 1px 8px; background: linear-gradient(90deg, color-mix(in srgb, var(--params) 30%, transparent) var(--peso), transparent var(--peso)); }
+/* Una fila por param: nombre y valor arriba, el control a todo el ancho y debajo las poses que mezcla (con su peso
+   como una barra). Las filas se separan con una línea fina. */
+.param { display: flex; flex-direction: column; gap: 3px; padding: 5px 0 6px; border-bottom: 1px solid color-mix(in srgb, var(--borde) 70%, transparent); }
+.param:last-child { border-bottom: none; }
+.param .cabeza-param { display: flex; align-items: center; gap: 6px; }
+.param .nombre { flex: 1; min-width: 0; text-align: left; padding: 0 2px; border-color: transparent; background: none; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.param.seleccionado .nombre { color: var(--acento); }
+.param .valor { color: var(--suave); font-variant-numeric: tabular-nums; }
+.param .deslizador { width: 100%; margin: 0; accent-color: var(--params); cursor: pointer; }
+.param .opciones-param { width: 100%; }
+.param .drivers { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.param .driver { font-size: 11px; padding: 0 6px; height: 18px; color: var(--suave); background: linear-gradient(90deg, color-mix(in srgb, var(--params) 30%, transparent) var(--peso), transparent var(--peso)); }
+.param .driver.activo { color: var(--texto); }
 .param .driver.seleccionado { border-color: var(--params); }
-.param .drivers select { font-size: 12px; max-width: 120px; }
+.param .sin-poses { font-size: 11px; color: var(--suave); font-style: italic; }
+.param .conectar { font-size: 11px; height: 18px; width: 34px; padding: 0 2px; }
 #lienzo.modo-params { box-shadow: inset 0 0 0 2px var(--params); }
 
 .cabecera { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--borde); }
@@ -531,3 +536,10 @@ dialog.manifiesto form { display: flex; justify-content: flex-end; }
 #cartel.cartel-vivo { border-color: var(--vivo); }
 #cartel.cartel-vivo b { color: var(--vivo); }
 #seccion-parametros > .cabecera { position: sticky; top: 0; z-index: 1; background: var(--panel); }
+
+/* Contraste entre Clips, Poses, Parameters e Inspector: cada cabecera con fondo más oscuro y una línea gruesa arriba,
+   para ver dónde empieza y termina cada sección aunque estén todas abiertas. */
+#panel-derecho .seccion-puppet > .cabecera, #seccion-inspector > .cabecera { background: var(--fondo); border-top: 2px solid var(--borde); border-bottom: 1px solid var(--borde); }
+#panel-derecho .seccion-puppet:first-child > .cabecera { border-top: none; }
+#panel-derecho .seccion-puppet .cabecera h2, #seccion-inspector .cabecera h2 { color: var(--texto); }
+#panel-derecho .seccion-puppet { border-bottom: none; }
