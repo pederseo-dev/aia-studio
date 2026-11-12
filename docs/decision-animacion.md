@@ -263,3 +263,6 @@ mezclan poses**. Se acordó (como las listas de animaciones e inputs de Rive y l
   el botón para salir: «Editing pose happy · Done», «Editing clip wave at 0.5 s · Close clip», «Previewing
   parameters · Reset» o «● Live · ■ Stop Live» (como el aviso de Moho al editar una acción).
 - Lo que se pliega se recuerda por sección. El MCP no cambia: es solo la interfaz.
+- **El inspector también se pliega**, en todos los modos (flecha del título «Inspector»; se recuerda). Se probó poner
+  Clips, Parameters y Poses en una columna propia al lado del inspector y el usuario prefirió volver atrás: con el
+  inspector plegable, cada uno decide cuánto lugar le da a cada cosa.

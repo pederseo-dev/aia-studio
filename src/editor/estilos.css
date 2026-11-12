@@ -498,10 +498,15 @@ dialog.manifiesto pre { white-space: pre-wrap; font: 12px/1.45 ui-monospace, mon
 dialog.manifiesto form { display: flex; justify-content: flex-end; }
 
 /* Puppet: Clips, Parameters y Poses plegables (la flecha del título); plegada, queda solo la cabecera. */
-.seccion-puppet.plegada > :not(.cabecera) { display: none !important; }
-.seccion-puppet.plegada .plegar-seccion .ico-flecha { transform: rotate(-90deg); }
-.seccion-puppet .cabecera h2 { flex: 1; }
+.seccion-puppet.plegada > :not(.cabecera), .seccion-plegable.plegada > :not(.cabecera) { display: none !important; }
+.seccion-puppet.plegada .plegar-seccion .ico-flecha, .seccion-plegable.plegada .plegar-seccion .ico-flecha { transform: rotate(-90deg); }
+.seccion-puppet .cabecera h2, .seccion-plegable .cabecera h2 { flex: 1; }
 .seccion-puppet.plegada { flex: 0 0 auto; }
+/* El inspector, plegable en todos los modos: abierto ocupa el alto libre; plegado queda su cabecera y, en Puppet,
+   Clips, Parameters y Poses se llevan el resto del alto. */
+#seccion-inspector { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+#seccion-inspector.plegada { flex: 0 0 auto; }
+#panel-derecho:has(#seccion-inspector.plegada) .seccion-puppet { max-height: none; flex: 0 1 auto; min-height: 0; }
 
 /* Poses (Puppet): una fila por pose, como los clips; dice qué params la mezclan. Abierta, en amarillo. */
 #seccion-poses { flex: 0 1 auto; max-height: 22%; overflow-y: auto; border-bottom: 1px solid var(--borde); }

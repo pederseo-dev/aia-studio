@@ -188,7 +188,13 @@
           </div>
           <div id="lista-poses"></div>
         </section>
-        <section id="inspector"></section>
+        <!-- El inspector se pliega con la flecha del título, en todos los modos; se recuerda lo que elija el usuario -->
+        <div id="seccion-inspector" class="seccion-plegable" data-plegable="inspector">
+          <div class="cabecera">
+            <h2><button type="button" class="plegar-seccion" aria-expanded="true" title="Collapse or expand the inspector">Inspector<span data-flecha></span></button></h2>
+          </div>
+          <section id="inspector"></section>
+        </div>
       </aside>
 
       <footer id="linea-de-tiempo" class="panel">
