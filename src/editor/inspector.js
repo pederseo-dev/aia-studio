@@ -4,7 +4,7 @@
 // campos donde los valores difieren se marcan como mixtos (muestran el valor del objeto principal).
 
 import { buscar, esqueletoDe } from '../core/documento.js';
-import { leerMeta, validarValor } from '../core/esquema.js';
+import { leer, leerMeta, validarValor } from '../core/esquema.js';
 import { opsDeTamano } from '../core/tamano.js';
 import { valoresDeHueso } from '../core/esqueleto.js';
 import { origenDelValor, valorEfectivo } from '../core/estilos.js';
@@ -38,7 +38,10 @@ export function montarInspector(raiz) {
     const otros = obj ? estado.seleccionados.map((id) => buscar(doc, id)).filter((o) => o && o.id !== obj.id) : [];
     // Con varios: solo lo que tienen todos (y que se puede editar en bloque).
     const comun = ([prop, p]) => !otros.length || (!['vertices', 'stops'].includes(p.type) && otros.every((o) => esquema.tipos.get(o.type).properties[prop]?.type === p.type));
-    const propiedades = Object.entries(tipo.properties).filter(comun);
+    // Lo de Live es de los clips de Puppet (una escena no se dispara), y la espera del auto, solo con auto repeat.
+    const deLive = ([prop, p]) =>
+      obj?.type !== 'animation' || otros.length || p.group !== 'Live' || (leer(esquema, obj, 'usage') === 'puppet' && (!prop.startsWith('repeat_') || leer(esquema, obj, 'auto') === 'repeat'));
+    const propiedades = Object.entries(tipo.properties).filter(comun).filter(deLive);
     contexto = { otros };
 
     raiz.replaceChildren(otros.length ? tituloVarios(obj, otros) : obj ? titulo(obj, tipo) : Object.assign(document.createElement('h2'), { textContent: 'Artboard' }));
