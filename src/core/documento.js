@@ -31,6 +31,12 @@ export function buscar(doc, id) {
   return doc.objects.find((o) => o.id === id);
 }
 
+/** Si el objeto o alguno de sus padres tiene el candado puesto (`locked`): en el lienzo no se elige ni se mueve. */
+export function bloqueado(doc, id) {
+  for (let o = buscar(doc, id); o; o = o.parent ? buscar(doc, o.parent) : null) if (o.locked) return true;
+  return false;
+}
+
 /** Hijos de un objeto (o de la raíz con null), en orden de dibujo. */
 export function hijos(doc, padre) {
   return doc.objects.filter((o) => (o.parent ?? null) === padre);

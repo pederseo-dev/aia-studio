@@ -18,7 +18,7 @@
 // En el montaje esos ajustes cambian el reposo. Con una pose activa, cualquier herramienta posa: arrastrar un hueso (o
 // el dibujo enlazado a él) lo gira dentro de la pose y el origen lo desplaza.
 
-import { buscar, esqueletoDe } from '../core/documento.js';
+import { bloqueado, buscar, esqueletoDe } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { evaluarEnPose, evaluarEsqueleto, huesoDe, limitarAngulo, marcoDeHijos, motivoParaNoEnlazar, opsParaSoltarAlMover, planEnlazarPorCercania, planReparentarHuesos, valoresDeHueso } from '../core/esqueleto.js';
 import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometria.js';
@@ -350,7 +350,7 @@ export function crearHuesos(ctx) {
     // Formas visibles (no contenedores, como con el clic), con su caja en pantalla; las ocultas miden 0 y quedan afuera.
     const CONTENEDORES = ['group', 'skeleton', 'switch'];
     const formas = !conFormas ? [] : [...ctx.documentoG.querySelectorAll('[data-id]')]
-      .filter((el) => !CONTENEDORES.includes(buscar(doc, el.dataset.id)?.type))
+      .filter((el) => !CONTENEDORES.includes(buscar(doc, el.dataset.id)?.type) && !bloqueado(doc, el.dataset.id))
       .map((el) => {
         const r = el.getBoundingClientRect();
         const [x0, y0] = ctx.puntoPantalla({ clientX: r.left, clientY: r.top });

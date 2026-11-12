@@ -3,7 +3,7 @@
 // En una pose o un clip abierto también sirve para lo que no sigue a un hueso: mover, rotar y escalar se guardan en la
 // pose (en un clip, como keyframes en el playhead) y el montaje no cambia. El pivote solo se mueve en el montaje.
 
-import { buscar, hijos } from '../core/documento.js';
+import { bloqueado, buscar, hijos } from '../core/documento.js';
 import { leer } from '../core/esquema.js';
 import { aplicar, invertir, matrizLocal, matrizMundo, multiplicar } from '../core/geometria.js';
 import { transformarVertices } from '../core/trazado.js';
@@ -112,6 +112,14 @@ export function crearTransformar(ctx) {
 
   function dibujar() {
     if (estado.pose && !estado.seleccionados.every((id) => esLibre(estado.doc, id))) return;
+    // Con candado (elegido desde Layers): se marca, sin manijas.
+    if (estado.seleccionados.some((id) => bloqueado(estado.doc, id))) {
+      for (const id of estado.seleccionados) {
+        const esquinas = esquinasDe(ctx.elemento(id));
+        if (esquinas) ctx.superposicion.append(ctx.crear('polygon', { class: 'seleccion secundaria', points: esquinas.map((p) => p.join(',')).join(' ') }, 'Locked: unlock it in Layers to edit it on the canvas'));
+      }
+      return;
+    }
     if (varios()) return dibujarVarios();
     const el = estado.seleccion && ctx.elemento(estado.seleccion);
     if (!el) return;
@@ -204,7 +212,7 @@ export function crearTransformar(ctx) {
     const marco = ctx.crear('rect', { class: 'recuadro' });
     // Cajas de las formas visibles (no contenedores: se elige lo que se ve, como con el clic).
     const formas = [...ctx.documentoG.querySelectorAll('[data-id]')]
-      .filter((el) => !['group', 'skeleton', 'switch'].includes(buscar(estado.doc, el.dataset.id)?.type))
+      .filter((el) => !['group', 'skeleton', 'switch'].includes(buscar(estado.doc, el.dataset.id)?.type) && !bloqueado(estado.doc, el.dataset.id))
       .map((el) => ({ id: el.dataset.id, caja: envolvente([esquinasDe(el) ?? []]) }))
       .filter((f) => f.caja);
     let movio = false;

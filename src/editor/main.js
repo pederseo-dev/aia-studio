@@ -581,7 +581,7 @@ window.addEventListener('keydown', (e) => {
   if (mod && tecla === 'a') {
     // Todo lo que está en la raíz (sin los recursos).
     e.preventDefault();
-    return seleccionarVarios(hijos(estado.doc, null).filter((o) => !esquema.tipos.get(o.type).resource).map((o) => o.id));
+    return seleccionarVarios(hijos(estado.doc, null).filter((o) => !esquema.tipos.get(o.type).resource && !o.locked).map((o) => o.id));
   }
   if (mod) return;
   if (ATAJOS[tecla]) return fijar({ herramienta: ATAJOS[tecla] });

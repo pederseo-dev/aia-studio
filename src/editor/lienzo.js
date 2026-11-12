@@ -111,6 +111,8 @@ export function montarLienzo(contenedor) {
     const mostrar = estado.vivo || (estado.params && !estado.pose) ? {} : variantesAMostrar(doc);
     mostrando = JSON.stringify(mostrar);
     documentoG.innerHTML = `${contenidoSvg(doc, esquema, { ...vista, mostrar, assets: (src) => urlDeAsset(src) })}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
+    // Con candado: los clics pasan de largo (llegan a lo de abajo), y sus hijos lo heredan.
+    for (const o of doc.objects) if (o.locked) ctx.elemento(o.id)?.style.setProperty('pointer-events', 'none');
     dibujarSuperposicion();
   }
 

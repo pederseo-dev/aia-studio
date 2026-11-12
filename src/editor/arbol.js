@@ -74,6 +74,7 @@ export function montarArbol(raiz, raizRecursos) {
         fila.innerHTML = `<button type="button" class="plegar${tieneHijos ? '' : ' vacio'}" title="${plegado ? 'Expand' : 'Collapse'}" tabindex="-1">${plegado ? '▸' : '▾'}</button>
           <span class="tipo" title="${o.type}">${ICONO_DE_TIPO[o.type] ?? '•'}</span><span class="nombre"></span>${o.bone ? `<span class="enlace">${ICONOS.hueso}</span>` : ''}
           ${o.type === 'switch' ? '<span class="desplegable variante-switch"><button type="button" class="variante" title="Variant shown (in a pose, saved to the pose)"></button><div class="menu" role="menu" hidden></div></span>' : ''}
+          ${conOjo ? `<button type="button" class="candado${o.locked ? ' puesto' : ''}" title="${o.locked ? 'Unlock: pick and edit it on the canvas again' : 'Lock: it can’t be picked or changed on the canvas'}">${o.locked ? ICONOS.candado : ICONOS.candadoAbierto}</button>` : ''}
           ${conOjo ? `<button type="button" class="ojo${visible ? '' : ' oculto'}" title="${visible ? 'Hide' : 'Show'}">${visible ? '◉' : '○'}</button>` : ''}`;
         fila.querySelector('.nombre').textContent = o.id;
         if (o.bone) (/** @type {HTMLElement} */ (fila.querySelector('.enlace'))).title = `Follows bone ${o.bone}`;
@@ -111,6 +112,11 @@ export function montarArbol(raiz, raizRecursos) {
       return elegirVariante(id, item.dataset.variante);
     }
     if (e.target.closest('.variante')) return abrirVariantes(fila, id);
+    if (e.target.closest('.candado')) {
+      const puesto = !!buscar(estado.doc, id)?.locked;
+      ejecutar([puesto ? { op: 'unset', target: id, props: ['locked'] } : { op: 'set', target: id, props: { locked: true } }], `${puesto ? 'unlock' : 'lock'} ${id}`);
+      return;
+    }
     if (e.target.closest('.ojo')) {
       const visible = leer(esquema, buscar(estado.doc, id), 'visible');
       ejecutar([visible ? { op: 'set', target: id, props: { visible: false } } : { op: 'unset', target: id, props: ['visible'] }], `${visible ? 'hide' : 'show'} ${id}`);

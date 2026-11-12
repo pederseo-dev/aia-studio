@@ -241,6 +241,11 @@ body.capas-plegado #plegar-capas .ico-flecha { transform: rotate(-90deg); }
 .fila .nombre input { width: 100%; padding: 0 3px; }
 .fila .ojo { border: none; background: none; padding: 0 2px; color: var(--suave); opacity: 0; }
 .fila:hover .ojo, .fila .ojo.oculto { opacity: 1; }
+/* Candado: aparece al pasar el mouse; puesto, queda a la vista en el color de acento. */
+.fila .candado { border: none; background: none; padding: 0 2px; color: var(--suave); opacity: 0; display: inline-flex; align-items: center; }
+.fila .candado .ico { width: 13px; height: 13px; }
+.fila:hover .candado, .fila .candado.puesto { opacity: 1; }
+.fila .candado.puesto { color: var(--acento); }
 .fila.oculta .nombre { color: var(--tenue); }
 .fila.apagada .nombre { color: var(--tenue); font-style: italic; }
 .fila .variante { border: 1px solid var(--borde); background: var(--panel-2); color: var(--suave); font-size: 11px; padding: 0 6px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
