@@ -10,8 +10,9 @@ and keyframe is within its reach, and it checks its own work with rendered previ
 can see it live and change absolutely all of it by hand. A person can also start from scratch, but the tool was
 designed the other way around: so the AI has complete control, and the human can always take over.
 
-It takes the rigging ideas of **Moho** (bone layers, smart bones, switch layers) and the runtime ideas of **Rive**
-(clips, live playback, a declarative runtime), and is built with HTML, CSS, JS and SVG.
+It takes the rigging ideas of **Moho** (bone layers, smart bones, switch layers), the runtime ideas of **Rive**
+(clips, a declarative runtime) and the live puppet ideas of **Adobe Character Animator** (triggers, gestures over a
+base, automatic blinking and breathing), and is built with HTML, CSS, JS and SVG.
 
 ## How it works
 
