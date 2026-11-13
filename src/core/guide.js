@@ -1,5 +1,4 @@
-// Guía del formato para la IA, generada desde el esquema: si se agrega un tipo o una propiedad, la guía se actualiza
-// sola.
+// Format guide for the AI, generated from the schema: if a type or a property is added, the guide updates itself.
 
 import { CURVE_DESCRIPTIONS } from './curves.js';
 import { FORMAT } from './format.js';

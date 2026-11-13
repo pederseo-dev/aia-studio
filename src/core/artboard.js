@@ -1,9 +1,9 @@
-// Cambiar el tamaño del lienzo (artboard) con el dibujo anclado al centro, como en Moho: el lienzo crece o se achica
-// por igual a cada lado y lo dibujado queda en el mismo lugar respecto del centro.
+// Resize the canvas (artboard) with the drawing anchored at the center, like in Moho: the canvas grows or shrinks
+// equally on each side and what is drawn stays in the same place relative to the center.
 //
-// El origen del documento es la esquina de arriba a la izquierda, así que mantener el centro es mover todo lo que
-// está en la raíz media diferencia de tamaño. Los valores de x/y de esos objetos en las poses y en las pistas de los
-// clips son absolutos, así que se mueven igual. Lo que está dentro de un contenedor se mueve con él.
+// The document origin is the top-left corner, so keeping the center means moving everything at the root by half
+// the size difference. The x/y values of those objects in poses and in clip tracks are absolute, so they move the
+// same. What is inside a container moves with it.
 
 import { children } from './document.js';
 import { read, readMeta } from './schema.js';
@@ -11,9 +11,9 @@ import { read, readMeta } from './schema.js';
 const round = (v) => Math.round(v * 1000) / 1000;
 
 /**
- * Operaciones para llevar el lienzo a `ancho` × `alto` con el dibujo centrado. Sin cambio de tamaño, solo fija
- * width/height (nada que mover). `corrimiento` ([dx, dy]) mueve el dibujo esa cantidad en vez de centrarlo (Fit to
- * content lo usa para llevar el contenido al medio del lienzo nuevo).
+ * Operations to bring the canvas to `width` × `height` with the drawing centered. Without a size change, it only
+ * sets width/height (nothing to move). `offset` ([dx, dy]) moves the drawing by that amount instead of centering it
+ * (Fit to content uses it to bring the content to the middle of the new canvas).
  */
 export function artboardOps(doc, schema, width, height, offset = null) {
   const [dx, dy] = (offset ?? [(width - readMeta(schema, doc, 'width')) / 2, (height - readMeta(schema, doc, 'height')) / 2]).map(round);
@@ -21,7 +21,7 @@ export function artboardOps(doc, schema, width, height, offset = null) {
   const ops = [{ op: 'set', target: 'meta', props: { width: width, height: height } }];
   if (!dx && !dy) return ops;
 
-  // Lo que hay que mover: los objetos de la raíz con posición (los recursos y los params no tienen).
+  // What has to move: the root objects with a position (assets and params have none).
   const root = children(doc, null).filter((o) => {
     const props = schema.types.get(o.type)?.properties;
     return props?.x?.type === 'number' && props?.y?.type === 'number';
@@ -32,7 +32,7 @@ export function artboardOps(doc, schema, width, height, offset = null) {
 
   for (const o of root) ops.push({ op: 'set', target: o.id, props: { x: shifted('x', read(schema, o, 'x')), y: shifted('y', read(schema, o, 'y')) } });
 
-  // Poses y clips: los x/y guardados de esos objetos (valores absolutos, como en el montaje).
+  // Poses and clips: the saved x/y of those objects (absolute values, as in the setup).
   for (const o of doc.objects) {
     for (const [prop, p] of Object.entries(schema.types.get(o.type)?.properties ?? {})) {
       const value = o[prop];

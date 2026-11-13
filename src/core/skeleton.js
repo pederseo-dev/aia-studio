@@ -1,25 +1,25 @@
-// Esqueleto: dónde está cada hueso en el montaje y en una pose, y cuánto mueve la pose a lo que está enlazado.
+// Skeleton: where each bone is in the setup and in a pose, and how much the pose moves what is bound to it.
 //
-// Como en Moho, los huesos viven en un `skeleton` (la capa de huesos), que también contiene el dibujo que mueven. Los
-// huesos raíz nacen en el marco del skeleton: si el skeleton se mueve, gira o escala, el esqueleto entero va con él.
-// El dibujo solo se enlaza a huesos de su skeleton.
+// As in Moho, bones live in a `skeleton` (the bone layer), which also contains the drawing they move. Root bones
+// are born in the skeleton's frame: if the skeleton moves, rotates or scales, the whole skeleton goes with it.
+// The drawing is only bound to bones of its skeleton.
 //
-// El montaje (los valores guardados en cada `bone`) es la pose de reposo, como el frame 0 de Moho. Una `pose`
-// reemplaza algunos valores de algunos huesos. Un objeto con `bone` sigue al hueso según su "delta": la matriz que
-// lleva al hueso de su lugar en el montaje a su lugar en la pose. En el montaje el delta es la identidad, así que
-// enlazar no mueve nada; recién al posar, el dibujo acompaña.
+// The setup (the values saved in each `bone`) is the rest pose, like Moho's frame 0. A `pose` replaces some values
+// of some bones. An object with `bone` follows the bone according to its "delta": the matrix that takes the bone
+// from its place in the setup to its place in the pose. In the setup the delta is the identity, so binding moves
+// nothing; only when posing does the drawing follow.
 
 import { findObject, skeletonOf, children, bonesOf, subtree } from './document.js';
 import { read } from './schema.js';
 import { IDENTITY, apply, invert, worldMatrix, multiply } from './geometry.js';
 import { applyPose } from './blend.js';
-// operaciones.js también importa este archivo: el ciclo es seguro porque solo se usan funciones, al llamarlas.
+// operations.js also imports this file: the cycle is safe because only functions are used, when called.
 import { applyOperations } from './operations.js';
 import { tangents } from './paths.js';
 
 export const POSE_FIELDS = ['x', 'y', 'rotation', 'scaleX', 'scaleY'];
 
-/** translate · rotate · scale a partir de valores sueltos. */
+/** translate · rotate · scale from separate values. */
 /** @param {Record<string, any>} values x, y, rotation, scaleX, scaleY */
 function matrix({ x, y, rotation, scaleX, scaleY }) {
   const r = (rotation * Math.PI) / 180;
@@ -28,7 +28,7 @@ function matrix({ x, y, rotation, scaleX, scaleY }) {
   return [c * scaleX, s * scaleX, -s * scaleY, c * scaleY, x, y];
 }
 
-/** Rotación limitada por minAngle / maxAngle del hueso. */
+/** Rotation limited by the bone's minAngle / maxAngle. */
 export function limitAngle(schema, bone, rotation) {
   const min = read(schema, bone, 'minAngle');
   const max = read(schema, bone, 'maxAngle');
@@ -37,7 +37,7 @@ export function limitAngle(schema, bone, rotation) {
   return rotation;
 }
 
-/** Valores de un hueso: los del montaje, con lo que fije la pose encima (la rotación, dentro de sus límites). */
+/** Values of a bone: the setup ones, with what the pose sets on top (the rotation, within its limits). */
 export function boneValues(schema, bone, pose) {
   const v = Object.fromEntries(POSE_FIELDS.map((k) => [k, read(schema, bone, k)]));
   const fixed = pose?.values?.[bone.id];
@@ -49,18 +49,18 @@ export function boneValues(schema, bone, pose) {
 }
 
 /**
- * Evalúa todos los esqueletos del documento. `pose` es un objeto pose (o null = el montaje). Devuelve, por id de
- * hueso, su matriz de mundo (en coordenadas del documento) en el montaje (`reposo`), en la pose (`posado`) y el
- * `delta` entre las dos.
+ * Evaluates all the skeletons of the document. `pose` is a pose object (or null = the setup). Returns, by bone id,
+ * its world matrix (in document coordinates) in the setup (`rest`), in the pose (`posed`) and the `delta` between
+ * the two.
  *
- * El marco de un hueso raíz es el de su skeleton. Si el skeleton está enlazado a un hueso de otro skeleton que lo
- * contiene, en la pose ese marco también se mueve con el delta de aquel hueso.
+ * The frame of a root bone is that of its skeleton. If the skeleton is bound to a bone of another skeleton that
+ * contains it, in the pose that frame also moves with the delta of that bone.
  */
 export function evaluateSkeleton(doc, schema, pose = null) {
   const bones = doc.objects.filter((o) => o.type === 'bone');
   const rest = new Map();
   const posed = pose ? new Map() : rest;
-  // Marco de los huesos raíz: el del skeleton (o el documento, para un hueso suelto de un documento sin migrar).
+  // Frame of the root bones: the skeleton's (or the document, for a loose bone of an unmigrated document).
   const rootFrame = (skeleton, withPose, resolve) => {
     if (!skeleton) return IDENTITY;
     const frame = worldMatrix(doc, schema, skeleton.id);
@@ -69,7 +69,7 @@ export function evaluateSkeleton(doc, schema, pose = null) {
     return multiply(multiply(resolve(findObject(doc, external)), invert(rest.get(external))), frame);
   };
   const compute = (world, withPose) => {
-    // Padres antes que hijos, aunque la lista plana no venga en ese orden.
+    // Parents before children, even if the flat list does not come in that order.
     const resolve = (h) => {
       if (world.has(h.id)) return world.get(h.id);
       const v = boneValues(schema, h, withPose ? pose : null);
@@ -77,7 +77,7 @@ export function evaluateSkeleton(doc, schema, pose = null) {
       let m;
       if (parent?.type !== 'bone') m = multiply(rootFrame(parent, withPose, resolve), matrix(v));
       else if (read(schema, h, 'independentAngle')) {
-        // Ángulo independiente: toma solo la posición del padre.
+        // Independent angle: it takes only the parent's position.
         const [x, y] = apply(resolve(parent), v.x, v.y);
         m = matrix({ ...v, x, y });
       } else m = multiply(resolve(parent), matrix(v));
@@ -93,31 +93,31 @@ export function evaluateSkeleton(doc, schema, pose = null) {
 }
 
 /**
- * Como evaluarEsqueleto, pero con los valores de la pose aplicados también a lo que no es hueso (el skeleton o sus
- * grupos de arriba que la pose mueva): es lo que se ve. `reposo` queda en el marco posado del skeleton.
+ * Like evaluateSkeleton, but with the pose values also applied to what is not a bone (the skeleton or its groups
+ * above that the pose moves): it is what is seen. `rest` stays in the skeleton's posed frame.
  */
 export function evaluateInPose(doc, schema, pose = null) {
   return evaluateSkeleton(pose ? applyPose(doc, schema, pose) : doc, schema, pose);
 }
 
-/** Hueso que mueve a un objeto: el suyo o, si no tiene, el de su padre más cercano que tenga uno. */
+/** Bone that moves an object: its own or, if it has none, that of its nearest parent that has one. */
 export function boneOf(doc, id) {
   for (let o = findObject(doc, id); o; o = findObject(doc, o.parent)) if (o.bone) return o.bone;
   return null;
 }
 
-/** Delta que la pose le aplica a un objeto (identidad si no sigue a ningún hueso). */
+/** Delta the pose applies to an object (identity if it does not follow any bone). */
 export function deltaOf(doc, skeleton, id) {
   const bone = boneOf(doc, id);
   return (bone && skeleton.delta.get(bone)) || IDENTITY;
 }
 
-/** Punta de un hueso (en coordenadas del documento) según una matriz de mundo. */
+/** Tip of a bone (in document coordinates) according to a world matrix. */
 export function tipOf(schema, bone, world) {
   return apply(world, read(schema, bone, 'length'), 0);
 }
 
-/** Marco en el que nacen los hijos de `padreId` (un hueso o un skeleton), en el montaje y en coordenadas del documento. */
+/** Frame where the children of `parentId` (a bone or a skeleton) are born, in the setup and in document coordinates. */
 export function childFrame(doc, schema, parentId) {
   const parent = parentId && findObject(doc, parentId);
   if (!parent) return IDENTITY;
@@ -125,7 +125,7 @@ export function childFrame(doc, schema, parentId) {
   return worldMatrix(doc, schema, parent.id);
 }
 
-/** Distancia de un punto al segmento de un hueso (origen → punta), en coordenadas del documento. */
+/** Distance from a point to the segment of a bone (origin → tip), in document coordinates. */
 function distanceToBone([px, py], [ax, ay], [bx, by]) {
   const [dx, dy] = [bx - ax, by - ay];
   const l2 = dx * dx + dy * dy;
@@ -135,7 +135,7 @@ function distanceToBone([px, py], [ax, ay], [bx, by]) {
 
 const segment = (schema, h, world) => ({ id: h.id, a: apply(world.get(h.id), 0, 0), b: tipOf(schema, h, world.get(h.id)) });
 
-/** El segmento (hueso) más cercano a un punto. */
+/** The segment (bone) nearest to a point. */
 const nearest = (segments, p) =>
   segments.reduce(
     (best, s) => {
@@ -146,8 +146,8 @@ const nearest = (segments, p) =>
   );
 
 /**
- * Enlace por punto automático: cada vértice del path pasa a seguir al hueso más cercano (en el montaje) de los
- * indicados, o de todos los de su skeleton. Devuelve los vértices nuevos.
+ * Automatic per-point binding: each vertex of the path follows the nearest bone (in the setup) among the given ones,
+ * or among all those of its skeleton. Returns the new vertices.
  */
 export function distributeBetweenBones(doc, schema, pathId, ids = null) {
   const path = findObject(doc, pathId);
@@ -167,8 +167,9 @@ export function distributeBetweenBones(doc, schema, pathId, ids = null) {
 }
 
 /**
- * Caja (en coordenadas del documento, en el montaje) de un objeto de dibujo y sus hijos: [minX, minY, maxX, maxY], o
- * null si no dibuja nada. Es aproximada para las curvas (usa anclas y tangentes), que alcanza para elegir un hueso.
+ * Box (in document coordinates, in the setup) of a drawing object and its children: [minX, minY, maxX, maxY], or
+ * null if it draws nothing. It is approximate for curves (it uses anchors and tangents), which is enough to choose a
+ * bone.
  */
 export function boxOf(doc, schema, id) {
   const box = [Infinity, Infinity, -Infinity, -Infinity];
@@ -200,18 +201,18 @@ export function boxOf(doc, schema, id) {
   return box[0] <= box[2] ? box : null;
 }
 
-/** ¿`ancestro` contiene a `id` (a cualquier profundidad)? */
+/** Does `ancestor` contain `id` (at any depth)? */
 function insideOf(doc, id, ancestor) {
   for (let o = findObject(doc, findObject(doc, id)?.parent); o; o = findObject(doc, o.parent)) if (o.id === ancestor) return true;
   return false;
 }
 
 /**
- * «Bind all by proximity»: el dibujo del skeleton que todavía no sigue a ningún hueso se enlaza (por capa) al hueso
- * más cercano al centro de su caja. Se enlazan las piezas más grandes que se pueda: un grupo (o switch, o skeleton
- * anidado) sin nada enlazado adentro va entero; si adentro ya hay algo enlazado, se baja a sus hijos para no cambiar
- * lo que ya estaba decidido. No se tocan lo que ya tiene hueso propio ni los paths enlazados por punto.
- * Devuelve [{ id, bone }] en orden de la lista.
+ * «Bind all by proximity»: the skeleton's drawing that does not follow any bone yet is bound (per layer) to the bone
+ * nearest to the center of its box. The largest possible pieces are bound: a group (or switch, or nested skeleton)
+ * with nothing bound inside goes whole; if there is already something bound inside, it goes down to its children so
+ * as not to change what was already decided. What already has its own bone and paths bound per point are not
+ * touched. Returns [{ id, bone }] in list order.
  */
 export function bindingsByProximity(doc, schema, skeletonId) {
   const skeleton = findObject(doc, skeletonId);
@@ -240,8 +241,8 @@ export function bindingsByProximity(doc, schema, skeletonId) {
 }
 
 /**
- * Enlaces que dejaron de valer porque el objeto cambió de skeleton (por ejemplo, al sacar un dibujo del skeleton):
- * el lote que los suelta (un unset de bone, o los vértices sin ese bone).
+ * Bindings that stopped being valid because the object changed skeleton (for example, when taking a drawing out of
+ * the skeleton): the batch that releases them (an unset of bone, or the vertices without that bone).
  */
 export function releaseForeignBindings(doc, schema) {
   const ops = [];
@@ -260,7 +261,7 @@ export function releaseForeignBindings(doc, schema) {
 
 const r4 = (v) => Math.round(v * 1e4) / 1e4 || 0;
 
-/** Matriz de mundo de un hueso con estos valores, colgado de `marco` (con ángulo independiente, solo la posición). */
+/** World matrix of a bone with these values, hanging from `frame` (with independent angle, only the position). */
 function worldFromValues(v, frame, independent) {
   const local = matrix(v);
   if (!independent) return multiply(frame, local);
@@ -268,24 +269,25 @@ function worldFromValues(v, frame, independent) {
   return [...local.slice(0, 4), x, y];
 }
 
-/** Valores (x, y, rotation, scaleX, scaleY) que dejan al hueso con esa matriz de mundo, colgado de `marco`. */
+/** Values (x, y, rotation, scaleX, scaleY) that leave the bone with that world matrix, hanging from `frame`. */
 function valuesFromWorld(world, frame, independent) {
   const [x, y] = apply(invert(frame), world[4], world[5]);
   const [a, b, c, d] = independent ? world : multiply(invert([...frame.slice(0, 4), 0, 0]), [...world.slice(0, 4), 0, 0]);
   const scaleX = Math.hypot(a, b);
   const scaleY = (a * d - b * c) / (scaleX || 1);
-  // Con un marco que deforma (escala desigual y giro), el hueso no se puede expresar sin torcerlo.
+  // With a distorting frame (unequal scale and rotation), the bone cannot be expressed without twisting it.
   if (Math.abs(a * c + b * d) > 1e-6 * Math.max(1, scaleX * Math.abs(scaleY))) return null;
   return { x: r4(x), y: r4(y), rotation: r4((Math.atan2(b, a) * 180) / Math.PI), scaleX: r4(scaleX), scaleY: r4(scaleY) };
 }
 
 /**
- * Lote para cambiar el padre de un hueso (otro hueso del mismo skeleton, o el skeleton para dejarlo como raíz) sin
- * que se mueva en el montaje: sus valores se recalculan en el marco nuevo, y los que fijan las poses también (con el
- * mismo cambio de marco del montaje). Sus hijos lo siguen como siempre.
+ * Batch to change the parent of a bone (another bone of the same skeleton, or the skeleton to make it a root) without
+ * it moving in the setup: its values are recomputed in the new frame, and those set by the poses too (with the same
+ * frame change as the setup). Its children follow it as always.
  *
- * En una pose que mueve al padre viejo (o a un ancestro que el padre nuevo no comparte), o al padre nuevo, el hueso
- * sí cambia de lugar: ahora sigue a otro. `reparentarHueso` dice en qué poses pasa y puede compensarlas.
+ * In a pose that moves the old parent (or an ancestor the new parent does not share), or the new parent, the bone
+ * does change place: it now follows another one. `reparentBone` says in which poses that happens and can compensate
+ * them.
  */
 export function opsToReparent(doc, schema, boneId, parentId) {
   const bone = findObject(doc, boneId);
@@ -315,7 +317,7 @@ export function opsToReparent(doc, schema, boneId, parentId) {
   const created = convert(setup);
   const props = { x: created.x, y: created.y, rotation: created.rotation };
   for (const k of ['scaleX', 'scaleY']) if (bone[k] !== undefined || Math.abs(created[k] - 1) > 1e-4) props[k] = created[k];
-  // Los límites de ángulo usan la misma referencia que rotation.
+  // The angle limits use the same reference as rotation.
   const rotation = created.rotation - setup.rotation;
   for (const k of ['minAngle', 'maxAngle']) if (bone[k] != null && rotation) props[k] = r4(bone[k] + rotation);
   /** @type {import('./types.js').Operation[]} */
@@ -332,9 +334,9 @@ export function opsToReparent(doc, schema, boneId, parentId) {
 }
 
 /**
- * Azúcar para crear o mover huesos con coordenadas del documento: `from` (origen) y `to` (punta), como [x, y].
- * Devuelve las props con x, y, rotation y length calculados en el marco del padre (el hueso padre o, para un hueso
- * raíz, el skeleton).
+ * Sugar for creating or moving bones with document coordinates: `from` (origin) and `to` (tip), as [x, y].
+ * Returns the props with x, y, rotation and length computed in the parent's frame (the parent bone or, for a root
+ * bone, the skeleton).
  */
 export function expandFromTo(doc, schema, parentId, props, current = {}) {
   if (props?.from === undefined && props?.to === undefined) return props;
@@ -352,14 +354,14 @@ export function expandFromTo(doc, schema, parentId, props, current = {}) {
   const root = parentObj?.type !== 'bone';
   const r1 = (v) => Math.round(v * 10) / 10 || 0;
   const output = { ...rest };
-  // Origen actual en el documento, si solo se da `to`.
+  // Current origin in the document, if only `to` is given.
   /** @type {import('./types.js').Point} */
   const localOrigin = from !== undefined ? apply(invert(parent), ...point('from')) : [values.x ?? 0, values.y ?? 0];
   if (from !== undefined) [output.x, output.y] = localOrigin.map(r1);
   if (to !== undefined) {
     const origin = apply(parent, ...localOrigin);
     const [tx, ty] = point('to');
-    // El ángulo se mide contra el padre, salvo con ángulo independiente (que no cuenta en un hueso raíz).
+    // The angle is measured against the parent, except with independent angle (which does not count in a root bone).
     const rotation = values.independentAngle && !root ? IDENTITY : parent;
     const linear = invert([...rotation.slice(0, 4), 0, 0]);
     const [dx, dy] = apply(linear, tx - origin[0], ty - origin[1]);
@@ -372,16 +374,16 @@ export function expandFromTo(doc, schema, parentId, props, current = {}) {
 const almostEqual = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-3);
 
 /**
- * Cambia el padre de un hueso como opsParaReparentar y además revisa las poses. Devuelve { ops, movidas }:
- * `movidas` son las poses en las que, después del lote, el hueso (y lo que lo sigue) queda en otro lugar que antes.
- * Con `conservarEnPoses`, el lote también fija en esas poses los valores del hueso que lo dejan donde estaba (como
- * en Moho, que conserva la animación al cambiar el padre); `movidas` queda con las que no se pudieron compensar (por
- * minAngle/maxAngle o por un marco que deforma).
+ * Changes the parent of a bone like opsToReparent and also checks the poses. Returns { ops, moved }:
+ * `moved` are the poses in which, after the batch, the bone (and what follows it) ends up in a different place
+ * than before. With `keepInPoses`, the batch also sets in those poses the bone values that leave it where it was
+ * (like in Moho, which keeps the animation when changing the parent); `moved` keeps those that could not be
+ * compensated (because of minAngle/maxAngle or a distorting frame).
  */
 /**
- * Varios cambios de padre seguidos ([[hueso, padre], ...]), cada uno sobre el documento como quedó con el anterior
- * (lo que hace Reparent Bone del editor con varios huesos elegidos). Devuelve { ops, movidas } como reparentarHueso,
- * con las poses de todos los pasos.
+ * Several parent changes in a row ([[bone, parent], ...]), each on the document as the previous one left it
+ * (what the editor's Reparent Bone does with several bones selected). Returns { ops, moved } like reparentBone,
+ * with the poses of all the steps.
  */
 export function reparentSeveral(doc, schema, steps, options = {}) {
   let current = doc;
@@ -416,7 +418,7 @@ export function reparentBone(doc, schema, boneId, parentId, { keepInPoses = fals
     const pose = findObject(final, poseId);
     const posed = evaluateInPose(final, schema, pose).posed;
     const bone = findObject(final, boneId);
-    // Marco del padre nuevo en la pose: el hueso padre o, para un hueso raíz, el del skeleton (mundo · local⁻¹).
+    // Frame of the new parent in the pose: the parent bone or, for a root bone, the skeleton's (world · local⁻¹).
     const frame = findObject(final, parentId).type === 'bone' ? posed.get(parentId) : multiply(posed.get(boneId), invert(matrix(boneValues(schema, bone, pose))));
     const values = valuesFromWorld(before.get(poseId), frame, independent);
     if (!values) continue;
@@ -429,9 +431,9 @@ export function reparentBone(doc, schema, boneId, parentId, { keepInPoses = fals
   return { ops: [...ops, ...compensate], moved: movingIn(final) };
 }
 
-// ---------- Planes que usan el editor y el MCP ----------
+// ---------- Plans used by the editor and the MCP ----------
 
-/** Por qué un objeto no puede seguir a un hueso (texto para el usuario), o null si puede. */
+/** Why an object cannot follow a bone (text for the user), or null if it can. */
 export function reasonNotToBind(doc, id, bone) {
   const own = skeletonOf(doc, id);
   const fromBone = skeletonOf(doc, bone);
@@ -440,8 +442,8 @@ export function reasonNotToBind(doc, id, bone) {
 }
 
 /**
- * Antes de mover `id` a `padre`: lo que suelta los enlaces que dejarían de valer (dibujo que sale del skeleton de su
- * hueso, o huesos que se van a otro skeleton). Va en el mismo lote, antes del move.
+ * Before moving `id` to `parent`: what releases the bindings that would stop being valid (drawing leaving the
+ * skeleton of its bone, or bones going to another skeleton). It goes in the same batch, before the move.
  */
 export function opsToReleaseOnMove(doc, schema, id, parent) {
   const copy = structuredClone(doc);
@@ -450,8 +452,8 @@ export function opsToReleaseOnMove(doc, schema, id, parent) {
 }
 
 /**
- * «Bind all by proximity» del editor y bind_by_proximity del MCP: el dibujo del skeleton que no sigue a ningún hueso
- * va al más cercano. Devuelve el lote y los enlaces ([{ id, bone }]).
+ * The editor's «Bind all by proximity» and the MCP's bind_by_proximity: the skeleton's drawing that does not follow
+ * any bone goes to the nearest one. Returns the batch and the bindings ([{ id, bone }]).
  */
 export function planProximityBinding(doc, schema, skeletonId) {
   const bindings = bindingsByProximity(doc, schema, skeletonId);
@@ -459,18 +461,19 @@ export function planProximityBinding(doc, schema, skeletonId) {
 }
 
 /**
- * Reparentar varios huesos a la vez (la barra de opciones del editor): `ids` son los elegidos y `principal`, el que
- * será el padre. Devuelve el lote para colgarlos del principal (`ops`), el que además compensa las poses
- * (`opsConservando()`), por qué no se puede (`problema`), y lo mismo para soltarlos a la raíz del skeleton (`sueltos`,
- * `opsSoltar`, `opsSoltarConservando()`). Cada lote trae `movidas`: las poses en que algún hueso queda en otro lugar.
+ * Reparent several bones at once (the editor's options bar): `ids` are the selected ones and `main`, the one that
+ * will be the parent. Returns the batch to hang them from the main one (`ops`), the one that also compensates the
+ * poses (`keepingOps()`), why it cannot be done (`problem`), and the same to release them to the skeleton root
+ * (`loose`, `releaseOps`, `releaseKeepingOps()`). Each batch carries `moved`: the poses in which some bone ends up
+ * in a different place.
  * @param {import('./types.js').Document} doc @param {any} schema @param {string[]} ids @param {string | null} main
  */
 export function planReparentBones(doc, schema, ids, main) {
   const chosen = ids.map((id) => findObject(doc, id)).filter((o) => o?.type === 'bone');
   const parent = chosen.find((h) => h.id === main) ?? null;
   const chosenChildren = chosen.filter((h) => h !== parent);
-  // Se arma paso a paso: cada hueso se cuelga sobre el documento como quedó con el anterior. `movidas`: poses en las
-  // que algún hueso queda en otro lugar (ahora sigue a otro padre); con `conservar`, esas poses se compensan.
+  // It is built step by step: each bone is hung on the document as the previous one left it. `moved`: poses in which
+  // some bone ends up in a different place (it now follows another parent); with `keep`, those poses are compensated.
   const chain = (steps, keep = false) => {
     const { ops, moved } = reparentSeveral(doc, schema, steps, { keepInPoses: keep });
     return Object.assign(ops, { moved });

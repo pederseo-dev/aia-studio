@@ -1,4 +1,4 @@
-// Matrices afines [a, b, c, d, e, f], las mismas que usa SVG en matrix(...).
+// Affine matrices [a, b, c, d, e, f], the same ones SVG uses in matrix(...).
 
 import { findObject } from './document.js';
 import { read } from './schema.js';
@@ -28,7 +28,7 @@ export function invert([a, b, c, d, e, f]) {
 }
 
 /**
- * Aplica la matriz al punto (x, y). Se puede llamar con el punto desplegado: aplicar(m, ...[x, y]).
+ * Applies the matrix to the point (x, y). It can be called with the point spread: apply(m, ...[x, y]).
  * @param {Matrix} m @param {...number} point x, y @returns {Point}
  */
 export function apply(m, ...point) {
@@ -46,7 +46,7 @@ export function localMatrix(schema, obj) {
   return [c * sx, s * sx, -s * sy, c * sy, read(schema, obj, 'x'), read(schema, obj, 'y')];
 }
 
-/** Matriz del objeto en coordenadas del documento (null = la raíz, identidad). */
+/** Matrix of the object in document coordinates (null = the root, identity). */
 export function worldMatrix(doc, schema, id) {
   let m = IDENTITY;
   for (let o = findObject(doc, id); o; o = findObject(doc, o.parent)) m = multiply(localMatrix(schema, o), m);

@@ -1,5 +1,5 @@
-// Esquema: las definiciones de schema/*.json resueltas (herencia incluida). Es la fuente única de verdad de qué tipos
-// existen y qué propiedades tienen; de aquí salen la validación, el inspector del editor y la guía para la IA.
+// Schema: the definitions of schema/*.json resolved (inheritance included). It is the single source of truth for
+// which types exist and which properties they have; validation, the editor inspector and the AI guide come from here.
 
 import { SAME_TIME, curveError } from './curves.js';
 import { vertexErrors } from './paths.js';
@@ -7,10 +7,10 @@ import { vertexErrors } from './paths.js';
 const PROPERTY_TYPES = new Set(['number', 'string', 'strings', 'boolean', 'color', 'enum', 'ref', 'asset', 'vertices', 'stops', 'pose', 'tracks']);
 const POSE_ID = /^[a-z][a-z0-9_]*$/;
 const COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
-// Nombre de un archivo de la carpeta assets/ del documento (ver src/core/imagenes.js): sin carpetas ni rarezas.
+// Name of a file in the document's assets/ folder (see src/core/images.js): no folders or oddities.
 export const ASSET_FILE = /^[a-z0-9][a-z0-9_.-]*\.(png|jpg|jpeg|webp|svg)$/;
 
-/** @param {object[]} defs contenido de schema/*.json */
+/** @param {object[]} defs content of schema/*.json */
 export function createSchema(defs) {
   const byName = new Map(defs.map((d) => [d.name, d]));
   const resolved = new Map();
@@ -28,17 +28,17 @@ export function createSchema(defs) {
     const kind = {
       name: name,
       description: def.description ?? '',
-      // `description` (en español) es para la guía de la IA; `help` (en inglés) es lo que muestra el editor.
+      // `description` (in Spanish) is for the AI guide; `help` (in English) is what the editor shows.
       help: def.help ?? '',
       abstract: !!def.abstract,
       container: def.container ?? base?.container ?? false,
-      // Recurso: vive en la raíz, no se dibuja y otros objetos lo usan por referencia (estilos, degradados).
+      // Asset: it lives at the root, is not drawn and other objects use it by reference (styles, gradients).
       resource: def.resource ?? base?.resource ?? false,
-      // Restricciones de jerarquía: qué tipos puede tener como padre (además de la raíz, salvo con requiresParent) y
-      // como hijos.
+      // Hierarchy constraints: which types it can have as parent (besides the root, except with requiresParent) and
+      // as children.
       parentTypes: def.parentTypes ?? base?.parentTypes ?? null,
       childTypes: def.childTypes ?? base?.childTypes ?? null,
-      // Si es true, no puede estar en la raíz (los huesos van siempre dentro de un skeleton).
+      // If true, it cannot be at the root (bones always go inside a skeleton).
       requiresParent: def.requiresParent ?? base?.requiresParent ?? false,
       ancestors: base ? [base.name, ...base.ancestors] : [],
       properties: { ...base?.properties, ...def.properties },
@@ -54,7 +54,7 @@ export function createSchema(defs) {
   return { meta, types };
 }
 
-/** Devuelve un mensaje de error si el valor no sirve para la propiedad, o null si está bien. */
+/** Returns an error message if the value is not valid for the property, or null if it is fine. */
 export function validateValue(p, value) {
   if (value === null) return p.nullable ? null : 'no puede ser null';
   switch (p.type) {
@@ -94,7 +94,7 @@ export function validateValue(p, value) {
     case 'strings':
       return Array.isArray(value) && value.every((v) => typeof v === 'string' && v) ? null : 'debe ser una lista de textos ["a", "b"]';
     case 'pose': {
-      // Solo la forma: qué objetos y propiedades valen lo revisa el documento, que conoce los tipos.
+      // Only the shape: which objects and properties are valid is checked by the document, which knows the types.
       if (!value || typeof value !== 'object' || Array.isArray(value)) return 'debe ser un objeto { id_de_objeto: { propiedad: valor } }';
       for (const [id, fields] of Object.entries(value)) {
         if (!POSE_ID.test(id)) return `"${id}" no es un id válido`;
@@ -103,8 +103,8 @@ export function validateValue(p, value) {
       return null;
     }
     case 'tracks': {
-      // Solo la forma: qué objetos, propiedades y valores valen lo revisa el documento, que conoce los tipos y la
-      // duración.
+      // Only the shape: which objects, properties and values are valid is checked by the document, which knows the
+      // types and the duration.
       const example = '{ object_id: { property: [ { "t": 0, "value": 10 } ] } }';
       if (!value || typeof value !== 'object' || Array.isArray(value)) return `must be an object ${example}`;
       for (const [id, fields] of Object.entries(value)) {
@@ -128,7 +128,7 @@ export function validateValue(p, value) {
   return 'tipo de propiedad desconocido';
 }
 
-/** Valor efectivo de una propiedad: el guardado o, si no está, el valor por defecto del esquema. */
+/** Effective value of a property: the saved one or, if absent, the schema's default value. */
 export function read(schema, obj, prop) {
   if (obj[prop] !== undefined) return obj[prop];
   return (schema.types.get(obj.type) ?? schema.meta).properties[prop]?.default;
@@ -138,7 +138,7 @@ export function readMeta(schema, doc, prop) {
   return doc.meta[prop] !== undefined ? doc.meta[prop] : schema.meta.properties[prop]?.default;
 }
 
-/** Sugerencia para nombres mal escritos: el más parecido a distancia ≤ 2, o uno que sea prefijo del otro. */
+/** Suggestion for misspelled names: the closest one at distance ≤ 2, or one that is a prefix of the other. */
 export function suggest(value, options) {
   let best = null;
   let bestDistance = 3;

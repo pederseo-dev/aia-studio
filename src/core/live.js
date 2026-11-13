@@ -1,11 +1,12 @@
-// El muñeco en marcha (Puppet en vivo): lo que la app o su IA manejan con tres verbos —play(clip), set(param, valor)
-// y stop(clip)— y que se avanza con avanzar(dt). Es el runtime que exporta la fase 7; el editor (▶ Live) y la vista
-// previa de la IA (render_preview con live) usan este mismo. Ver docs/decision-animacion.md §9.
+// The running puppet (live Puppet): what the app or its AI drives with three verbs —play(clip), set(param, value)
+// and stop(clip)— and that is advanced with advance(dt). It is the runtime that phase 7 exports; the editor
+// (▶ Live) and the AI preview (render_preview with live) use this same one. See docs/decision-animacion.md §9.
 //
-// Capas, de abajo hacia arriba:
-//   montaje → bases (loop/pingpong, con fundido cruzado) → gestos (once, en orden) → auto (repeat/always) → drivers
-// Cada capa pisa lo de abajo con su peso (o suma, si es additive). Los params se mezclan igual: el valor de la app
-// debajo y lo que animan los clips encima; los drivers se calculan una sola vez, con los params ya mezclados.
+// Layers, from bottom to top:
+//   setup → bases (loop/pingpong, with crossfade) → gestures (once, in order) → auto (repeat/always) → drivers
+// Each layer overrides what is below with its weight (or adds, if it is additive). Params are blended the same way:
+// the app's value below and what the clips animate on top; drivers are computed only once, with the params already
+// blended.
 
 import { findObject } from './document.js';
 import { evaluateClip } from './animation.js';
@@ -13,7 +14,7 @@ import { read } from './schema.js';
 import { effectiveValue } from './styles.js';
 import { blendColor, blendPoses, blendVertices, paramValues } from './blend.js';
 
-/** Generador de números al azar con semilla (mulberry32): el mismo guion da la misma tira. */
+/** Seeded random number generator (mulberry32): the same script gives the same strip. */
 function random(seed) {
   let a = seed >>> 0;
   return () => {
@@ -25,50 +26,50 @@ function random(seed) {
   };
 }
 
-/** Curva del fundido: suave al entrar y al salir (ease-in-out). */
+/** Fade curve: smooth in and out (ease-in-out). */
 const smooth = (w) => w * w * (3 - 2 * w);
 
-/** Clips de Puppet que la app puede disparar (no los auto ni las escenas). */
+/** Puppet clips the app can trigger (not the auto ones nor the scenes). */
 export function triggerableClips(doc, schema) {
   return doc.objects.filter((o) => o.type === 'animation' && read(schema, o, 'usage') === 'puppet' && read(schema, o, 'auto') === 'off');
 }
 
-/** Es un clip de base (se queda sonando) o un gesto (una vez, encima). */
+/** Whether it is a base clip (it keeps playing) or a gesture (once, on top). */
 export const isBase = (schema, clip) => read(schema, clip, 'loop') !== 'once';
 
 /**
- * Crea el muñeco en marcha. `params`: valores iniciales de la app. `semilla`: para el azar de los clips auto repeat.
- * `auto: false` apaga las capas auto (para comparar un guion con y sin parpadeo o respiración).
- * Devuelve { play, stop, set, avanzar, pose, estado, actualizar }.
+ * Creates the running puppet. `params`: initial values from the app. `seed`: for the randomness of auto repeat clips.
+ * `auto: false` turns off the auto layers (to compare a script with and without blinking or breathing).
+ * Returns { play, stop, set, advance, pose, state, update }.
  */
 export function createLive(doc, schema, { params = {}, seed = 1, auto = true } = {}) {
   let documentData = doc;
   const rng = random(seed);
   let clock = 0;
-  const app = {}; // valores de la app (los que falten, el inicial)
-  // Entradas que suenan: { clip, t, peso, objetivo, fade, capa: 'base' | 'gesture' | 'auto', siguienteHecho }
+  const app = {}; // app values (the missing ones, the initial value)
+  // Playing entries: { clip, t, weight, target, fade, layer: 'base' | 'gesture' | 'auto', nextDone }
   let entries = [];
-  // Clips auto repeat: id → segundos que faltan para la próxima vez.
+  // Auto repeat clips: id → seconds left until the next time.
   const waits = new Map();
 
   const clipOf = (id) => {
     const c = findObject(documentData, id);
     return c?.type === 'animation' ? c : null;
   };
-  // Un clip once no puede fundirse más de la mitad de lo que dura: si no, empezaría a salir antes de terminar de
-  // entrar y nunca llegaría al 100%.
+  // A once clip cannot fade for more than half of its length: otherwise, it would start leaving before it finished
+  // entering and would never reach 100%.
   const fadeOf = (clip) => {
     const fade = Math.max(0, read(schema, clip, 'fade'));
     return read(schema, clip, 'loop') === 'once' ? Math.min(fade, read(schema, clip, 'duration') / 2) : fade;
   };
-  /** El clip con el que se evalúa una entrada: un auto always suena siempre en loop, aunque el clip diga once. */
+  /** The clip an entry is evaluated with: an auto always one always plays in a loop, even if the clip says once. */
   const howItSounds = (clip, e) => (e.layer === 'auto' && read(schema, clip, 'auto') === 'always' && read(schema, clip, 'loop') === 'once' ? { ...clip, loop: 'loop' } : clip);
   const wait = (clip) => {
     const [a, b] = [read(schema, clip, 'repeat_min'), read(schema, clip, 'repeat_max')];
     return a + rng() * Math.max(0, b - a);
   };
 
-  /** Arranca las capas auto que falten y quita las de clips que ya no son auto. */
+  /** Starts the missing auto layers and removes those of clips that are no longer auto. */
   function syncAuto() {
     const autos = auto ? documentData.objects.filter((o) => o.type === 'animation' && read(schema, o, 'usage') === 'puppet' && read(schema, o, 'auto') !== 'off') : [];
     const ids = new Set(autos.map((c) => c.id));
@@ -93,8 +94,8 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
     if (isBase(schema, clip)) {
       const current = entries.find((e) => e.layer === 'base' && e.target === 1);
       if (current?.clip === id) return;
-      // La base anterior sale al ritmo de la nueva (fundido cruzado). Si la pedida estaba saliendo, vuelve a entrar
-      // desde donde estaba (sin saltar de fase).
+      // The previous base leaves at the pace of the new one (crossfade). If the requested one was leaving, it enters
+      // again from where it was (without jumping phase).
       for (const e of entries) if (e.layer === 'base') Object.assign(e, { target: 0, fade });
       const leaving = entries.find((e) => e.layer === 'base' && e.clip === id);
       if (leaving) Object.assign(leaving, { target: 1 });
@@ -129,7 +130,7 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
   }
   for (const [k, v] of Object.entries(params)) set(k, v);
 
-  /** Avanza el tiempo; en pasos de 1/60 s como mucho, para que los fundidos no dependan del tamaño del paso. */
+  /** Advances time; in steps of 1/60 s at most, so that the fades do not depend on the step size. */
   function advance(dt) {
     if (!(dt > 0)) return;
     for (let missing = dt; missing > 1e-12; missing -= Math.min(missing, 1 / 60)) advanceStep(Math.min(missing, 1 / 60));
@@ -138,7 +139,7 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
   function advanceStep(dt) {
     clock += dt;
     syncAuto();
-    // Los auto repeat cuya espera terminó vuelven a sonar.
+    // Auto repeat clips whose wait ended play again.
     for (const [id, missing] of waits) {
       if (missing - dt > 0) {
         waits.set(id, missing - dt);
@@ -155,11 +156,11 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
       if (!clip) continue;
       const inAuto = e.layer === 'auto' && read(schema, clip, 'auto') === 'always';
       if (!(e.layer === 'gesture' || e.layer === 'auto') || inAuto || e.t < read(schema, clip, 'duration')) e.t += dt;
-      // El peso va hacia su objetivo a razón de 1/fade por segundo.
+      // The weight moves toward its target at a rate of 1/fade per second.
       const fade = e.fade ?? fadeOf(clip);
       e.weight = fade > 0 ? Math.max(0, Math.min(1, e.weight + Math.sign(e.target - e.weight) * Math.min(Math.abs(e.target - e.weight), dt / fade))) : e.target;
       if (Math.abs(e.weight - e.target) < 1e-9) e.weight = e.target;
-      // Un clip once empieza a salir a tiempo para terminar en su final; ahí se dispara su next.
+      // A once clip starts leaving in time to finish at its end; there its next is triggered.
       if ((e.layer === 'gesture' || (e.layer === 'auto' && !inAuto)) && e.target === 1) {
         const d = read(schema, clip, 'duration');
         if (e.t >= d - fade - 1e-9) {
@@ -174,7 +175,7 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
       }
       if (fade === 0 && e.target === 0) e.weight = 0;
     }
-    // Las que ya salieron del todo se van; un auto repeat espera la próxima vez.
+    // Those that have fully left go away; an auto repeat waits for the next time.
     entries = entries.filter((e) => {
       if (e.weight > 0 || e.target > 0) return true;
       if (e.layer === 'auto' && clipOf(e.clip) && read(schema, clipOf(e.clip), 'auto') === 'repeat') waits.set(e.clip, wait(clipOf(e.clip)));
@@ -183,7 +184,7 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
     for (const id of created) play(id);
   }
 
-  /** La pose que se ve ahora (un objeto pose, como mezclarPoses), con `params` = los params ya mezclados. */
+  /** The pose seen now (a pose object, like blendPoses), with `params` = the already blended params. */
   function pose() {
     syncAuto();
     const values = {};
@@ -192,7 +193,7 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
     const typeOf = (id, prop) => schema.types.get(findObject(documentData, id).type).properties[prop].type;
     const number = (id) => read(schema, findObject(documentData, id), 'kind') === 'number';
 
-    /** Pisa `actual` con `v` por el peso w, según el tipo (lo que no se interpola cambia en w ≥ 0.5). */
+    /** Overrides `current` with `v` by the weight w, by kind (what is not interpolated changes at w ≥ 0.5). */
     const overwrite = (kind, current, v, w) => {
       if (w >= 1) return v;
       if (kind === 'number' && typeof v === 'number' && typeof current === 'number') return current + (v - current) * w;
@@ -200,7 +201,7 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
       if (kind === 'vertices' && Array.isArray(current) && Array.isArray(v)) return blendVertices(current, v, w);
       return w >= 0.5 ? v : undefined;
     };
-    /** Una capa (lo que fija un clip, o la mezcla de las bases) encima de lo que hay, con su peso. */
+    /** A layer (what a clip sets, or the blend of the bases) on top of what there is, with its weight. */
     const apply = ({ values: vs, params: ps }, w, sum) => {
       for (const [id, fields] of Object.entries(vs)) {
         for (const [prop, v] of Object.entries(fields)) {
@@ -228,9 +229,9 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
       return clip ? { clip, w: smooth(e.weight), ev: evaluateClip(documentData, schema, howItSounds(clip, e), e.t) } : null;
     };
 
-    // 1. Las bases (override) se promedian entre sí por sus pesos, y esa mezcla pisa el montaje con el peso total de
-    // la capa: en un fundido cruzado entre dos bases que dejan el brazo en 30, el brazo se queda en 30 (el montaje no
-    // se cuela), y la primera base entra desde el montaje.
+    // 1. The bases (override) are averaged among themselves by their weights, and that blend overrides the setup with
+    // the total weight of the layer: in a crossfade between two bases that leave the arm at 30, the arm stays at 30
+    // (the setup does not leak in), and the first base enters from the setup.
     const bases = entries.filter((e) => e.layer === 'base').map(evaluated).filter((b) => b && b.w > 0);
     const overlap = bases.filter((b) => read(schema, b.clip, 'blend') !== 'additive');
     const total = overlap.reduce((s, b) => s + b.w, 0);
@@ -239,7 +240,7 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
       let accumulated = 0;
       for (const b of overlap) {
         accumulated += b.w;
-        const r = b.w / accumulated; // peso relativo: el promedio ponderado de las bases, de a una
+        const r = b.w / accumulated; // relative weight: the weighted average of the bases, one at a time
         for (const [id, fields] of Object.entries(b.ev.values)) {
           for (const [prop, v] of Object.entries(fields)) {
             const before = layer.values[id]?.[prop];
@@ -257,7 +258,7 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
     }
     for (const b of bases.filter((x) => !overlap.includes(x))) apply(b.ev, b.w, true);
 
-    // 2. Gestos y capas auto, de a uno y en orden, cada uno encima de lo de abajo.
+    // 2. Gestures and auto layers, one at a time and in order, each on top of what is below.
     for (const e of entries.filter((x) => x.layer === 'gesture').concat(entries.filter((x) => x.layer === 'auto'))) {
       const c = evaluated(e);
       if (c && c.w > 0) apply(c.ev, c.w, read(schema, c.clip, 'blend') === 'additive');
@@ -265,7 +266,7 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
     return blendPoses(documentData, schema, P, values);
   }
 
-  /** Qué suena ahora: cada clip con su capa, su tiempo y su peso (0 a 1), y los valores de la app. */
+  /** What is playing now: each clip with its layer, its time and its weight (0 to 1), and the app values. */
   function state() {
     syncAuto();
     return {
@@ -277,15 +278,15 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
   }
 
   /**
-   * Cambia el documento (lo edita la IA por MCP, o se deshace algo, con Live encendido): sigue sonando lo que todavía
-   * existe y todavía es de su capa (una base que pasó a once, o un clip que pasó a Animate, sale).
+   * Changes the document (the AI edits it through MCP, or something is undone, with Live on): what still exists and
+   * still belongs to its layer keeps playing (a base that became once, or a clip that became Animate, leaves).
    */
   function update(created) {
     documentData = created;
     entries = entries.filter((e) => {
       const c = clipOf(e.clip);
       if (!c || read(schema, c, 'usage') !== 'puppet') return false;
-      if (e.layer === 'auto') return true; // sincronizarAuto decide
+      if (e.layer === 'auto') return true; // syncAuto decides
       return read(schema, c, 'auto') === 'off' && isBase(schema, c) === (e.layer === 'base');
     });
     for (const id of Object.keys(app)) if (findObject(documentData, id)?.type !== 'param') delete app[id];
@@ -296,10 +297,10 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
 }
 
 /**
- * Corre un guion ([{ t, play | stop | set }]) y devuelve la pose y el estado en cada uno de `tiempos` (segundos).
- * `stop: true` para todo; `set: { param: valor }`. Avanza en pasos de 1/60 s, como un cuadro de la app. El arreglo
- * devuelto trae además `repeticiones`: cuándo sonó cada clip auto repeat ([{ clip, desde, hasta }]), porque un
- * parpadeo corto suele caer entre dos cuadros.
+ * Runs a script ([{ t, play | stop | set }]) and returns the pose and the state at each of `times` (seconds).
+ * `stop: true` stops everything; `set: { param: value }`. Advances in steps of 1/60 s, like an app frame. The
+ * returned array also carries `repeats`: when each auto repeat clip played ([{ clip, from, to }]), because a short
+ * blink usually falls between two frames.
  */
 /**
  * @param {any} doc @param {any} schema @param {any[]} [script] @param {number[]} [times]

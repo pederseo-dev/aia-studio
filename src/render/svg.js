@@ -1,4 +1,4 @@
-// Proyección de un documento a SVG. El documento es la fuente de verdad; el SVG es solo una vista.
+// Projection of a document to SVG. The document is the source of truth; the SVG is only a view.
 
 import { findObject, children } from '../core/document.js';
 import { readMeta } from '../core/schema.js';
@@ -13,8 +13,8 @@ const n = (v) => +v.toFixed(3);
 const attribute = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 const resourceId = (id) => `aia-${id}`;
 
-// Cómo se dibuja cada tipo concreto del esquema (los recursos no se dibujan). Una prueba verifica que no falte ninguno.
-// Los huesos no se dibujan en el personaje: el editor los muestra en su superposición.
+// How each concrete type of the schema is drawn (assets are not drawn). A test checks that none is missing.
+// Bones are not drawn in the character: the editor shows them in its overlay.
 export const DRAW = {
   bone: null,
   group: () => '',
@@ -36,8 +36,8 @@ export const DRAW = {
     const d = verticesAD(v('vertices'), v('closed'));
     return d ? `<path d="${d}"${paint(v)} stroke-linejoin="round" stroke-linecap="round"/>` : '';
   },
-  // El href lo decide la vista (`assets`): una URL del servidor en el editor; sin nada, el nombre del archivo (el MCP
-  // lo cambia por los bytes al pasar a PNG). Estirada a width × height, como un rect.
+  // The href is decided by the view (`assets`): a server URL in the editor; with nothing, the file name (the MCP
+  // replaces it with the bytes when converting to PNG). Stretched to width × height, like a rect.
   image: (v) => {
     const [w, h] = [v('width'), v('height')];
     const src = v('src');
@@ -47,7 +47,7 @@ export const DRAW = {
   },
 };
 
-// Recursos que generan algo en <defs>.
+// Assets that generate something in <defs>.
 const DEFINE = {
   linear_gradient: (o, v) => `<linearGradient id="${resourceId(o.id)}" x1="${n(v('x1'))}" y1="${n(v('y1'))}" x2="${n(v('x2'))}" y2="${n(v('y2'))}">${stops(v('stops'))}</linearGradient>`,
   radial_gradient: (o, v) => `<radialGradient id="${resourceId(o.id)}" cx="${n(v('cx'))}" cy="${n(v('cy'))}" r="${n(v('r'))}">${stops(v('stops'))}</radialGradient>`,
@@ -77,8 +77,8 @@ function transform(v) {
 const reader = (doc, schema, obj, assets = null) => Object.assign((prop) => effectiveValue(schema, doc, obj, prop), { doc, assets });
 
 /**
- * Con una pose, un objeto que sigue a otro hueso que su padre recibe una matriz completa: la que lo deja donde el
- * delta de su hueso lo lleva, vista desde el padre (que ya se movió con el suyo).
+ * With a pose, an object that follows a different bone than its parent gets a full matrix: the one that leaves it
+ * where the delta of its bone takes it, seen from the parent (which already moved with its own).
  */
 function transformInPose(doc, schema, obj, v, ctx) {
   const delta = obj.bone ? (ctx.skeleton.delta.get(obj.bone) ?? IDENTITY) : ctx.parentDelta;
@@ -89,8 +89,8 @@ function transformInPose(doc, schema, obj, v, ctx) {
 }
 
 /**
- * Enlace por punto: en una pose, cada vértice con `bone` se mueve (con sus tangentes) según el delta de su hueso, en
- * vez del de la forma. Así un solo path se dobla siguiendo una cadena de huesos (una cola, un brazo).
+ * Per-point binding: in a pose, each vertex with `bone` moves (with its tangents) according to the delta of its
+ * bone, instead of the shape's. So a single path bends following a chain of bones (a tail, an arm).
  */
 function verticesInPose(doc, schema, obj, vertices, delta, ctx) {
   if (!vertices.some((vt) => vt.bone)) return vertices;
@@ -120,9 +120,9 @@ function node(doc, schema, obj, ctx) {
     v('visible') ? '' : ' display="none"',
   ].join('');
   const sub = { ...ctx, parentDelta: delta };
-  // Los huesos de un skeleton son sus hijos, pero no se dibujan.
+  // The bones of a skeleton are its children, but they are not drawn.
   let visible = children(doc, obj.id).filter((h) => DRAW[h.type]);
-  // Un switch dibuja un solo hijo: el activo, o el primero.
+  // A switch draws a single child: the active one, or the first.
   if (obj.type === 'switch') {
     const chosen = ctx.show?.[obj.id] ?? v('active');
     visible = [visible.find((h) => h.id === chosen) ?? visible[0]].filter(Boolean);
@@ -132,8 +132,9 @@ function node(doc, schema, obj, ctx) {
 }
 
 /**
- * Qué se dibuja: un clip en un tiempo (con los params encima), una pose sola (por id o como objeto), la mezcla de
- * poses que dan los params (un objeto { id_de_param: valor }, vacío = sus valores iniciales) o, sin nada, el montaje.
+ * What is drawn: a clip at a time (with the params on top), a single pose (by id or as an object), the blend of
+ * poses given by the params (an object { param_id: value }, empty = their initial values) or, with nothing, the
+ * setup.
  */
 export function resolvePose(doc, schema, pose, params, animation = null, time = 0) {
   if (animation) return clipPose(doc, schema, animation, time, params ?? {});
@@ -145,15 +146,15 @@ export function resolvePose(doc, schema, pose, params, animation = null, time = 
 }
 
 /**
- * Contenido del SVG (definiciones + fondo + objetos), para insertar dentro de otro <svg> o <g>.
- * `pose`: id de una pose (o el objeto) para dibujarla sola; `params`: valores de params para dibujar la mezcla de
- * poses que dan los drivers; `animation` + `time`: un clip en ese tiempo (en segundos), con los params encima; sin
- * nada, el montaje.
+ * SVG content (definitions + background + objects), to insert inside another <svg> or <g>.
+ * `pose`: id of a pose (or the object) to draw it alone; `params`: param values to draw the blend of poses given
+ * by the drivers; `animation` + `time`: a clip at that time (in seconds), with the params on top; with nothing,
+ * the setup.
  */
 /** @param {any} setup @param {any} schema @param {import('../core/types.js').ViewOptions} [options] */
 export function svgContent(setup, schema, { pose, params, animation, time, show, assets } = {}) {
   const activePose = resolvePose(setup, schema, pose, params, animation, time);
-  // Lo que no es hueso toma los valores de la pose; los huesos se mueven por el esqueleto (con su delta).
+  // What is not a bone takes the values of the pose; bones are moved by the skeleton (with their delta).
   const doc = applyPose(setup, schema, activePose);
   const background = readMeta(schema, doc, 'background');
   const w = readMeta(schema, doc, 'width');
@@ -162,22 +163,22 @@ export function svgContent(setup, schema, { pose, params, animation, time, show,
   const definitions = root.filter((o) => DEFINE[o.type]).map((o) => DEFINE[o.type](o, reader(doc, schema, o)));
   const defs = definitions.length ? `<defs>${definitions.join('')}</defs>` : '';
   const rect = background == null ? '' : `<rect data-background="" width="${w}" height="${h}" fill="${attribute(background)}"/>`;
-  // `mostrar`: { id_de_switch: id_de_hijo } para ver una variante sin cambiarla (el editor, al seleccionarla).
-  // `assets`: src → href de las capas image (el editor da la URL del servidor).
+  // `show`: { switch_id: child_id } to see a variant without changing it (the editor, when selecting it).
+  // `assets`: src → href of the image layers (the editor gives the server URL).
   const ctx = { skeleton: activePose ? evaluateSkeleton(doc, schema, activePose) : null, parentDelta: IDENTITY, show, assets };
   const objects = root.filter((o) => DRAW[o.type]).map((o) => node(doc, schema, o, ctx));
   return defs + rect + objects.join('');
 }
 
 /**
- * El esqueleto dibujado encima, con el id de cada hueso: para revisar dónde quedaron (en el editor se ven en su
- * superposición; esto es para las vistas previas de la IA).
+ * The skeleton drawn on top, with the id of each bone: to check where they ended up (in the editor they are seen
+ * in its overlay; this is for the AI previews).
  */
 /** @param {any} doc @param {any} schema @param {import('../core/types.js').ViewOptions} options */
 function svgBones(doc, schema, { pose, params, animation, time }) {
   const bones = doc.objects.filter((o) => o.type === 'bone');
   if (!bones.length) return '';
-  // Sobre lo que se ve: si la pose mueve el skeleton (o un grupo de arriba), los huesos van con él.
+  // On top of what is seen: if the pose moves the skeleton (or a group above), the bones go with it.
   const { posed } = evaluateInPose(doc, schema, resolvePose(doc, schema, pose, params, animation, time));
   const parts = bones.map((h) => {
     const m = posed.get(h.id);
@@ -193,8 +194,8 @@ function svgBones(doc, schema, { pose, params, animation, time }) {
 }
 
 /**
- * SVG completo. `region` ({ x, y, width, height }) recorta una parte del documento; `huesos: true` dibuja el
- * esqueleto encima.
+ * Full SVG. `region` ({ x, y, width, height }) crops a part of the document; `bones: true` draws the skeleton
+ * on top.
  */
 /** @param {any} doc @param {any} schema @param {import('../core/types.js').ViewOptions} [options] */
 export function svgDocument(doc, schema, { region, bones, ...options } = {}) {
@@ -204,9 +205,9 @@ export function svgDocument(doc, schema, { region, bones, ...options } = {}) {
 }
 
 /**
- * Tira de cuadros de un clip: un cuadro por tiempo, en filas de hasta `columnas`, con el tiempo debajo de cada uno.
- * Sirve para ver el movimiento en una sola imagen (la vista previa de la IA). Acepta las mismas opciones que
- * svgDocumento (`region`, `huesos`, `params`) más `animation` y `times`, o `times` con `poses` (una por cuadro).
+ * Frame strip of a clip: one frame per time, in rows of up to `columns`, with the time below each one.
+ * It serves to see the motion in a single image (the AI preview). Accepts the same options as
+ * svgDocument (`region`, `bones`, `params`) plus `animation` and `times`, or `times` with `poses` (one per frame).
  */
 /** @param {any} doc @param {any} schema @param {import('../core/types.js').ViewOptions} [options] */
 export function svgStrip(doc, schema, { times, poses, columns = 4, region, bones, ...options } = {}) {
@@ -218,7 +219,7 @@ export function svgStrip(doc, schema, { times, poses, columns = 4, region, bones
   const [width, height] = [r.width + margin, r.height + label + margin];
   const frames = times.map((time, i) => {
     const [x, y] = [(i % cols) * width, Math.floor(i / cols) * height];
-    // `poses`: una pose ya resuelta por cuadro (el runtime en vivo), en lugar de un clip en ese tiempo.
+    // `poses`: an already resolved pose per frame (the live runtime), instead of a clip at that time.
     const o = poses ? { ...options, pose: poses[i] } : { ...options, time };
     const above = bones ? svgBones(doc, schema, o) : '';
     const view = `<svg x="${n(x)}" y="${n(y)}" width="${n(r.width)}" height="${n(r.height)}" viewBox="${n(r.x)} ${n(r.y)} ${n(r.width)} ${n(r.height)}" overflow="hidden">${svgContent(doc, schema, o)}${above}</svg>`;

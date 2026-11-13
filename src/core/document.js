@@ -1,15 +1,15 @@
-// Documento: lista plana de objetos con `parent`. El orden de la lista define el orden de dibujo entre hermanos
-// (los últimos quedan encima).
+// Document: flat list of objects with `parent`. The order of the list defines the drawing order among siblings
+// (the last ones end up on top).
 
 import { FORMAT } from './format.js';
 import { read, suggest, validateValue } from './schema.js';
 
 export const ID = /^[a-z][a-z0-9_]*$/;
-// "meta" nombra las propiedades del documento en set/unset (target: "meta"): ningún objeto puede llamarse así.
+// "meta" names the document properties in set/unset (target: "meta"): no object can be called that.
 export const RESERVED_IDS = new Set(['meta']);
 const STRUCTURE = new Set(['id', 'type', 'parent']);
 
-/** Por qué un id nuevo no sirve (null si sirve). */
+/** Why a new id is not valid (null if it is). */
 export function idError(id) {
   if (!ID.test(id ?? '')) return `id inválido "${id}": usa minúsculas, números y _, empezando con letra`;
   if (RESERVED_IDS.has(id)) return `"${id}" is a reserved id (target "meta" means the document's properties); choose another one`;
@@ -31,18 +31,18 @@ export function findObject(doc, id) {
   return doc.objects.find((o) => o.id === id);
 }
 
-/** Si el objeto o alguno de sus padres tiene el candado puesto (`locked`): en el lienzo no se elige ni se mueve. */
+/** Whether the object or one of its parents is locked (`locked`): on the canvas it cannot be picked or moved. */
 export function locked(doc, id) {
   for (let o = findObject(doc, id); o; o = o.parent ? findObject(doc, o.parent) : null) if (o.locked) return true;
   return false;
 }
 
-/** Hijos de un objeto (o de la raíz con null), en orden de dibujo. */
+/** Children of an object (or of the root with null), in drawing order. */
 export function children(doc, parent) {
   return doc.objects.filter((o) => (o.parent ?? null) === parent);
 }
 
-/** Ids del objeto y todos sus descendientes. */
+/** Ids of the object and all its descendants. */
 export function subtree(doc, id) {
   const ids = [id];
   for (let i = 0; i < ids.length; i++) for (const h of children(doc, ids[i])) ids.push(h.id);
@@ -50,22 +50,22 @@ export function subtree(doc, id) {
 }
 
 /**
- * El skeleton que contiene a un objeto: su ancestro de tipo skeleton más cercano (sin contarse a sí mismo), o null.
- * Para un hueso, es el skeleton al que pertenece.
+ * The skeleton that contains an object: its nearest ancestor of type skeleton (not counting itself), or null.
+ * For a bone, it is the skeleton it belongs to.
  */
 export function skeletonOf(doc, id) {
   for (let o = findObject(doc, findObject(doc, id)?.parent); o; o = findObject(doc, o.parent)) if (o.type === 'skeleton') return o.id;
   return null;
 }
 
-/** Huesos de un skeleton (los suyos, no los de un skeleton anidado), en orden de la lista. */
+/** Bones of a skeleton (its own, not those of a nested skeleton), in list order. */
 export function bonesOf(doc, skeletonId) {
   return doc.objects.filter((o) => o.type === 'bone' && skeletonOf(doc, o.id) === skeletonId);
 }
 
 /**
- * Por qué un objeto no puede enlazarse a un hueso (null si puede): el hueso tiene que ser del skeleton que lo
- * contiene. `dueño` es el nombre para el mensaje (por ejemplo "arm.bone" o "tail.vertices[3].bone").
+ * Why an object cannot be bound to a bone (null if it can): the bone has to belong to the skeleton that contains
+ * it. `owner` is the name for the message (for example "arm.bone" or "tail.vertices[3].bone").
  */
 export function bindingError(doc, objId, boneId, owner) {
   const bone = findObject(doc, boneId);
@@ -80,15 +80,15 @@ export function bindingError(doc, objId, boneId, owner) {
   return `${owner}: "${boneId}" es un hueso del skeleton "${fromBone}", pero ${objId} está en el skeleton "${own}" y solo puede enlazarse a sus huesos: ${ownBones.join(', ') || 'todavía no tiene'}.${suggest(boneId, ownBones)}`;
 }
 
-/** Propiedades que no son estructurales (id, type, parent). */
+/** Properties that are not structural (id, type, parent). */
 export function savedProperties(obj) {
   return Object.keys(obj).filter((k) => !STRUCTURE.has(k));
 }
 
 /**
- * Revisa el documento completo contra el esquema.
- * Los errores impiden guardar; los avisos no (propiedades desconocidas se conservan para no perder datos de
- * versiones futuras, pero suelen ser errores de tipeo).
+ * Checks the whole document against the schema.
+ * Errors prevent saving; warnings do not (unknown properties are kept so as not to lose data from future
+ * versions, but they are usually typos).
  */
 export function validate(doc, schema) {
   const errors = [];
@@ -137,7 +137,7 @@ export function validate(doc, schema) {
       if (p.type !== 'ref' || o[prop] == null) continue;
       errors.push(...referenceErrors(doc, o, prop, p, o[prop], o.id));
     }
-    // Los vértices enlazados a un hueso (enlace por punto) nombran huesos de su skeleton.
+    // Vertices bound to a bone (per-point binding) name bones of their skeleton.
     for (const [prop, p] of Object.entries(kind.properties)) {
       if (p.type !== 'vertices' || !Array.isArray(o[prop])) continue;
       o[prop].forEach((v, i) => {
@@ -146,7 +146,7 @@ export function validate(doc, schema) {
         if (error) errors.push(error);
       });
     }
-    // Las poses nombran objetos que existen y propiedades animables suyas, con valores válidos.
+    // Poses name objects that exist and animatable properties of theirs, with valid values.
     for (const [prop, p] of Object.entries(kind.properties)) {
       if (p.type !== 'pose' || !o[prop] || typeof o[prop] !== 'object' || Array.isArray(o[prop])) continue;
       for (const [id, fields] of Object.entries(o[prop])) {
@@ -168,7 +168,7 @@ export function validate(doc, schema) {
         }
       }
     }
-    // Las pistas de un clip: como las poses, más los params (que animan su valor) y los tiempos dentro de la duración.
+    // The tracks of a clip: like poses, plus params (which animate their value) and times within the duration.
     for (const [prop, p] of Object.entries(kind.properties)) {
       if (p.type !== 'tracks' || validateValue(p, o[prop] ?? {})) continue;
       const duration = read(schema, o, 'duration');
@@ -178,7 +178,7 @@ export function validate(doc, schema) {
           errors.push(`${o.id}.${prop}: object "${id}" does not exist.${suggest(id, ids)}`);
           continue;
         }
-        // Los params son del muñeco: solo un clip de Puppet los anima. Una escena keya los valores mismos.
+        // Params belong to the puppet: only a Puppet clip animates them. A scene keys the values themselves.
         if (target.type === 'param' && read(schema, o, 'usage') !== 'puppet') {
           errors.push(`${o.id}.${prop}.${id}: scene "${o.id}" (Animate) can't animate params: params belong to Puppet. If this is a Puppet clip, pass usage: "puppet". Otherwise key the values themselves (set_keys with values or pose) and remove this track (set_keys with remove: ["${id}"], delete_keys with targets: ["${id}"], or × on the track in the editor).`);
           continue;
@@ -202,7 +202,7 @@ export function validate(doc, schema) {
     }
   }
 
-  // Ciclos: subir por los padres nunca debe volver al punto de partida.
+  // Cycles: going up through the parents must never return to the starting point.
   for (const o of doc.objects) {
     const seen = new Set([o.id]);
     for (let p = findObject(doc, o.parent); p; p = findObject(doc, p.parent)) {
@@ -217,8 +217,8 @@ export function validate(doc, schema) {
 }
 
 /**
- * Qué valores acepta una pista de `destino.prop`: devuelve un validador (valor → mensaje o null), o un mensaje si esa
- * propiedad no se puede animar. Un param anima su `value` (número, 0/1 o una de sus opciones).
+ * What values a track of `target.prop` accepts: returns a validator (value → message or null), or a message if that
+ * property cannot be animated. A param animates its `value` (number, 0/1 or one of its options).
  */
 export function animatedValueError(doc, schema, target, prop) {
   if (target.type === 'param') {
@@ -237,8 +237,8 @@ export function animatedValueError(doc, schema, target, prop) {
 }
 
 /**
- * Errores de una referencia: que exista, que sea del tipo pedido y, con refScope "children", que sea un hijo; con
- * refScope "skeleton", que sea un hueso del skeleton que contiene al objeto.
+ * Errors of a reference: that it exists, that it is of the requested type and, with refScope "children", that it is
+ * a child; with refScope "skeleton", that it is a bone of the skeleton that contains the object.
  */
 function referenceErrors(doc, o, prop, p, value, owner, { pose: poseId = null, clip = null, t = null } = {}) {
   if (value == null) return [];
@@ -251,7 +251,7 @@ function referenceErrors(doc, o, prop, p, value, owner, { pose: poseId = null, c
   if (p.refTypes && !p.refTypes.includes(referenced.type)) return [`${owner}.${prop}: "${value}" es un ${referenced.type}; se esperaba ${p.refTypes.join(' o ')}`];
   if (p.refScope === 'children' && referenced.parent !== o.id) {
     const children = doc.objects.filter((x) => x.parent === o.id).map((x) => x.id);
-    // Lo más común: sacar del switch una variante que una pose elige. El mensaje dice cómo seguir.
+    // The most common case: taking out of the switch a variant that a pose picks. The message says how to proceed.
     if (poseId) {
       return [`Pose "${poseId}" makes switch ${o.id} show "${value}", but "${value}" is not a child of ${o.id} (children: ${children.join(', ') || 'none'}). To take it out of the switch, first remove only ${o.id}'s ${prop} from pose "${poseId}" — in the editor: Puppet → View → Pose: ${poseId}, select ${o.id} and click ↺ next to ${prop}; for the AI: set_pose with remove: ["${o.id}.${prop}"] — or keep "${value}" inside ${o.id}. Otherwise, pick one of its children.`];
     }
@@ -264,8 +264,8 @@ function referenceErrors(doc, o, prop, p, value, owner, { pose: poseId = null, c
 }
 
 /**
- * Coherencia de params y drivers: un param enum con initial fuera de sus options, un param numérico con min > max, o
- * un driver con equals que no es una opción de su param.
+ * Consistency of params and drivers: an enum param with initial outside its options, a numeric param with
+ * min > max, or a driver with equals that is not an option of its param.
  */
 function controlErrors(doc, schema, o) {
   const errors = [];
@@ -275,8 +275,8 @@ function controlErrors(doc, schema, o) {
     if (kind === 'enum' && o.initial != null && Array.isArray(options) && !options.includes(o.initial)) errors.push(`${o.id}.initial "${o.initial}" is not one of its options: ${list(options)}`);
     if (Array.isArray(options) && new Set(options).size !== options.length) errors.push(`${o.id}.options has repeated options: ${list(options)}`);
     if (kind !== 'enum' && typeof min === 'number' && typeof max === 'number' && min > max) errors.push(`${o.id}: min (${min}) is greater than max (${max})`);
-    // Drivers cuyo equals no es una opción (por ejemplo, al quitar o renombrar una opción en uso): un solo error que
-    // los nombra a todos y dice cómo seguir.
+    // Drivers whose equals is not an option (for example, when removing or renaming an option in use): a single error
+    // that names them all and says how to proceed.
     if (kind === 'enum' && Array.isArray(options)) {
       const bad = doc.objects.filter((d) => d.type === 'driver' && d.param === o.id && d.equals != null && !options.includes(d.equals));
       if (bad.length) {
@@ -285,7 +285,7 @@ function controlErrors(doc, schema, o) {
       }
     }
   }
-  // Lo de Live (fade, next, blend, auto) es de los clips de Puppet; una escena no se dispara en vivo.
+  // The Live settings (fade, next, blend, auto) belong to Puppet clips; a scene is not triggered live.
   if (o.type === 'animation') {
     const puppet = read(schema, o, 'usage') === 'puppet';
     const [next, blend, auto, rmin, rmax] = ['next', 'blend', 'auto', 'repeat_min', 'repeat_max'].map((k) => read(schema, o, k));

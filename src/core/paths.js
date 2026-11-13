@@ -1,15 +1,15 @@
-// Trazados: vértices con tangentes en polares (ángulo + distancia, como Rive), su conversión a un `d` de SVG y
-// desde un `d` de SVG. Un vértice:
+// Paths: vertices with polar tangents (angle + distance, like Rive), their conversion to an SVG `d` and from an
+// SVG `d`. A vertex:
 //
-//   { x, y }                                                        recto
-//   { x, y, radius }                                                recto con la esquina redondeada
-//   { x, y, mode: 'mirrored',   angle, dist }                       curva simétrica
-//   { x, y, mode: 'asymmetric', angle, inDist, outDist }            misma dirección, largos distintos
-//   { x, y, mode: 'detached',   inAngle, inDist, outAngle, outDist } tangentes independientes (pico)
+//   { x, y }                                                        straight
+//   { x, y, radius }                                                straight with the corner rounded
+//   { x, y, mode: 'mirrored',   angle, dist }                       symmetric curve
+//   { x, y, mode: 'asymmetric', angle, inDist, outDist }            same direction, different lengths
+//   { x, y, mode: 'detached',   inAngle, inDist, outAngle, outDist } independent tangents (cusp)
 //
-// `angle` / `outAngle` es la dirección de la tangente de salida (hacia el vértice siguiente), en grados con Y hacia
-// abajo (0 = derecha, 90 = abajo). La de entrada apunta hacia el vértice anterior: en mirrored y asymmetric es
-// angle + 180; en detached, inAngle.
+// `angle` / `outAngle` is the direction of the out tangent (toward the next vertex), in degrees with Y pointing
+// down (0 = right, 90 = down). The in tangent points toward the previous vertex: in mirrored and asymmetric it is
+// angle + 180; in detached, inAngle.
 
 export const MODES = ['straight', 'mirrored', 'asymmetric', 'detached'];
 export const VERTEX_FIELDS = {
@@ -20,7 +20,7 @@ export const VERTEX_FIELDS = {
 };
 
 const RAD = Math.PI / 180;
-const KAPPA = 0.5523; // control de una cubic que aproxima un cuarto de círculo
+const KAPPA = 0.5523; // control point of a cubic that approximates a quarter circle
 const r2 = (v) => Math.round(v * 100) / 100 || 0;
 const n = (v) => +v.toFixed(3);
 const polar = (angle, dist) => [Math.cos(angle * RAD) * dist, Math.sin(angle * RAD) * dist];
@@ -30,10 +30,10 @@ const length = ([x, y]) => Math.hypot(x, y);
 const angleOf = ([x, y]) => r2(Math.atan2(y, x) / RAD);
 const normalizeAngle = (a) => ((((a + 180) % 360) + 360) % 360) - 180;
 
-/** Un vértice rehecho conserva el hueso que seguía el original (enlace por punto). */
+/** A rebuilt vertex keeps the bone the original followed (per-point binding). */
 export const withBone = (original, created) => (original?.bone ? { ...created, bone: original.bone } : created);
 
-/** Tangentes de un vértice como vectores relativos al ancla. */
+/** Tangents of a vertex as vectors relative to the anchor. */
 export function tangents(v) {
   switch (v.mode ?? 'straight') {
     case 'mirrored': {
@@ -49,7 +49,7 @@ export function tangents(v) {
   }
 }
 
-/** Construye un vértice a partir del ancla y sus tangentes, eligiendo el modo más simple que lo describe. */
+/** Builds a vertex from the anchor and its tangents, choosing the simplest mode that describes it. */
 export function vertexFromTangents(x, y, entry, output, extra = {}) {
   const li = length(entry);
   const lo = length(output);
@@ -73,9 +73,9 @@ export function vertexFromTangents(x, y, entry, output, extra = {}) {
   };
 }
 
-// ---------- Vértices → d ----------
+// ---------- Vertices → d ----------
 
-/** Puntos con tangentes absolutas, con las esquinas redondeadas ya expandidas en dos puntos. */
+/** Points with absolute tangents, with the rounded corners already expanded into two points. */
 function expand(vertices, closed) {
   const points = [];
   vertices.forEach((v, i) => {
@@ -115,11 +115,11 @@ export function verticesAD(vertices, closed) {
   return d;
 }
 
-// ---------- d → vértices ----------
+// ---------- d → vertices ----------
 
 /**
- * Convierte un `d` de SVG en subtrazados [{ closed, vertices }]. Acepta todos los comandos (M L H V C S Q T A Z),
- * absolutos y relativos. Las cuadráticas y los arcos se convierten a cúbicas.
+ * Converts an SVG `d` into subpaths [{ closed, vertices }]. Accepts all commands (M L H V C S Q T A Z), absolute
+ * and relative. Quadratics and arcs are converted to cubics.
  */
 export function parseD(d) {
   const text = String(d);
@@ -253,7 +253,7 @@ export function parseD(d) {
         throw new Error(`d inválido: comando desconocido "${command}"`);
     }
     lastControl = control;
-    // Si siguen números sin letra, se repite este comando (M repetido es L).
+    // If numbers follow without a letter, this command repeats (a repeated M is L).
     lastCommand = command;
   }
 
@@ -262,7 +262,7 @@ export function parseD(d) {
     .map((s) => ({ closed: s.closed, vertices: s.points.map((pt) => vertexFromTangents(pt.p[0], pt.p[1], pt.in, pt.out)) }));
 }
 
-/** Arco elíptico de SVG → lista de cúbicas [c1, c2, fin] (algoritmo de la especificación SVG, apéndice F.6). */
+/** SVG elliptical arc → list of cubics [c1, c2, end] (algorithm from the SVG specification, appendix F.6). */
 function arcToCubics(p0, rx, ry, rotation, large, clockwise, p) {
   if (Math.hypot(p[0] - p0[0], p[1] - p0[1]) < 1e-9) return [];
   rx = Math.abs(rx);
@@ -311,9 +311,9 @@ function arcToCubics(p0, rx, ry, rotation, large, clockwise, p) {
   return cubics;
 }
 
-// ---------- Transformar y editar ----------
+// ---------- Transform and edit ----------
 
-/** Aplica una matriz afín [a b c d e f] a los vértices (anclas y tangentes). */
+/** Applies an affine matrix [a b c d e f] to the vertices (anchors and tangents). */
 export function transformVertices(vertices, m) {
   const scale = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
   return vertices.map((v) => {
@@ -325,7 +325,7 @@ export function transformVertices(vertices, m) {
   });
 }
 
-/** Anclas y extremos de las tangentes en coordenadas absolutas (para dibujar las manijas del editor). */
+/** Anchors and tangent ends in absolute coordinates (to draw the editor's handles). */
 export function handles(vertices) {
   return vertices.map((v) => {
     const { in: entry, out: output } = tangents(v);
@@ -347,7 +347,7 @@ function cubicSpan(vertices, i) {
 
 const lerp = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
 
-/** Puntos a lo largo del tramo i (del vértice i al siguiente), para buscar dónde hizo clic el usuario. */
+/** Points along span i (from vertex i to the next), to find where the user clicked. */
 export function sampleSpan(vertices, i, steps = 24) {
   const [p0, p1, p2, p3] = cubicSpan(vertices, i);
   return Array.from({ length: steps + 1 }, (_, k) => {
@@ -358,10 +358,10 @@ export function sampleSpan(vertices, i, steps = 24) {
   });
 }
 
-/** Inserta un vértice en el tramo i, en el parámetro t, sin cambiar la forma (de Casteljau). */
+/** Inserts a vertex in span i, at parameter t, without changing the shape (de Casteljau). */
 export function splitSpan(vertices, i, t) {
   const [p0, p1, p2, p3] = cubicSpan(vertices, i);
-  // Tramo recto: el vértice nuevo también es recto.
+  // Straight span: the new vertex is straight too.
   if (p1[0] === p0[0] && p1[1] === p0[1] && p2[0] === p3[0] && p2[1] === p3[1]) {
     const p = lerp(p0, p3, t);
     return [...vertices.slice(0, i + 1), withBone(vertices[i], { x: r2(p[0]), y: r2(p[1]) }), ...vertices.slice(i + 1)];
@@ -386,14 +386,14 @@ export function splitSpan(vertices, i, t) {
   return result;
 }
 
-/** Errores de un vértice (lista vacía si está bien). */
+/** Errors of a vertex (empty list if it is fine). */
 export function vertexErrors(v) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return ['debe ser un objeto { x, y, ... }'];
   const mode = v.mode ?? 'straight';
   if (!MODES.includes(mode)) return [`mode debe ser ${MODES.join(', ')}`];
   const errors = [];
   const fields = VERTEX_FIELDS[mode];
-  // `bone` (enlace por punto) vale en cualquier modo; que el hueso exista lo revisa el documento.
+  // `bone` (per-point binding) is valid in any mode; whether the bone exists is checked by the document.
   for (const k of Object.keys(v)) if (k !== 'bone' && !fields.includes(k)) errors.push(`campo "${k}" no va en un vértice ${mode} (campos: ${fields.join(', ')}, y bone)`);
   if (v.bone !== undefined && (typeof v.bone !== 'string' || !v.bone)) errors.push('bone debe ser el id de un hueso');
   for (const k of fields) {

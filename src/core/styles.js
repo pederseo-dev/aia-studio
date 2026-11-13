@@ -1,5 +1,5 @@
-// Estilos compartidos (de Moho): una forma toma de su estilo las propiedades de apariencia que no tiene propias.
-// Orden: valor propio → valor del estilo → valor por defecto del esquema.
+// Shared styles (from Moho): a shape takes from its style the appearance properties it does not have of its own.
+// Order: own value → style value → schema default value.
 
 import { findObject } from './document.js';
 import { read } from './schema.js';
@@ -11,7 +11,7 @@ export function effectiveValue(schema, doc, obj, prop) {
   return read(schema, obj, prop);
 }
 
-/** De dónde sale el valor: 'propio', 'estilo' o 'defecto' (para mostrarlo en el inspector). */
+/** Where the value comes from: 'own', 'style' or 'defecto' (to show it in the inspector). */
 export function valueOrigin(doc, obj, prop) {
   if (obj[prop] !== undefined) return 'own';
   const style = obj.style ? findObject(doc, obj.style) : null;

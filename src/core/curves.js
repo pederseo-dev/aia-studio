@@ -1,8 +1,8 @@
-// Curvas de interpolación de los keyframes. Cada keyframe lleva la suya y vale para el tramo que sale de él (como en
-// Moho y Rive). Todas son cubic-bezier como las de CSS, para que pasen sin pérdida a CSS, Lottie y Rive; `step`
-// mantiene el valor hasta el keyframe siguiente.
+// Keyframe interpolation curves. Each keyframe carries its own and it applies to the span leaving it (like in
+// Moho and Rive). All are cubic-bezier like CSS ones, so they carry over losslessly to CSS, Lottie and Rive; `step`
+// holds the value until the next keyframe.
 
-// Las fuertes (quad, cubic, expo, back) son las aproximaciones cubic-bezier clásicas (las de easings.net).
+// The strong ones (quad, cubic, expo, back) are the classic cubic-bezier approximations (those of easings.net).
 export const NAMED_CURVES = {
   linear: [0, 0, 1, 1],
   'ease-in': [0.42, 0, 1, 1],
@@ -23,7 +23,7 @@ export const NAMED_CURVES = {
 };
 export const CURVE_NAMES = [...Object.keys(NAMED_CURVES), 'step'];
 
-/** Qué hace cada curva, para la guía de la IA (una línea por familia). */
+/** What each curve does, for the AI guide (one line per family). */
 export const CURVE_DESCRIPTIONS = [
   ['linear', 'velocidad pareja (por defecto)'],
   ['step', 'se mantiene y cambia de golpe en el keyframe siguiente'],
@@ -35,13 +35,13 @@ export const CURVE_DESCRIPTIONS = [
 ];
 
 /**
- * Dos keyframes de una pista a menos de esto (en segundos) son el mismo momento: ponerlos reemplaza, quitar o mover
- * los elige juntos, y la validación no deja guardar dos tan cerca. Es menos que un cuadro a 120 fps.
+ * Two keyframes of a track closer than this (in seconds) are the same moment: setting one replaces, removing or
+ * moving picks them together, and validation does not allow saving two this close. It is less than a frame at 120 fps.
  */
 export const SAME_TIME = 1e-3;
 export const sameTime = (a, b) => Math.abs(a - b) < SAME_TIME;
 
-/** Por qué una curva no sirve (null si sirve). `undefined` es linear. */
+/** Why a curve is not valid (null if it is). `undefined` is linear. */
 export function curveError(ease) {
   if (ease === undefined || CURVE_NAMES.includes(ease)) return null;
   if (Array.isArray(ease)) {
@@ -53,8 +53,8 @@ export function curveError(ease) {
 }
 
 /**
- * Progreso con curva: `f` va de 0 a 1 en el tramo; devuelve cuánto del cambio ya ocurrió (puede salir de 0…1 con
- * una bezier que se pasa, como en CSS). `step` da 0 hasta el final del tramo.
+ * Progress with a curve: `f` goes from 0 to 1 over the span; returns how much of the change has already happened
+ * (it can leave 0…1 with an overshooting bezier, like in CSS). `step` gives 0 until the end of the span.
  */
 export function applyCurve(ease, f) {
   if (ease === 'step') return 0;
@@ -63,12 +63,12 @@ export function applyCurve(ease, f) {
   return bezierY(y1, y2, resolveX(x1, x2, f));
 }
 
-// Cubic-bezier con extremos (0,0) y (1,1): B(s) = 3(1−s)²s·p1 + 3(1−s)s²·p2 + s³.
+// Cubic-bezier with endpoints (0,0) and (1,1): B(s) = 3(1−s)²s·p1 + 3(1−s)s²·p2 + s³.
 const bezier = (p1, p2, s) => ((1 - 3 * p2 + 3 * p1) * s + (3 * p2 - 6 * p1)) * s * s + 3 * p1 * s;
 const derivative = (p1, p2, s) => 3 * (1 - 3 * p2 + 3 * p1) * s * s + 2 * (3 * p2 - 6 * p1) * s + 3 * p1;
 const bezierY = (y1, y2, s) => bezier(y1, y2, s);
 
-/** El parámetro s con B_x(s) = x: Newton-Raphson y, si no converge, bisección (el algoritmo clásico de CSS). */
+/** The parameter s with B_x(s) = x: Newton-Raphson and, if it does not converge, bisection (classic CSS algorithm). */
 function resolveX(x1, x2, x) {
   let s = x;
   for (let i = 0; i < 8; i++) {

@@ -1,18 +1,18 @@
-// Motor de operaciones: la única forma de modificar un documento, igual para la IA y para el editor.
+// Operations engine: the only way to modify a document, the same for the AI and for the editor.
 //
 //   { op: 'create', type: 'rect', id: 'eye_l', parent: 'head', index?: 0, props?: { width: 20 } }
 //   { op: 'set',    target: 'eye_l' | 'meta', props: { x: 10, fill: '#ffffff' } }
-//   { op: 'unset',  target: 'eye_l' | 'meta', props: ['x'] }            ← vuelve al valor por defecto
-//   { op: 'delete', target: 'head' }                                     ← borra también los hijos y suelta
-//                                                                          las referencias a lo borrado
+//   { op: 'unset',  target: 'eye_l' | 'meta', props: ['x'] }            ← back to the default value
+//   { op: 'delete', target: 'head' }                                     ← also deletes the children and releases
+//                                                                          the references to what was deleted
 //   { op: 'move',   target: 'eye_l', parent?: 'face' | null, index?: 0, keepPosition?: true }
-//                                                     ← reparentar y/o reordenar; keepPosition deja el x/y que
-//                                                       conserva su lugar en pantalla
-//   { op: 'rename', target: 'eye_l', id: 'left_eye' }                    ← actualiza las referencias (y las poses)
+//                                                     ← reparent and/or reorder; keepPosition leaves the x/y that
+//                                                       keeps its place on screen
+//   { op: 'rename', target: 'eye_l', id: 'left_eye' }                    ← updates the references (and the poses)
 //   { op: 'duplicate', target: 'arm_l', id?: 'arm_r', suffix?: 'copy', parent?, index?, props? }
-//                                                     ← copia con sus hijos; los hijos reciben el sufijo
+//                                                     ← copy with its children; the children get the suffix
 //
-// `index` es la posición entre los hermanos en orden de dibujo: 0 = al fondo; sin index = al frente.
+// `index` is the position among the siblings in drawing order: 0 = at the back; no index = at the front.
 
 import { expandFromTo } from './skeleton.js';
 import { read, suggest } from './schema.js';
@@ -23,8 +23,8 @@ import { ValidationError, ID, findObject, idError, children, subtree, validate }
 const STRUCTURE = new Set(['id', 'type', 'parent']);
 
 /**
- * Aplica un lote de forma atómica: si una operación falla o el resultado no es válido, no cambia nada y lanza.
- * Devuelve el documento nuevo, las operaciones inversas (para deshacer) y los avisos nuevos.
+ * Applies a batch atomically: if an operation fails or the result is not valid, nothing changes and it throws.
+ * Returns the new document, the inverse operations (for undo) and the new warnings.
  */
 export function applyOperations(doc, ops, schema) {
   if (!Array.isArray(ops) || !ops.length) throw new Error('Se necesita una lista de operaciones no vacía');
@@ -43,7 +43,7 @@ export function applyOperations(doc, ops, schema) {
   return { doc: next, inverses, warnings: warnings.filter((a) => !previous.has(a)) };
 }
 
-/** Junta los `set` seguidos sobre el mismo objetivo en uno solo (el último valor gana). */
+/** Merges consecutive `set`s on the same target into one (the last value wins). */
 export function compact(ops) {
   const result = [];
   for (const op of ops) {
@@ -57,7 +57,7 @@ export function compact(ops) {
   return result;
 }
 
-/** Resumen corto de un lote para mostrar: "head.x, head.rotation, crear eye_l". */
+/** Short summary of a batch for display: "head.x, head.rotation, crear eye_l". */
 export function summarizeOperations(ops) {
   const parts = [];
   for (const op of ops) {
@@ -87,8 +87,8 @@ function container(doc, id, schema) {
 }
 
 /**
- * El x/y que deja a un objeto en el mismo lugar de la pantalla al pasar a otro padre (en el montaje). Lo usan
- * `move` con keepPosition y el editor al arrastrar en Layers.
+ * The x/y that leaves an object in the same place on screen when moving to another parent (in the setup). Used by
+ * `move` with keepPosition and by the editor when dragging in Layers.
  */
 export function keptPosition(doc, schema, obj, newParent) {
   const world = apply(worldMatrix(doc, schema, obj.parent ?? null), read(schema, obj, 'x'), read(schema, obj, 'y'));
@@ -96,19 +96,19 @@ export function keptPosition(doc, schema, obj, newParent) {
   return { x: Math.round(x * 10) / 10 || 0, y: Math.round(y * 10) / 10 || 0 };
 }
 
-/** Inserta obj en la lista plana para que quede en la posición `index` entre los hijos de `padre`. */
+/** Inserts obj into the flat list so it ends up at position `index` among the children of `parent`. */
 function insert(doc, obj, parent, index) {
   const siblings = children(doc, parent);
   const i = Math.max(0, Math.min(index ?? siblings.length, siblings.length));
   let pos;
   if (i < siblings.length) pos = doc.objects.indexOf(siblings[i]);
-  // Al frente: después de todo el subárbol del último hermano, para que la lista plana siga ordenada por ramas.
+  // At the front: after the whole subtree of the last sibling, so the flat list stays ordered by branches.
   else if (siblings.length) pos = Math.max(...subtree(doc, siblings.at(-1).id).map((id) => doc.objects.findIndex((o) => o.id === id))) + 1;
   else pos = parent == null ? doc.objects.length : doc.objects.indexOf(findObject(doc, parent)) + 1;
   doc.objects.splice(pos, 0, obj);
 }
 
-/** Azúcar para la IA: un path acepta `d` (trazado SVG de un solo subtrazado) y se guarda como vértices. */
+/** Sugar for the AI: a path accepts `d` (SVG path data with a single subpath) and is saved as vertices. */
 function expandD(kind, props) {
   if (props?.d === undefined) return props;
   if (!kind?.properties.vertices) throw new Error(`"d" solo sirve en tipos con vértices (path), no en ${kind?.name ?? 'meta'}`);
@@ -119,8 +119,8 @@ function expandD(kind, props) {
 }
 
 /**
- * Rehace los valores de una pose cambiando ids: los de los objetos (claves) y los que son referencias (el hijo
- * activo de un switch). `cambiar(id)` devuelve el id nuevo, o null para quitarlo.
+ * Rebuilds the values of a pose changing ids: those of the objects (keys) and those that are references (the
+ * active child of a switch). `change(id)` returns the new id, or null to remove it.
  */
 function mapPose(doc, schema, values, change) {
   const result = {};
@@ -139,8 +139,8 @@ function mapPose(doc, schema, values, change) {
 }
 
 /**
- * Azúcar para la IA: dentro de una pose, un path también acepta `d` (se guarda como vértices, para el morph). Los
- * vértices de una pose no guardan `bone`: el enlace por punto es del montaje, como en Moho (ver aplicarPose).
+ * Sugar for the AI: inside a pose, a path also accepts `d` (saved as vertices, for the morph). The vertices of a
+ * pose do not keep `bone`: the per-point binding belongs to the setup, like in Moho (see applyPose).
  */
 function expandPose(doc, schema, kind, props) {
   if (kind !== 'pose' || !props?.values || typeof props.values !== 'object' || Array.isArray(props.values)) return props;
@@ -155,7 +155,7 @@ function expandPose(doc, schema, kind, props) {
     let rest = fields;
     if (fields.d !== undefined) {
       const { d, closed, ...withoutD } = expandD(targetType, fields);
-      rest = withoutD; // si es cerrado o abierto lo decide el montaje
+      rest = withoutD; // whether it is closed or open is decided by the setup
     }
     for (const [k, p] of Object.entries(targetType.properties)) {
       if (p.type === 'vertices' && Array.isArray(rest[k]) && rest[k].some((v) => v?.bone !== undefined)) rest = { ...rest, [k]: rest[k].map(({ bone, ...v }) => v) };
@@ -166,8 +166,8 @@ function expandPose(doc, schema, kind, props) {
 }
 
 /**
- * Lo mismo para las pistas de un clip: rehace las pistas cambiando ids de objetos y los valores que son referencias.
- * Un keyframe que apuntaba a algo quitado sale de la pista; una pista vacía sale entera.
+ * The same for the tracks of a clip: rebuilds the tracks changing object ids and the values that are references.
+ * A keyframe that pointed to something removed leaves the track; an empty track leaves entirely.
  */
 function mapTracks(doc, schema, tracks, change) {
   const result = {};
@@ -187,8 +187,8 @@ function mapTracks(doc, schema, tracks, change) {
 }
 
 /**
- * Azúcar para la IA en las pistas de un clip: un path acepta una pista `d` (cada value, un trazado SVG) que se guarda
- * como pista de `vertices` (para el morph). Como en las poses, los vértices no guardan `bone`.
+ * Sugar for the AI in the tracks of a clip: a path accepts a `d` track (each value, an SVG path data) that is saved
+ * as a `vertices` track (for the morph). As in poses, the vertices do not keep `bone`.
  */
 function expandTracks(doc, schema, kind, props) {
   if (!props?.tracks || typeof props.tracks !== 'object' || Array.isArray(props.tracks)) return props;
@@ -215,7 +215,7 @@ function expandTracks(doc, schema, kind, props) {
   return { ...props, tracks };
 }
 
-/** Azúcar para la IA: un bone acepta `from` y `to` ([x, y] en el documento) en vez de x, y, rotation y length. */
+/** Sugar for the AI: a bone accepts `from` and `to` ([x, y] in the document) instead of x, y, rotation and length. */
 function expandBone(doc, schema, kind, parent, props, current) {
   if (props?.from === undefined && props?.to === undefined) return props;
   if (kind !== 'bone') throw new Error(`"from"/"to" solo sirven en huesos (bone), no en ${kind}`);
@@ -238,7 +238,7 @@ function applyOne(doc, op, schema) {
       if (idError(op.id)) throw new Error(idError(op.id));
       const repeated = findObject(doc, op.id);
       if (repeated) {
-        // Los ids son únicos en todo el documento: dibujo, huesos y recursos comparten el espacio de nombres.
+        // Ids are unique across the whole document: drawing, bones and assets share the namespace.
         const track = op.type === 'bone' && repeated.type !== 'bone' ? ` Para huesos conviene el sufijo _bone: "${op.id}_bone".` : '';
         throw new Error(`ya existe un objeto "${op.id}" (${repeated.type}).${track}`);
       }
@@ -286,7 +286,7 @@ function applyOne(doc, op, schema) {
       const removed = [];
       doc.objects.forEach((o, pos) => ids.has(o.id) && removed.push({ pos, obj: o }));
       doc.objects = doc.objects.filter((o) => !ids.has(o.id));
-      // Lo que apuntaba a algo borrado (un estilo, un hueso) se suelta; deshacer lo vuelve a enlazar.
+      // What pointed to something deleted (a style, a bone) is released; undo binds it again.
       const rebind = [];
       for (const o of doc.objects) {
         const previous = {};
@@ -311,7 +311,7 @@ function applyOne(doc, op, schema) {
     }
 
     case '_restore': {
-      // Interna: inversa de delete. Devuelve los objetos a su posición exacta en la lista plana.
+      // Internal: inverse of delete. Puts the objects back at their exact position in the flat list.
       for (const { pos, obj } of op.entries) doc.objects.splice(pos, 0, structuredClone(obj));
       return [{ op: 'delete', target: op.root }];
     }
@@ -344,7 +344,7 @@ function applyOne(doc, op, schema) {
     }
 
     case '_place': {
-      // Interna: inversa de move. Devuelve el objeto a su posición exacta en la lista plana.
+      // Internal: inverse of move. Puts the object back at its exact position in the flat list.
       const obj = target(doc, op.target);
       const inverse = { op: '_place', target: obj.id, parent: obj.parent ?? null, pos: doc.objects.indexOf(obj) };
       doc.objects.splice(inverse.pos, 1);
@@ -386,7 +386,7 @@ function applyOne(doc, op, schema) {
       const parent = 'parent' in op ? container(doc, op.parent, schema) : originalParent;
       if (op.props !== undefined) checkProps(op.props);
 
-      // Copias en el orden de la lista plana, con padres y referencias apuntando a las copias.
+      // Copies in the order of the flat list, with parents and references pointing to the copies.
       const copies = doc.objects
         .filter((o) => map.has(o.id))
         .map((o) => {
@@ -395,14 +395,14 @@ function applyOne(doc, op, schema) {
           c.parent = o.id === original.id ? parent : map.get(o.parent);
           for (const [prop, p] of Object.entries(schema.types.get(c.type)?.properties ?? {})) {
             if (p.type === 'ref' && map.has(c[prop])) c[prop] = map.get(c[prop]);
-            // Al copiar un skeleton entero, los vértices enlazados por punto siguen a los huesos copiados.
+            // When copying a whole skeleton, the vertices bound per point follow the copied bones.
             if (p.type === 'vertices' && c[prop]?.some((v) => map.has(v.bone))) c[prop] = c[prop].map((v) => (map.has(v.bone) ? { ...v, bone: map.get(v.bone) } : v));
           }
           return c;
         });
       const root = copies.find((c) => c.id === map.get(original.id));
       Object.assign(root, structuredClone(op.props ?? {}));
-      // Por defecto queda justo delante del original.
+      // By default it ends up right in front of the original.
       const index = op.index ?? (parent === originalParent ? children(doc, parent).indexOf(original) + 1 : undefined);
       insert(doc, root, parent, index);
       let pos = doc.objects.indexOf(root) + 1;

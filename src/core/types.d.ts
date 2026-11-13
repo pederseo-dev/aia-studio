@@ -1,11 +1,11 @@
-// Tipos compartidos del núcleo, para la verificación con `npm run tipos` (tsc sobre JS con JSDoc). No generan código.
+// Shared core types, for checking with `npm run typecheck` (tsc over JS with JSDoc). They generate no code.
 
-/** Matriz afín [a, b, c, d, e, f], la misma que usa SVG en matrix(...). */
+/** Affine matrix [a, b, c, d, e, f], the same one SVG uses in matrix(...). */
 export type Matrix = number[];
-/** Punto [x, y]. */
+/** Point [x, y]. */
 export type Point = [number, number];
 
-/** Un objeto del documento: `type`, `id`, `parent` y sus propiedades (las define el esquema). */
+/** An object of the document: `type`, `id`, `parent` and its properties (defined by the schema). */
 export interface Object {
   id: string;
   type: string;
@@ -13,7 +13,7 @@ export interface Object {
   [prop: string]: any;
 }
 
-/** El documento: `format`, `meta` y la lista plana de objetos. */
+/** The document: `format`, `meta` and the flat list of objects. */
 export interface Document {
   format: number;
   meta: Record<string, any>;
@@ -21,16 +21,16 @@ export interface Document {
   [prop: string]: any;
 }
 
-/** Una operación de un lote: create, set, unset, delete, move, rename, duplicate (y las internas `_...`). */
+/** An operation of a batch: create, set, unset, delete, move, rename, duplicate (and the internal `_...` ones). */
 export interface Operation {
   op: string;
   target?: string;
   [field: string]: any;
 }
 
-/** Opciones de lo que se dibuja (render/svg.js y las vistas previas del MCP). */
+/** Options for what is drawn (render/svg.js and the MCP previews). */
 export interface ViewOptions {
-  /** Pose que se ve encima del montaje (un objeto pose o sus valores ya resueltos). */
+  /** Pose seen on top of the setup (a pose object or its already resolved values). */
   pose?: any;
   params?: Record<string, number>;
   animation?: any;
@@ -38,7 +38,7 @@ export interface ViewOptions {
   times?: number[];
   poses?: any[];
   show?: any;
-  /** src de una capa image → href con que se dibuja (el editor: la URL del servidor). */
+  /** src of an image layer → href it is drawn with (the editor: the server URL). */
   assets?: (src: string) => string;
   region?: { x: number; y: number; width: number; height: number };
   bones?: boolean;

@@ -1,12 +1,12 @@
-// Imágenes como capa (tipo `image`): leer el formato y el tamaño de un archivo desde sus bytes, darle un nombre de
-// asset y armar la operación que la agrega. Lo usan el servidor (al guardar el archivo), el editor y el MCP, así que
-// es código puro: sin disco ni DOM.
+// Images as a layer (type `image`): read the format and size of a file from its bytes, give it an asset name and
+// build the operation that adds it. The server (when saving the file), the editor and the MCP use it, so it is pure
+// code: no disk or DOM.
 
 import { findObject, idError } from './document.js';
 import { ASSET_FILE, readMeta } from './schema.js';
 import { apply, invert, worldMatrix } from './geometry.js';
 
-/** Formatos aceptados: extensión del archivo guardado y tipo MIME. */
+/** Accepted formats: extension of the saved file and MIME type. */
 export const IMAGE_FORMATS = {
   png: { extension: 'png', mime: 'image/png' },
   jpeg: { extension: 'jpg', mime: 'image/jpeg' },
@@ -14,12 +14,12 @@ export const IMAGE_FORMATS = {
   svg: { extension: 'svg', mime: 'image/svg+xml' },
 };
 
-/** Tamaño máximo de un archivo de imagen, en bytes. */
+/** Maximum size of an image file, in bytes. */
 export const IMAGE_MAX = 25 * 1024 * 1024;
 
 const MIME_BY_EXTENSION = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', svg: 'image/svg+xml' };
 
-/** Tipo MIME de un asset por su extensión (null si no es una imagen aceptada). */
+/** MIME type of an asset by its extension (null if it is not an accepted image). */
 export const assetMime = (name) => MIME_BY_EXTENSION[/\.([a-z]+)$/i.exec(name)?.[1]?.toLowerCase()] ?? null;
 
 const ascii = (b, from, to) => String.fromCharCode(...b.subarray(from, to));
@@ -28,8 +28,8 @@ const u24le = (b, i) => b[i] | (b[i + 1] << 8) | (b[i + 2] << 16);
 const u32be = (b, i) => ((b[i] << 24) >>> 0) + ((b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]);
 
 /**
- * Formato y tamaño natural de una imagen a partir de sus bytes (solo lee la cabecera; en un SVG, width/height o el
- * viewBox). Lanza si no es PNG, JPEG, WebP ni SVG.
+ * Format and natural size of an image from its bytes (it only reads the header; in an SVG, width/height or the
+ * viewBox). Throws if it is not PNG, JPEG, WebP or SVG.
  * @param {Uint8Array} b
  * @returns {{ format: 'png' | 'jpeg' | 'webp' | 'svg', naturalWidth: number, naturalHeight: number }}
  */
@@ -50,7 +50,7 @@ function measure(format, naturalWidth, naturalHeight) {
 }
 
 function jpegSize(b) {
-  // Marcadores hasta un SOF (C0–CF salvo C4, C8 y CC): ahí están alto y ancho.
+  // Markers up to an SOF (C0–CF except C4, C8 and CC): height and width are there.
   let i = 2;
   while (i + 9 < b.length) {
     if (b[i] !== 0xff) return [0, 0];
@@ -79,7 +79,7 @@ function webpSize(b) {
 function svgSize(text) {
   const label = /<svg\b[^>]*>/i.exec(text)?.[0] ?? '';
   const attribute = (name) => new RegExp(`\\s${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(label)?.[1];
-  // Solo px (o sin unidad): un 100% o 10cm no dice cuánto mide en el lienzo.
+  // Only px (or no unit): a 100% or 10cm does not say how big it is on the canvas.
   const px = (v) => (v != null && /^\s*[\d.]+\s*(px)?\s*$/i.test(v) ? parseFloat(v) : null);
   const box = attribute('viewBox')?.trim().split(/[\s,]+/).map(Number);
   const [vw, vh] = box?.length === 4 && box.every(Number.isFinite) ? [box[2], box[3]] : [null, null];
@@ -91,8 +91,8 @@ function svgSize(text) {
 }
 
 /**
- * Nombre de asset para un archivo: el nombre original en minúsculas y sin caracteres raros, con la extensión de su
- * formato real ("Mi Foto.JPEG" → "mi_foto.jpg").
+ * Asset name for a file: the original name in lowercase and without odd characters, with the extension of its
+ * real format ("Mi Foto.JPEG" → "mi_foto.jpg").
  */
 export function assetName(original, format) {
   const base =
@@ -110,7 +110,7 @@ export function assetName(original, format) {
   return name;
 }
 
-/** El mismo nombre con _2, _3... antes de la extensión, hasta uno que `ocupado` no tenga. */
+/** The same name with _2, _3... before the extension, until one that `taken` does not have. */
 export function freeName(name, taken) {
   if (!taken(name)) return name;
   const [, base, ext] = /^(.*)(\.[a-z]+)$/.exec(name);
@@ -120,11 +120,12 @@ export function freeName(name, taken) {
 const round = (v) => Math.round(v * 100) / 100;
 
 /**
- * Operación para agregar una capa `image` que usa el asset `src` (de tamaño natural `ancho` × `alto`).
- * Por defecto: id libre a partir del nombre del archivo, centrada en el lienzo (o en `punto`, en coordenadas del
- * documento: donde se soltó el archivo; `x`/`y` en cambio son las del padre) y de su
- * tamaño natural, achicada en proporción si no entra en el 90 % del lienzo. Con solo `width` o solo `height`, el otro
- * sale en proporción. Lo usan el editor (Add image, soltar o pegar un archivo) y el MCP (add_image).
+ * Operation to add an `image` layer that uses the asset `src` (of natural size `naturalWidth` × `naturalHeight`).
+ * By default: free id based on the file name, centered on the canvas (or at `point`, in document coordinates:
+ * where the file was dropped; `x`/`y` instead are the parent's) and at its
+ * natural size, scaled down proportionally if it does not fit in 90 % of the canvas. With only `width` or only
+ * `height`, the other follows proportionally. The editor (Add image, dropping or pasting a file) and the MCP
+ * (add_image) use it.
  * @param {any} doc @param {any} schema
  * @param {{ src: string, naturalWidth: number, naturalHeight: number, id?: string, parent?: string | null, index?: number, x?: number, y?: number, point?: number[], width?: number, height?: number }} options
  * @returns {{ id: string, ops: import('./types.js').Operation[] }}
@@ -148,7 +149,7 @@ export function planAddImage(doc, schema, { src, naturalWidth, naturalHeight, id
     const scale = Math.min(1, (readMeta(schema, doc, 'width') * 0.9) / naturalWidth, (readMeta(schema, doc, 'height') * 0.9) / naturalHeight);
     [w, h] = [naturalWidth * scale, naturalHeight * scale];
   }
-  // El centro del lienzo (o el punto dado), visto desde el padre.
+  // The center of the canvas (or the given point), seen from the parent.
   const [px, py] = point ?? [readMeta(schema, doc, 'width') / 2, readMeta(schema, doc, 'height') / 2];
   const [cx, cy] = apply(invert(worldMatrix(doc, schema, parent)), px, py);
   const props = { src, x: round(x ?? cx), y: round(y ?? cy), width: round(w), height: round(h) };
@@ -162,5 +163,5 @@ function free(doc, base) {
   for (let n = 2; ; n++) if (!findObject(doc, `${base}_${n}`)) return `${base}_${n}`;
 }
 
-/** Los archivos de assets que usan las capas `image` del documento. */
+/** The asset files used by the document's `image` layers. */
 export const usedAssets = (doc) => [...new Set(doc.objects.filter((o) => o.type === 'image' && typeof o.src === 'string').map((o) => o.src))];

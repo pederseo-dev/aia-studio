@@ -1,16 +1,16 @@
-// Params, drivers y poses: cómo el valor de un param se convierte en el peso de una pose, y cómo se suman las poses
-// sobre el montaje (como las acciones de los smart bones de Moho, pero con la conexión explícita en un driver).
+// Params, drivers and poses: how a param's value becomes the weight of a pose, and how poses are added on top of
+// the setup (like the actions of Moho's smart bones, but with the connection made explicit in a driver).
 //
-// - Números (rotación, posición, opacidad...): se suman las diferencias con el montaje, cada una por su peso.
-// - Colores y vértices: se interpolan hacia el valor de cada pose, en orden.
-// - Lo que no se puede interpolar (el hijo activo de un switch, booleanos, textos): gana la pose con peso ≥ 0.5.
+// - Numbers (rotation, position, opacity...): the differences from the setup are added, each one by its weight.
+// - Colors and vertices: they are interpolated toward the value of each pose, in order.
+// - What cannot be interpolated (the active child of a switch, booleans, texts): the pose with weight ≥ 0.5 wins.
 
 import { findObject } from './document.js';
 import { read } from './schema.js';
 import { effectiveValue } from './styles.js';
 import { tangents, vertexFromTangents } from './paths.js';
 
-/** Valor de cada param: el pedido o, si no, su valor inicial. Los enum valen un texto; los demás, un número. */
+/** Value of each param: the requested one or, if not, its initial value. Enums hold a text; the rest, a number. */
 export function paramValues(doc, schema, requested = {}) {
   const valueMap = {};
   for (const p of doc.objects.filter((o) => o.type === 'param')) {
@@ -30,8 +30,8 @@ export function paramValues(doc, schema, requested = {}) {
 }
 
 /**
- * Params que eligen la variante de un switch: los que tienen drivers hacia poses que fijan el `active` de ese
- * switch. Es solo información (para la barra de opciones y el árbol de la IA).
+ * Params that choose the variant of a switch: those with drivers to poses that set the `active` of that switch.
+ * It is information only (for the options bar and the AI tree).
  */
 export function switchParams(doc, switchId) {
   const ids = doc.objects
@@ -41,14 +41,14 @@ export function switchParams(doc, switchId) {
   return [...new Set(ids)];
 }
 
-/** Peso (0 a 1) que un driver le da a su pose con el valor actual de su param. */
+/** Weight (0 to 1) that a driver gives its pose with the current value of its param. */
 export function driverWeight(doc, schema, driver, value) {
   const param = findObject(doc, driver.param);
   const [outMin, outMax] = [read(schema, driver, 'outMin'), read(schema, driver, 'outMax')];
   if (read(schema, param, 'kind') === 'enum') {
     const equals = read(schema, driver, 'equals');
     if (equals != null) return value === equals ? outMax : outMin;
-    // Sin equals, un enum se mueve como un número: la posición de la opción.
+    // Without equals, an enum moves like a number: the position of the option.
     value = read(schema, param, 'options').indexOf(value);
   }
   const [inMin, inMax] = [read(schema, driver, 'inMin'), read(schema, driver, 'inMax')];
@@ -56,13 +56,13 @@ export function driverWeight(doc, schema, driver, value) {
   return outMin + t * (outMax - outMin);
 }
 
-// ---------- Interpolación por tipo de propiedad ----------
+// ---------- Interpolation by property kind ----------
 
 const withoutBone = (vertices) => vertices.map(({ bone, ...v }) => v);
 
 /**
- * Vértices de una pose con el enlace por punto del montaje: el vértice i toma el `bone` del vértice i del montaje (y
- * los que sobran, ninguno). Lo que una pose vieja haya guardado en `bone` se ignora.
+ * Vertices of a pose with the setup's per-point binding: vertex i takes the `bone` of vertex i of the setup (and
+ * the extra ones, none). Whatever an old pose saved in `bone` is ignored.
  */
 export function withSetupBinding(vertices, setup) {
   return vertices.map(({ bone, ...v }, i) => (setup?.[i]?.bone ? { ...v, bone: setup[i].bone } : v));
@@ -83,8 +83,8 @@ export function blendColor(a, b, w) {
 }
 
 /**
- * Morph entre dos listas de vértices con la misma cantidad: anclas y tangentes se interpolan. El resultado no trae
- * `bone`: el enlace por punto es del montaje (lo pone `aplicarPose`), como en Moho.
+ * Morph between two vertex lists of the same length: anchors and tangents are interpolated. The result has no
+ * `bone`: the per-point binding belongs to the setup (`applyPose` sets it), like in Moho.
  */
 export function blendVertices(a, b, w) {
   if (a.length !== b.length) return withoutBone(w >= 0.5 ? b : a);
@@ -99,13 +99,13 @@ export function blendVertices(a, b, w) {
 }
 
 /**
- * La pose que resulta de mezclar todas las poses según los drivers y los valores de los params. Es un objeto pose
- * (sin id real) que se dibuja igual que una pose con nombre. `base` ({ objeto: { propiedad: valor } }, lo que fija
- * un clip en un tiempo) reemplaza al montaje como punto de partida: las poses se suman encima de lo animado.
+ * The pose that results from blending all poses according to the drivers and the param values. It is a pose object
+ * (with no real id) that is drawn just like a named pose. `base` ({ object: { property: value } }, what a clip sets
+ * at a time) replaces the setup as the starting point: the poses are added on top of what is animated.
  */
 export function blendPoses(doc, schema, requested = {}, base = {}) {
   const params = paramValues(doc, schema, requested);
-  const accumulated = new Map(); // "objeto\u0000propiedad" → { id, prop, tipo, base, valor }
+  const accumulated = new Map(); // "object\u0000property" → { id, prop, kind, base, value }
   for (const driver of doc.objects.filter((o) => o.type === 'driver')) {
     const pose = findObject(doc, driver.pose);
     if (!pose || !(driver.param in params)) continue;
@@ -118,13 +118,14 @@ export function blendPoses(doc, schema, requested = {}, base = {}) {
       for (const [prop, target] of Object.entries(fields)) {
         const p = definitions[prop];
         if (!p) continue;
-        // Lo que no se suma (colores, vértices, el hijo de un switch, booleanos) lo decide la pista del clip, si la
-        // tiene: un param enum siempre tiene una opción activa y, si no, su driver taparía el keyframe (ver
+        // What is not added (colors, vertices, the child of a switch, booleans) is decided by the clip track, if it
+        // has one: an enum param always has an active option and, otherwise, its driver would hide the keyframe (see
         // docs/decision-animacion.md §4).
         if (p.type !== 'number' && base[id]?.[prop] !== undefined) continue;
         const key = `${id}\u0000${prop}`;
-        // El valor del montaje es el que se ve: el propio, el del estilo o el por defecto. Las diferencias de los
-        // números se miden contra él (como siempre) y se suman a lo animado; colores y vértices parten de lo animado.
+        // The setup value is the one seen: its own, the style's or the default. The differences of numbers are
+        // measured against it (as always) and added to what is animated; colors and vertices start from the
+        // animated value.
         const setup = effectiveValue(schema, doc, obj, prop);
         const from = base[id]?.[prop] !== undefined ? base[id][prop] : setup;
         if (!accumulated.has(key)) accumulated.set(key, { id, prop, kind: p.type, base: setup, from, sum: 0, value: from });
@@ -144,9 +145,9 @@ export function blendPoses(doc, schema, requested = {}, base = {}) {
 }
 
 /**
- * El documento con los valores de una pose aplicados a los objetos que no son huesos (los huesos se mueven por el
- * esqueleto, con su delta). Sirve para dibujar y para que el editor lea lo que se ve. Los vértices de la pose
- * conservan el enlace por punto del montaje.
+ * The document with the values of a pose applied to the objects that are not bones (bones are moved by the
+ * skeleton, with their delta). It is used for drawing and so the editor reads what is seen. The pose's vertices
+ * keep the setup's per-point binding.
  */
 export function applyPose(doc, schema, pose) {
   if (!pose?.values || !Object.keys(pose.values).length) return doc;
@@ -164,15 +165,15 @@ export function applyPose(doc, schema, pose) {
   };
 }
 
-// ---------- Escribir en una pose ----------
-// Lo usan los dos lados: el editor (cada cambio a mano dentro de una pose) y el MCP (set_pose).
+// ---------- Writing to a pose ----------
+// Both sides use it: the editor (each manual change inside a pose) and the MCP (set_pose).
 
 /**
- * Los valores nuevos de una pose. Por defecto se suman a los que ya tenía (por objeto, propiedad a propiedad); un
- * objeto con {} sale de la pose entero; con `replace`, la pose queda solo con estos. Un "d" nuevo reemplaza los
- * vértices que la pose ya tenía para ese path. Una propiedad en undefined sale de la pose (y el objeto, si queda
- * vacío). `quitar` (["mouth.active", "brow_l"]) saca de la pose una sola propiedad de un objeto, o el objeto entero;
- * se aplica antes que `values`.
+ * The new values of a pose. By default they are added to the ones it already had (per object, property by
+ * property); an object with {} leaves the pose entirely; with `replace`, the pose keeps only these. A new "d"
+ * replaces the vertices the pose already had for that path. A property set to undefined leaves the pose (and the
+ * object, if it ends up empty). `remove` (["mouth.active", "brow_l"]) takes a single property of an object, or the
+ * whole object, out of the pose; it is applied before `values`.
  * @param {Record<string, Record<string, any>>} [existing] @param {Record<string, Record<string, any>>} [values]
  * @param {boolean} [replace] @param {string[]} [remove]
  */
@@ -202,8 +203,8 @@ export function mergePose(existing, values = {}, replace = false, remove = []) {
 }
 
 /**
- * El lote que escribe `values` en la pose `pose` (ver fusionarPose): la crea si no existe y no pisa un objeto que no
- * es pose.
+ * The batch that writes `values` into the pose `pose` (see mergePose): it creates it if it does not exist and does
+ * not overwrite an object that is not a pose.
  * @param {import('./types.js').Document} doc @param {string} pose @param {Record<string, Record<string, any>>} values
  * @param {boolean} [replace] @param {string[]} [remove] @returns {import('./types.js').Operation[]}
  */

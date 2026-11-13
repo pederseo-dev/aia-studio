@@ -1,11 +1,11 @@
-// Clips de animación: el valor de cada pista en un tiempo, y la pose que resulta de un clip en un tiempo con los
-// params encima. Es el evaluador único del que salen el editor, la vista previa de la IA, el runtime y (al hornear)
-// el video y Lottie. Orden (ver docs/decision-animacion.md §4):
+// Animation clips: the value of each track at a time, and the pose that results from a clip at a time with the
+// params on top. It is the single evaluator behind the editor, the AI preview, the runtime and (when baking) the
+// video and Lottie. Order (see docs/decision-animacion.md §4):
 //
-//   montaje → clip en t (valores absolutos) → params (los del clip pisan a los de afuera) → drivers suman sus poses
+//   setup → clip at t (absolute values) → params (the clip's override the outside ones) → drivers add their poses
 //
-// Eso es en un clip de Puppet. Una escena de Animate se evalúa sin drivers: montaje + keyframes, como Design + lo
-// animado (los params, las poses y los drivers son del muñeco; en una escena, una pose se copia como keyframes).
+// That is in a Puppet clip. An Animate scene is evaluated without drivers: setup + keyframes, like Design + what is
+// animated (params, poses and drivers belong to the puppet; in a scene, a pose is copied as keyframes).
 
 import { findObject } from './document.js';
 import { applyCurve, sameTime } from './curves.js';
@@ -14,9 +14,9 @@ import { effectiveValue } from './styles.js';
 import { blendColor, blendPoses, blendVertices, driverWeight, paramValues } from './blend.js';
 
 /**
- * El tiempo dentro del clip (0…duration) para un tiempo de reproducción, según su loop. En un loop, el final de cada
- * vuelta (t = duration, 2·duration…) es el final y no el principio: así el último cuadro de la tira, el playhead al
- * final y el keyframe que se guarda ahí hablan del mismo momento.
+ * The time inside the clip (0…duration) for a playback time, according to its loop. In a loop, the end of each
+ * cycle (t = duration, 2·duration…) is the end and not the start: so the last frame of the strip, the playhead at
+ * the end and the keyframe saved there talk about the same moment.
  */
 export function localTime(schema, clip, t) {
   const d = read(schema, clip, 'duration');
@@ -33,13 +33,13 @@ export function localTime(schema, clip, t) {
   return Math.max(0, Math.min(d, t));
 }
 
-/** Valor de una lista de keyframes en el tiempo t, según el tipo de la propiedad (number, color, vertices o discreto). */
+/** Value of a list of keyframes at time t, according to the property kind (number, color, vertices or discrete). */
 export function trackValue(keys, t, kind) {
   if (!keys?.length) return undefined;
   if (t <= keys[0].t) return keys[0].value;
   const last = keys.at(-1);
   if (t >= last.t) return last.value;
-  // Búsqueda binaria del tramo [a, b] que contiene a t (como Rive).
+  // Binary search for the span [a, b] that contains t (like Rive).
   let [lo, hi] = [0, keys.length - 1];
   while (hi - lo > 1) {
     const m = (lo + hi) >> 1;
@@ -52,13 +52,13 @@ export function trackValue(keys, t, kind) {
   if (kind === 'number' && typeof a.value === 'number' && typeof b.value === 'number') return a.value + (b.value - a.value) * w;
   if (kind === 'color') return blendColor(a.value, b.value, Math.max(0, Math.min(1, w)));
   if (kind === 'vertices' && Array.isArray(a.value) && Array.isArray(b.value)) return blendVertices(a.value, b.value, w);
-  // Lo que no se interpola cambia de golpe en el keyframe siguiente.
+  // What is not interpolated changes abruptly at the next keyframe.
   return a.value;
 }
 
 /**
- * Lo que fija un clip en el tiempo t (de reproducción): `values` ({ objeto: { propiedad: valor } }, como una pose) y
- * `params` ({ param: valor }) de las pistas de params.
+ * What a clip sets at (playback) time t: `values` ({ object: { property: value } }, like a pose) and
+ * `params` ({ param: value }) from the param tracks.
  */
 export function evaluateClip(doc, schema, clip, t) {
   const local = localTime(schema, clip, t);
@@ -83,13 +83,13 @@ export function evaluateClip(doc, schema, clip, t) {
   return { values, params, time: local };
 }
 
-/** Una escena de Animate (no un clip de Puppet): se evalúa sin params ni drivers. */
+/** An Animate scene (not a Puppet clip): it is evaluated without params or drivers. */
 export const isScene = (schema, clip) => clip?.type === 'animation' && read(schema, clip, 'usage') !== 'puppet';
 
 /**
- * La pose que se ve con un clip en el tiempo t. En un clip de Puppet, lo animado con los drivers sumando sus poses
- * encima; `params` son los de afuera (la app, los sliders) y los que el clip anima los pisan. En una escena de
- * Animate, solo lo animado: `params` no cuenta y los drivers no suman.
+ * The pose seen with a clip at time t. In a Puppet clip, what is animated with the drivers adding their poses on
+ * top; `params` are the outside ones (the app, the sliders) and the ones the clip animates override them. In an
+ * Animate scene, only what is animated: `params` does not count and the drivers do not add.
  */
 export function clipPose(doc, schema, clip, t, params = {}) {
   const c = typeof clip === 'string' ? findObject(doc, clip) : clip;
@@ -103,8 +103,8 @@ export function clipPose(doc, schema, clip, t, params = {}) {
 export const roundTime = (t) => Math.round(t * 1e6) / 1e6;
 
 /**
- * Pistas con un keyframe puesto en `id.prop` en el tiempo t (reemplaza el que hubiera en ese tiempo y conserva su
- * curva si no se pasa otra). No modifica las pistas recibidas. Los vértices no guardan `bone` (es del montaje).
+ * Tracks with a keyframe set on `id.prop` at time t (replaces any at that time and keeps its curve if no other is
+ * given). Does not modify the given tracks. Vertices do not keep `bone` (it belongs to the setup).
  */
 export function putKey(tracks, id, prop, t, value, ease) {
   const created = structuredClone(tracks ?? {});
@@ -120,7 +120,7 @@ export function putKey(tracks, id, prop, t, value, ease) {
   return created;
 }
 
-/** Pistas sin el keyframe de `id.prop` en el tiempo t (una pista que queda vacía sale). */
+/** Tracks without the keyframe of `id.prop` at time t (a track left empty is removed). */
 export function removeKey(tracks, id, prop, t) {
   const created = structuredClone(tracks ?? {});
   const keys = created[id]?.[prop];
@@ -131,7 +131,7 @@ export function removeKey(tracks, id, prop, t) {
   return created;
 }
 
-/** Tiempos de todos los keyframes de un clip, ordenados y sin repetir (para la tira de cuadros y el resumen). */
+/** Times of all keyframes of a clip, sorted and without repeats (for the frame strip and the summary). */
 export function keyTimes(clip) {
   const times = new Set();
   for (const fields of Object.values(clip.tracks ?? {})) for (const keys of Object.values(fields)) for (const c of keys ?? []) times.add(c.t);
@@ -139,9 +139,9 @@ export function keyTimes(clip) {
 }
 
 /**
- * El valor que hay que guardar en la pista para que se vea `visto` (autokey): lo que se ve ya trae lo que suman los
- * drivers, y al evaluar se sumaría otra vez. En los números se resta ese aporte; lo demás (colores, vértices,
- * discretos) se guarda tal cual, porque la pista del clip gana sobre los drivers (ver mezclarPoses).
+ * The value to save in the track so that `seen` shows (autokey): what is seen already includes what the drivers
+ * add, and evaluating would add it again. For numbers that contribution is subtracted; the rest (colors, vertices,
+ * discrete) is saved as is, because the clip track wins over the drivers (see blendPoses).
  */
 export function valueToSave(doc, schema, clip, t, params, id, prop, seen) {
   const obj = findObject(doc, id);
@@ -154,9 +154,9 @@ export function valueToSave(doc, schema, clip, t, params, id, prop, seen) {
 }
 
 /**
- * El lote que deja `campos` ({ propiedad: valor }) de un objeto como keyframes del clip en el tiempo `t` (autokey del
- * editor). Cada valor es lo que se quiere ver, con los params en `params`: se guarda sin lo que suman los drivers
- * (valorAGuardar). Un valor undefined quita el keyframe de esa propiedad en `t`.
+ * The batch that leaves `fields` ({ property: value }) of an object as keyframes of the clip at time `t` (editor
+ * autokey). Each value is what should be seen, with the params in `params`: it is saved without what the drivers add
+ * (valueToSave). An undefined value removes the keyframe of that property at `t`.
  * @param {import('./types.js').Document} doc @param {any} schema @param {string} clipId @param {string} id
  * @param {Record<string, any>} fields @param {number} t @param {Record<string, any>} [params]
  * @returns {import('./types.js').Operation[]}
@@ -169,9 +169,9 @@ export function opsForKeysInClip(doc, schema, clipId, id, fields, t, params = {}
 }
 
 /**
- * Los valores del montaje de todo lo que el clip anima (y de lo que fija `pose`, si se pasa: el id de una pose o sus
- * values ya filtrados), con los params en su valor inicial: { objeto: { propiedad: valor } }. Es «Key setup» del
- * editor y `setup: true` de set_keys.
+ * The setup values of everything the clip animates (and of what `pose` sets, if given: the id of a pose or its
+ * already filtered values), with the params at their initial value: { object: { property: value } }. It is the
+ * editor's «Key setup» and `setup: true` of set_keys.
  */
 export function setupValues(doc, schema, tracks, pose = null) {
   const params = paramValues(doc, schema);
@@ -188,8 +188,8 @@ export function setupValues(doc, schema, tracks, pose = null) {
 }
 
 /**
- * Pistas con el keyframe de `id.prop` en `desde` movido a `hasta` (conserva valor y curva), o null si no hay
- * keyframe en `desde`. Error si en `hasta` ya hay otro: moverlo encima lo borraría.
+ * Tracks with the keyframe of `id.prop` at `from` moved to `to` (keeps value and curve), or null if there is no
+ * keyframe at `from`. Error if there is already another at `to`: moving it on top would delete it.
  */
 export function moveKey(tracks, id, prop, from, to) {
   const keys = tracks?.[id]?.[prop] ?? [];
@@ -200,13 +200,13 @@ export function moveKey(tracks, id, prop, from, to) {
 }
 
 /**
- * Avisos de un clip para la IA y el editor: las pistas numéricas a las que un driver activo les suma su pose encima
- * (un param animado, o uno con valor inicial distinto de 0), en los tiempos de sus keyframes. Así no sorprende que
- * un hueso keyado en 10 se vea en 40.
+ * Warnings of a clip for the AI and the editor: the numeric tracks to which an active driver adds its pose on top
+ * (an animated param, or one with an initial value other than 0), at the times of their keyframes. So it is no
+ * surprise that a bone keyed at 10 shows at 40.
  */
 export function clipWarnings(doc, schema, clip, params = {}) {
   const c = typeof clip === 'string' ? findObject(doc, clip) : clip;
-  // Una escena no tiene drivers encima (ver poseDeClip).
+  // A scene has no drivers on top (see clipPose).
   if (c?.type !== 'animation' || isScene(schema, c)) return [];
   const warnings = new Map();
   const drivers = doc.objects.filter((o) => o.type === 'driver' && findObject(doc, o.pose)?.type === 'pose');
@@ -230,10 +230,10 @@ export function clipWarnings(doc, schema, clip, params = {}) {
 }
 
 /**
- * Reescala el tiempo de un tramo de un clip: los keyframes entre `desde` y `hasta` se estiran o comprimen en
- * proporción para que el tramo dure `largo`, y los de después se corren lo mismo (con su valor y su curva). Sin
- * desde/hasta, el clip entero. Devuelve { pistas, duracion } (la duración cambia lo mismo que el tramo). Error si
- * dos keyframes de una pista quedarían en el mismo momento.
+ * Rescales the time of a span of a clip: the keyframes between `from` and `to` are stretched or compressed
+ * proportionally so the span lasts `length`, and the ones after are shifted by the same amount (with their value
+ * and curve). Without from/to, the whole clip. Returns { tracks, duration } (the duration changes as much as the
+ * span). Error if two keyframes of a track would land on the same moment.
  */
 export function scaleTime(tracks, duration, { from = 0, to = duration, length }) {
   if (!(from >= 0) || !(to <= duration + 1e-9) || !(to - from > 0)) throw new Error(`the stretch to scale must be inside the clip (0…${roundTime(duration)} s) with from < to (received ${from}…${to})`);
@@ -255,9 +255,9 @@ export function scaleTime(tracks, duration, { from = 0, to = duration, length })
 }
 
 /**
- * Qué mueve cada param que anima un clip de Puppet: [{ param, poses: [{ driver, pose, objetos }] }], con las poses de
- * sus drivers y los objetos que toca cada una. Así la IA (y la timeline) ven que animar `happiness` mueve también,
- * por ejemplo, `mirando_arriba`. En una escena, nada (no tiene params ni drivers).
+ * What each param animated by a Puppet clip moves: [{ param, poses: [{ driver, pose, objects }] }], with the poses
+ * of its drivers and the objects each one touches. So the AI (and the timeline) see that animating `happiness` also
+ * moves, for example, `mirando_arriba`. In a scene, nothing (it has no params or drivers).
  */
 export function animatedParamPoses(doc, schema, clip) {
   const c = typeof clip === 'string' ? findObject(doc, clip) : clip;
@@ -271,7 +271,7 @@ export function animatedParamPoses(doc, schema, clip) {
     }));
 }
 
-/** Una línea por param animado: «happiness → happy (eye_l, mouth), mirando_arriba (head_bone)». */
+/** One line per animated param: «happiness → happy (eye_l, mouth), mirando_arriba (head_bone)». */
 export function paramPoseLines(doc, schema, clip) {
   const objects = (ids) => (ids.length > 6 ? `${ids.slice(0, 6).join(', ')}…` : ids.join(', '));
   return animatedParamPoses(doc, schema, clip).map(({ param, poses }) =>

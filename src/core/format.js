@@ -1,12 +1,13 @@
-// Constantes y convenciones del formato de documento. El núcleo no usa el DOM: corre igual en Node y en el navegador.
+// Constants and conventions of the document format. The core does not use the DOM: it runs the same in Node and in
+// the browser.
 
 export const FORMAT = 'aia/0.1';
 
 /**
- * Convenciones comunes a todo el formato:
- * - Coordenadas como en SVG: origen arriba a la izquierda, Y crece hacia abajo.
- * - Ángulos en grados; los positivos giran en sentido horario.
- * - Tiempo en segundos. Los fps del documento solo sirven para mostrar frames y para el snapping.
+ * Conventions common to the whole format:
+ * - Coordinates as in SVG: origin at the top left, Y grows downward.
+ * - Angles in degrees; positive ones rotate clockwise.
+ * - Time in seconds. The document fps only serve to show frames and for snapping.
  */
 export const CONVENTIONS = {
   axisY: 'abajo',

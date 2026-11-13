@@ -1,6 +1,6 @@
-// El manifiesto: lo que la IA de la app sabe del muñeco para manejarlo en vivo (play, set, stop). Sale del documento
-// y nada más, así que lo ve igual la IA que edita (get_manifest) que la app (fase 7). Ver
-// docs/decision-animacion.md §9. Los textos van en inglés: los lee la IA de una app, y la app suele ser en inglés.
+// The manifest: what the app's AI knows about the puppet to drive it live (play, set, stop). It comes from the
+// document and nothing else, so the editing AI (get_manifest) sees it the same as the app (phase 7). See
+// docs/decision-animacion.md §9. The texts are in English: an app's AI reads them, and the app is usually in English.
 
 import { findObject } from './document.js';
 import { read, readMeta } from './schema.js';
@@ -8,14 +8,14 @@ import { triggerableClips, isBase } from './live.js';
 
 const poseObjects = (doc, id) => Object.keys(findObject(doc, id)?.values ?? {});
 
-/** Las poses que mueve un param (por sus drivers), con los objetos que toca cada una. */
+/** The poses a param moves (through its drivers), with the objects each one touches. */
 function paramPoses(doc, param) {
   return doc.objects
     .filter((d) => d.type === 'driver' && d.param === param && findObject(doc, d.pose)?.type === 'pose')
     .map((d) => ({ pose: d.pose, ...(d.equals != null ? { when: d.equals } : {}), objects: poseObjects(doc, d.pose) }));
 }
 
-/** Qué anima un clip: objetos (sin repetir) y params. */
+/** What a clip animates: objects (without repeats) and params. */
 function thatAnimates(doc, clip) {
   const ids = Object.keys(clip.tracks ?? {});
   return {
@@ -25,8 +25,8 @@ function thatAnimates(doc, clip) {
 }
 
 /**
- * El manifiesto como objeto: { name, api, params, clips, auto }. `clips` son los que la app puede disparar (base o
- * gesto); `auto` los que suenan solos (solo informativos).
+ * The manifest as an object: { name, api, params, clips, auto }. `clips` are the ones the app can trigger (base or
+ * gesture); `auto` the ones that play on their own (informative only).
  */
 export function manifest(doc, schema) {
   const params = doc.objects
@@ -40,7 +40,8 @@ export function manifest(doc, schema) {
       return { ...base, moves: paramPoses(doc, p.id) };
     });
   const autos = doc.objects.filter((o) => o.type === 'animation' && read(schema, o, 'usage') === 'puppet' && read(schema, o, 'auto') !== 'off');
-  // Un param que anima un clip auto lo maneja el muñeco solo: si la app lo pone, el auto lo pisa cuando suena.
+  // A param animated by an auto clip is driven by the puppet itself: if the app sets it, the auto overrides it when
+// it plays.
   for (const p of params) {
     const drivenBy = autos.filter((c) => thatAnimates(doc, c).params.includes(p.id)).map((c) => c.id);
     if (drivenBy.length) p.drivenBy = drivenBy;
@@ -73,7 +74,7 @@ export function manifest(doc, schema) {
       ...(animates.params.length ? { animatesParams: animates.params } : {}),
     };
   });
-  // Lo que confundiría a la IA de la app: descripciones vacías y params que no mueven nada.
+  // What would confuse the app's AI: empty descriptions and params that move nothing.
   const problems = [];
   const withoutDescription = (list) => list.filter((x) => !x.description).map((x) => x.id);
   if (withoutDescription(params).length) problems.push(`params without description: ${withoutDescription(params).join(', ')}`);
@@ -94,10 +95,10 @@ export function manifest(doc, schema) {
   };
 }
 
-/** Una lista corta para el texto: hasta 6 ids y «…» si hay más. */
+/** A short list for the text: up to 6 ids and «…» if there are more. */
 const short = (ids) => (ids.length > 6 ? `${ids.slice(0, 6).join(', ')}… (${ids.length})` : ids.join(', '));
 
-/** El manifiesto como texto corto, para leerlo de un vistazo (la IA que edita y las pruebas). */
+/** The manifest as short text, to read at a glance (the editing AI and the tests). */
 export function manifestText(m) {
   const lines = [`Puppet "${m.name}". API: play(clip), set(param, value), stop(clip?).`];
   lines.push('', 'Params:');
@@ -113,7 +114,8 @@ export function manifestText(m) {
   for (const c of m.clips) {
     const extra = [c.role, `${c.duration} s`, c.loop, `fade ${c.fade} s`, c.next && `then ${c.next}`, c.blend].filter(Boolean).join(', ');
     lines.push(`- ${c.id} (${extra})${c.description ? `: ${c.description}` : ' — no description'}`);
-    // Lo que pisa: dos gestos que tocan lo mismo se tapan; un clip que anima un param le gana a la app mientras suena.
+    // What overrides: two gestures that touch the same thing hide each other; a clip that animates a param beats the
+// app while it plays.
     const overwrites = [c.animatesParams?.length && `params ${c.animatesParams.join(', ')}`, c.animates.length && short(c.animates)].filter(Boolean).join('; ');
     if (overwrites) lines.push(`    overrides: ${overwrites}`);
   }
