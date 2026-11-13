@@ -369,3 +369,12 @@ elastic/bounce/«a dos». Detalle en [decision-animacion.md §7](decision-animac
 Deformación por pesos (máximo 4 huesos por vértice), IK de dos huesos, constraints de copiar transformación con
 factor y retardo, dinámica secundaria, morph entre formas con igual número de vértices y mallas de imagen (una imagen que se
 deforma con varios huesos) en una capa canvas.
+
+**Capa vectorial con malla compartida, como en Moho** (decidido el 2026-11-12, para más adelante). Hoy cada forma es
+un objeto con sus propios vértices y el `group` hace de capa. La idea es una capa vectorial con una malla de puntos
+compartida: las formas son rellenos y contornos sobre esos puntos, y dos formas pueden compartir puntos soldados (un
+brazo y su manga se mueven juntos sin enlazar dos veces). Es el cambio más grande de los tres que se debatieron:
+toca vértices, `bind_points`, poses, timeline, render, herramienta Points e importador SVG. Hay que pensar cómo la
+IA nombra un punto de la malla sin depender del índice, que es frágil. Antes conviene hacer dos pasos más chicos:
+Layers que distinga grupos (capas) de formas (hijos plegados), y `path` con varios subtrazados y regla de relleno
+para formas con agujero, como en Rive.
