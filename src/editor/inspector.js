@@ -12,9 +12,7 @@ import { openedClip, editingName, poseOps, activePose } from './editing.js';
 import { execute, schema, state, setState, preview, select, subscribe } from './state.js';
 import { replaceImage, imagesOnly, naturalSize, assetUrl } from './images.js';
 
-const GROUP_ORDER = ['General', 'Imagen', 'Forma', 'Transformación', 'Apariencia', 'Degradado', 'Lienzo', 'Tiempo'];
-// Schema group names, as displayed (the schema is still in Spanish).
-const GROUP_NAMES = { General: 'General', Imagen: 'Image', Forma: 'Shape', Transformación: 'Transform', Apariencia: 'Appearance', Degradado: 'Gradient', Lienzo: 'Canvas', Tiempo: 'Time', Driver: 'Driver', Esqueleto: 'Skeleton', Hueso: 'Bone', Límites: 'Limits', Parámetro: 'Parameter', Pose: 'Pose', Switch: 'Switch', Tramo: 'Range', Otros: 'Other' };
+const GROUP_ORDER = ['General', 'Image', 'Shape', 'Transform', 'Appearance', 'Gradient', 'Canvas', 'Time'];
 const PAIRS = { x: 'y', scaleX: 'scaleY', width: 'height', originX: 'originY', x1: 'y1', x2: 'y2', cx: 'cy' };
 // In a pair row, the row name goes in the label column and each half only carries its letter (as in Rive).
 const PAIR_NAMES = { x: 'Position', scaleX: 'Scale', width: 'Size', originX: 'Pivot', x1: 'Start', x2: 'End', cx: 'Center' };
@@ -50,10 +48,10 @@ export function mountInspector(root) {
     const pose = activePose();
     if (pose && obj && !others.length && !kind.resource) poseSection(obj, kind, pose);
 
-    const groups = Map.groupBy(properties, ([, p]) => p.group ?? 'Otros');
+    const groups = Map.groupBy(properties, ([, p]) => p.group ?? 'Other');
     const names = [...groups.keys()].sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99));
     for (const name of names) {
-      root.append(Object.assign(document.createElement('h3'), { textContent: GROUP_NAMES[name] ?? name }));
+      root.append(Object.assign(document.createElement('h3'), { textContent: name }));
       const props = groups.get(name);
       const inPair = new Set();
       for (const [prop, p] of props) {
@@ -159,13 +157,13 @@ export function mountInspector(root) {
 
   function field(target, data, prop, p, labelText) {
     const isObject = target !== 'meta';
-    const origin = isObject ? valueOrigin(state.doc, data, prop) : data[prop] !== undefined ? 'own' : 'defecto';
+    const origin = isObject ? valueOrigin(state.doc, data, prop) : data[prop] !== undefined ? 'own' : 'default';
     const value = isObject ? effectiveValue(schema, state.doc, data, prop) : (data[prop] ?? p.default);
     const { others } = context;
     const targets = [target, ...others.map((o) => o.id)];
     const mixed = others.some((o) => JSON.stringify(effectiveValue(schema, state.doc, o, prop)) !== JSON.stringify(value));
     const div = document.createElement('div');
-    div.className = `field${origin === 'defecto' ? ' default' : origin === 'style' ? ' default by-style' : ''}${mixed ? ' mixed' : ''}`;
+    div.className = `field${origin === 'default' ? ' default' : origin === 'style' ? ' default by-style' : ''}${mixed ? ' mixed' : ''}`;
     div.dataset.prop = prop;
     const label = document.createElement('label');
     label.textContent = labelText ?? prop;

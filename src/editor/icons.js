@@ -57,4 +57,4 @@ export const TYPE_ICON = {
   pose: ICONOS.pose, param: ICONOS.param, driver: ICONOS.driver, animation: ICONOS.animation,
 };
 
-export const FLECHA = `<svg class="ico-flecha" viewBox="0 0 10 10" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5"/></svg>`;
+export const ARROW = `<svg class="ico-arrow" viewBox="0 0 10 10" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5"/></svg>`;

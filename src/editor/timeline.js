@@ -640,11 +640,11 @@ export function mountTimeline(root) {
       const head = row(obj.id, `${obj.id} (${obj.type})`);
       head.classList.add('group');
       if (obj.id === state.selection) head.classList.add('main');
-      const flecha = button(open ? '▾' : '▸', open ? `Collapse ${obj.id}` : `Expand ${obj.id} to see its channels`, () => {
+      const arrow = button(open ? '▾' : '▸', open ? `Collapse ${obj.id}` : `Expand ${obj.id} to see its channels`, () => {
         folded.set(obj.id, !open);
         draw();
       }, 'fold');
-      head.label.prepend(flecha);
+      head.label.prepend(arrow);
       const name = /** @type {HTMLElement} */ (head.label.querySelector('.track-name'));
       name.style.cursor = 'pointer';
       name.addEventListener('click', () => selectSeveral(state.selected, obj.id));

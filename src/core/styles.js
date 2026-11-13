@@ -11,9 +11,9 @@ export function effectiveValue(schema, doc, obj, prop) {
   return read(schema, obj, prop);
 }
 
-/** Where the value comes from: 'own', 'style' or 'defecto' (to show it in the inspector). */
+/** Where the value comes from: 'own', 'style' or 'default' (to show it in the inspector). */
 export function valueOrigin(doc, obj, prop) {
   if (obj[prop] !== undefined) return 'own';
   const style = obj.style ? findObject(doc, obj.style) : null;
-  return style?.type === 'style' && style[prop] !== undefined ? 'style' : 'defecto';
+  return style?.type === 'style' && style[prop] !== undefined ? 'style' : 'default';
 }

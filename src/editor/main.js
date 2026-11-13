@@ -7,7 +7,7 @@ import { artboardOps } from '../core/artboard.js';
 import { mountTree } from './layers.js';
 import { notifyLoose, bindByProximity, reasonNotToBind, releaseOnMove } from './bones.js';
 import { mountHistory } from './history.js';
-import { FLECHA, ICONOS } from './icons.js';
+import { ARROW, ICONOS } from './icons.js';
 import { importOperations } from './importSvg.js';
 import { addImages, imagesOnly } from './images.js';
 import { mountInspector } from './inspector.js';
@@ -24,9 +24,9 @@ import {
 } from './state.js';
 
 const $ = (s) => document.querySelector(s);
-// Fixed icons of the HTML: data-icon puts them at the start of the element and data-flecha is a dropdown's arrow.
+// Fixed icons of the HTML: data-icon puts them at the start of the element and data-arrow is a dropdown's arrow.
 for (const el of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-icon]'))) el.insertAdjacentHTML('afterbegin', ICONOS[el.dataset.icon]);
-for (const el of document.querySelectorAll('[data-flecha]')) el.innerHTML = FLECHA;
+for (const el of document.querySelectorAll('[data-arrow]')) el.innerHTML = ARROW;
 
 mountTree($('#tree'), $('#resources'));
 mountInspector($('#inspector'));
@@ -295,7 +295,7 @@ function drawGroups() {
     if (active) lastInGroup[group] = active.id;
     const visible = tools.find((h) => h.id === lastInGroup[group]);
     box.classList.toggle('active', !!active);
-    box.innerHTML = `<button type="button" class="main" title="${visible.name}${visible.shortcut ? ` (${visible.shortcut})` : ''}" aria-label="${visible.name}">${ICONOS[visible.icon ?? visible.id]}</button>${tools.length > 1 ? `<button type="button" class="choose" aria-haspopup="menu" title="More tools">${FLECHA}</button><div class="menu" role="menu" hidden></div>` : ''}`;
+    box.innerHTML = `<button type="button" class="main" title="${visible.name}${visible.shortcut ? ` (${visible.shortcut})` : ''}" aria-label="${visible.name}">${ICONOS[visible.icon ?? visible.id]}</button>${tools.length > 1 ? `<button type="button" class="choose" aria-haspopup="menu" title="More tools">${ARROW}</button><div class="menu" role="menu" hidden></div>` : ''}`;
     box.querySelector('.main').addEventListener('click', () => setState({ tool: visible.id }));
     // A lone tool (Artboard) has no menu.
     if (tools.length === 1) continue;
@@ -608,17 +608,17 @@ window.addEventListener('keydown', (e) => {
   }
 
   // Arrows: move the selection 1 px (Shift: 10 px).
-  const flechas = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   const roots = selectionRoots();
   // In a pose, the arrows do not move the setup.
-  if (flechas[e.key] && roots.length && !state.pose) {
+  if (arrows[e.key] && roots.length && !state.pose) {
     e.preventDefault();
-    const [dx, dy] = flechas[e.key].map((d) => d * (e.shiftKey ? 10 : 1));
+    const [dx, dy] = arrows[e.key].map((d) => d * (e.shiftKey ? 10 : 1));
     const ops = roots.map((id) => {
       const obj = findObject(state.doc, id);
       return { op: 'set', target: id, props: { x: read(schema, obj, 'x') + dx, y: read(schema, obj, 'y') + dy } };
     });
-    execute(ops, `move ${nameOf(roots)}`, { group: `flechas:${roots.join()}` });
+    execute(ops, `move ${nameOf(roots)}`, { group: `arrows:${roots.join()}` });
   }
 });
 

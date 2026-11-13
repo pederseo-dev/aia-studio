@@ -207,7 +207,7 @@ export function sendPending() {
 }
 
 /**
- * Applies a batch instantly on screen and saves it. With `group` (a key like "flechas:head"), consecutive batches
+ * Applies a batch instantly on screen and saves it. With `group` (a key like "arrows:head"), consecutive batches
  * with the same key are merged until a moment passes without changes.
  */
 /** @param {any[]} ops @param {string} [note] @param {{ group?: string }} [options] */
