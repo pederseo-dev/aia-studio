@@ -5,43 +5,43 @@ import { FORMAT } from './format.js';
 
 function range(p) {
   if (p.type === 'enum') return p.values.join(' \\| ');
-  if (p.type === 'ref' && p.refTypes) return `id de ${p.refTypes.join(' o ')}`;
-  if (p.type === 'asset') return 'archivo de assets/';
+  if (p.type === 'ref' && p.refTypes) return `id of ${p.refTypes.join(' or ')}`;
+  if (p.type === 'asset') return 'file in assets/';
   if (p.min == null && p.max == null) return '';
   return `${p.min ?? '−∞'} … ${p.max ?? '∞'}`;
 }
 
 function table(properties) {
   const rows = Object.entries(properties).map(([name, p]) => {
-    const kind = p.type + (p.nullable ? ' o null' : '') + (p.integer ? ' (entero)' : '');
+    const kind = p.type + (p.nullable ? ' or null' : '') + (p.integer ? ' (integer)' : '');
     return `| \`${name}\` | ${kind} | \`${JSON.stringify(p.default)}\` | ${range(p)} | ${p.description ?? ''} |`;
   });
-  return ['| Propiedad | Tipo | Por defecto | Rango | Descripción |', '| --- | --- | --- | --- | --- |', ...rows].join('\n');
+  return ['| Property | Type | Default | Range | Description |', '| --- | --- | --- | --- | --- |', ...rows].join('\n');
 }
 
 export function guideForAI(schema) {
   const types = [...schema.types.values()]
     .map((t) => {
-      const allowedChildren = (t.childTypes ? ` (solo puede tener hijos ${t.childTypes.join(', ')})` : t.container ? ' (puede tener hijos)' : '') + (t.requiresParent ? ` (va dentro de ${t.parentTypes.join(' o ')}, nunca en la raíz)` : '');
-      return `### \`${t.name}\`${allowedChildren}${t.resource ? ' (recurso)' : ''}\n\n${t.description}\n\n${table(t.properties)}`;
+      const allowedChildren = (t.childTypes ? ` (can only have children ${t.childTypes.join(', ')})` : t.container ? ' (can have children)' : '') + (t.requiresParent ? ` (goes inside ${t.parentTypes.join(' or ')}, never at the root)` : '');
+      return `### \`${t.name}\`${allowedChildren}${t.resource ? ' (asset)' : ''}\n\n${t.description}\n\n${table(t.properties)}`;
     })
     .join('\n\n');
 
-  return `# Guía de aia-studio (formato ${FORMAT})
+  return `# aia-studio guide (format ${FORMAT})
 
-aia-studio es un editor de animación 2D vectorial: personajes, objetos, íconos, escenas o lo que haga falta animar. Un documento es JSON; tú lo modificas con lotes de operaciones
-(\`apply_ops\`) y el usuario lo ve en vivo en el editor, donde también puede retocar a mano.
+aia-studio is a 2D vector animation editor: characters, objects, icons, scenes or whatever needs animating. A document is JSON; you modify it with batches of operations
+(\`apply_ops\`) and the user sees it live in the editor, where they can also tweak it by hand.
 
-## Convenciones
+## Conventions
 
-- Coordenadas como en SVG: origen arriba a la izquierda, **Y crece hacia abajo**. Unidades en px.
-- Ángulos en **grados**; positivo = sentido horario.
-- Cada objeto se dibuja en el sistema de coordenadas de su padre: \`x\`/\`y\` son relativas al padre.
-- Las formas (\`rect\`, \`ellipse\`) están **centradas** en su \`x\`/\`y\`, salvo que \`originX\`/\`originY\` (fracciones de
-  0 a 1) pongan el pivote en otro punto: \`originY: 1\` = pivote en el borde de abajo.
-- Orden de dibujo: entre hermanos, los últimos de la lista quedan **encima**.
+- Coordinates as in SVG: origin at the top left, **Y grows downward**. Units in px.
+- Angles in **degrees**; positive = clockwise.
+- Each object is drawn in its parent's coordinate system: \`x\`/\`y\` are relative to the parent.
+- Shapes (\`rect\`, \`ellipse\`) are **centered** on their \`x\`/\`y\`, unless \`originX\`/\`originY\` (fractions from
+  0 to 1) put the pivot elsewhere: \`originY: 1\` = pivot on the bottom edge.
+- Drawing order: among siblings, the last ones in the list end up **on top**.
 
-## Documento
+## Document
 
 \`\`\`json
 {
@@ -54,80 +54,82 @@ aia-studio es un editor de animación 2D vectorial: personajes, objetos, íconos
 }
 \`\`\`
 
-- \`objects\` es una **lista plana**: la jerarquía se arma con \`parent\` (null = raíz).
-- \`id\`: minúsculas, números y \`_\`, empezando con letra. Único en el documento. Usa nombres que digan qué es
-  (\`eye_l\`, \`arm_r\`, \`head\`). \`meta\` está reservado (es el \`target\` de las propiedades del documento).
-- **Izquierda y derecha son las del personaje**, como en cualquier rig: en un personaje de frente, \`arm_l\` es el
-  brazo que el espectador ve a su derecha. Usa los sufijos \`_l\` y \`_r\`.
-- Las propiedades que no aparecen usan su valor por defecto. Solo se guarda lo que cambia.
+- \`objects\` is a **flat list**: the hierarchy is built with \`parent\` (null = root).
+- \`id\`: lowercase letters, digits and \`_\`, starting with a letter. Unique in the document. Use names that say what it is
+  (\`eye_l\`, \`arm_r\`, \`head\`). \`meta\` is reserved (it is the \`target\` for the document's properties).
+- **Left and right are the character's**, as in any rig: on a character facing front, \`arm_l\` is the
+  arm the viewer sees on their right. Use the suffixes \`_l\` and \`_r\`.
+- Properties that don't appear use their default value. Only what changes is stored.
 
-## Operaciones
+## Operations
 
-Se envían en lotes. Un lote es **atómico**: si algo falla, no se aplica nada y recibes la lista de errores para
-corregir y reintentar.
+They are sent in batches. A batch is **atomic**: if anything fails, nothing is applied and you get the list of errors to
+fix and retry.
 
-| Operación | Forma | Qué hace |
+| Operation | Shape | What it does |
 | --- | --- | --- |
-| \`create\` | \`{ "op": "create", "type": "rect", "id": "eye_l", "parent": "head", "props": { ... }, "index": 0 }\` | Crea un objeto. \`parent\` e \`index\` son opcionales. |
-| \`set\` | \`{ "op": "set", "target": "eye_l", "props": { "x": 10, "fill": "#ffffff" } }\` | Cambia propiedades. \`target: "meta"\` cambia el documento. |
-| \`unset\` | \`{ "op": "unset", "target": "eye_l", "props": ["x"] }\` | Vuelve propiedades a su valor por defecto. |
-| \`delete\` | \`{ "op": "delete", "target": "head" }\` | Borra el objeto **y todos sus hijos**. |
-| \`move\` | \`{ "op": "move", "target": "eye_l", "parent": "face", "index": 0, "keepPosition": true }\` | Cambia de padre y/o de orden. Sin \`parent\` conserva el actual; \`null\` = raíz. Con \`keepPosition\`, recalcula \`x\`/\`y\` para que quede en el mismo lugar de la pantalla. |
-| \`rename\` | \`{ "op": "rename", "target": "eye_l", "id": "left_eye" }\` | Cambia el id y actualiza las referencias. |
-| \`duplicate\` | \`{ "op": "duplicate", "target": "arm_l", "id": "arm_r", "suffix": "r", "props": { "x": 110, "scaleX": -1 } }\` | Copia el objeto con todos sus hijos. Los hijos copiados se llaman \`<id>_<suffix>\`. La copia queda justo delante del original. |
+| \`create\` | \`{ "op": "create", "type": "rect", "id": "eye_l", "parent": "head", "props": { ... }, "index": 0 }\` | Creates an object. \`parent\` and \`index\` are optional. |
+| \`set\` | \`{ "op": "set", "target": "eye_l", "props": { "x": 10, "fill": "#ffffff" } }\` | Changes properties. \`target: "meta"\` changes the document. |
+| \`unset\` | \`{ "op": "unset", "target": "eye_l", "props": ["x"] }\` | Resets properties to their default value. |
+| \`delete\` | \`{ "op": "delete", "target": "head" }\` | Deletes the object **and all its children**. |
+| \`move\` | \`{ "op": "move", "target": "eye_l", "parent": "face", "index": 0, "keepPosition": true }\` | Changes parent and/or order. Without \`parent\` keeps the current one; \`null\` = root. With \`keepPosition\`, recomputes \`x\`/\`y\` so it stays at the same place on screen. |
+| \`rename\` | \`{ "op": "rename", "target": "eye_l", "id": "left_eye" }\` | Changes the id and updates the references. |
+| \`duplicate\` | \`{ "op": "duplicate", "target": "arm_l", "id": "arm_r", "suffix": "r", "props": { "x": 110, "scaleX": -1 } }\` | Copies the object with all its children. Copied children are named \`<id>_<suffix>\`. The copy goes right in front of the original. |
 
-\`index\` es la posición entre los hermanos en orden de dibujo: \`0\` = al fondo; sin \`index\` = al frente.
-Sin \`keepPosition\`, \`move\` no cambia \`x\`/\`y\` (los valores son relativos al padre, así que el objeto se corre si
-el padre nuevo está en otro lugar). Con \`keepPosition: true\` queda donde se veía, como al arrastrarlo en Layers en
-el editor (se conserva la posición, no el giro ni la escala). Para huesos usa \`reparent_bone\`.
-Para copiar un documento entero, usa \`create_document\` con \`copy_from\`.
+\`index\` is the position among siblings in drawing order: \`0\` = at the back; no \`index\` = at the front.
+Without \`keepPosition\`, \`move\` doesn't change \`x\`/\`y\` (the values are relative to the parent, so the object shifts if
+the new parent is somewhere else). With \`keepPosition: true\` it stays where it was seen, like dragging it in Layers in
+the editor (the position is kept, not the rotation or the scale). For bones use \`reparent_bone\`.
+To copy a whole document, use \`create_document\` with \`copy_from\`.
 
-## Formas libres (\`path\`)
+## Free-form shapes (\`path\`)
 
-Lo más cómodo es pasar un trazado SVG en \`d\` (un solo subtrazado, cualquier comando: M L H V C S Q T A Z) y el
-editor lo convierte a vértices:
+The easiest is to pass an SVG path in \`d\` (a single subpath, any command: M L H V C S Q T A Z) and the
+editor converts it to vertices:
 
 \`\`\`json
 { "op": "create", "type": "path", "id": "ear_l", "parent": "head", "props": { "d": "M-60 -150 C-80 -220 -20 -200 -30 -150 Z", "fill": "#3a2a4d" } }
 \`\`\`
 
-Las coordenadas de \`d\` y de los vértices son **relativas al path**: su \`x\`/\`y\` es el pivote. Para que el path gire
-desde un punto concreto, pon ese punto en \`x\`/\`y\` y dibuja alrededor de (0, 0).
+The coordinates of \`d\` and of the vertices are **relative to the path**: its \`x\`/\`y\` is the pivot. For the path to rotate
+around a specific point, put that point in \`x\`/\`y\` and draw around (0, 0).
 
-Lo que se guarda es \`vertices\` (y \`closed\`). Cada vértice tiene \`x\`, \`y\` y, si es curvo, sus tangentes en
-polares (ángulo en grados con Y hacia abajo: 0 = derecha, 90 = abajo; distancia en px):
+### Vertices
 
-| Vértice | Forma |
+What is stored is \`vertices\` (and \`closed\`). Each vertex has \`x\`, \`y\` and, if curved, its tangents in
+polar form (angle in degrees with Y downward: 0 = right, 90 = down; distance in px):
+
+| Vertex | Shape |
 | --- | --- |
-| Recto | \`{ "x": 0, "y": 0 }\`, con \`"radius": 8\` para redondear la esquina |
-| Curva suave simétrica | \`{ "x": 0, "y": 0, "mode": "mirrored", "angle": 0, "dist": 20 }\` |
-| Curva suave con largos distintos | \`{ "x": 0, "y": 0, "mode": "asymmetric", "angle": 0, "inDist": 10, "outDist": 30 }\` |
-| Pico (tangentes independientes) | \`{ "x": 0, "y": 0, "mode": "detached", "inAngle": 200, "inDist": 15, "outAngle": -20, "outDist": 15 }\` |
+| Corner | \`{ "x": 0, "y": 0 }\`, with \`"radius": 8\` to round the corner |
+| Symmetric smooth curve | \`{ "x": 0, "y": 0, "mode": "mirrored", "angle": 0, "dist": 20 }\` |
+| Smooth curve with different lengths | \`{ "x": 0, "y": 0, "mode": "asymmetric", "angle": 0, "inDist": 10, "outDist": 30 }\` |
+| Cusp (independent tangents) | \`{ "x": 0, "y": 0, "mode": "detached", "inAngle": 200, "inDist": 15, "outAngle": -20, "outDist": 15 }\` |
 
-\`angle\`/\`outAngle\` es la dirección de la tangente que sale hacia el vértice siguiente; la de entrada apunta hacia
-el anterior (en mirrored y asymmetric es \`angle + 180\`). Para retocar un vértice suelto puedes leer \`vertices\`,
-cambiar ese elemento y reenviar la lista completa con \`set\`.
+\`angle\`/\`outAngle\` is the direction of the tangent going out toward the next vertex; the incoming one points toward
+the previous one (in mirrored and asymmetric it is \`angle + 180\`). To tweak a single vertex you can read \`vertices\`,
+change that element and resend the whole list with \`set\`.
 
-## Imágenes (\`image\`)
+## Images (\`image\`)
 
-Una capa \`image\` dibuja un archivo PNG, JPG, WebP o SVG (el SVG entero, sin poder editar sus formas; para formas
-editables, el usuario tiene Import SVG en el editor). El archivo vive en la carpeta \`assets/\` del documento y \`src\`
-es su nombre.
+An \`image\` layer draws a PNG, JPG, WebP or SVG file (the whole SVG, without being able to edit its shapes; for editable
+shapes, the user has Import SVG in the editor). The file lives in the document's \`assets/\` folder and \`src\`
+is its name.
 
-- **Agregar:** \`add_image\` con \`path\` (ruta absoluta de un archivo que te indicó el usuario) o \`url\`. Copia el
-  archivo a \`assets/\` y crea la capa centrada en el lienzo, de su tamaño natural (achicada si no entra), o donde y del
-  tamaño que digas (\`x\`, \`y\`, \`width\` o \`height\`; con uno solo, el otro va en proporción). Devuelve la vista previa.
-- **Reusar un archivo** que ya está en \`assets/\` (por ejemplo, la misma imagen dos veces): \`create\` con \`apply_ops\` y
-  su \`src\`. Un \`src\` que no está en \`assets/\` se acepta pero no se dibuja, y apply_ops avisa.
-- Se comporta como cualquier capa: está centrada en \`x\`/\`y\` (\`originX\`/\`originY\` mueven el pivote), va dentro de
-  grupos, switches y skeletons, se pega a un hueso con \`bone\` y en poses y clips se animan su posición, giro, escala,
-  \`opacity\`, \`visible\`, \`width\` y \`height\`. \`width\`/\`height\` la estiran: para no deformarla, cámbialos en
-  proporción o usa \`scaleX\`/\`scaleY\`.
-- Para cambiar de imagen en una animación (bocas, ojos dibujados), pon una \`image\` por variante dentro de un
+- **Add:** \`add_image\` with \`path\` (absolute path of a file the user pointed you to) or \`url\`. It copies the
+  file to \`assets/\` and creates the layer centered on the canvas, at its natural size (shrunk if it doesn't fit), or where and at the
+  size you say (\`x\`, \`y\`, \`width\` or \`height\`; with only one, the other follows in proportion). Returns the preview.
+- **Reuse a file** already in \`assets/\` (for example, the same image twice): \`create\` with \`apply_ops\` and
+  its \`src\`. A \`src\` that isn't in \`assets/\` is accepted but not drawn, and apply_ops warns.
+- It behaves like any layer: it is centered on \`x\`/\`y\` (\`originX\`/\`originY\` move the pivot), goes inside
+  groups, switches and skeletons, sticks to a bone with \`bone\`, and in poses and clips its position, rotation, scale,
+  \`opacity\`, \`visible\`, \`width\` and \`height\` are animated. \`width\`/\`height\` stretch it: to avoid distorting it, change them in
+  proportion or use \`scaleX\`/\`scaleY\`.
+- To change images in an animation (mouths, drawn eyes), put one \`image\` per variant inside a
   \`switch\`.
-- Deshacer quita la capa, pero el archivo queda en \`assets/\`.
-- En \`render_preview\` una imagen WebP sale como un recuadro gris con una cruz (en su lugar y tamaño): esa vista
-  no sabe dibujar WebP. El usuario la ve bien. PNG, JPG y SVG se ven tal cual.
+- Undo removes the layer, but the file stays in \`assets/\`.
+- In \`render_preview\` a WebP image shows as a gray box with a cross (at its place and size): that view
+  can't draw WebP. The user sees it fine. PNG, JPG and SVG show as they are.
 
 \`\`\`json
 [
@@ -135,16 +137,16 @@ es su nombre.
 ]
 \`\`\`
 
-## Estilos y degradados (recursos)
+## Styles and gradients (assets)
 
-\`style\`, \`linear_gradient\` y \`radial_gradient\` son **recursos**: van en la raíz, no se dibujan y las formas los
-usan por id.
+\`style\`, \`linear_gradient\` and \`radial_gradient\` are **assets**: they go at the root, are not drawn, and shapes
+use them by id.
 
-- **Estilo compartido:** crea un \`style\` (por ejemplo \`skin\` con \`fill\` y \`stroke\`) y pon \`"style": "skin"\` en
-  las formas. Las propiedades que la forma no tenga propias salen del estilo; cambiar el estilo cambia todas a la
-  vez. Úsalo para la paleta del personaje: piel, pelo, ropa, contorno.
-- **Degradado:** crea un \`linear_gradient\` o \`radial_gradient\` con sus \`stops\` y pon su id en \`fillGradient\` de
-  la forma (o del estilo). Sus coordenadas van de 0 a 1 sobre la caja de la forma.
+- **Shared style:** create a \`style\` (for example \`skin\` with \`fill\` and \`stroke\`) and put \`"style": "skin"\` on
+  the shapes. Properties the shape doesn't set itself come from the style; changing the style changes all of them at
+  once. Use it for the character's palette: skin, hair, clothes, outline.
+- **Gradient:** create a \`linear_gradient\` or \`radial_gradient\` with its \`stops\` and put its id in \`fillGradient\` of
+  the shape (or of the style). Its coordinates go from 0 to 1 over the shape's box.
 
 \`\`\`json
 [
@@ -154,58 +156,58 @@ usan por id.
 ]
 \`\`\`
 
-## Huesos y poses
+## Bones and poses
 
-Como en Moho, el esqueleto vive en una **capa de huesos**: un \`skeleton\`. Es un contenedor como \`group\` que tiene
-adentro, en orden de dibujo, **el dibujo que el esqueleto mueve** y, aparte, **sus huesos**. Los \`bone\` solo pueden
-estar dentro de un \`skeleton\` (los huesos raíz) o de otro \`bone\` del mismo skeleton: nunca en la raíz ni en un
-\`group\`. El dibujo no se mete dentro de los huesos: se **enlaza** con la propiedad \`bone\` (de cualquier forma o
-grupo), así el orden de dibujo queda libre (un brazo puede ir detrás del torso aunque su hueso sea hijo del torso).
+As in Moho, the skeleton lives in a **bone layer**: a \`skeleton\`. It is a container like \`group\` that holds
+inside, in drawing order, **the drawing the skeleton moves** and, separately, **its bones**. \`bone\`s can only
+be inside a \`skeleton\` (root bones) or inside another \`bone\` of the same skeleton: never at the root nor in a
+\`group\`. The drawing doesn't go inside the bones: it is **bound** with the \`bone\` property (of any shape or
+group), so the drawing order stays free (an arm can go behind the torso even though its bone is a child of the torso).
 
-- **Primero el skeleton.** Crea un \`skeleton\` (por ejemplo \`rig\`) y dibuja adentro, o mete el dibujo que ya
-  existe con \`move\`. Si el skeleton queda en \`x: 0, y: 0\` sin giro, mover algo adentro no cambia dónde se ve; si
-  tiene transformación, recalcula \`x\`/\`y\` al moverlo (como con cualquier grupo).
-- **Enlace limitado a su skeleton:** un objeto solo puede enlazarse a huesos del skeleton que lo contiene (el más
-  cercano). Lo que está fuera de todo skeleton no se enlaza. Un skeleton puede ir dentro de otro y enlazarse entero
-  a un hueso del de afuera (una mano con sus propios huesos, que sigue al antebrazo).
-- **Sin enlace no se mueve:** el dibujo de un skeleton que no tiene \`bone\` (ni lo hereda de un grupo) queda quieto
-  en las poses. \`get_document\` lo marca como "sin hueso". Para enlazar todo de una vez, \`bind_by_proximity\` pone
-  cada pieza sin enlace en el hueso más cercano (por el centro de su caja); después revisa el reparto y corrige con
-  \`set\` lo que haya caído mal.
-- Los ids son únicos en todo el documento (dibujo, huesos y recursos): nombra los huesos con el sufijo \`_bone\`
-  (\`head_bone\`, \`tail_1_bone\`) para que no choquen con los grupos del dibujo.
-- **Lo más fácil es crear huesos con \`from\` y \`to\`**: origen (la articulación) y punta, como \`[x, y]\` en
-  coordenadas del **documento** (aunque el skeleton esté movido o girado). Se convierten solos a \`x\`, \`y\`,
-  \`rotation\` y \`length\` relativos al padre. También sirven en \`set\` (solo \`to\` conserva el origen).
-- Lo que se guarda: un hueso nace en su \`x\`/\`y\` (relativo a su hueso padre; un hueso raíz, relativo a su
-  skeleton) y apunta según \`rotation\` (0 = derecha, 90 = abajo, -90 = arriba) con largo \`length\`. \`rotation\` y
-  \`x\`/\`y\` son **relativos al padre**: el ángulo en pantalla es la suma de la cadena (y del giro del skeleton). Las
-  poses usan estos valores relativos. \`get_document\` muestra dónde queda cada hueso en el documento.
-- **Cambiar el padre de un hueso:** usa \`reparent_bone\`, no \`move\` (que conserva los valores relativos y corre el
-  hueso de lugar): recalcula sus valores para que quede donde estaba en el montaje, y los que le fijan las poses. Con
-  el skeleton como padre, queda como hueso raíz. Ojo con las poses que mueven al padre viejo (o a un ancestro que el
-  nuevo no comparte) o al padre nuevo: ahí el hueso sí cambia de lugar, porque ahora sigue a otro. La respuesta
-  lista esas poses; con \`keep_in_poses: true\` también se ajustan para que quede donde estaba.
-- **Montaje:** los valores guardados en los huesos son la pose de reposo. Ubica los huesos sobre el dibujo tal como
-  está. **Enlazar no mueve nada**: un objeto con \`"bone": "forearm_l_bone"\` (y todos sus hijos) acompaña a ese hueso
-  solo cuando una pose lo mueve. Mover, girar o escalar el skeleton mueve el dibujo y los huesos juntos.
-- Enlaza en el nivel más alto que convenga: el grupo \`head\` al hueso \`head_bone\`, y los hijos del grupo lo siguen
-  sin enlazarlos uno por uno. Un hijo con su propio \`bone\` sigue al suyo.
-- **Partes que se doblan** (cola, brazo flexible, cuello largo): no hace falta partir el dibujo. Un solo \`path\`
-  puede seguir a varios huesos **por punto**: cada vértice acepta \`"bone": "tail_2_bone"\` (de su skeleton) y, en una
-  pose, se mueve con sus tangentes según ese hueso. \`bind_points\` reparte los vértices entre los huesos más cercanos
-  de su skeleton (o de una lista). Los vértices sin \`bone\` siguen al hueso de la forma (o de su grupo). Pon
-  vértices cerca de cada articulación para que la curva se doble bien.
-- **El enlace por punto es del montaje**, como en Moho: una pose que cambia la forma de un path (\`vertices\` o
-  \`d\`) no guarda \`bone\` en sus vértices; al aplicarla, el vértice i sigue al hueso del vértice i del montaje. Por
-  eso conviene que la pose tenga los mismos vértices, en el mismo orden. Para cambiar a qué hueso sigue un punto,
-  cambia el montaje.
-- **Poses:** una \`pose\` es un recurso con nombre que fija valores (absolutos, como en el montaje) sin cambiar el
-  montaje: en \`values\`, \`{ id_de_objeto: { propiedad: valor } }\`. Se crea con \`set_pose\` (o con \`apply_ops\`) y
-  se mira con \`render_preview\` pasando \`pose\`. \`minAngle\`/\`maxAngle\` de un hueso limitan la rotación en las
-  poses. Una pose no se limita a huesos: ver la sección siguiente.
-- Los huesos no salen en la imagen del personaje: para revisar dónde quedaron, usa \`render_preview\` con
-  \`bones: true\` (y \`pose\`, para verlos posados).
+- **Skeleton first.** Create a \`skeleton\` (for example \`rig\`) and draw inside it, or move the existing drawing in
+  with \`move\`. If the skeleton is at \`x: 0, y: 0\` with no rotation, moving something inside doesn't change where it shows; if
+  it has a transform, recompute \`x\`/\`y\` when moving it (as with any group).
+- **Binding limited to its skeleton:** an object can only bind to bones of the skeleton that contains it (the
+  nearest). What is outside every skeleton isn't bound. A skeleton can go inside another and be bound as a whole
+  to a bone of the outer one (a hand with its own bones, following the forearm).
+- **Without a binding it doesn't move:** drawing in a skeleton that has no \`bone\` (nor inherits it from a group) stays still
+  in poses. \`get_document\` marks it as "no bone". To bind everything at once, \`bind_by_proximity\` puts
+  each unbound piece on the nearest bone (by the center of its box); then check the distribution and fix with
+  \`set\` whatever landed wrong.
+- Ids are unique across the whole document (drawing, bones and assets): name bones with the suffix \`_bone\`
+  (\`head_bone\`, \`tail_1_bone\`) so they don't clash with the drawing's groups.
+- **The easiest way to create bones is with \`from\` and \`to\`**: origin (the joint) and tip, as \`[x, y]\` in
+  **document** coordinates (even if the skeleton is moved or rotated). They are converted automatically to \`x\`, \`y\`,
+  \`rotation\` and \`length\` relative to the parent. They also work in \`set\` (only \`to\` keeps the origin).
+- What is stored: a bone starts at its \`x\`/\`y\` (relative to its parent bone; a root bone, relative to its
+  skeleton) and points according to \`rotation\` (0 = right, 90 = down, -90 = up) with length \`length\`. \`rotation\` and
+  \`x\`/\`y\` are **relative to the parent**: the on-screen angle is the sum along the chain (plus the skeleton's rotation). Poses
+  use these relative values. \`get_document\` shows where each bone ends up in the document.
+- **Changing a bone's parent:** use \`reparent_bone\`, not \`move\` (which keeps the relative values and shifts the
+  bone): it recomputes its values so it stays where it was in the setup, and the ones the poses set for it. With
+  the skeleton as parent, it becomes a root bone. Watch out for poses that move the old parent (or an ancestor the
+  new one doesn't share) or the new parent: there the bone does change place, because it now follows another one. The response
+  lists those poses; with \`keep_in_poses: true\` they are also adjusted so it stays where it was.
+- **Setup:** the values stored in the bones are the rest pose. Place the bones over the drawing as it
+  is. **Binding moves nothing**: an object with \`"bone": "forearm_l_bone"\` (and all its children) follows that bone
+  only when a pose moves it. Moving, rotating or scaling the skeleton moves the drawing and the bones together.
+- Bind at the highest level that makes sense: the group \`head\` to the bone \`head_bone\`, and the group's children follow it
+  without binding them one by one. A child with its own \`bone\` follows its own.
+- **Parts that bend** (tail, flexible arm, long neck): there's no need to split the drawing. A single \`path\`
+  can follow several bones **per point**: each vertex accepts \`"bone": "tail_2_bone"\` (of its skeleton) and, in a
+  pose, moves with its tangents according to that bone. \`bind_points\` distributes the vertices among the nearest bones
+  of its skeleton (or of a list). Vertices without \`bone\` follow the shape's bone (or its group's). Put
+  vertices near each joint so the curve bends well.
+- **Per-point binding belongs to the setup**, as in Moho: a pose that changes a path's shape (\`vertices\` or
+  \`d\`) doesn't store \`bone\` in its vertices; when applied, vertex i follows the bone of vertex i in the setup. So
+  the pose should have the same vertices, in the same order. To change which bone a point follows,
+  change the setup.
+- **Poses:** a \`pose\` is a named asset that sets values (absolute, as in the setup) without changing the
+  setup: in \`values\`, \`{ object_id: { property: value } }\`. It is created with \`set_pose\` (or with \`apply_ops\`) and
+  viewed with \`render_preview\` passing \`pose\`. A bone's \`minAngle\`/\`maxAngle\` limit its rotation in
+  poses. A pose isn't limited to bones: see the next section.
+- Bones don't show in the character's image: to check where they ended up, use \`render_preview\` with
+  \`bones: true\` (and \`pose\`, to see them posed).
 
 \`\`\`json
 [
@@ -223,43 +225,43 @@ grupo), así el orden de dibujo queda libre (un brazo puede ir detrás del torso
 ]
 \`\`\`
 
-Los tres \`move\` meten el dibujo en \`rig\` (que está en el origen, así que nada cambia de lugar). Con \`from\`/\`to\`,
-\`spine_bone\` queda en \`x: 300, y: 420, rotation: -90, length: 120\` (apunta hacia arriba), y \`upper_arm_l_bone\` en
-\`x: 100, y: 50, rotation: 180\`: relativo a \`spine_bone\`, que ya está girado -90°, así que en pantalla cuelga hacia
-abajo (-90 + 180 = 90°). En la pose \`wave\` queda en -90 + 45 = -45°: levantado hacia arriba y afuera. En vez de los
-tres \`set\` de \`bone\` podrías usar \`bind_by_proximity\` con \`skeleton: "rig"\` y revisar lo que eligió.
+The three \`move\`s put the drawing into \`rig\` (which is at the origin, so nothing changes place). With \`from\`/\`to\`,
+\`spine_bone\` ends up at \`x: 300, y: 420, rotation: -90, length: 120\` (pointing up), and \`upper_arm_l_bone\` at
+\`x: 100, y: 50, rotation: 180\`: relative to \`spine_bone\`, which is already rotated -90°, so on screen it hangs
+down (-90 + 180 = 90°). In the pose \`wave\` it is at -90 + 45 = -45°: raised up and outward. Instead of the
+three \`set\`s of \`bone\` you could use \`bind_by_proximity\` with \`skeleton: "rig"\` and check what it chose.
 
-## Expresiones: poses, params, drivers y switch
+## Expressions: poses, params, drivers and switch
 
-Así se controla al personaje desde afuera (la app, otra IA): con **params** de alto nivel (\`happiness\`,
-\`head_turn\`, \`viseme\`) en vez de mover piezas sueltas. Como los smart bones de Moho, pero explícito:
+This is how the character is controlled from outside (the app, another AI): with high-level **params** (\`happiness\`,
+\`head_turn\`, \`viseme\`) instead of moving individual pieces. Like Moho's smart bones, but explicit:
 
-1. **Pose**: lo que cambia en una expresión. Puede fijar **cualquier propiedad animable** de cualquier objeto:
-   rotación de huesos, \`vertices\` de una boca o una ceja (también acepta \`d\`), \`fill\`, \`opacity\`, \`visible\`, el
-   \`active\` de un switch... Para que una forma se **interpole** (morph) entre el montaje y la pose, la pose tiene
-   que tener **la misma cantidad de vértices** que el montaje: redibuja la misma línea moviendo los puntos.
-2. **Param**: el control. \`kind\` \`number\` (entre \`min\` y \`max\`), \`boolean\` o \`enum\` (\`options\`). Su valor no
-   se guarda: lo pone quien usa el personaje.
-3. **Driver**: conecta un param con una pose. El tramo \`inMin\`…\`inMax\` del param se vuelve peso \`outMin\`…\`outMax\`
-   (0 = nada, 1 = la pose completa). Con un enum, \`equals\` dice con qué opción va la pose.
-4. Varias poses activas se **suman** sobre el montaje: los números suman sus diferencias (cabeza girada + feliz),
-   colores y vértices se interpolan, y lo que no se interpola (el \`active\` de un switch) lo toma la pose con peso
+1. **Pose**: what changes in an expression. It can set **any animatable property** of any object:
+   bone rotation, the \`vertices\` of a mouth or an eyebrow (it also accepts \`d\`), \`fill\`, \`opacity\`, \`visible\`, a
+   switch's \`active\`... For a shape to **interpolate** (morph) between the setup and the pose, the pose must
+   have **the same number of vertices** as the setup: redraw the same line by moving the points.
+2. **Param**: the control. \`kind\` \`number\` (between \`min\` and \`max\`), \`boolean\` or \`enum\` (\`options\`). Its value isn't
+   stored: whoever uses the character sets it.
+3. **Driver**: connects a param to a pose. The param span \`inMin\`…\`inMax\` becomes weight \`outMin\`…\`outMax\`
+   (0 = nothing, 1 = the full pose). With an enum, \`equals\` says which option the pose goes with.
+4. Several active poses **add up** over the setup: numbers add their differences (head turned + happy),
+   colors and vertices interpolate, and what doesn't interpolate (a switch's \`active\`) is taken from the pose with weight
    ≥ 0.5.
 
-**Switch**: un grupo que muestra un solo hijo, el de \`active\` (o el primero, si es null), como la switch layer de
-Moho. Se crea con \`create\` y \`type: "switch"\`, y cada variante es un hijo suyo (\`parent\`). Para elegir cuál se ve,
-\`set\` con \`{ "active": "<hijo>" }\`: es lo mismo que hace el usuario con el menú ▾ del switch en Layers o con el
-selector de la barra de opciones. En una pose: \`set_pose\` con \`{ "<switch>": { "active": "<hijo>" } }\`. Si un param
-tiene que elegir la variante (bocas, visemas), arma tú las piezas: un param enum, una pose por opción que fija
-\`active\` y un driver con \`equals\` para cada una, como en el ejemplo de abajo. Si sacas del switch una variante que una pose elige, el lote falla: antes saca
-de la pose solo el \`active\` del switch con \`set_pose\` y \`remove: ["mouth.active"]\` (no con \`{ "mouth": {} }\`, que
-sacaría de la pose todo lo de \`mouth\`, por ejemplo su \`x\`), o deja la variante dentro del switch. \`remove\` sirve
-para sacar cualquier propiedad suelta de una pose.
+**Switch**: a group that shows a single child, the one in \`active\` (or the first, if null), like Moho's switch layer.
+It is created with \`create\` and \`type: "switch"\`, and each variant is a child of it (\`parent\`). To choose which one shows,
+\`set\` with \`{ "active": "<child>" }\`: it's the same thing the user does with the switch's ▾ menu in Layers or with the
+picker in the options bar. In a pose: \`set_pose\` with \`{ "<switch>": { "active": "<child>" } }\`. If a param
+has to choose the variant (mouths, visemes), build the pieces yourself: an enum param, one pose per option that sets
+\`active\`, and a driver with \`equals\` for each one, as in the example below. If you take out of the switch a variant that a pose chooses, the batch fails: first remove
+from the pose only the switch's \`active\` with \`set_pose\` and \`remove: ["mouth.active"]\` (not with \`{ "mouth": {} }\`, which
+would remove from the pose everything about \`mouth\`, for example its \`x\`), or leave the variant inside the switch. \`remove\` works
+to remove any single property from a pose.
 
-El \`initial\` de un param enum y el \`equals\` de sus drivers tienen que ser opciones de \`options\`; en un param
-numérico, \`min\` no puede ser mayor que \`max\`. Para quitar o renombrar una opción que un driver usa, cambia su
-\`equals\` (o borra el driver) **en el mismo lote** que el \`set\` de \`options\`. \`get_document\` dice en cada switch
-qué params eligen su variante (los que tienen drivers hacia poses que fijan su \`active\`).
+The \`initial\` of an enum param and the \`equals\` of its drivers must be options in \`options\`; in a numeric
+param, \`min\` can't be greater than \`max\`. To remove or rename an option a driver uses, change its
+\`equals\` (or delete the driver) **in the same batch** as the \`set\` of \`options\`. \`get_document\` says for each switch
+which params choose its variant (those with drivers to poses that set its \`active\`).
 
 \`\`\`json
 [
@@ -274,146 +276,147 @@ qué params eligen su variante (los que tienen drivers hacia poses que fijan su 
 ]
 \`\`\`
 
-Aquí \`happiness\` va de -1 (triste) a 1 (feliz): de 0 a 1 entra \`happy\` y de 0 a -1 entra \`sad\`. \`mouth_line\`
-tiene en el montaje los mismos 2 vértices que en las poses, así que la boca se curva de a poco. Revisa la mezcla con
-\`render_preview\` y \`params\` (por ejemplo \`{ "happiness": 0.5, "viseme": "o" }\`); el texto dice qué poses quedaron
-activas y con qué peso.
+Here \`happiness\` goes from -1 (sad) to 1 (happy): from 0 to 1 \`happy\` comes in and from 0 to -1 \`sad\` comes in. \`mouth_line\`
+has in the setup the same 2 vertices as in the poses, so the mouth curves gradually. Check the blend with
+\`render_preview\` and \`params\` (for example \`{ "happiness": 0.5, "viseme": "o" }\`); the text says which poses ended up
+active and with what weight.
 
-## Animación: clips con keyframes
+## Animation: clips with keyframes
 
-El editor tiene tres modos: **Design** (dibujo y rig), **Animate** (una timeline de escena para exportar a video,
-Lottie o SVG) y **Puppet** (el muñeco listo para que una app o su IA lo manejen en vivo: params, poses y clips
-cortos que se disparan, uno por botón). Los dos últimos usan el mismo recurso, \`animation\` (un clip), con
-\`usage\` \`animate\` o \`puppet\`.
+The editor has three modes: **Design** (drawing and rig), **Animate** (a scene timeline to export to video,
+Lottie or SVG) and **Puppet** (the puppet ready for an app or its AI to drive live: params, poses and short
+clips that get triggered, one per button). The last two use the same asset, \`animation\` (a clip), with
+\`usage\` \`animate\` or \`puppet\`.
 
-- **Pistas** (\`tracks\`): \`{ id_de_objeto: { propiedad: [ { "t": 0, "value": 0 }, { "t": 0.4, "value": -60, "ease": "ease-out" } ] } }\`,
-  con la misma forma que \`values\` de una pose: valores **absolutos**, como en el montaje. Cualquier propiedad
-  animable sirve: huesos, \`fill\`, \`opacity\`, el \`active\` de un switch, \`vertices\` (o \`d\`) con la misma cantidad
-  de puntos para un morph. **Solo en un clip de Puppet**, un **param** también tiene pista: \`{ "happiness": { "value": [...] } }\`,
-  y sus drivers suman la pose (un clip «laugh» puede llevar \`happiness\` a 1 en vez de repetir la cara feliz).
-- **Una escena de Animate no tiene params ni drivers:** se ve el montaje con sus keyframes, nada más (como se exporta).
-  Las poses y los params son del muñeco; en una escena, una expresión se copia como keyframes (\`set_keys\` con
-  \`pose\`) y una variante se elige keyando el \`active\` del switch (\`values: { "mouth": { "active": "mouth_o" } }\`).
-- \`t\` en segundos, de 0 a \`duration\`. Antes del primer keyframe vale el primero; después del último, el último; una
-  propiedad sin pista vale lo del montaje. Por eso, **keya el estado inicial en \`t = 0\`** (por ejemplo la boca normal):
-  si el primer keyframe de la boca está en 1 s con «a», el clip muestra «a» desde 0. \`loop\`: \`once\`, \`loop\` (vuelve a empezar: pon en \`t = duration\` los
-  mismos valores que en 0 para que no salte) o \`pingpong\`.
-- Para **empezar y terminar en reposo**, un momento con \`setup: true\` pone el montaje en todo lo que el clip anima (y,
-  en Puppet, los params en su valor inicial), sin copiar valores a mano.
-- **Ojo con los params (Puppet):** animar un param mueve **todas** las poses de sus drivers, también las que hizo el
-  usuario (\`happiness\` puede mover \`happy\` y además \`mirando_arriba\`). \`set_keys\` y \`render_preview\` listan, por
-  cada param animado, qué poses mueve y qué objetos toca cada una: léelo antes de dar el clip por bueno. Si una de
-  ellas mueve también algo que el clip anima (un hueso), los dos se suman; revísalo con la tira de cuadros.
-- \`set_keys\` solo cambia las pistas que nombras: las demás, también los retoques del usuario, quedan como estaban, y
-  \`undo\` va por pista. Un momento con solo \`t\` y \`ease\` cambia la curva de los keyframes que ya hay en ese tiempo.
-  Para alargar un clip basta con \`duration\`.
-- \`ease\` va en el keyframe y vale para el tramo que **sale** de él. Curvas con nombre:
+- **Tracks** (\`tracks\`): \`{ object_id: { property: [ { "t": 0, "value": 0 }, { "t": 0.4, "value": -60, "ease": "ease-out" } ] } }\`,
+  with the same shape as a pose's \`values\`: **absolute** values, as in the setup. Any animatable
+  property works: bones, \`fill\`, \`opacity\`, a switch's \`active\`, \`vertices\` (or \`d\`) with the same number
+  of points for a morph. **Only in a Puppet clip**, a **param** also has a track: \`{ "happiness": { "value": [...] } }\`,
+  and its drivers add the pose (a «laugh» clip can take \`happiness\` to 1 instead of repeating the happy face).
+- **An Animate scene has no params or drivers:** you see the setup with its keyframes, nothing else (as it's exported).
+  Poses and params belong to the puppet; in a scene, an expression is copied as keyframes (\`set_keys\` with
+  \`pose\`) and a variant is chosen by keying the switch's \`active\` (\`values: { "mouth": { "active": "mouth_o" } }\`).
+- \`t\` in seconds, from 0 to \`duration\`. Before the first keyframe it holds the first; after the last, the last; a
+  property without a track holds the setup value. So **key the initial state at \`t = 0\`** (for example the normal mouth):
+  if the mouth's first keyframe is at 1 s with «a», the clip shows «a» from 0. \`loop\`: \`once\`, \`loop\` (starts over: put at \`t = duration\` the
+  same values as at 0 so it doesn't jump) or \`pingpong\`.
+- To **start and end at rest**, a moment with \`setup: true\` sets the setup on everything the clip animates (and,
+  in Puppet, the params to their initial value), without copying values by hand.
+- **Careful with params (Puppet):** animating a param moves **all** the poses of its drivers, including those the
+  user made (\`happiness\` can move \`happy\` and also \`look_up\`). \`set_keys\` and \`render_preview\` list, for
+  each animated param, which poses it moves and which objects each one touches: read it before calling the clip done. If one of
+  them also moves something the clip animates (a bone), the two add up; check it with the frame strip.
+- \`set_keys\` only changes the tracks you name: the others, including the user's tweaks, stay as they were, and
+  \`undo\` works per track. A moment with only \`t\` and \`ease\` changes the curve of the keyframes already at that time.
+  To lengthen a clip, \`duration\` is enough.
+- \`ease\` goes on the keyframe and applies to the span that **leaves** it. Named curves:
 ${CURVE_DESCRIPTIONS.map(([name, meaning]) => `  - \`${name}\`: ${meaning}.`).join('\n')}
-  O \`[x1, y1, x2, y2]\` (cubic-bezier de CSS) si ninguna sirve. Prefiere una con nombre antes que adivinar números: para
-  «vuelve de golpe al final del tramo», \`ease-in-expo\`; para «llega y rebota un poco», \`ease-out-back\`. El \`active\` de
-  un switch, los booleanos y los textos cambian de golpe.
-- Orden en un clip de **Puppet**: montaje → clip en ese tiempo → los drivers suman sus poses encima (los params del
-  clip pisan a los de afuera). En una escena de Animate no hay drivers: solo montaje → clip.
-  Los **números se suman** (un hueso keyado en 10 con un driver activo que le suma 30 se ve en 40; \`set_keys\` y
-  \`render_preview\` lo avisan). Lo que **no se suma** (el \`active\` de un switch, colores, vértices, booleanos) lo
-  decide la pista del clip si la tiene; si no, los drivers.
-- **Si un param elige la variante** (visemas, bocas, ojos): en un clip de **Puppet**, anima el **param**
-  (\`params: { "viseme": "o" }\`) y no el \`active\` del switch; así el clip usa las mismas piezas que la app y se combina
-  con sus drivers (un param enum siempre tiene una opción activa: sus drivers están siempre en juego). En una
-  **escena**, keya el \`active\` (\`values: { "mouth": { "active": "mouth_o" } }\`) o copia la pose con \`pose\`.
-- **Cómo armarlo:** \`set_keys\` piensa en **momentos**: «en t = 0.3, el brazo así y la boca así» (\`values\`, como en
-  \`set_pose\`), «en t = 0.6, la pose \`happy\`» (\`pose\`, copia sus valores; con \`only: ["eye_l", "eye_r", "mouth"]\` solo
-  esa parte, con \`except: ["tail_bone"]\` todo menos eso) o, solo en un clip de Puppet, params (\`params\`): los params son
-  del muñeco y una escena de Animate no los anima (keya los valores, o copia la pose con \`pose\`). Crea el clip si no
-  existe. Si una escena tiene pistas de params (un clip que pasó de Puppet a Animate), quítalas con \`set_keys\` y
-  \`remove\` o con \`delete_keys\` y \`targets\`. \`delete_keys\` quita keyframes y \`move_keys\` los mueve en el tiempo (con su valor y su curva).
-  Un número de \`values\` puede ser **relativo al montaje**: \`{ "head_bone": { "rotation": "+=14" } }\` es 14° más que en
-  el montaje (\`"-=0.3"\` resta); se guarda el valor absoluto. Revisa el
-  movimiento con \`render_preview\` y \`animation\` + \`times\` (una tira de cuadros en una sola imagen) o \`time\` (un
-  cuadro). \`get_document\` lista cada pista de un clip con sus keyframes (\`t = valor curva\`), para leerlo sin el JSON.
-  En un documento con muchos clips, \`get_document\` con \`json: false\` y \`clips: ["wave"]\` da el árbol con las pistas
-  de solo esos clips (si la respuesta es muy grande, el JSON queda afuera solo). Las respuestas de \`apply_ops\` y
-  \`undo\` muestran los clips resumidos, sin sus pistas.
-- **Cambiar el ritmo:** \`scale_time\` estira o comprime en proporción todos los keyframes y la duración, en un solo paso
-  de deshacer (\`duration: 1\` deja el clip en 1 s; \`factor: 0.5\`, el doble de rápido; con \`from\` y \`to\`, solo ese
-  tramo, y lo de después se corre). No muevas los momentos de a uno con \`move_keys\` para eso.
-- \`duration\` en \`set_keys\` no puede quedar más corta que los keyframes: para acortar el clip con todo adentro, usa
-  \`scale_time\`; para cortar el final, borra antes los últimos keyframes.
-- Para Puppet, escribe \`description\` (qué hace el clip, en pocas palabras): la IA de la app la lee para elegir cuándo
-  dispararlo. Los clips de puppet suelen ser cortos (parpadeo 0.2 s, saludo 1–1.5 s, reposo en loop 2–4 s).
+  Or \`[x1, y1, x2, y2]\` (CSS cubic-bezier) if none fits. Prefer a named one over guessing numbers: for
+  «snaps back at the end of the span», \`ease-in-expo\`; for «arrives and bounces a little», \`ease-out-back\`. A switch's
+  \`active\`, booleans and strings change abruptly.
+- Order in a **Puppet** clip: setup → clip at that time → drivers add their poses on top (the clip's params
+  override the outside ones). In an Animate scene there are no drivers: only setup → clip.
+  **Numbers add up** (a bone keyed at 10 with an active driver that adds 30 shows at 40; \`set_keys\` and
+  \`render_preview\` warn about it). What **doesn't add up** (a switch's \`active\`, colors, vertices, booleans) is
+  decided by the clip's track if it has one; otherwise, by the drivers.
+- **If a param chooses the variant** (visemes, mouths, eyes): in a **Puppet** clip, animate the **param**
+  (\`params: { "viseme": "o" }\`) and not the switch's \`active\`; that way the clip uses the same pieces as the app and combines
+  with its drivers (an enum param always has an active option: its drivers are always in play). In a
+  **scene**, key the \`active\` (\`values: { "mouth": { "active": "mouth_o" } }\`) or copy the pose with \`pose\`.
+- **How to build it:** \`set_keys\` thinks in **moments**: «at t = 0.3, the arm like this and the mouth like this» (\`values\`, as in
+  \`set_pose\`), «at t = 0.6, the pose \`happy\`» (\`pose\`, copies its values; with \`only: ["eye_l", "eye_r", "mouth"]\` only
+  that part, with \`except: ["tail_bone"]\` everything but that) or, only in a Puppet clip, params (\`params\`): params belong
+  to the puppet and an Animate scene doesn't animate them (key the values, or copy the pose with \`pose\`). It creates the clip if it doesn't
+  exist. If a scene has param tracks (a clip that went from Puppet to Animate), remove them with \`set_keys\` and
+  \`remove\` or with \`delete_keys\` and \`targets\`. \`delete_keys\` removes keyframes and \`move_keys\` moves them in time (with their value and curve).
+  A number in \`values\` can be **relative to the setup**: \`{ "head_bone": { "rotation": "+=14" } }\` is 14° more than in
+  the setup (\`"-=0.3"\` subtracts); the absolute value is stored. Check the
+  motion with \`render_preview\` and \`animation\` + \`times\` (a frame strip in a single image) or \`time\` (one
+  frame). \`get_document\` lists each track of a clip with its keyframes (\`t = value curve\`), to read it without the JSON.
+  In a document with many clips, \`get_document\` with \`json: false\` and \`clips: ["wave"]\` gives the tree with the tracks
+  of only those clips (if the response is very large, the JSON is left out automatically). The responses of \`apply_ops\` and
+  \`undo\` show clips summarized, without their tracks.
+- **Changing the timing:** \`scale_time\` stretches or compresses all keyframes and the duration proportionally, in a single undo
+  step (\`duration: 1\` leaves the clip at 1 s; \`factor: 0.5\`, twice as fast; with \`from\` and \`to\`, only that
+  span, and what comes after shifts). Don't move the moments one by one with \`move_keys\` for that.
+- \`duration\` in \`set_keys\` can't end up shorter than the keyframes: to shorten the clip with everything in it, use
+  \`scale_time\`; to cut the end, delete the last keyframes first.
+- For Puppet, write \`description\` (what the clip does, in a few words): the app's AI reads it to choose when to
+  trigger it. Puppet clips are usually short (blink 0.2 s, wave 1–1.5 s, idle loop 2–4 s).
 
-## Puppet en vivo
+## Live puppet
 
-Una app (o su IA) maneja el muñeco con tres verbos: \`play(clip)\`, \`set(param, valor)\` y \`stop(clip)\`. No hay state
-machine: la app decide qué toca. Cómo suena cada clip de Puppet lo dice el clip:
+An app (or its AI) drives the puppet with three verbs: \`play(clip)\`, \`set(param, value)\` and \`stop(clip)\`. There is no state
+machine: the app decides what plays. How each Puppet clip plays is said by the clip:
 
-- **Base o gesto** sale del \`loop\`: un clip en \`loop\`/\`pingpong\` (reposo, escuchando, pensando, hablando) es **la
-  base**: \`play\` la cambia con un fundido cruzado y se queda sonando. Un clip \`once\` (saludo, asentir, sorpresa) es
-  un **gesto**: entra **encima** de la base, pisa **solo las pistas que tiene** y sale solo al final. Por eso un gesto
-  no debe keyar lo que no le toca (un saludo que keya la boca tapa la boca de «hablando»).
-- \`fade\`: segundos del fundido al entrar y salir (0.2 por defecto; 0 para el parpadeo). Un gesto empieza a salir
-  \`fade\` segundos antes de su final.
-- \`next\` (clip \`once\`): qué se dispara cuando empieza a salir. Encadena: \`start_talking\` → \`talking\`,
-  \`surprised\` → \`idle\`. Si \`next\` es un clip en loop, pasa a ser la base.
-- \`auto\`: lo que el muñeco hace solo, sin que la app lo pida: \`repeat\` (cada \`repeat_min\`…\`repeat_max\` s al azar:
-  el parpadeo) o \`always\` (en loop siempre: la respiración). Van encima de los gestos. La app no los dispara.
-- \`blend: "additive"\`: el clip **suma** su diferencia con el montaje en vez de pisar (la respiración con \`scaleY\`
-  1.02 suma 0.02 a lo que haya). Solo los números se suman.
-- **Params:** el valor lo pone la app con \`set\`. Si un clip anima ese param, gana el clip mientras suena y, al salir,
-  vuelve suave al valor de la app. Escribe la \`description\` de cada param (qué controla y qué hacen sus extremos,
-  por ejemplo «-1 looks at the viewer, 1 looks away»): la app la lee.
-- **Una base que anima un param se lo quita a la app** mientras suena, o sea casi siempre. Anima en una base solo lo
-  que es parte de ese estado (\`viseme\` en «hablando»); deja expresiones como \`happiness\` para la app o para gestos.
-- **Los ángulos se mezclan como números.** El fundido entre bases (o al entrar un gesto) interpola \`rotation\`: un
-  brazo en 140 cuando el montaje lo tiene en -178 da casi una vuelta entera, aunque en pantalla se vea parecido.
-  Escribe los ángulos cerca de los del montaje (-220 en vez de 140; \`"+=n"\` ayuda). \`set_keys\` avisa cuando una
-  rotación de un clip de Puppet queda a más de 180° del montaje.
-- **\`next\` reemplaza la base** si es un clip en loop: un gesto con \`next: "idle"\` disparado durante «hablando»
-  deja al personaje en reposo. Úsalo para reacciones que cambian de estado; un gesto sin \`next\` vuelve solo a la base que
-  había.
-- **Parpadeo automático:** si ya había un parpadeo keyado dentro de una base (\`idle\`), sácalo al crear el auto
-  \`repeat\` (si no, parpadea dos veces). Un clip \`auto\` ya no lo dispara la app: si la app también necesita un
-  parpadeo a pedido, deja otro clip \`once\`. La primera vez suena al azar entre \`repeat_min\` y \`repeat_max\`
-  segundos desde que arranca.
-- \`fade\` se come el final de un gesto: el gesto empieza a salir \`fade\` segundos antes de terminar. Con un fade largo,
-  alarga el clip o deja quieto el final. En un clip \`once\` el fundido no pasa de la mitad de lo que dura (si no, el
-  gesto nunca llegaría a verse entero). Un clip \`auto: "always"\` suena siempre en loop aunque su \`loop\` diga \`once\`.
-- \`stop\` con un clip que no suena no hace nada; con un id que no existe o un clip \`auto\`, da error. Con Live
-  encendido en el editor, la persona no edita a mano, pero tus cambios por MCP (y deshacer) se aplican y el muñeco
-  sigue con el documento nuevo.
+- **Base or gesture** comes from \`loop\`: a clip in \`loop\`/\`pingpong\` (idle, listening, thinking, talking) is **the
+  base**: \`play\` switches it with a crossfade and it keeps playing. A \`once\` clip (wave, nod, surprise) is
+  a **gesture**: it comes in **on top of** the base, overrides **only the tracks it has** and leaves by itself at the end. So a gesture
+  shouldn't key what isn't its business (a wave that keys the mouth covers the mouth of «talking»).
+- \`fade\`: seconds of the fade in and out (0.2 by default; 0 for the blink). A gesture starts leaving
+  \`fade\` seconds before its end.
+- \`next\` (\`once\` clip): what gets triggered when it starts leaving. Chains: \`start_talking\` → \`talking\`,
+  \`surprised\` → \`idle\`. If \`next\` is a looping clip, it becomes the base.
+- \`auto\`: what the puppet does on its own, without the app asking: \`repeat\` (every \`repeat_min\`…\`repeat_max\` s at random:
+  the blink) or \`always\` (always looping: breathing). They go on top of gestures. The app doesn't trigger them.
+- \`blend: "additive"\`: the clip **adds** its difference from the setup instead of overriding (breathing with \`scaleY\`
+  1.02 adds 0.02 to whatever is there). Only numbers add up.
+- **Params:** the value is set by the app with \`set\`. If a clip animates that param, the clip wins while it plays and, on leaving,
+  it smoothly returns to the app's value. Write the \`description\` of each param (what it controls and what its extremes do,
+  for example «-1 looks at the viewer, 1 looks away»): the app reads it.
+- **A base that animates a param takes it away from the app** while it plays, which is almost always. In a base, animate only
+  what is part of that state (\`viseme\` in «talking»); leave expressions like \`happiness\` to the app or to gestures.
+- **Angles blend as numbers.** The fade between bases (or when a gesture comes in) interpolates \`rotation\`: an
+  arm at 140 when the setup has it at -178 makes almost a full turn, even if on screen it looks similar.
+  Write angles close to the setup's (-220 instead of 140; \`"+=n"\` helps). \`set_keys\` warns when a
+  rotation in a Puppet clip ends up more than 180° from the setup.
+- **\`next\` replaces the base** if it's a looping clip: a gesture with \`next: "idle"\` triggered during «talking»
+  leaves the character at idle. Use it for reactions that change state; a gesture without \`next\` returns by itself to the base that
+  was there.
+- **Automatic blink:** if there was already a blink keyed inside a base (\`idle\`), take it out when creating the auto
+  \`repeat\` (otherwise it blinks twice). An \`auto\` clip is no longer triggered by the app: if the app also needs an
+  on-demand blink, keep another \`once\` clip. The first time it plays at random between \`repeat_min\` and \`repeat_max\`
+  seconds after start.
+- \`fade\` eats the end of a gesture: the gesture starts leaving \`fade\` seconds before finishing. With a long fade,
+  lengthen the clip or keep the end still. In a \`once\` clip the fade is never more than half its duration (otherwise the
+  gesture would never be seen whole). An \`auto: "always"\` clip always plays looping even if its \`loop\` says \`once\`.
+- \`stop\` with a clip that isn't playing does nothing; with an id that doesn't exist or an \`auto\` clip, it errors. With Live
+  on in the editor, the person doesn't edit by hand, but your MCP changes (and undo) are applied and the puppet
+  continues with the new document.
 
-Todo esto se pone con \`set_keys\` (\`fade\`, \`next\`, \`blend\`, \`auto\`, \`repeat_min\`, \`repeat_max\`) o con \`apply_ops\`.
-Para ver cómo lo verá la app, \`render_preview\` con \`live\`: un guion \`[{ "t": 0, "play": "idle" }, { "t": 1, "play":
-"wave" }, { "t": 1.2, "set": { "happiness": 1 } }]\`. Por defecto la tira llega hasta que termina el último gesto
-disparado (cada 0.25 s, como mucho 24 cuadros); \`until\` dice hasta cuándo y \`times\` elige los cuadros. El texto dice
-qué suena en cada cuadro y con qué peso, y cuándo sonó cada auto \`repeat\` (un parpadeo suele caer entre cuadros). El
-azar usa una semilla fija (el mismo guion da la misma tira) y \`auto: false\` apaga las capas auto para comparar. Al terminar un Puppet, lee **\`get_manifest\`**: es lo que recibe la IA de la app (params con qué poses
-mueven, clips con su descripción, lo automático). Una descripción vacía o un param que no mueve nada ahí es un
-problema para la app.
+All of this is set with \`set_keys\` (\`fade\`, \`next\`, \`blend\`, \`auto\`, \`repeat_min\`, \`repeat_max\`) or with \`apply_ops\`.
+To see how the app will see it, \`render_preview\` with \`live\`: a script \`[{ "t": 0, "play": "idle" }, { "t": 1, "play":
+"wave" }, { "t": 1.2, "set": { "happiness": 1 } }]\`. By default the strip runs until the last triggered gesture
+ends (every 0.25 s, at most 24 frames); \`until\` says until when and \`times\` picks the frames. The text says
+what plays in each frame and with what weight, and when each auto \`repeat\` played (a blink usually falls between frames). The
+randomness uses a fixed seed (the same script gives the same strip) and \`auto: false\` turns off the auto layers to compare. When finishing a Puppet, read **\`get_manifest\`**: it's what the app's AI receives (params with which poses they
+move, clips with their description, the automatic ones). An empty description or a param that moves nothing there is a
+problem for the app.
 
-## Tipos
+## Types
 
-### \`meta\` (propiedades del documento, se cambian con \`target: "meta"\`)
+### \`meta\` (document properties, changed with \`target: "meta"\`)
 
 ${table(schema.meta.properties)}
 
 ${types}
 
-## Cómo trabajar bien
+## How to work well
 
-1. **Mira el historial** (\`get_history\`, con \`origin: "user"\` para ver solo lo del usuario) antes de editar un
-   documento existente. Esas entradas son retoques a mano: respétalos y no los pises.
-2. **Usa grupos como articulaciones.** El \`x\`/\`y\` de un grupo es su pivote: para que una cabeza gire desde el
-   cuello, pon el grupo \`head\` en el cuello y dibuja la cara con \`y\` negativa dentro del grupo.
-3. **Mira el resultado** con \`render_preview\` después de cada cambio importante.
-4. **Prefiere pocos lotes grandes** con una nota clara (\`note\`): cada lote es un paso de deshacer para el usuario.
-5. Si te equivocas, \`undo\` deshace tu último lote (solo los tuyos, nunca los del usuario). Si el usuario cambió
-   después alguna de las mismas propiedades, \`undo\` se niega y dice cuáles: corrígelas con un lote nuevo, sin
-   pisar su retoque. A él le pasa lo mismo con lo tuyo. En una pose la unidad es cada objeto y propiedad
-   (\`values.mouth.active\`), no la pose entera: si el usuario retocó otro objeto de la misma pose, tu \`undo\` deshace
-   solo lo tuyo y deja lo suyo.
-6. Para revisar un detalle chico, \`render_preview\` acepta \`region\` (un recorte del documento) además de \`pose\`.
-7. \`delete_document\` borra un documento entero y no se puede deshacer: úsalo solo si el usuario lo pide.
-8. No hay importador de SVG para la IA: pasa cada forma como \`d\` de un \`path\` (un path por subtrazado).
+1. **Check the history** (\`get_history\`, with \`origin: "user"\` to see only the user's) before editing an existing
+   document. Each entry has \`origin\` (\`"ai"\`, \`"user"\` or \`"system"\`), \`kind\` (\`"create"\`, \`"change"\`, \`"undo"\`,
+   \`"redo"\`, \`"migration"\`) and \`note\`. The user's entries are hand tweaks: respect them and don't overwrite them.
+2. **Use groups as joints.** A group's \`x\`/\`y\` is its pivot: for a head to rotate from the
+   neck, put the group \`head\` at the neck and draw the face with negative \`y\` inside the group.
+3. **Look at the result** with \`render_preview\` after each important change.
+4. **Prefer few large batches** with a clear note (\`note\`): each batch is one undo step for the user.
+5. If you make a mistake, \`undo\` undoes your last batch (only yours, never the user's). If the user changed
+   any of the same properties afterward, \`undo\` refuses and says which: fix them with a new batch, without
+   overwriting their tweak. The same happens to them with yours. In a pose the unit is each object and property
+   (\`values.mouth.active\`), not the whole pose: if the user tweaked another object in the same pose, your \`undo\` undoes
+   only yours and leaves theirs.
+6. To check a small detail, \`render_preview\` accepts \`region\` (a crop of the document) besides \`pose\`.
+7. \`delete_document\` deletes a whole document (from the \`documents/\` folder) and can't be undone: use it only if the user asks.
+8. There's no SVG importer for the AI: pass each shape as the \`d\` of a \`path\` (one path per subpath).
 `;
 }
