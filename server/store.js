@@ -185,7 +185,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
   const enqueue = (fn) => (row = row.then(fn, fn));
 
   const filePath = (id, file) => {
-    if (!DOCUMENT_ID.test(id ?? '')) throw new Error(`id de documento inválido "${id}": minúsculas, números, _ y -`);
+    if (!DOCUMENT_ID.test(id ?? '')) throw new Error(`Invalid document id "${id}": lowercase, digits, _ and -`);
     return path.join(folder, id, file);
   };
 
@@ -219,7 +219,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     try {
       doc = JSON.parse(await fs.readFile(filePath(id, 'document.json'), 'utf8'));
     } catch (e) {
-      if (e.code === 'ENOENT') throw new Error(`No existe el documento "${id}"`);
+      if (e.code === 'ENOENT') throw new Error(`There is no document "${id}"`);
       throw e;
     }
     return migrateOnRead(id, doc);
@@ -367,7 +367,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
       enqueue(async () => {
         try {
           await fs.access(filePath(id, 'document.json'));
-          throw new Error(`Ya existe el documento "${id}"`);
+          throw new Error(`The document "${id}" already exists`);
         } catch (e) {
           if (e.code !== 'ENOENT') throw e;
         }

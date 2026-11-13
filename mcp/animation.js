@@ -218,14 +218,14 @@ export function clipSummary(schema, clip) {
   const tracks = Object.entries(clip.tracks ?? {}).flatMap(([id, fields]) => Object.keys(fields).map((k) => `${id}.${k}`));
   const frameTimes = keyTimes(clip);
   const base = `${read(schema, clip, 'usage')}, ${n(read(schema, clip, 'duration'))} s, ${read(schema, clip, 'loop')}`;
-  return `${base}${live(schema, clip)}; ${tracks.length ? `anima ${tracks.join(', ')}; keys en ${frameTimes.map(n).join(', ')}` : 'sin keyframes'}`;
+  return `${base}${live(schema, clip)}; ${tracks.length ? `animates ${tracks.join(', ')}; keys at ${frameTimes.map(n).join(', ')}` : 'no keyframes'}`;
 }
 
-/** The Live part of a Puppet clip, for the summary: ", gesto, fade 0.2 s, next idle". Empty in a scene. */
+/** The Live part of a Puppet clip, for the summary: ", gesture, fade 0.2 s, next idle". Empty in a scene. */
 function live(schema, clip) {
   if (read(schema, clip, 'usage') !== 'puppet') return '';
   const auto = read(schema, clip, 'auto');
-  const parts = [auto !== 'off' ? `auto ${auto}${auto === 'repeat' ? ` cada ${n(read(schema, clip, 'repeat_min'))}–${n(read(schema, clip, 'repeat_max'))} s` : ''}` : read(schema, clip, 'loop') === 'once' ? 'gesto' : 'base'];
+  const parts = [auto !== 'off' ? `auto ${auto}${auto === 'repeat' ? ` every ${n(read(schema, clip, 'repeat_min'))}–${n(read(schema, clip, 'repeat_max'))} s` : ''}` : read(schema, clip, 'loop') === 'once' ? 'gesture' : 'base'];
   parts.push(`fade ${n(read(schema, clip, 'fade'))} s`);
   if (read(schema, clip, 'next')) parts.push(`next ${read(schema, clip, 'next')}`);
   if (read(schema, clip, 'blend') === 'additive') parts.push('additive');
@@ -237,7 +237,7 @@ function live(schema, clip) {
  * whole JSON: vertices are summarized by point count.
  */
 export function trackLines(clip) {
-  const value = (v) => (Array.isArray(v) ? `(${v.length} puntos)` : typeof v === 'number' ? n(v) : JSON.stringify(v));
+  const value = (v) => (Array.isArray(v) ? `(${v.length} points)` : typeof v === 'number' ? n(v) : JSON.stringify(v));
   const curve = (e) => (e === undefined ? '' : ` ${Array.isArray(e) ? `[${e.join(', ')}]` : e}`);
   return Object.entries(clip.tracks ?? {}).flatMap(([id, fields]) =>
     Object.entries(fields).map(([prop, keys]) => `${id}.${prop}: ${keys.map((c) => `${n(c.t)} = ${value(c.value)}${curve(c.ease)}`).join(' · ')}`),
@@ -265,11 +265,11 @@ export function planClipView(doc, schema, { region, bones, params, animation, ti
   const svg = frameTimes.length === 1 ? svgDocument(doc, schema, { ...options, time: frameTimes[0] }) : svgStrip(doc, schema, { ...options, times: frameTimes });
   const animated = Object.keys(evaluateClip(doc, schema, clip, 0).params);
   const all = keyTimes(clip).length;
-  const clipped = time == null && !times?.length && all > frameTimes.length ? ` (${frameTimes.length} de sus ${all} tiempos de keyframes, repartidos; pasa times para ver otros)` : '';
-  const frames = frameTimes.length === 1 ? `cuadro en t = ${frameTimes[0]} s` : `${frameTimes.length} cuadros en t = ${frameTimes.join(', ')} s${clipped}`;
+  const clipped = time == null && !times?.length && all > frameTimes.length ? ` (${frameTimes.length} of its ${all} keyframe times, spread out; pass times to see others)` : '';
+  const frames = frameTimes.length === 1 ? `frame at t = ${frameTimes[0]} s` : `${frameTimes.length} frames at t = ${frameTimes.join(', ')} s${clipped}`;
   const warnings = clipWarnings(doc, schema, clip, params ?? {});
   const poses = paramPoseText(doc, schema, clip);
-  const text = `Clip "${animation}" (${clipSummary(schema, clip)}): ${frames}${animated.length ? `; el clip anima los params ${animated.join(', ')}` : ''}.${poses ? `\n${poses}` : ''}${warnings.length ? `\nOjo, drivers que suman encima del clip:\n${warnings.map((a) => `- ${a}`).join('\n')}` : ''}`;
+  const text = `Clip "${animation}" (${clipSummary(schema, clip)}): ${frames}${animated.length ? `; the clip animates the params ${animated.join(', ')}` : ''}.${poses ? `\n${poses}` : ''}${warnings.length ? `\nCareful, drivers that add on top of the clip:\n${warnings.map((a) => `- ${a}`).join('\n')}` : ''}`;
   return { svg, width: frameTimes.length === 1 ? 600 : 1000, text };
 }
 
@@ -316,7 +316,7 @@ export function rotationWarnings(doc, schema, clip) {
     if (!far.length) continue;
     const example = far[0].value;
     const near = example - 360 * Math.round((example - setup) / 360);
-    warnings.push(`${id}.rotation: ${far.map((c) => `${n(c.value)} en t ${n(c.t)}`).join(', ')} queda a más de 180° del montaje (${n(setup)}); en vivo, el fundido lo hace girar casi una vuelta. Para el mismo ángulo en pantalla usa ${n(near)}.`);
+    warnings.push(`${id}.rotation: ${far.map((c) => `${n(c.value)} at t ${n(c.t)}`).join(', ')} is more than 180° from the setup (${n(setup)}); live, the fade makes it spin almost a full turn. For the same angle on screen use ${n(near)}.`);
   }
   return warnings;
 }
@@ -324,7 +324,7 @@ export function rotationWarnings(doc, schema, clip) {
 /** The "param → poses (objects)" lines of a Puppet clip, as text for the AI (empty if it animates no params). */
 export function paramPoseText(doc, schema, clip) {
   const lines = paramPoseLines(doc, schema, clip);
-  return lines.length ? `Params animados y las poses que mueven (por sus drivers; todas se suman):\n${lines.map((l) => `- ${l}`).join('\n')}` : '';
+  return lines.length ? `Animated params and the poses they move (through their drivers; they all add up):\n${lines.map((l) => `- ${l}`).join('\n')}` : '';
 }
 
 /**
@@ -356,20 +356,20 @@ export function planLiveView(doc, schema, { live, times, until, auto, params, re
   const svg = frames.length === 1 ? svgDocument(doc, schema, { ...options, pose: frames[0].pose }) : svgStrip(doc, schema, { ...options, times: frameTimes, poses: frames.map((c) => c.pose) });
   const pct = (w) => `${Math.round(w * 100)}%`;
   const lines = frames.map((c) => {
-    const playing = c.state.playing.filter((s) => s.weight > 0).map((s) => `${s.clip} (${s.layer === 'gesture' ? 'gesto' : s.layer}, ${pct(s.weight)}${s.leaving ? ', saliendo' : ''})`);
-    return `- t = ${n(c.t)} s: ${playing.join(', ') || 'nada (montaje y params)'}`;
+    const playing = c.state.playing.filter((s) => s.weight > 0).map((s) => `${s.clip} (${s.layer === 'gesture' ? 'gesture' : s.layer}, ${pct(s.weight)}${s.leaving ? ', leaving' : ''})`);
+    return `- t = ${n(c.t)} s: ${playing.join(', ') || 'nothing (setup and params)'}`;
   });
   // In the last frame: the visible value (blended with the clips that animate params) and, if it differs, the app's.
   const last = frames.at(-1);
   const value = (v) => (typeof v === 'number' ? n(v) : v);
   const withValue = Object.entries(last?.pose.params ?? {}).map(([k, v]) => {
     const app = last.state.params[k];
-    return `${k} ${value(v)}${value(app) !== value(v) ? ` (la app: ${value(app)})` : ''}`;
+    return `${k} ${value(v)}${value(app) !== value(v) ? ` (the app: ${value(app)})` : ''}`;
   });
-  const paramsEnd = withValue.length ? `\nParams en el último cuadro (mezclados con los clips): ${withValue.join(', ')}` : '';
-  const distribution = times?.length ? '' : ` (cada ${n(step)} s hasta ${n(end)} s${step > 0.25 ? '; para ver más de cerca, pasa times o un until más corto' : ''})`;
-  const autos = frames.repeats.length ? `\nClips auto repeat que sonaron (pueden caer entre cuadros): ${frames.repeats.map((r) => `${r.clip} ${n(r.from)}–${n(r.to)} s`).join(', ')}` : '';
-  const apagados = auto === false ? '\nCapas auto apagadas (auto: false).' : '';
-  const text = `En vivo (como lo vería la app), ${frames.length} cuadros${distribution}:\n${lines.join('\n')}${paramsEnd}${autos}${apagados}`;
+  const paramsEnd = withValue.length ? `\nParams in the last frame (blended with the clips): ${withValue.join(', ')}` : '';
+  const distribution = times?.length ? '' : ` (every ${n(step)} s until ${n(end)} s${step > 0.25 ? '; to look closer, pass times or a shorter until' : ''})`;
+  const autos = frames.repeats.length ? `\nAuto repeat clips that played (they may fall between frames): ${frames.repeats.map((r) => `${r.clip} ${n(r.from)}–${n(r.to)} s`).join(', ')}` : '';
+  const apagados = auto === false ? '\nAuto layers off (auto: false).' : '';
+  const text = `Live (as the app would see it), ${frames.length} frames${distribution}:\n${lines.join('\n')}${paramsEnd}${autos}${apagados}`;
   return { svg, width: frames.length === 1 ? 600 : 1000, text };
 }

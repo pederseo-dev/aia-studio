@@ -59,7 +59,7 @@ export function aiaDocuments() {
             const original = new URL(req.url, 'http://x').searchParams.get('name') ?? 'image';
             return respond(res, 200, await store.saveAsset(id, original, await readBytes(req)));
           }
-          if (rest.length) return respond(res, 404, { error: 'Ruta desconocida' });
+          if (rest.length) return respond(res, 404, { error: 'Unknown route' });
 
           if (!id && method === 'GET') return respond(res, 200, await store.list());
           if (!id && method === 'POST') {
@@ -75,7 +75,7 @@ export function aiaDocuments() {
           }
           if (action === 'undo' && method === 'POST') return respond(res, 200, await store.undo(id, ORIGIN));
           if (action === 'redo' && method === 'POST') return respond(res, 200, await store.redo(id, ORIGIN));
-          respond(res, 404, { error: 'Ruta desconocida' });
+          respond(res, 404, { error: 'Unknown route' });
         } catch (e) {
           respond(res, 400, { error: e.message });
         }
