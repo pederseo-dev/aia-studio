@@ -14,6 +14,8 @@ It takes the rigging ideas of **Moho** (bone layers, smart bones, switch layers)
 (clips, a declarative runtime) and the live puppet ideas of **Adobe Character Animator** (triggers, gestures over a
 base, automatic blinking and breathing).
 
+![The aia-studio editor in Animate mode: the layers of the logo, the canvas and the timeline of its «hello» clip](docs/images/editor.png)
+
 ## Why HTML, CSS, JS and SVG
 
 That choice is the point. A character made here is not locked inside a video or a proprietary player: it is plain
@@ -103,6 +105,11 @@ aia-studio is built by two, working together:
 
 The rigging, runtime and live puppet ideas come from studying Moho, Rive and Adobe Character Animator; aia-studio is
 not affiliated with any of them.
+
+## Security
+
+aia-studio is a local tool: keep the dev server off public networks. See [SECURITY.md](SECURITY.md) for details and
+how to report a vulnerability privately.
 
 ## License
 
