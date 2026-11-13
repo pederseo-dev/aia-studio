@@ -89,3 +89,15 @@ The AI starts with the `get_guide` tool, which explains the format and every too
 
 - [docs/decision-animacion.md](docs/decision-animacion.md): the Design, Animate and Puppet modes and the clip model.
 - [docs/sintesis.md](docs/sintesis.md): what aia-studio takes from Moho and Rive (research in `docs/investigacion/`).
+
+## Credits
+
+aia-studio is built by two, working together:
+
+- **[pederseo-dev](https://github.com/pederseo-dev)**: the idea, the product vision and direction, design decisions
+  and hands-on testing in the editor.
+- **Claude** (Anthropic, through Claude Code): architecture, code, tests, audits and the AI tests of each phase,
+  as a development partner. Commits it co-wrote carry `Co-Authored-By: Claude`.
+
+The rigging, runtime and live puppet ideas come from studying Moho, Rive and Adobe Character Animator; aia-studio is
+not affiliated with any of them.
