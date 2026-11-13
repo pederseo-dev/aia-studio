@@ -6,14 +6,16 @@
 import fs from 'node:fs/promises';
 import { existsSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { ValidationError, createDocument, validate } from '../src/core/document.js';
 import { migrateScenesWithParams } from '../src/core/migration.js';
 import { applyOperations } from '../src/core/operations.js';
 import { ASSET_FILE } from '../src/core/schema.js';
 import { IMAGE_FORMATS, usedAssets, readImage, assetMime, assetName, freeName } from '../src/core/images.js';
 
-export const DOCUMENTS_FOLDER = fileURLToPath(new URL('../documents/', import.meta.url));
+import { resolveDocumentsFolder } from './folder.js';
+
+/** The documents folder of this process: see server/folder.js. */
+export const DOCUMENTS_FOLDER = resolveDocumentsFolder();
 const DOCUMENT_ID = /^[a-z][a-z0-9_-]*$/;
 
 // Operations that change the structure of an object (not a single property): they touch the "whole" object.

@@ -627,7 +627,13 @@ window.addEventListener('pagehide', sendPending);
 
 // ---------- Changes from outside (the AI through MCP, or another process) ----------
 
-import.meta.hot?.on('aia:document', async ({ id }) => {
+// The server streams what changed on disk (server/events.js) over Server-Sent Events, in `npm run dev` and in the
+// desktop app alike. EventSource reconnects by itself if the server restarts.
+const serverEvents = new EventSource('/api/events');
+/** @param {string} event @param {(data: any) => void} fn */
+const onServer = (event, fn) => serverEvents.addEventListener(event, (e) => fn(JSON.parse(e.data)));
+
+onServer('document', async ({ id }) => {
   // A new document (for example, created by the AI) opens in a tab without taking you away from the current one.
   if (!state.documents.some((d) => d.id === id)) {
     await loadDocuments();
@@ -645,7 +651,7 @@ import.meta.hot?.on('aia:document', async ({ id }) => {
 });
 
 // A document deleted outside the editor (the AI with delete_document, or another process): its tab is closed.
-import.meta.hot?.on('aia:deleted', async ({ id }) => {
+onServer('deleted', async ({ id }) => {
   const name = state.documents.find((d) => d.id === id)?.name ?? id;
   const known = state.documents.some((d) => d.id === id) || state.tabs.includes(id);
   if (!known || deletedHere.has(id)) return;
@@ -654,7 +660,7 @@ import.meta.hot?.on('aia:deleted', async ({ id }) => {
   notify(`“${name}” was deleted outside the editor (by the AI or another program)`);
 });
 
-import.meta.hot?.on('aia:history', ({ id }) => id === state.id && refreshHistory());
+onServer('history', ({ id }) => id === state.id && refreshHistory());
 
 // ---------- Startup ----------
 
