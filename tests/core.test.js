@@ -32,7 +32,7 @@ test('el esquema resuelve la herencia y solo expone tipos concretos', () => {
 });
 
 test('cada tipo concreto que no es recurso tiene cómo dibujarse', () => {
-  for (const [name, tipo] of schema.types) if (!tipo.resource) assert.ok(name in DRAW, `falta DIBUJAR.${name}`);
+  for (const [name, kind] of schema.types) if (!kind.resource) assert.ok(name in DRAW, `falta DIBUJAR.${name}`);
 });
 
 test('crear arma la jerarquía y el orden de dibujo', () => {
@@ -56,21 +56,21 @@ test('cada operación se deshace exactamente con sus inversas', () => {
     [{ op: 'move', target: 'body', parent: null, index: 0 }, { op: 'delete', target: 'body' }],
   ];
   for (const ops of lotes) {
-    const { doc: changed, inversas } = op(doc, ...ops);
+    const { doc: changed, inverses } = op(doc, ...ops);
     assert.notDeepEqual(changed, doc, JSON.stringify(ops));
-    assert.deepEqual(op(changed, ...inversas).doc, doc, JSON.stringify(ops));
+    assert.deepEqual(op(changed, ...inverses).doc, doc, JSON.stringify(ops));
   }
 });
 
 test('duplicate copia el subárbol con ids nuevos y se deshace', () => {
   const doc = robot();
-  const { doc: copy, inversas } = op(doc, { op: 'duplicate', target: 'head', id: 'head_b', suffix: 'b', props: { x: 50 } });
+  const { doc: copy, inverses } = op(doc, { op: 'duplicate', target: 'head', id: 'head_b', suffix: 'b', props: { x: 50 } });
   const ids = copy.objects.map((o) => o.id);
   assert.deepEqual(ids.slice(0, 5), ['body', 'torso', 'head', 'eye_l', 'eye_r']);
   assert.deepEqual(copy.objects.filter((o) => o.parent === 'body').map((o) => o.id), ['torso', 'head', 'head_b']);
   assert.deepEqual(copy.objects.filter((o) => o.parent === 'head_b').map((o) => o.id), ['eye_l_b', 'eye_r_b']);
   assert.equal(copy.objects.find((o) => o.id === 'head_b').x, 50);
-  assert.deepEqual(op(copy, ...inversas).doc, doc);
+  assert.deepEqual(op(copy, ...inverses).doc, doc);
   assert.throws(() => op(copy, { op: 'duplicate', target: 'head', suffix: 'b' }), /ya existe un objeto "head_b"/);
   assert.throws(() => op(copy, { op: 'duplicate', target: 'head', id: 'head_c', suffix: 'b' }), /ya existe un objeto "eye_l_b"/);
   const root = op(doc, { op: 'duplicate', target: 'eye_l', parent: null, index: 0 }).doc;
@@ -130,7 +130,7 @@ test('el SVG respeta jerarquía, valores por defecto y orden', () => {
 
 test('la guía para la IA sale del esquema', () => {
   const guide = guideForAI(schema);
-  for (const tipo of schema.types.keys()) assert.ok(guide.includes(`### \`${tipo}\``));
+  for (const kind of schema.types.keys()) assert.ok(guide.includes(`### \`${kind}\``));
   assert.ok(guide.includes('`cornerRadius`'));
 });
 
@@ -180,9 +180,9 @@ test('sacar de un switch una variante que usa una pose dice las dos salidas', ()
 
 test('move con keepPosition deja el objeto en el mismo lugar de la pantalla, y se deshace', () => {
   const doc = op(createDocument({}), { op: 'create', type: 'group', id: 'g', props: { x: 100, y: 50, rotation: 90 } }, { op: 'create', type: 'rect', id: 'r', props: { x: 10, y: 20 } }).doc;
-  const { doc: moved, inversas } = op(doc, { op: 'move', target: 'r', parent: 'g', keepPosition: true });
+  const { doc: moved, inverses } = op(doc, { op: 'move', target: 'r', parent: 'g', keepPosition: true });
   assert.deepEqual(apply(worldMatrix(moved, schema, 'r'), 0, 0).map(Math.round), [10, 20]);
-  assert.deepEqual(op(moved, ...inversas).doc, doc);
+  assert.deepEqual(op(moved, ...inverses).doc, doc);
   // Sin keepPosition conserva x/y (y se corre).
   assert.deepEqual(apply(worldMatrix(op(doc, { op: 'move', target: 'r', parent: 'g' }).doc, schema, 'r'), 0, 0).map(Math.round), [80, 60]);
   assert.throws(() => op(op(moved, { op: 'create', type: 'skeleton', id: 's' }, { op: 'create', type: 'bone', id: 'b', parent: 's' }).doc, { op: 'move', target: 'b', parent: 'g', keepPosition: true }), /reparent_bone/);

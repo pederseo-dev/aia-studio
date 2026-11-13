@@ -90,7 +90,7 @@ export function mountParameters(root, newButton, deleteButton) {
    * poses que mezcla con su peso ahora, con «＋» para conectar otra.
    */
   function row(doc, param, value) {
-    const tipo = read(schema, param, 'kind');
+    const kind = read(schema, param, 'kind');
     const div = document.createElement('div');
     div.className = `param${param.id === state.selection ? ' seleccionado' : ''}`;
     div.dataset.param = param.id;
@@ -101,13 +101,13 @@ export function mountParameters(root, newButton, deleteButton) {
     name.title = `${description ? `${description}\n` : ''}Select the parameter (kind, range, options and description in the inspector)`;
     name.addEventListener('click', () => select(param.id));
     head.append(name);
-    if (tipo === 'boolean') {
+    if (kind === 'boolean') {
       const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: value >= 0.5, title: 'On / off' });
       check.addEventListener('change', () => move(param.id, check.checked ? 1 : 0));
       head.append(check);
-    } else if (tipo === 'number') head.append(Object.assign(document.createElement('span'), { className: 'valor', textContent: +value.toFixed(2) }));
+    } else if (kind === 'number') head.append(Object.assign(document.createElement('span'), { className: 'valor', textContent: +value.toFixed(2) }));
     div.append(head);
-    if (tipo !== 'boolean') div.append(control(param, value, tipo));
+    if (kind !== 'boolean') div.append(control(param, value, kind));
 
     // Las poses que mezcla (por sus drivers) y con qué peso ahora; «＋» conecta otra.
     const drivers = doc.objects.filter((o) => o.type === 'driver' && o.param === param.id);
@@ -130,7 +130,7 @@ export function mountParameters(root, newButton, deleteButton) {
       if (!connect.value) return;
       const id = freeId(`${param.id}_to_${connect.value}`.slice(0, 40));
       // Con un enum, la pose va con la opción que está elegida ahora.
-      const props = { param: param.id, pose: connect.value, ...(tipo === 'enum' ? { equals: value } : {}) };
+      const props = { param: param.id, pose: connect.value, ...(kind === 'enum' ? { equals: value } : {}) };
       execute([{ op: 'create', type: 'driver', id, props }], `connect ${param.id} → ${connect.value}`);
       select(id);
     });
@@ -154,8 +154,8 @@ export function mountParameters(root, newButton, deleteButton) {
     if (number && typeof value === 'number') number.textContent = +value.toFixed(2);
   }
 
-  function control(param, value, tipo) {
-    if (tipo === 'enum') {
+  function control(param, value, kind) {
+    if (kind === 'enum') {
       const select = document.createElement('select');
       select.className = 'opciones-param';
       for (const o of read(schema, param, 'options')) select.append(new Option(o, o, false, o === value));

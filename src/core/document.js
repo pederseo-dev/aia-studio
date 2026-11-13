@@ -111,34 +111,34 @@ export function validate(doc, schema) {
   }
 
   for (const o of doc.objects) {
-    const tipo = schema.types.get(o.type);
-    if (!tipo) {
+    const kind = schema.types.get(o.type);
+    if (!kind) {
       errors.push(`${o.id}: tipo desconocido "${o.type}".${suggest(o.type, schema.types.keys())} Tipos: ${[...schema.types.keys()].join(', ')}`);
       continue;
     }
-    if (tipo.resource && o.parent != null) errors.push(`${o.id}: es un recurso (${o.type}) y va en la raíz (parent: null)`);
-    else if (o.parent == null && tipo.requiresParent) {
+    if (kind.resource && o.parent != null) errors.push(`${o.id}: es un recurso (${o.type}) y va en la raíz (parent: null)`);
+    else if (o.parent == null && kind.requiresParent) {
       const skeletons = doc.objects.filter((x) => x.type === 'skeleton').map((x) => x.id);
       const track = skeletons.length ? ` Esqueletos del documento: ${skeletons.join(', ')}.` : ' Crea primero un skeleton (la capa de huesos, que también contiene el dibujo que mueve) y pon el hueso adentro.';
-      errors.push(`${o.id}: un ${o.type} no puede estar en la raíz: va dentro de ${tipo.parentTypes.join(' o ')}.${track} (Los documentos de antes de los skeleton se convierten con npm run migrar.)`);
+      errors.push(`${o.id}: un ${o.type} no puede estar en la raíz: va dentro de ${kind.parentTypes.join(' o ')}.${track} (Los documentos de antes de los skeleton se convierten con npm run migrar.)`);
     } else if (o.parent != null) {
       const parent = findObject(doc, o.parent);
       if (!parent) errors.push(`${o.id}: el padre "${o.parent}" no existe.${suggest(o.parent, ids)}`);
       else if (!schema.types.get(parent.type)?.container) errors.push(`${o.id}: su padre "${o.parent}" es un ${parent.type} y no puede tener hijos (usa un group)`);
-      else if (tipo.parentTypes && !tipo.parentTypes.includes(parent.type)) errors.push(`${o.id}: un ${o.type} solo puede estar ${tipo.requiresParent ? '' : 'en la raíz o '}dentro de ${tipo.parentTypes.join(' o ')} (su padre "${o.parent}" es un ${parent.type})`);
+      else if (kind.parentTypes && !kind.parentTypes.includes(parent.type)) errors.push(`${o.id}: un ${o.type} solo puede estar ${kind.requiresParent ? '' : 'en la raíz o '}dentro de ${kind.parentTypes.join(' o ')} (su padre "${o.parent}" es un ${parent.type})`);
       else if (schema.types.get(parent.type).childTypes && !schema.types.get(parent.type).childTypes.includes(o.type)) {
         const track = parent.type === 'bone' ? `; el dibujo va dentro del skeleton (${skeletonOf(doc, parent.id) ?? 'el de ese hueso'}), no dentro del hueso: ponlo ahí y enlázalo con la propiedad bone` : '';
         errors.push(`${o.id}: un ${parent.type} solo puede tener hijos ${schema.types.get(parent.type).childTypes.join(' o ')} y "${o.id}" es un ${o.type}${track}`);
       }
     }
-    checkProperties(o.id, o, savedProperties(o), tipo, errors, warnings);
+    checkProperties(o.id, o, savedProperties(o), kind, errors, warnings);
     errors.push(...controlErrors(doc, schema, o));
-    for (const [prop, p] of Object.entries(tipo.properties)) {
+    for (const [prop, p] of Object.entries(kind.properties)) {
       if (p.type !== 'ref' || o[prop] == null) continue;
       errors.push(...referenceErrors(doc, o, prop, p, o[prop], o.id));
     }
     // Los vértices enlazados a un hueso (enlace por punto) nombran huesos de su skeleton.
-    for (const [prop, p] of Object.entries(tipo.properties)) {
+    for (const [prop, p] of Object.entries(kind.properties)) {
       if (p.type !== 'vertices' || !Array.isArray(o[prop])) continue;
       o[prop].forEach((v, i) => {
         if (v?.bone == null) return;
@@ -147,7 +147,7 @@ export function validate(doc, schema) {
       });
     }
     // Las poses nombran objetos que existen y propiedades animables suyas, con valores válidos.
-    for (const [prop, p] of Object.entries(tipo.properties)) {
+    for (const [prop, p] of Object.entries(kind.properties)) {
       if (p.type !== 'pose' || !o[prop] || typeof o[prop] !== 'object' || Array.isArray(o[prop])) continue;
       for (const [id, fields] of Object.entries(o[prop])) {
         const target = findObject(doc, id);
@@ -169,7 +169,7 @@ export function validate(doc, schema) {
       }
     }
     // Las pistas de un clip: como las poses, más los params (que animan su valor) y los tiempos dentro de la duración.
-    for (const [prop, p] of Object.entries(tipo.properties)) {
+    for (const [prop, p] of Object.entries(kind.properties)) {
       if (p.type !== 'tracks' || validateValue(p, o[prop] ?? {})) continue;
       const duration = read(schema, o, 'duration');
       for (const [id, fields] of Object.entries(o[prop] ?? {})) {
@@ -305,11 +305,11 @@ function controlErrors(doc, schema, o) {
   return errors;
 }
 
-function checkProperties(owner, obj, props, tipo, errors, warnings) {
+function checkProperties(owner, obj, props, kind, errors, warnings) {
   for (const prop of props) {
-    const p = tipo.properties[prop];
+    const p = kind.properties[prop];
     if (!p) {
-      warnings.push(`${owner}: propiedad desconocida "${prop}" en ${tipo.name} (se conserva).${suggest(prop, Object.keys(tipo.properties))}`);
+      warnings.push(`${owner}: propiedad desconocida "${prop}" en ${kind.name} (se conserva).${suggest(prop, Object.keys(kind.properties))}`);
       continue;
     }
     const error = validateValue(p, obj[prop]);

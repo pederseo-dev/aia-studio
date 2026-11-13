@@ -52,10 +52,10 @@ export function createTransform(ctx) {
     return output.length ? output : null;
   }
   const show = (ops) => preview(inPose(ops));
-  const save = (ops, nota) => {
+  const save = (ops, note) => {
     const final = inPose(ops);
     if (!final) return preview(null);
-    execute(final, state.pose ? `${editingName()}: ${nota}` : nota);
+    execute(final, state.pose ? `${editingName()}: ${note}` : note);
   };
   /** Lo elegido que se transforma: en una pose, solo lo libre (los huesos y lo enlazado se posan con sus huesos). */
   const roots = () => (state.pose ? selectionRoots().filter((id) => isFree(state.doc, id)) : selectionRoots());
@@ -239,10 +239,10 @@ export function createTransform(ctx) {
 
   // ---------- Manijas ----------
 
-  function handle(e, tipo) {
-    if (roots().length > 1) return multiHandle(e, tipo);
+  function handle(e, kind) {
+    if (roots().length > 1) return multiHandle(e, kind);
     const id = state.selection;
-    if (state.pose && (tipo === 'pivote' || !isFree(state.doc, id))) return;
+    if (state.pose && (kind === 'pivote' || !isFree(state.doc, id))) return;
     const doc = seen();
     const obj = findObject(doc, id);
     const parent = multiply(ctx.cameraMatrix(), worldMatrix(doc, schema, obj.parent ?? null));
@@ -253,9 +253,9 @@ export function createTransform(ctx) {
     const sy0 = read(schema, obj, 'scaleY');
     const pivot = apply(parent, x0, y0); // en pantalla
     let ops = null;
-    const finish = (nota) => () => (ops ? save(ops, nota) : preview(null));
+    const finish = (note) => () => (ops ? save(ops, note) : preview(null));
 
-    if (tipo === 'rotar') {
+    if (kind === 'rotar') {
       const direction = directionOf(parent);
       const angle = (p) => Math.atan2(p[1] - pivot[1], p[0] - pivot[0]) * DEGREES;
       const a0 = angle(ctx.screenPoint(e));
@@ -271,7 +271,7 @@ export function createTransform(ctx) {
       );
     }
 
-    if (tipo === 'escalar-libre') {
+    if (kind === 'escalar-libre') {
       // Herramienta Escalar: arrastrar en cualquier lugar escala de forma proporcional según la distancia al pivote.
       const distance = (p) => Math.hypot(p[0] - pivot[0], p[1] - pivot[1]);
       const d0 = Math.max(distance(ctx.screenPoint(e)), 8);
@@ -286,7 +286,7 @@ export function createTransform(ctx) {
       );
     }
 
-    if (tipo.startsWith('escalar')) {
+    if (kind.startsWith('escalar')) {
       // Coordenadas del objeto girado pero sin su escala: así el cociente da la escala nueva.
       const frame = invert(multiply(parent, localMatrix(schema, { ...obj, scaleX: 1, scaleY: 1 })));
       const p0 = apply(frame, ...ctx.screenPoint(e));
@@ -307,7 +307,7 @@ export function createTransform(ctx) {
       );
     }
 
-    if (tipo === 'pivote') {
+    if (kind === 'pivote') {
       // Mueve el pivote y compensa el contenido (hijos o vértices) para que el dibujo no se mueva.
       const parentInverse = invert(parent);
       const linear = invert([...localMatrix(schema, obj).slice(0, 4), 0, 0]);
@@ -343,7 +343,7 @@ export function createTransform(ctx) {
    * Rotar o escalar varios objetos a la vez desde el centro de su caja común: cada uno gira o escala sobre sí mismo y
    * su pivote se desplaza alrededor del centro. Con varios, la escala siempre es proporcional.
    */
-  function multiHandle(e, tipo) {
+  function multiHandle(e, kind) {
     const ids = roots();
     const box = enclosing(ids.map((id) => cornersOf(ctx.element(id))).filter(Boolean));
     if (!box) return;
@@ -360,9 +360,9 @@ export function createTransform(ctx) {
       return { x: round(x), y: round(y) };
     };
     let ops = null;
-    const nota = `${tipo === 'rotar' ? 'rotate' : 'scale'} ${objects.length} objects`;
+    const note = `${kind === 'rotar' ? 'rotate' : 'scale'} ${objects.length} objects`;
 
-    if (tipo === 'rotar') {
+    if (kind === 'rotar') {
       const angle = (p) => Math.atan2(p[1] - c[1], p[0] - c[0]) * DEGREES;
       const a0 = angle(ctx.screenPoint(e));
       return ctx.drag(
@@ -378,11 +378,11 @@ export function createTransform(ctx) {
           });
           show(ops);
         },
-        () => (ops ? save(ops, nota) : preview(null)),
+        () => (ops ? save(ops, note) : preview(null)),
       );
     }
 
-    if (tipo.startsWith('escalar')) {
+    if (kind.startsWith('escalar')) {
       const distance = (p) => Math.hypot(p[0] - c[0], p[1] - c[1]);
       const d0 = Math.max(distance(ctx.screenPoint(e)), 8);
       return ctx.drag(
@@ -395,7 +395,7 @@ export function createTransform(ctx) {
           });
           show(ops);
         },
-        () => (ops ? save(ops, nota) : preview(null)),
+        () => (ops ? save(ops, note) : preview(null)),
       );
     }
   }

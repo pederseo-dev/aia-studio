@@ -25,8 +25,8 @@ export const ICONOS = {
   reparentar: stroke(`${smallBone}<path d="M14 13.5v5a1.5 1.5 0 0 0 1.5 1.5H21"/><path d="m19 18 2 2-2 2"/>`),
   enlazarCapa: stroke(`${smallBone}<path d="m13.5 16.5 4-2.2 4 2.2-4 2.2z"/><path d="m13.5 19.3 4 2.2 4-2.2"/>`),
   enlazarPuntos: stroke(`${smallBone}<path d="M14.5 20.5 17.5 15l3.5 4.5" stroke-width="1"/><circle cx="14.5" cy="20.5" r="1.4" fill="currentColor"/><circle cx="17.5" cy="15" r="1.4" fill="currentColor"/><circle cx="21" cy="19.5" r="1.4" fill="currentColor"/>`),
-  deshacer: stroke('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
-  rehacer: stroke('<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>'),
+  undo: stroke('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
+  redo: stroke('<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>'),
   group: stroke('<path d="M3.5 7.5V18a1 1 0 0 0 1 1h15a1 1 0 0 0 1-1V9.5a1 1 0 0 0-1-1h-8l-2-3h-5a1 1 0 0 0-1 1z"/>'),
   // Carpeta con un hueso: la capa de huesos.
   skeleton: stroke('<path d="M3.5 7.5V18a1 1 0 0 0 1 1h15a1 1 0 0 0 1-1V9.5a1 1 0 0 0-1-1h-8l-2-3h-5a1 1 0 0 0-1 1z"/><path d="M9 15.5l6-3"/><circle cx="8.2" cy="15.9" r="1.1"/><circle cx="15.8" cy="12.1" r="1.1"/>'),

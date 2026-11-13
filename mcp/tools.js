@@ -37,8 +37,8 @@ export function treeOutline(doc, schema, { tracks = true } = {}) {
         detail = ` (muestra ${o.active ?? 'el primero'}${params.length ? `; lo elige${params.length > 1 ? 'n los params' : ' el param'} ${params.join(', ')}` : ''})`;
       }
       if (o.type === 'param') {
-        const tipo = read(schema, o, 'kind');
-        detail = tipo === 'enum' ? ` enum [${read(schema, o, 'options').join(', ')}]` : tipo === 'boolean' ? ' boolean' : ` ${read(schema, o, 'min')}…${read(schema, o, 'max')}`;
+        const kind = read(schema, o, 'kind');
+        detail = kind === 'enum' ? ` enum [${read(schema, o, 'options').join(', ')}]` : kind === 'boolean' ? ' boolean' : ` ${read(schema, o, 'min')}…${read(schema, o, 'max')}`;
       }
       if (o.type === 'driver') detail = ` ${o.param ?? '?'} → ${o.pose ?? '?'}${o.equals != null ? ` cuando = "${o.equals}"` : ` (${read(schema, o, 'inMin')}…${read(schema, o, 'inMax')})`}`;
       if (o.type === 'bone') {
@@ -148,8 +148,8 @@ function finalValues(ops) {
 /** get_history: los últimos `limit` lotes (de `origin`, si se pide), resumidos o con sus operaciones (`detail`). */
 /** @param {any[]} entries @param {{ limit?: number, origin?: string, detail?: boolean }} [options] */
 export function historySummary(entries, { limit, origin, detail } = {}) {
-  const chosen = entries.filter((e) => !origin || e.origen === origin).slice(-(limit ?? 20));
-  return chosen.map(({ inversas, ops, ...e }) => ({ ...e, ...(detail ? { ops } : { touches: summarizeOperations(ops), values: finalValues(ops) }) }));
+  const chosen = entries.filter((e) => !origin || e.origin === origin).slice(-(limit ?? 20));
+  return chosen.map(({ inverses, ops, ...e }) => ({ ...e, ...(detail ? { ops } : { touches: summarizeOperations(ops), values: finalValues(ops) }) }));
 }
 
 /**
@@ -194,7 +194,7 @@ export function planPreview(doc, schema, { pose, region, bones, params, animatio
 /**
  * Bytes y nombre de un archivo de imagen para add_image: una ruta local (absoluta) o una URL http(s). Lanza si no se
  * puede leer o pasa del máximo; si es una imagen válida lo decide después el almacén (leerImagen).
- * @param {{ path?: string, url?: string }} origen
+ * @param {{ path?: string, url?: string }} origin
  * @returns {Promise<{ bytes: Uint8Array, name: string }>}
  */
 export async function imageBytes({ path: filePath, url }) {

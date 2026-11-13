@@ -1,9 +1,10 @@
-// Documentos en disco: personajes/<id>/documento.json y su historial (historial.jsonl).
+// Documentos en disco: documents/<id>/document.json y su historial (history.jsonl).
 // Lo usan el servidor del editor (origen "user") y el MCP (origen "ai"), así que los dos trabajan sobre los mismos
 // archivos. Cada lote queda en el historial con su origen y sus inversas; deshacer y rehacer se calculan desde ahí,
 // por origen: la IA deshace solo lo suyo y el usuario solo lo suyo.
 
 import fs from 'node:fs/promises';
+import { existsSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ValidationError, createDocument, validate } from '../src/core/document.js';
@@ -12,7 +13,7 @@ import { applyOperations } from '../src/core/operations.js';
 import { ASSET_FILE } from '../src/core/schema.js';
 import { IMAGE_FORMATS, usedAssets, readImage, assetMime, assetName, freeName } from '../src/core/images.js';
 
-export const DOCUMENTS_FOLDER = fileURLToPath(new URL('../personajes/', import.meta.url));
+export const DOCUMENTS_FOLDER = fileURLToPath(new URL('../documents/', import.meta.url));
 const DOCUMENT_ID = /^[a-z][a-z0-9_-]*$/;
 
 // Operaciones que cambian la estructura de un objeto (no una propiedad suelta): tocan "todo" el objeto.
@@ -43,7 +44,7 @@ function changesByKey(entry) {
     return m;
   };
   const after = last(entry.ops);
-  const before = last(entry.inversas);
+  const before = last(entry.inverses);
   const changes = new Map();
   for (const target of new Set([...after.keys(), ...before.keys()])) {
     const field = (after.get(target) ?? before.get(target)).field;
@@ -68,8 +69,8 @@ function changesByKey(entry) {
  */
 function inversesByKey(doc, entry) {
   const changes = changesByKey(entry);
-  if (!changes.size) return entry.inversas;
-  return entry.inversas.flatMap((op) => {
+  if (!changes.size) return entry.inverses;
+  return entry.inverses.flatMap((op) => {
     const change = changes.get(op.target);
     if (!change) return op;
     const { field } = change;
@@ -98,7 +99,7 @@ function touched(entry) {
   const byKey = changesByKey(entry);
   for (const [target, { keys }] of byKey) keys.forEach((k) => add(target, k));
   const alreadyCounted = (id, k) => byKey.get(id)?.field === k;
-  for (const op of [...(entry.ops ?? []), ...(entry.inversas ?? [])]) {
+  for (const op of [...(entry.ops ?? []), ...(entry.inverses ?? [])]) {
     if (op.op === 'set') Object.keys(op.props ?? {}).forEach((k) => !alreadyCounted(op.target, k) && add(op.target, k));
     else if (op.op === 'unset') (op.props ?? []).forEach((k) => !alreadyCounted(op.target, k) && add(op.target, k));
     else if (STRUCTURAL.has(op.op)) {
@@ -127,7 +128,55 @@ function common(a, b) {
   return output;
 }
 
+// ---------- Formato viejo en disco ----------
+// Hasta la etapa de traducción (2026-11) los documentos vivían en personajes/<id>/documento.json, con el historial en
+// historial.jsonl y sus campos en español. Se pasa al formato nuevo una sola vez, al crear el almacén; es repetible y
+// no toca lo que ya está migrado.
+
+const KIND_FROM_LEGACY = { crear: 'create', cambio: 'change', migracion: 'migration', deshacer: 'undo', rehacer: 'redo' };
+
+/** Una entrada del historial viejo con sus campos en inglés (las nuevas quedan igual). */
+export function entryFromLegacy(e) {
+  if (!('fecha' in e) && !('origen' in e) && !('tipo' in e)) return e;
+  const { fecha, origen, tipo, nota, inversas, ...rest } = e;
+  const entry = { ...rest, date: fecha, origin: origen, kind: KIND_FROM_LEGACY[tipo] ?? tipo };
+  if (nota !== undefined) entry.note = nota;
+  if (inversas !== undefined) entry.inverses = inversas;
+  // El orden de los campos de antes: n, date, origin, kind, [ref], note, ops, inverses.
+  const { n, date, origin, kind, ref, note, ops, inverses, ...extra } = entry;
+  return Object.fromEntries(Object.entries({ n, date, origin, kind, ref, note, ops, inverses, ...extra }).filter(([, v]) => v !== undefined));
+}
+
+/** Pasa `folder` (y la carpeta vieja personajes/ al lado, si `folder` todavía no existe) al formato nuevo. */
+export function migrateLegacyFolder(folder) {
+  const legacy = path.join(path.dirname(path.resolve(folder)), 'personajes');
+  if (!existsSync(folder) && existsSync(legacy)) {
+    try {
+      renameSync(legacy, folder);
+    } catch (e) {
+      // Otro proceso (el editor o el MCP) pudo moverla primero.
+      if (!existsSync(folder)) throw e;
+    }
+  }
+  if (!existsSync(folder)) return;
+  for (const d of readdirSync(folder, { withFileTypes: true })) {
+    if (!d.isDirectory()) continue;
+    const dir = path.join(folder, d.name);
+    const pair = (old, current) => [path.join(dir, old), path.join(dir, current)];
+    const [oldDoc, newDoc] = pair('documento.json', 'document.json');
+    if (existsSync(oldDoc) && !existsSync(newDoc)) renameSync(oldDoc, newDoc);
+    const [oldHistory, newHistory] = pair('historial.jsonl', 'history.jsonl');
+    if (existsSync(oldHistory) && !existsSync(newHistory)) {
+      const lines = readFileSync(oldHistory, 'utf8').split('\n').filter((l) => l.trim());
+      writeFileSync(`${newHistory}.tmp`, lines.map((l) => JSON.stringify(entryFromLegacy(JSON.parse(l))) + '\n').join(''));
+      renameSync(`${newHistory}.tmp`, newHistory);
+      unlinkSync(oldHistory);
+    }
+  }
+}
+
 export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
+  migrateLegacyFolder(folder);
   // Las escrituras de este proceso van en fila para no pisarse entre sí.
   /** @type {Promise<any>} */
   let row = Promise.resolve();
@@ -167,7 +216,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
   async function read(id) {
     let doc;
     try {
-      doc = JSON.parse(await fs.readFile(filePath(id, 'documento.json'), 'utf8'));
+      doc = JSON.parse(await fs.readFile(filePath(id, 'document.json'), 'utf8'));
     } catch (e) {
       if (e.code === 'ENOENT') throw new Error(`No existe el documento "${id}"`);
       throw e;
@@ -184,7 +233,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     if (!migrating.has(id)) {
       migrating.set(id, (async () => {
         await write(id, migrated);
-        await record(id, { origen: 'system', tipo: 'migracion', nota: changes.join(' '), ops: [], inversas: [] });
+        await record(id, { origin: 'system', kind: 'migration', note: changes.join(' '), ops: [], inverses: [] });
       })().finally(() => migrating.delete(id)));
     }
     await migrating.get(id);
@@ -193,14 +242,14 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
 
   async function write(id, doc) {
     // Temporal + rename: nadie lee nunca un archivo a medio escribir.
-    const target = filePath(id, 'documento.json');
+    const target = filePath(id, 'document.json');
     await fs.writeFile(target + '.tmp', JSON.stringify(doc, null, 2) + '\n');
     await fs.rename(target + '.tmp', target);
   }
 
   async function history(id) {
     try {
-      const text = await fs.readFile(filePath(id, 'historial.jsonl'), 'utf8');
+      const text = await fs.readFile(filePath(id, 'history.jsonl'), 'utf8');
       return text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
     } catch (e) {
       if (e.code === 'ENOENT') return [];
@@ -210,35 +259,35 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
 
   async function record(id, entry) {
     const n = (await history(id)).length + 1;
-    const complete = { n, fecha: new Date().toISOString(), ...entry };
-    await fs.appendFile(filePath(id, 'historial.jsonl'), JSON.stringify(complete) + '\n');
+    const complete = { n, date: new Date().toISOString(), ...entry };
+    await fs.appendFile(filePath(id, 'history.jsonl'), JSON.stringify(complete) + '\n');
     return complete;
   }
 
   // Pilas de deshacer/rehacer de un origen, reconstruidas desde el historial.
-  function stacks(entries, origen) {
-    const deshacer = [];
-    const rehacer = [];
+  function stacks(entries, origin) {
+    const undo = [];
+    const redo = [];
     for (const e of entries) {
       // Una migración del formato (de cualquier origen) corta las pilas: las inversas de antes ya no encajan.
-      if (e.tipo === 'migracion') {
-        deshacer.length = 0;
-        rehacer.length = 0;
+      if (e.kind === 'migration') {
+        undo.length = 0;
+        redo.length = 0;
         continue;
       }
-      if (e.origen !== origen) continue;
-      if (e.tipo === 'cambio') {
-        deshacer.push(e.n);
-        rehacer.length = 0;
-      } else if (e.tipo === 'deshacer') {
-        deshacer.pop();
-        rehacer.push(e.n);
-      } else if (e.tipo === 'rehacer') {
-        rehacer.pop();
-        deshacer.push(e.n);
+      if (e.origin !== origin) continue;
+      if (e.kind === 'change') {
+        undo.push(e.n);
+        redo.length = 0;
+      } else if (e.kind === 'undo') {
+        undo.pop();
+        redo.push(e.n);
+      } else if (e.kind === 'redo') {
+        redo.pop();
+        undo.push(e.n);
       }
     }
-    return { deshacer, rehacer };
+    return { undo, redo };
   }
 
   /**
@@ -250,47 +299,47 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     const own = touched(entry);
     const standing = new Map(); // origen → Map(n → entrada)
     for (const e of entries.slice(entry.n)) {
-      if (e.tipo === 'migracion') return []; // la migración ya cortó las pilas
-      if (e.origen === entry.origen || !['cambio', 'deshacer', 'rehacer'].includes(e.tipo)) continue;
-      const fromOrigin = standing.get(e.origen) ?? standing.set(e.origen, new Map()).get(e.origen);
+      if (e.kind === 'migration') return []; // la migración ya cortó las pilas
+      if (e.origin === entry.origin || !['change', 'undo', 'redo'].includes(e.kind)) continue;
+      const fromOrigin = standing.get(e.origin) ?? standing.set(e.origin, new Map()).get(e.origin);
       // Deshacer un lote (o rehacer un deshacer) que también es posterior: se anulan entre sí.
-      if (e.tipo !== 'cambio' && fromOrigin.has(e.ref)) fromOrigin.delete(e.ref);
+      if (e.kind !== 'change' && fromOrigin.has(e.ref)) fromOrigin.delete(e.ref);
       else fromOrigin.set(e.n, e);
     }
     const conflicts = [];
     for (const fromOrigin of standing.values()) {
       for (const e of fromOrigin.values()) {
         const props = [...common(own, touched(e))];
-        if (props.length) conflicts.push({ who: e.origen, n: e.n, nota: e.nota ?? '', props });
+        if (props.length) conflicts.push({ who: e.origin, n: e.n, note: e.note ?? '', props });
       }
     }
     return conflicts;
   }
 
-  async function revert(id, origen, tipo) {
+  async function revert(id, origin, kind) {
     const entries = await history(id);
-    const stack = stacks(entries, origen)[tipo === 'deshacer' ? 'deshacer' : 'rehacer'];
-    if (!stack.length) throw new Error(tipo === 'deshacer' ? 'Nothing of yours to undo' : 'Nothing to redo');
+    const stack = stacks(entries, origin)[kind === 'undo' ? 'undo' : 'redo'];
+    if (!stack.length) throw new Error(kind === 'undo' ? 'Nothing of yours to undo' : 'Nothing to redo');
     const entry = entries[stack.at(-1) - 1];
     const conflicts = conflictsWithOthers(entries, entry);
     if (conflicts.length) {
-      const verb = tipo === 'deshacer' ? 'undo' : 'redo';
-      const detail = conflicts.map(({ who, n, nota, props }) => `${props.join(', ')} (changed by ${who === 'user' ? 'the user' : who === 'ai' ? 'the AI' : who} in #${n} "${nota}")`).join('; ');
-      throw new Error(`Can't ${verb} #${entry.n} "${entry.nota ?? ''}": it would overwrite later changes from another origin: ${detail}. Change those properties by hand instead, or ask whoever made them.`);
+      const verb = kind === 'undo' ? 'undo' : 'redo';
+      const detail = conflicts.map(({ who, n, note, props }) => `${props.join(', ')} (changed by ${who === 'user' ? 'the user' : who === 'ai' ? 'the AI' : who} in #${n} "${note}")`).join('; ');
+      throw new Error(`Can't ${verb} #${entry.n} "${entry.note ?? ''}": it would overwrite later changes from another origin: ${detail}. Change those properties by hand instead, or ask whoever made them.`);
     }
     let result;
     const current = await read(id);
-    const inversas = inversesByKey(current, entry);
+    const inverses = inversesByKey(current, entry);
     try {
-      result = applyOperations(current, inversas, schema);
+      result = applyOperations(current, inverses, schema);
     } catch (e) {
-      throw new Error(`Can't ${tipo === 'deshacer' ? 'undo' : 'redo'}: the document changed afterwards and it no longer fits.\n${e.message}`);
+      throw new Error(`Can't ${kind === 'undo' ? 'undo' : 'redo'}: the document changed afterwards and it no longer fits.\n${e.message}`);
     }
     await write(id, result.doc);
     // La nota la ve el usuario en el historial: en inglés (los prefijos viejos en español también se limpian).
-    const nota = entry.nota?.replace(/^(deshacer|rehacer|undo|redo): /, '') ?? '';
-    await record(id, { origen, tipo, ref: entry.n, nota: `${tipo === 'deshacer' ? 'undo' : 'redo'}: ${nota}`, ops: inversas, inversas: result.inversas });
-    return { doc: result.doc, entrada: { n: entry.n, nota, ops: entry.ops.length, lote: entry.ops } };
+    const note = entry.note?.replace(/^(deshacer|rehacer|undo|redo): /, '') ?? '';
+    await record(id, { origin, kind, ref: entry.n, note: `${kind === 'undo' ? 'undo' : 'redo'}: ${note}`, ops: inverses, inverses: result.inverses });
+    return { doc: result.doc, entrada: { n: entry.n, note, ops: entry.ops.length, lote: entry.ops } };
   }
 
   return {
@@ -312,11 +361,11 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     },
 
     /** Crea un documento vacío o, con `copiarDe`, una copia de otro (sin su historial). */
-    /** @param {string} id @param {Record<string, any>} meta @param {{ origen: string, nota?: string, copyFrom?: string }} options */
-    crear: (id, meta, { origen, nota, copyFrom }) =>
+    /** @param {string} id @param {Record<string, any>} meta @param {{ origin: string, note?: string, copyFrom?: string }} options */
+    crear: (id, meta, { origin, note, copyFrom }) =>
       enqueue(async () => {
         try {
-          await fs.access(filePath(id, 'documento.json'));
+          await fs.access(filePath(id, 'document.json'));
           throw new Error(`Ya existe el documento "${id}"`);
         } catch (e) {
           if (e.code !== 'ENOENT') throw e;
@@ -325,24 +374,24 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
         if (copyFrom) {
           const base = await read(copyFrom);
           doc = { ...base, meta: { ...base.meta, ...meta } };
-          nota ??= `copy of ${copyFrom}`;
+          note ??= `copy of ${copyFrom}`;
         }
         const { errors } = validate(doc, schema);
         if (errors.length) throw new ValidationError(errors);
-        await fs.mkdir(path.dirname(filePath(id, 'documento.json')), { recursive: true });
+        await fs.mkdir(path.dirname(filePath(id, 'document.json')), { recursive: true });
         // La copia lleva también los archivos de sus imágenes.
         if (copyFrom && (await listAssets(copyFrom)).length) await fs.cp(path.dirname(assetPath(copyFrom, 'x.png')), path.dirname(assetPath(id, 'x.png')), { recursive: true });
         await write(id, doc);
-        await record(id, { origen, tipo: 'crear', nota: nota ?? 'document created', ops: [], inversas: [] });
+        await record(id, { origin, kind: 'create', note: note ?? 'document created', ops: [], inverses: [] });
         return doc;
       }),
 
     /** Aplica un lote sobre la versión en disco. Devuelve el documento y los avisos. */
-    applyOps: (id, ops, { origen, nota }) =>
+    applyOps: (id, ops, { origin, note }) =>
       enqueue(async () => {
-        const { doc, inversas, warnings } = applyOperations(await read(id), ops, schema);
+        const { doc, inverses, warnings } = applyOperations(await read(id), ops, schema);
         await write(id, doc);
-        await record(id, { origen, tipo: 'cambio', nota: nota || `${ops.length} ${ops.length === 1 ? 'change' : 'changes'}`, ops, inversas });
+        await record(id, { origin, kind: 'change', note: note || `${ops.length} ${ops.length === 1 ? 'change' : 'changes'}`, ops, inverses });
         return { doc, warnings: [...warnings, ...(await assetWarnings(id, doc, ops))] };
       }),
 
@@ -350,7 +399,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     eliminar: (id) =>
       enqueue(async () => {
         await read(id);
-        await fs.rm(path.dirname(filePath(id, 'documento.json')), { recursive: true });
+        await fs.rm(path.dirname(filePath(id, 'document.json')), { recursive: true });
       }),
 
     /**
@@ -398,15 +447,15 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
       return map;
     },
 
-    deshacer: (id, origen) => enqueue(() => revert(id, origen, 'deshacer')),
-    rehacer: (id, origen) => enqueue(() => revert(id, origen, 'rehacer')),
+    undo: (id, origin) => enqueue(() => revert(id, origin, 'undo')),
+    redo: (id, origin) => enqueue(() => revert(id, origin, 'redo')),
 
     /** Últimas entradas, de la más vieja a la más nueva, más qué puede deshacer/rehacer cada origen. */
     async history(id, limit = 50) {
       const entries = await history(id);
-      const available = (origen) => {
-        const p = stacks(entries, origen);
-        return { deshacer: p.deshacer.length > 0, rehacer: p.rehacer.length > 0 };
+      const available = (origin) => {
+        const p = stacks(entries, origin);
+        return { undo: p.undo.length > 0, redo: p.redo.length > 0 };
       };
       return { entries: entries.slice(-limit), ai: available('ai'), user: available('user') };
     },

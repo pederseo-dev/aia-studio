@@ -19,7 +19,7 @@ const requested = process.argv.slice(2);
 const ids = requested.length ? requested : (await fs.readdir(DOCUMENTS_FOLDER, { withFileTypes: true })).filter((c) => c.isDirectory()).map((c) => c.name).sort();
 
 for (const id of ids) {
-  const file = path.join(DOCUMENTS_FOLDER, id, 'documento.json');
+  const file = path.join(DOCUMENTS_FOLDER, id, 'document.json');
   let doc;
   try {
     doc = JSON.parse(await fs.readFile(file, 'utf8'));
@@ -33,14 +33,14 @@ for (const id of ids) {
   }
   await fs.writeFile(file + '.tmp', JSON.stringify(migrated, null, 2) + '\n');
   await fs.rename(file + '.tmp', file);
-  const history = path.join(DOCUMENTS_FOLDER, id, 'historial.jsonl');
+  const history = path.join(DOCUMENTS_FOLDER, id, 'history.jsonl');
   let n = 1;
   try {
     n = (await fs.readFile(history, 'utf8')).split('\n').filter(Boolean).length + 1;
   } catch {
     // sin historial
   }
-  const nota = `Moved to the Skeleton model: ${changes.join('; ')}`;
-  await fs.appendFile(history, JSON.stringify({ n, fecha: new Date().toISOString(), origen: 'system', tipo: 'migracion', nota, ops: [], inversas: [] }) + '\n');
+  const note = `Moved to the Skeleton model: ${changes.join('; ')}`;
+  await fs.appendFile(history, JSON.stringify({ n, date: new Date().toISOString(), origin: 'system', kind: 'migration', note, ops: [], inverses: [] }) + '\n');
   console.log(`${id}: ${changes.join('; ')}`);
 }

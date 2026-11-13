@@ -38,8 +38,8 @@ export function mountCanvas(container) {
       return [e.clientX - r.left, e.clientY - r.top];
     },
     element: (id) => documentG.querySelector(`[data-id="${CSS.escape(id)}"]`),
-    crear(tipo, attributes, title) {
-      const el = document.createElementNS(NS, tipo);
+    crear(kind, attributes, title) {
+      const el = document.createElementNS(NS, kind);
       for (const [k, v] of Object.entries(attributes)) if (v !== '') el.setAttribute(k, v);
       if (title) el.append(Object.assign(document.createElementNS(NS, 'title'), { textContent: title }));
       return el;
@@ -284,11 +284,11 @@ export function mountCanvas(container) {
     );
   }
 
-  function createShape(e, tipo) {
+  function createShape(e, kind) {
     const parent = parentForNew();
     const inverse = invert(multiply(ctx.cameraMatrix(), worldMatrix(state.doc, schema, parent)));
     const s0 = ctx.screenPoint(e);
-    const draft = ctx.crear(tipo === 'ellipse' ? 'ellipse' : 'rect', { class: 'borrador' });
+    const draft = ctx.crear(kind === 'ellipse' ? 'ellipse' : 'rect', { class: 'borrador' });
     overlay.append(draft);
 
     const box = (ev) => {
@@ -308,7 +308,7 @@ export function mountCanvas(container) {
       e,
       (ev) => {
         const c = box(ev);
-        const attributes = tipo === 'ellipse' ? { cx: c.x + c.w / 2, cy: c.y + c.h / 2, rx: c.w / 2, ry: c.h / 2 } : { x: c.x, y: c.y, width: c.w, height: c.h };
+        const attributes = kind === 'ellipse' ? { cx: c.x + c.w / 2, cy: c.y + c.h / 2, rx: c.w / 2, ry: c.h / 2 } : { x: c.x, y: c.y, width: c.w, height: c.h };
         for (const [k, v] of Object.entries(attributes)) draft.setAttribute(k, v);
       },
       (ev) => {
@@ -320,8 +320,8 @@ export function mountCanvas(container) {
           c.w < 4 && c.h < 4
             ? { x: round(ax), y: round(ay) }
             : { x: round((ax + bx) / 2), y: round((ay + by) / 2), width: round(Math.abs(bx - ax)), height: round(Math.abs(by - ay)) };
-        const id = freeId(tipo);
-        execute([{ op: 'create', type: tipo, id, parent: parent, props }], `create ${id}`);
+        const id = freeId(kind);
+        execute([{ op: 'create', type: kind, id, parent: parent, props }], `create ${id}`);
         setState({ tool: 'seleccionar' });
         select(id);
       },

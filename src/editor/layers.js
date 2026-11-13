@@ -254,9 +254,9 @@ export function mountTree(root, resourcesRoot) {
       loose.push(...release);
       step([...release, { op: 'move', target: id, parent: parent, ...(index !== undefined ? { index } : {}) }, ...keepPosition(doc, id, parent)]);
     };
-    const finish = (nota) => {
+    const finish = (note) => {
       if (!ops.length) return;
-      execute(ops, nota).then((ok) => ok && notifyLoose(loose));
+      execute(ops, note).then((ok) => ok && notifyLoose(loose));
     };
     if (where === 'dentro') {
       for (const id of ids) move(id, target.id);

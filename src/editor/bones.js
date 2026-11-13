@@ -245,15 +245,15 @@ export function createBones(ctx) {
     return [{ op: 'set', target: id, props: fields }];
   }
 
-  const nota = (id, what) => (state.pose ? `${editingName()}: ${what} ${id}` : `${what} ${id}`);
+  const note = (id, what) => (state.pose ? `${editingName()}: ${what} ${id}` : `${what} ${id}`);
 
   // ---------- Interacción ----------
 
   /** Girar un hueso arrastrando alrededor de su origen. */
   function rotate(e, id) {
     const { values, own, rotation } = frames(id);
-    const origen = apply(own, 0, 0);
-    const angle = (p) => Math.atan2(p[1] - origen[1], p[0] - origen[0]) * DEGREES;
+    const origin = apply(own, 0, 0);
+    const angle = (p) => Math.atan2(p[1] - origin[1], p[0] - origin[0]) * DEGREES;
     const direction = directionOf(rotation);
     let previous = angle(ctx.screenPoint(e));
     let accumulated = 0;
@@ -270,18 +270,18 @@ export function createBones(ctx) {
         ops = change(id, { rotation: rot });
         preview(ops);
       },
-      () => (ops ? execute(ops, nota(id, 'rotate')) : preview(null)),
+      () => (ops ? execute(ops, note(id, 'rotate')) : preview(null)),
     );
   }
 
-  function handle(e, tipo) {
+  function handle(e, kind) {
     const id = state.selection;
     if (!isBone(id)) return;
     const { values, parent, rotation, own } = frames(id);
     let ops = null;
-    const finish = (what) => () => (ops ? execute(ops, nota(id, what)) : preview(null));
+    const finish = (what) => () => (ops ? execute(ops, note(id, what)) : preview(null));
 
-    if (tipo === 'hueso-origen') {
+    if (kind === 'hueso-origen') {
       const inverse = invert(parent);
       return ctx.drag(
         e,
@@ -294,17 +294,17 @@ export function createBones(ctx) {
       );
     }
 
-    if (tipo === 'hueso-punta') {
+    if (kind === 'hueso-punta') {
       // En la pose, la punta solo gira. Con Add Bone encadena uno nuevo; con Manipulate cambia dirección y largo.
       if (state.pose) return rotate(e, id);
       if (!adjusting()) return create(e);
       const inverse = invert(rotation);
-      const origen = apply(inverse, ...apply(own, 0, 0));
+      const origin = apply(inverse, ...apply(own, 0, 0));
       return ctx.drag(
         e,
         (ev) => {
           const p = apply(inverse, ...ctx.screenPoint(ev));
-          const [dx, dy] = [p[0] - origen[0], p[1] - origen[1]];
+          const [dx, dy] = [p[0] - origin[0], p[1] - origin[1]];
           let rotation = Math.atan2(dy, dx) * DEGREES;
           rotation = ev.shiftKey ? Math.round(rotation / 15) * 15 : round(rotation);
           const length = round(Math.hypot(dx, dy) / (values.scaleX || 1));

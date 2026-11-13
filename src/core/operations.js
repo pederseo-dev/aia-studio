@@ -29,10 +29,10 @@ const STRUCTURE = new Set(['id', 'type', 'parent']);
 export function applyOperations(doc, ops, schema) {
   if (!Array.isArray(ops) || !ops.length) throw new Error('Se necesita una lista de operaciones no vacía');
   const next = structuredClone(doc);
-  const inversas = [];
+  const inverses = [];
   ops.forEach((op, i) => {
     try {
-      inversas.unshift(...applyOne(next, op, schema));
+      inverses.unshift(...applyOne(next, op, schema));
     } catch (e) {
       throw new Error(`Operación ${i + 1} (${op?.op}): ${e.message}`);
     }
@@ -40,7 +40,7 @@ export function applyOperations(doc, ops, schema) {
   const { errors, warnings } = validate(next, schema);
   if (errors.length) throw new ValidationError(errors);
   const previous = new Set(validate(doc, schema).warnings);
-  return { doc: next, inversas, warnings: warnings.filter((a) => !previous.has(a)) };
+  return { doc: next, inverses, warnings: warnings.filter((a) => !previous.has(a)) };
 }
 
 /** Junta los `set` seguidos sobre el mismo objetivo en uno solo (el último valor gana). */
@@ -109,9 +109,9 @@ function insert(doc, obj, parent, index) {
 }
 
 /** Azúcar para la IA: un path acepta `d` (trazado SVG de un solo subtrazado) y se guarda como vértices. */
-function expandD(tipo, props) {
+function expandD(kind, props) {
   if (props?.d === undefined) return props;
-  if (!tipo?.properties.vertices) throw new Error(`"d" solo sirve en tipos con vértices (path), no en ${tipo?.name ?? 'meta'}`);
+  if (!kind?.properties.vertices) throw new Error(`"d" solo sirve en tipos con vértices (path), no en ${kind?.name ?? 'meta'}`);
   const subpaths = parseD(props.d);
   if (subpaths.length !== 1) throw new Error(`d tiene ${subpaths.length} subtrazados; crea un path por cada uno`);
   const { d, ...rest } = props;
@@ -127,10 +127,10 @@ function mapPose(doc, schema, values, change) {
   for (const [id, fields] of Object.entries(values)) {
     const created = change(id);
     if (created == null) continue;
-    const tipo = schema.types.get(findObject(doc, created)?.type ?? findObject(doc, id)?.type);
+    const kind = schema.types.get(findObject(doc, created)?.type ?? findObject(doc, id)?.type);
     const clean = {};
     for (const [k, v] of Object.entries(fields)) {
-      if (tipo?.properties[k]?.type !== 'ref' || v == null) clean[k] = v;
+      if (kind?.properties[k]?.type !== 'ref' || v == null) clean[k] = v;
       else if (change(v) != null) clean[k] = change(v);
     }
     if (Object.keys(clean).length) result[created] = clean;
@@ -142,8 +142,8 @@ function mapPose(doc, schema, values, change) {
  * Azúcar para la IA: dentro de una pose, un path también acepta `d` (se guarda como vértices, para el morph). Los
  * vértices de una pose no guardan `bone`: el enlace por punto es del montaje, como en Moho (ver aplicarPose).
  */
-function expandPose(doc, schema, tipo, props) {
-  if (tipo !== 'pose' || !props?.values || typeof props.values !== 'object' || Array.isArray(props.values)) return props;
+function expandPose(doc, schema, kind, props) {
+  if (kind !== 'pose' || !props?.values || typeof props.values !== 'object' || Array.isArray(props.values)) return props;
   const values = {};
   for (const [id, fields] of Object.entries(props.values)) {
     const target = findObject(doc, id);
@@ -174,10 +174,10 @@ function mapTracks(doc, schema, tracks, change) {
   for (const [id, fields] of Object.entries(tracks)) {
     const created = change(id);
     if (created == null) continue;
-    const tipo = schema.types.get(findObject(doc, created)?.type ?? findObject(doc, id)?.type);
+    const kind = schema.types.get(findObject(doc, created)?.type ?? findObject(doc, id)?.type);
     const clean = {};
     for (const [k, keys] of Object.entries(fields)) {
-      const isRef = tipo?.properties[k]?.type === 'ref';
+      const isRef = kind?.properties[k]?.type === 'ref';
       const created = !isRef || !Array.isArray(keys) ? keys : keys.filter((c) => c.value == null || change(c.value) != null).map((c) => (c.value == null ? c : { ...c, value: change(c.value) }));
       if (!Array.isArray(created) || created.length) clean[k] = created;
     }
@@ -190,9 +190,9 @@ function mapTracks(doc, schema, tracks, change) {
  * Azúcar para la IA en las pistas de un clip: un path acepta una pista `d` (cada value, un trazado SVG) que se guarda
  * como pista de `vertices` (para el morph). Como en las poses, los vértices no guardan `bone`.
  */
-function expandTracks(doc, schema, tipo, props) {
+function expandTracks(doc, schema, kind, props) {
   if (!props?.tracks || typeof props.tracks !== 'object' || Array.isArray(props.tracks)) return props;
-  if (!Object.values(schema.types.get(tipo)?.properties ?? {}).some((p) => p.type === 'tracks')) return props;
+  if (!Object.values(schema.types.get(kind)?.properties ?? {}).some((p) => p.type === 'tracks')) return props;
   const tracks = {};
   for (const [id, fields] of Object.entries(props.tracks)) {
     const targetType = schema.types.get(findObject(doc, id)?.type);
@@ -216,9 +216,9 @@ function expandTracks(doc, schema, tipo, props) {
 }
 
 /** Azúcar para la IA: un bone acepta `from` y `to` ([x, y] en el documento) en vez de x, y, rotation y length. */
-function expandBone(doc, schema, tipo, parent, props, current) {
+function expandBone(doc, schema, kind, parent, props, current) {
   if (props?.from === undefined && props?.to === undefined) return props;
-  if (tipo !== 'bone') throw new Error(`"from"/"to" solo sirven en huesos (bone), no en ${tipo}`);
+  if (kind !== 'bone') throw new Error(`"from"/"to" solo sirven en huesos (bone), no en ${kind}`);
   return expandFromTo(doc, schema, parent, props, current);
 }
 
@@ -233,8 +233,8 @@ function checkProps(props) {
 function applyOne(doc, op, schema) {
   switch (op?.op) {
     case 'create': {
-      const tipo = schema.types.get(op.type);
-      if (!tipo) throw new Error(`tipo desconocido "${op.type}".${suggest(op.type, schema.types.keys())} Tipos: ${[...schema.types.keys()].join(', ')}`);
+      const kind = schema.types.get(op.type);
+      if (!kind) throw new Error(`tipo desconocido "${op.type}".${suggest(op.type, schema.types.keys())} Tipos: ${[...schema.types.keys()].join(', ')}`);
       if (idError(op.id)) throw new Error(idError(op.id));
       const repeated = findObject(doc, op.id);
       if (repeated) {
@@ -244,7 +244,7 @@ function applyOne(doc, op, schema) {
       }
       const parent = container(doc, op.parent, schema);
       if (op.props !== undefined) checkProps(op.props);
-      const props = expandTracks(doc, schema, op.type, expandPose(doc, schema, op.type, expandBone(doc, schema, op.type, parent, expandD(tipo, op.props)))) ?? {};
+      const props = expandTracks(doc, schema, op.type, expandPose(doc, schema, op.type, expandBone(doc, schema, op.type, parent, expandD(kind, op.props)))) ?? {};
       insert(doc, { id: op.id, type: op.type, parent: parent, ...structuredClone(props) }, parent, op.index);
       return [{ op: 'delete', target: op.id }];
     }
@@ -260,10 +260,10 @@ function applyOne(doc, op, schema) {
         else created.push(k);
         obj[k] = structuredClone(v);
       }
-      const inversas = [];
-      if (Object.keys(previous).length) inversas.push({ op: 'set', target: op.target, props: previous });
-      if (created.length) inversas.push({ op: 'unset', target: op.target, props: created });
-      return inversas;
+      const inverses = [];
+      if (Object.keys(previous).length) inverses.push({ op: 'set', target: op.target, props: previous });
+      if (created.length) inverses.push({ op: 'unset', target: op.target, props: created });
+      return inverses;
     }
 
     case 'unset': {
@@ -332,15 +332,15 @@ function applyOne(doc, op, schema) {
       obj.parent = parent;
       insert(doc, obj, parent, op.index);
       /** @type {import('./types.js').Operation[]} */
-      const inversas = [{ op: '_place', target: obj.id, parent: previousParent, pos: previousPos }];
+      const inverses = [{ op: '_place', target: obj.id, parent: previousParent, pos: previousPos }];
       if (position) {
         const previous = Object.fromEntries(['x', 'y'].filter((k) => k in obj).map((k) => [k, obj[k]]));
         const created = ['x', 'y'].filter((k) => !(k in obj));
         Object.assign(obj, position);
-        if (created.length) inversas.unshift({ op: 'unset', target: obj.id, props: created });
-        if (Object.keys(previous).length) inversas.unshift({ op: 'set', target: obj.id, props: previous });
+        if (created.length) inverses.unshift({ op: 'unset', target: obj.id, props: created });
+        if (Object.keys(previous).length) inverses.unshift({ op: 'set', target: obj.id, props: previous });
       }
-      return inversas;
+      return inverses;
     }
 
     case '_place': {
@@ -361,8 +361,8 @@ function applyOne(doc, op, schema) {
       obj.id = op.id;
       for (const o of doc.objects) {
         if (o.parent === previous) o.parent = op.id;
-        const tipo = schema.types.get(o.type);
-        for (const [prop, p] of Object.entries(tipo?.properties ?? {})) {
+        const kind = schema.types.get(o.type);
+        for (const [prop, p] of Object.entries(kind?.properties ?? {})) {
           if (p.type === 'ref' && o[prop] === previous) o[prop] = op.id;
           if (p.type === 'pose' && o[prop]) o[prop] = mapPose(doc, schema, o[prop], (id) => (id === previous ? op.id : id));
           if (p.type === 'tracks' && o[prop]) o[prop] = mapTracks(doc, schema, o[prop], (id) => (id === previous ? op.id : id));

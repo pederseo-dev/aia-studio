@@ -25,7 +25,7 @@ export function createSchema(defs) {
       if (!PROPERTY_TYPES.has(p.type)) throw new Error(`Esquema: ${name}.${prop} tiene un tipo desconocido "${p.type}"`);
       if (p.type === 'enum' && !Array.isArray(p.values)) throw new Error(`Esquema: ${name}.${prop} es enum y necesita values`);
     }
-    const tipo = {
+    const kind = {
       name: name,
       description: def.description ?? '',
       // `description` (en español) es para la guía de la IA; `help` (en inglés) es lo que muestra el editor.
@@ -43,8 +43,8 @@ export function createSchema(defs) {
       ancestors: base ? [base.name, ...base.ancestors] : [],
       properties: { ...base?.properties, ...def.properties },
     };
-    resolved.set(name, tipo);
-    return tipo;
+    resolved.set(name, kind);
+    return kind;
   };
 
   for (const d of defs) resolve(d.name);

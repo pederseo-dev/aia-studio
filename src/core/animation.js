@@ -34,7 +34,7 @@ export function localTime(schema, clip, t) {
 }
 
 /** Valor de una lista de keyframes en el tiempo t, según el tipo de la propiedad (number, color, vertices o discreto). */
-export function trackValue(keys, t, tipo) {
+export function trackValue(keys, t, kind) {
   if (!keys?.length) return undefined;
   if (t <= keys[0].t) return keys[0].value;
   const last = keys.at(-1);
@@ -49,9 +49,9 @@ export function trackValue(keys, t, tipo) {
   const [a, b] = [keys[lo], keys[hi]];
   if (a.ease === 'step') return a.value;
   const w = applyCurve(a.ease, (t - a.t) / (b.t - a.t));
-  if (tipo === 'number' && typeof a.value === 'number' && typeof b.value === 'number') return a.value + (b.value - a.value) * w;
-  if (tipo === 'color') return blendColor(a.value, b.value, Math.max(0, Math.min(1, w)));
-  if (tipo === 'vertices' && Array.isArray(a.value) && Array.isArray(b.value)) return blendVertices(a.value, b.value, w);
+  if (kind === 'number' && typeof a.value === 'number' && typeof b.value === 'number') return a.value + (b.value - a.value) * w;
+  if (kind === 'color') return blendColor(a.value, b.value, Math.max(0, Math.min(1, w)));
+  if (kind === 'vertices' && Array.isArray(a.value) && Array.isArray(b.value)) return blendVertices(a.value, b.value, w);
   // Lo que no se interpola cambia de golpe en el keyframe siguiente.
   return a.value;
 }

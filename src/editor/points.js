@@ -24,7 +24,7 @@ export function createPoints(ctx) {
     const pose = activePose();
     return pose ? poseOps(state.doc, pose.id, state.editing, { vertices }) : [{ op: 'set', target: state.editing, props: { vertices } }];
   };
-  const save = (vertices, nota) => execute(vertexOps(vertices), `${state.pose ? `${editingName()}: ` : ''}${nota} in ${state.editing}`);
+  const save = (vertices, note) => execute(vertexOps(vertices), `${state.pose ? `${editingName()}: ` : ''}${note} in ${state.editing}`);
 
   function draw() {
     const obj = path();
@@ -51,8 +51,8 @@ export function createPoints(ctx) {
   }
 
   /** Arrastre de un ancla o de una tangente. */
-  function handle(e, tipo) {
-    const [which, text] = tipo.split('-');
+  function handle(e, kind) {
+    const [which, text] = kind.split('-');
     const i = Number(text);
     const obj = path();
     const vertices = read(schema, obj, 'vertices');

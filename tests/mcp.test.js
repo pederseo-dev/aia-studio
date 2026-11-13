@@ -172,13 +172,13 @@ test('lecturas del MCP sin el servidor: get_document, get_history y render_previ
   assert.doesNotMatch(documentText(doc, schema, { json: false }), /JSON:/);
   // get_history: filtra por origen, corta y resume lo que tocó cada lote.
   const entries = [
-    { n: 1, origen: 'ai', nota: 'a', ops: [{ op: 'set', target: 'r', props: { x: 2, vertices: [1, 2, 3] } }], inversas: [] },
-    { n: 2, origen: 'user', nota: 'b', ops: [{ op: 'set', target: 'r', props: { y: 3 } }], inversas: [] },
+    { n: 1, origin: 'ai', note: 'a', ops: [{ op: 'set', target: 'r', props: { x: 2, vertices: [1, 2, 3] } }], inverses: [] },
+    { n: 2, origin: 'user', note: 'b', ops: [{ op: 'set', target: 'r', props: { y: 3 } }], inverses: [] },
   ];
   const summary = historySummary(entries, { origin: 'ai' });
   assert.equal(summary.length, 1);
   assert.deepEqual(summary[0].values, { 'r.x': 2, 'r.vertices': '(3 elementos)' });
-  assert.equal(summary[0].inversas, undefined);
+  assert.equal(summary[0].inverses, undefined);
   assert.deepEqual(historySummary(entries, { limit: 1, detail: true })[0].ops, entries[1].ops);
   // render_preview: el montaje, una pose, params con sus pesos, y errores claros.
   assert.match(planPreview(doc, schema).text, /en el montaje/);

@@ -14,14 +14,14 @@ import { tangents, vertexFromTangents } from './paths.js';
 export function paramValues(doc, schema, requested = {}) {
   const valueMap = {};
   for (const p of doc.objects.filter((o) => o.type === 'param')) {
-    const tipo = read(schema, p, 'kind');
-    if (tipo === 'enum') {
+    const kind = read(schema, p, 'kind');
+    if (kind === 'enum') {
       const options = read(schema, p, 'options');
       const v = requested[p.id] ?? read(schema, p, 'initial') ?? options[0] ?? null;
       valueMap[p.id] = options.includes(v) ? v : (options[0] ?? null);
     } else {
       let v = Number(requested[p.id] ?? read(schema, p, 'default'));
-      if (tipo === 'boolean') v = requested[p.id] === true || v >= 0.5 ? 1 : 0;
+      if (kind === 'boolean') v = requested[p.id] === true || v >= 0.5 ? 1 : 0;
       else v = Math.min(read(schema, p, 'max'), Math.max(read(schema, p, 'min'), Number.isFinite(v) ? v : 0));
       valueMap[p.id] = v;
     }
@@ -127,7 +127,7 @@ export function blendPoses(doc, schema, requested = {}, base = {}) {
         // números se miden contra él (como siempre) y se suman a lo animado; colores y vértices parten de lo animado.
         const setup = effectiveValue(schema, doc, obj, prop);
         const from = base[id]?.[prop] !== undefined ? base[id][prop] : setup;
-        if (!accumulated.has(key)) accumulated.set(key, { id, prop, tipo: p.type, base: setup, from, sum: 0, value: from });
+        if (!accumulated.has(key)) accumulated.set(key, { id, prop, kind: p.type, base: setup, from, sum: 0, value: from });
         const a = accumulated.get(key);
         if (p.type === 'number') a.sum += w * (target - a.base);
         else if (p.type === 'color') a.value = blendColor(a.value, target, w);
@@ -138,7 +138,7 @@ export function blendPoses(doc, schema, requested = {}, base = {}) {
   }
   const values = structuredClone(base);
   for (const a of accumulated.values()) {
-    (values[a.id] ??= {})[a.prop] = a.tipo === 'number' ? a.from + a.sum : a.value;
+    (values[a.id] ??= {})[a.prop] = a.kind === 'number' ? a.from + a.sum : a.value;
   }
   return { id: null, type: 'pose', values, params };
 }

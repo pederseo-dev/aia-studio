@@ -18,9 +18,9 @@ import { changeMode, mountClips, mountModes, mountTimeline } from './timeline.js
 import { mountBanner, mountPoses } from './poses.js';
 import { resetParams } from './live.js';
 import {
-  open, addTab, api, notify, deletedHere, loadDocuments, closeTab, deshacer, execute, deleteDocument,
+  open, addTab, api, notify, deletedHere, loadDocuments, closeTab, undo, execute, deleteDocument,
   sendPending, schema, state, setState, hasPending, freeId, keepPosition, parentForNew,
-  savedTabs, refreshHistory, rehacer, selectionRoots, select, selectSeveral, subscribe,
+  savedTabs, refreshHistory, redo, selectionRoots, select, selectSeveral, subscribe,
 } from './state.js';
 
 const $ = (s) => document.querySelector(s);
@@ -358,10 +358,10 @@ const CONTAINERS = {
 };
 $('#nuevo-grupo').addEventListener('click', (e) => toggleMenu($('#crear-grupo .menu'), e.currentTarget));
 $('#crear-grupo .menu').addEventListener('click', (e) => {
-  const tipo = e.target.closest('[data-tipo]')?.dataset.tipo;
-  if (!tipo) return;
+  const kind = e.target.closest('[data-tipo]')?.dataset.tipo;
+  if (!kind) return;
   closeMenus();
-  CONTAINERS[tipo]();
+  CONTAINERS[kind]();
 });
 $('#duplicar').addEventListener('click', duplicateSelection);
 $('#nuevo-estilo').addEventListener('click', () => newResource('style', 'style', { fill: '#c8c2d4', stroke: '#2b2135' }));
@@ -392,10 +392,10 @@ $('#archivo-svg').addEventListener('change', async (e) => {
   }
 });
 
-function newResource(tipo, base, props) {
+function newResource(kind, base, props) {
   if (!state.doc) return;
   const id = freeId(base);
-  execute([{ op: 'create', type: tipo, id, ...(props ? { props } : {}) }], `create ${id}`);
+  execute([{ op: 'create', type: kind, id, ...(props ? { props } : {}) }], `create ${id}`);
   select(id);
 }
 
@@ -434,10 +434,10 @@ function deleteSelection() {
   execute(roots.map((id) => ({ op: 'delete', target: id })), `delete ${nameOf(roots)}`);
 }
 
-function newGroup(tipo = 'group') {
+function newGroup(kind = 'group') {
   if (!state.doc) return;
-  const id = freeId(tipo);
-  execute([{ op: 'create', type: tipo, id, parent: parentForNew() }], `create ${id}`);
+  const id = freeId(kind);
+  execute([{ op: 'create', type: kind, id, parent: parentForNew() }], `create ${id}`);
   select(id);
 }
 
@@ -466,7 +466,7 @@ function newSkeleton() {
  * Mete la selección en un grupo nuevo (Ctrl+G). Si todos tienen el mismo padre, el grupo queda ahí, en el lugar del
  * que estaba más al frente; si no, va a la raíz. Los objetos no se mueven de lugar en pantalla.
  */
-function groupSelection(tipo = 'group') {
+function groupSelection(kind = 'group') {
   // Los huesos no se agrupan: viven en su skeleton.
   const roots = selectionRoots().filter((id) => !schema.types.get(findObject(state.doc, id).type).resource && findObject(state.doc, id).type !== 'bone');
   if (!roots.length) return;
@@ -474,9 +474,9 @@ function groupSelection(tipo = 'group') {
   const parent = parents.size === 1 ? [...parents][0] : null;
   const siblings = children(state.doc, parent);
   const front = Math.max(...roots.map((id) => siblings.findIndex((o) => o.id === id)));
-  const group = freeId(tipo);
+  const group = freeId(kind);
   /** @type {any[]} */
-  const ops = [{ op: 'create', type: tipo, id: group, parent: parent, ...(front >= 0 ? { index: front + 1 } : {}) }];
+  const ops = [{ op: 'create', type: kind, id: group, parent: parent, ...(front >= 0 ? { index: front + 1 } : {}) }];
   let doc = applyOperations(state.doc, ops, schema).doc;
   const loose = [];
   for (const id of roots) {
@@ -487,7 +487,7 @@ function groupSelection(tipo = 'group') {
     doc = applyOperations(doc, lote, schema).doc;
     ops.push(...lote);
   }
-  const verb = { switch: 'switch with', skeleton: 'skeleton with' }[tipo] ?? 'group';
+  const verb = { switch: 'switch with', skeleton: 'skeleton with' }[kind] ?? 'group';
   execute(ops, `${verb} ${nameOf(roots)} into ${group}`).then((ok) => ok && notifyLoose(loose));
   select(group);
 }
@@ -560,11 +560,11 @@ window.addEventListener('keydown', (e) => {
   if (!state.doc) return;
   if (mod && key === 'z') {
     e.preventDefault();
-    return e.shiftKey ? rehacer() : deshacer();
+    return e.shiftKey ? redo() : undo();
   }
   if (mod && key === 'y') {
     e.preventDefault();
-    return rehacer();
+    return redo();
   }
   if (mod && key === 'd') {
     e.preventDefault();
@@ -626,7 +626,7 @@ window.addEventListener('pagehide', sendPending);
 
 // ---------- Cambios desde fuera (la IA por MCP, u otro proceso) ----------
 
-import.meta.hot?.on('aia:documento', async ({ id }) => {
+import.meta.hot?.on('aia:document', async ({ id }) => {
   // Un documento nuevo (por ejemplo, creado por la IA) se abre en una pestaña sin quitarte de la actual.
   if (!state.documents.some((d) => d.id === id)) {
     await loadDocuments();
@@ -644,7 +644,7 @@ import.meta.hot?.on('aia:documento', async ({ id }) => {
 });
 
 // Un documento borrado fuera del editor (la IA con delete_document, u otro proceso): se cierra su pestaña.
-import.meta.hot?.on('aia:borrado', async ({ id }) => {
+import.meta.hot?.on('aia:deleted', async ({ id }) => {
   const name = state.documents.find((d) => d.id === id)?.name ?? id;
   const known = state.documents.some((d) => d.id === id) || state.tabs.includes(id);
   if (!known || deletedHere.has(id)) return;
@@ -653,7 +653,7 @@ import.meta.hot?.on('aia:borrado', async ({ id }) => {
   notify(`“${name}” was deleted outside the editor (by the AI or another program)`);
 });
 
-import.meta.hot?.on('aia:historial', ({ id }) => id === state.id && refreshHistory());
+import.meta.hot?.on('aia:history', ({ id }) => id === state.id && refreshHistory());
 
 // ---------- Inicio ----------
 

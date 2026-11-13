@@ -193,24 +193,24 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
     const number = (id) => read(schema, findObject(documentData, id), 'kind') === 'number';
 
     /** Pisa `actual` con `v` por el peso w, según el tipo (lo que no se interpola cambia en w ≥ 0.5). */
-    const overwrite = (tipo, current, v, w) => {
+    const overwrite = (kind, current, v, w) => {
       if (w >= 1) return v;
-      if (tipo === 'number' && typeof v === 'number' && typeof current === 'number') return current + (v - current) * w;
-      if (tipo === 'color') return blendColor(current, v, w);
-      if (tipo === 'vertices' && Array.isArray(current) && Array.isArray(v)) return blendVertices(current, v, w);
+      if (kind === 'number' && typeof v === 'number' && typeof current === 'number') return current + (v - current) * w;
+      if (kind === 'color') return blendColor(current, v, w);
+      if (kind === 'vertices' && Array.isArray(current) && Array.isArray(v)) return blendVertices(current, v, w);
       return w >= 0.5 ? v : undefined;
     };
     /** Una capa (lo que fija un clip, o la mezcla de las bases) encima de lo que hay, con su peso. */
     const apply = ({ values: vs, params: ps }, w, sum) => {
       for (const [id, fields] of Object.entries(vs)) {
         for (const [prop, v] of Object.entries(fields)) {
-          const tipo = typeOf(id, prop);
+          const kind = typeOf(id, prop);
           const current = values[id]?.[prop] ?? setup(id, prop);
           let created;
           if (sum) {
-            if (tipo !== 'number' || typeof v !== 'number') continue;
+            if (kind !== 'number' || typeof v !== 'number') continue;
             created = current + w * (v - setup(id, prop));
-          } else created = overwrite(tipo, current, v, w);
+          } else created = overwrite(kind, current, v, w);
           if (created !== undefined) (values[id] ??= {})[prop] = created;
         }
       }

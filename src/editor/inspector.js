@@ -33,7 +33,7 @@ export function mountInspector(root) {
     const inFocus = root.contains(document.activeElement) ? (/** @type {HTMLElement} */ (document.activeElement.closest('[data-prop]')))?.dataset.prop : null;
 
     const obj = state.selection ? findObject(doc, state.selection) : null;
-    const tipo = obj ? schema.types.get(obj.type) : schema.meta;
+    const kind = obj ? schema.types.get(obj.type) : schema.meta;
     const target = obj ? obj.id : 'meta';
     const data = obj ?? doc.meta;
     const others = obj ? state.selected.map((id) => findObject(doc, id)).filter((o) => o && o.id !== obj.id) : [];
@@ -42,13 +42,13 @@ export function mountInspector(root) {
     // Lo de Live es de los clips de Puppet (una escena no se dispara), y la espera del auto, solo con auto repeat.
     const fromLive = ([prop, p]) =>
       obj?.type !== 'animation' || others.length || p.group !== 'Live' || (read(schema, obj, 'usage') === 'puppet' && (!prop.startsWith('repeat_') || read(schema, obj, 'auto') === 'repeat'));
-    const properties = Object.entries(tipo.properties).filter(common).filter(fromLive);
+    const properties = Object.entries(kind.properties).filter(common).filter(fromLive);
     context = { others };
 
-    root.replaceChildren(others.length ? severalTitle(obj, others) : obj ? title(obj, tipo) : Object.assign(document.createElement('h2'), { textContent: 'Artboard' }));
+    root.replaceChildren(others.length ? severalTitle(obj, others) : obj ? title(obj, kind) : Object.assign(document.createElement('h2'), { textContent: 'Artboard' }));
     if (others.length && !properties.length) root.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'No properties in common.' }));
     const pose = activePose();
-    if (pose && obj && !others.length && !tipo.resource) poseSection(obj, tipo, pose);
+    if (pose && obj && !others.length && !kind.resource) poseSection(obj, kind, pose);
 
     const groups = Map.groupBy(properties, ([, p]) => p.group ?? 'Otros');
     const names = [...groups.keys()].sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99));
@@ -80,8 +80,8 @@ export function mountInspector(root) {
    * Con una pose activa, lo animable del objeto en esa pose: lo que la pose fija se ve normal y lo demás (que sigue
    * como en el montaje), atenuado. Cambiar un campo lo agrega a la pose; ↺ lo quita.
    */
-  function poseSection(obj, tipo, pose) {
-    const animatable = Object.entries(tipo.properties).filter(([, p]) => p.animatable);
+  function poseSection(obj, kind, pose) {
+    const animatable = Object.entries(kind.properties).filter(([, p]) => p.animatable);
     if (!animatable.length) return;
     const clip = openedClip();
     const title = clip ? `Clip “${clip.id}” at ${+state.time.toFixed(3)} s` : `Pose “${pose.id}”`;
@@ -140,11 +140,11 @@ export function mountInspector(root) {
     return div;
   }
 
-  function title(obj, tipo) {
+  function title(obj, kind) {
     const div = document.createElement('div');
     div.className = 'campo';
     div.dataset.prop = '__id';
-    div.innerHTML = `<label title="${tipo.help.replace(/"/g, '&quot;')}">${tipo.name}</label><input type="text" aria-label="Id"><span></span>`;
+    div.innerHTML = `<label title="${kind.help.replace(/"/g, '&quot;')}">${kind.name}</label><input type="text" aria-label="Id"><span></span>`;
     const input = div.querySelector('input');
     input.value = obj.id;
     input.addEventListener('change', async () => {
@@ -159,17 +159,17 @@ export function mountInspector(root) {
 
   function field(target, data, prop, p, labelText) {
     const isObject = target !== 'meta';
-    const origen = isObject ? valueOrigin(state.doc, data, prop) : data[prop] !== undefined ? 'propio' : 'defecto';
+    const origin = isObject ? valueOrigin(state.doc, data, prop) : data[prop] !== undefined ? 'propio' : 'defecto';
     const value = isObject ? effectiveValue(schema, state.doc, data, prop) : (data[prop] ?? p.default);
     const { others } = context;
     const targets = [target, ...others.map((o) => o.id)];
     const mixed = others.some((o) => JSON.stringify(effectiveValue(schema, state.doc, o, prop)) !== JSON.stringify(value));
     const div = document.createElement('div');
-    div.className = `campo${origen === 'defecto' ? ' por-defecto' : origen === 'estilo' ? ' por-defecto por-estilo' : ''}${mixed ? ' mixto' : ''}`;
+    div.className = `campo${origin === 'defecto' ? ' por-defecto' : origin === 'estilo' ? ' por-defecto por-estilo' : ''}${mixed ? ' mixto' : ''}`;
     div.dataset.prop = prop;
     const label = document.createElement('label');
     label.textContent = labelText ?? prop;
-    const whence = origen === 'estilo' ? `\nFrom style "${data.style}".` : '';
+    const whence = origin === 'estilo' ? `\nFrom style "${data.style}".` : '';
     label.title = `${prop}: ${p.help ?? ''}${p.default !== undefined ? `\nDefault: ${JSON.stringify(p.default)}` : ''}${whence}${mixed ? `\nMixed values: showing ${target}.` : ''}`;
     const reset = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Reset to default' });
     const name = others.length ? `${targets.length} objects` : target;

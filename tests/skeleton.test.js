@@ -135,10 +135,10 @@ test('un skeleton anidado sigue al hueso del de afuera', () => {
 test('renombrar y borrar un hueso actualiza enlaces y poses, y deshacer los recupera', () => {
   let doc = op(arm(), { op: 'rename', target: 'upper', id: 'arm' });
   assert.deepEqual(findObject(doc, 'up').values, { arm: { rotation: -90 } });
-  const { doc: sin, inversas } = applyOperations(doc, [{ op: 'delete', target: 'arm' }], schema);
+  const { doc: sin, inverses } = applyOperations(doc, [{ op: 'delete', target: 'arm' }], schema);
   assert.equal(findObject(sin, 'hand').bone, undefined);
   assert.deepEqual(findObject(sin, 'up').values, {});
-  doc = applyOperations(sin, inversas, schema).doc;
+  doc = applyOperations(sin, inverses, schema).doc;
   assert.equal(findObject(doc, 'hand').bone, 'lower');
   assert.deepEqual(findObject(doc, 'up').values, { arm: { rotation: -90 } });
 });

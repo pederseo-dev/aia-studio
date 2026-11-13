@@ -115,11 +115,11 @@ test('renombrar y borrar objetos actualiza las pistas', () => {
   doc = op(doc, { op: 'rename', target: 'arm_bone', id: 'brazo_bone' }, { op: 'rename', target: 'mouth_o', id: 'boca_o' });
   assert.deepEqual(Object.keys(findObject(doc, 'wave').tracks), ['brazo_bone', 'mouth']);
   assert.equal(findObject(doc, 'wave').tracks.mouth.active[1].value, 'boca_o');
-  const { doc: withoutMouth, inversas } = applyOperations(doc, [{ op: 'delete', target: 'boca_o' }, { op: 'delete', target: 'brazo_bone' }], schema);
+  const { doc: withoutMouth, inverses } = applyOperations(doc, [{ op: 'delete', target: 'boca_o' }, { op: 'delete', target: 'brazo_bone' }], schema);
   assert.deepEqual(findObject(withoutMouth, 'wave').tracks, { mouth: { active: [{ t: 0, value: 'mouth_rest' }] } });
   assert.equal(validate(withoutMouth, schema).errors.length, 0);
   // Deshacer devuelve las pistas.
-  const returned = applyOperations(withoutMouth, inversas, schema).doc;
+  const returned = applyOperations(withoutMouth, inverses, schema).doc;
   assert.deepEqual(findObject(returned, 'wave').tracks, findObject(doc, 'wave').tracks);
 });
 

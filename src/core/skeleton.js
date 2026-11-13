@@ -225,9 +225,9 @@ export function bindingsByProximity(doc, schema, skeletonId) {
   const bindings = [];
   const walk = (parentId) => {
     for (const o of children(doc, parentId)) {
-      const tipo = schema.types.get(o.type);
-      if (!tipo || !('bone' in tipo.properties) || o.bone || byPoint(o)) continue;
-      if (tipo.container && o.type !== 'skeleton' && boundInside(o.id)) {
+      const kind = schema.types.get(o.type);
+      if (!kind || !('bone' in kind.properties) || o.bone || byPoint(o)) continue;
+      if (kind.container && o.type !== 'skeleton' && boundInside(o.id)) {
         walk(o.id);
         continue;
       }
@@ -357,12 +357,12 @@ export function expandFromTo(doc, schema, parentId, props, current = {}) {
   const localOrigin = from !== undefined ? apply(invert(parent), ...point('from')) : [values.x ?? 0, values.y ?? 0];
   if (from !== undefined) [output.x, output.y] = localOrigin.map(r1);
   if (to !== undefined) {
-    const origen = apply(parent, ...localOrigin);
+    const origin = apply(parent, ...localOrigin);
     const [tx, ty] = point('to');
     // El ángulo se mide contra el padre, salvo con ángulo independiente (que no cuenta en un hueso raíz).
     const rotation = values.independentAngle && !root ? IDENTITY : parent;
     const linear = invert([...rotation.slice(0, 4), 0, 0]);
-    const [dx, dy] = apply(linear, tx - origen[0], ty - origen[1]);
+    const [dx, dy] = apply(linear, tx - origin[0], ty - origin[1]);
     output.rotation = r1((Math.atan2(dy, dx) * 180) / Math.PI);
     output.length = r1(Math.hypot(dx, dy) / (values.scaleX ?? 1));
   }

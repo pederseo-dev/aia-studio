@@ -31,7 +31,7 @@ export const state = {
   live: false,
   livePose: null,
   liveState: null,
-  history: { entries: [], user: { deshacer: false, rehacer: false } },
+  history: { entries: [], user: { undo: false, redo: false } },
 };
 
 const listeners = new Set();
@@ -47,7 +47,7 @@ export const docVisible = () => state.previewDoc ?? state.doc;
 async function request(filePath, body) {
   // keepalive: un lote agrupado que se envía al cerrar la pestaña igual llega.
   const options = body === undefined ? undefined : { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
-  const res = await fetch(`/api/documentos${filePath}`, options);
+  const res = await fetch(`/api/documents${filePath}`, options);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error);
   return data;
@@ -57,12 +57,12 @@ export const api = {
   list: () => request(''),
   crear: (id, meta, copyFrom) => request('', { id, meta, copyFrom }),
   read: (id) => request(`/${id}`),
-  history: (id) => request(`/${id}/historial`),
-  applyOps: (id, ops, nota) => request(`/${id}/ops`, { ops, nota }),
-  deshacer: (id) => request(`/${id}/deshacer`, {}),
-  rehacer: (id) => request(`/${id}/rehacer`, {}),
+  history: (id) => request(`/${id}/history`),
+  applyOps: (id, ops, note) => request(`/${id}/ops`, { ops, note }),
+  undo: (id) => request(`/${id}/undo`, {}),
+  redo: (id) => request(`/${id}/redo`, {}),
   eliminar: async (id) => {
-    const res = await fetch(`/api/documentos/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error((await res.json()).error);
   },
 };
@@ -133,7 +133,7 @@ export async function closeTab(id) {
   if (neighbor) return open(neighbor);
   await sendPending();
   history.replaceState(null, '', location.pathname);
-  setState({ id: null, doc: null, previewDoc: null, selection: null, selected: [], editing: null, vertex: null, pose: null, params: null, time: 0, playing: false, history: { entries: [], user: { deshacer: false, rehacer: false } } });
+  setState({ id: null, doc: null, previewDoc: null, selection: null, selected: [], editing: null, vertex: null, pose: null, params: null, time: 0, playing: false, history: { entries: [], user: { undo: false, redo: false } } });
 }
 
 /** Documentos que se están borrando desde este editor (para no avisar de un borrado que pidió el propio usuario). */
@@ -177,18 +177,18 @@ export const hasPending = () => pending !== null || underway > 0;
 /** Envía ya el lote agrupado que esté esperando. */
 export function sendPending() {
   if (!pending) return row;
-  const { id, ops, nota, timer } = pending;
+  const { id, ops, note, timer } = pending;
   clearTimeout(timer);
   pending = null;
-  return send(id, ops, nota);
+  return send(id, ops, note);
 }
 
 /**
  * Aplica un lote al instante en pantalla y lo guarda. Con `agrupar` (una clave como "flechas:head"), los lotes
  * seguidos con la misma clave se juntan hasta que pasa un momento sin cambios.
  */
-/** @param {any[]} ops @param {string} [nota] @param {{ group?: string }} [options] */
-export function execute(ops, nota, { group } = {}) {
+/** @param {any[]} ops @param {string} [note] @param {{ group?: string }} [options] */
+export function execute(ops, note, { group } = {}) {
   if (state.live) {
     notify('Live is on: turn it off (■ Live) to edit the document.', true);
     return Promise.resolve(false);
@@ -205,12 +205,12 @@ export function execute(ops, nota, { group } = {}) {
   if (result.warnings.length) notify(result.warnings.join(' · '));
 
   if (pending && (pending.key !== group || pending.id !== state.id)) sendPending();
-  if (!group) return send(state.id, ops, nota);
+  if (!group) return send(state.id, ops, note);
   if (pending) {
     clearTimeout(pending.timer);
     pending.ops = compact([...pending.ops, ...ops]);
   } else {
-    pending = { key: group, id: state.id, ops: compact(ops), nota };
+    pending = { key: group, id: state.id, ops: compact(ops), note };
   }
   pending.timer = setTimeout(sendPending, GROUP_WAIT);
   return Promise.resolve(true);
@@ -218,11 +218,11 @@ export function execute(ops, nota, { group } = {}) {
 
 let underway = 0;
 
-function send(id, ops, nota) {
+function send(id, ops, note) {
   underway++;
   row = row.then(async () => {
     try {
-      const { doc } = await api.applyOps(id, ops, nota);
+      const { doc } = await api.applyOps(id, ops, note);
       // Si quedan lotes por llegar al servidor, la pantalla ya va por delante: no se pisa con un estado viejo.
       if (state.id === id && !pending && underway === 1) setState({ doc });
     } catch (e) {
@@ -237,19 +237,19 @@ function send(id, ops, nota) {
   return row;
 }
 
-async function revert(tipo) {
+async function revert(kind) {
   if (!state.id) return;
   await sendPending();
   try {
-    const { doc } = await api[tipo](state.id);
+    const { doc } = await api[kind](state.id);
     setState({ doc, previewDoc: null });
   } catch (e) {
     notify(e.message, true);
   }
   await refreshHistory();
 }
-export const deshacer = () => revert('deshacer');
-export const rehacer = () => revert('rehacer');
+export const undo = () => revert('undo');
+export const redo = () => revert('redo');
 
 export function select(id) {
   if (id !== state.selection || state.selected.length !== (id ? 1 : 0)) setState({ selection: id, selected: id ? [id] : [] });

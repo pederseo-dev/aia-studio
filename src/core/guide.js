@@ -14,8 +14,8 @@ function range(p) {
 
 function table(properties) {
   const rows = Object.entries(properties).map(([name, p]) => {
-    const tipo = p.type + (p.nullable ? ' o null' : '') + (p.integer ? ' (entero)' : '');
-    return `| \`${name}\` | ${tipo} | \`${JSON.stringify(p.default)}\` | ${range(p)} | ${p.description ?? ''} |`;
+    const kind = p.type + (p.nullable ? ' o null' : '') + (p.integer ? ' (entero)' : '');
+    return `| \`${name}\` | ${kind} | \`${JSON.stringify(p.default)}\` | ${range(p)} | ${p.description ?? ''} |`;
   });
   return ['| Propiedad | Tipo | Por defecto | Rango | Descripción |', '| --- | --- | --- | --- | --- |', ...rows].join('\n');
 }

@@ -242,7 +242,7 @@ export function mountOptions(root, actions) {
     const bones = skeleton ? bonesOf(doc, skeleton) : [];
     if (!bones.length) return [];
     const vertices = read(schema, path, 'vertices');
-    const save = (created, nota) => execute([{ op: 'set', target: path.id, props: { vertices: created } }], `${nota} in ${path.id}`);
+    const save = (created, note) => execute([{ op: 'set', target: path.id, props: { vertices: created } }], `${note} in ${path.id}`);
     const parts = [];
     if (state.vertex != null && vertices[state.vertex]) {
       const i = state.vertex;

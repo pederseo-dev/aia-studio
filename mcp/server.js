@@ -125,7 +125,7 @@ server.registerTool(
   },
   safe(async ({ id, name, width, height, background, copy_from }) => {
     const meta = Object.fromEntries(Object.entries({ name, width, height, background }).filter(([, v]) => v !== undefined));
-    const doc = await store.crear(id, meta, { origen: ORIGIN, copyFrom: copy_from });
+    const doc = await store.crear(id, meta, { origin: ORIGIN, copyFrom: copy_from });
     return text(`Documento "${id}" creado${copy_from ? ` como copia de "${copy_from}"` : ''}.\n\nÁrbol:\n${shortTree(doc)}`);
   }),
 );
@@ -143,7 +143,7 @@ server.registerTool(
     },
   },
   safe(async ({ id, ops, note }) => {
-    const { doc, warnings } = await store.applyOps(id, ops, { origen: ORIGIN, nota: note });
+    const { doc, warnings } = await store.applyOps(id, ops, { origin: ORIGIN, note: note });
     const parts = [`Aplicadas ${ops.length} operaciones.`];
     if (warnings.length) parts.push(`Avisos:\n${warnings.map((a) => `- ${a}`).join('\n')}`);
     parts.push(`Árbol resultante (del fondo al frente):\n${shortTree(doc)}`);
@@ -151,13 +151,13 @@ server.registerTool(
   }),
 );
 
-const revert = (tipo) =>
+const revert = (kind) =>
   safe(async ({ id }) => {
-    const { doc, entrada: entry } = await store[tipo](id, ORIGIN);
-    const verb = tipo === 'deshacer' ? 'Deshecho' : 'Rehecho';
+    const { doc, entrada: entry } = await store[kind](id, ORIGIN);
+    const verb = kind === 'undo' ? 'Deshecho' : 'Rehecho';
     const touched = summarizeOperations(entry.lote).slice(0, 12).join(', ');
-    const follows = tipo === 'deshacer' ? ' Lo de los lotes anteriores sigue en pie.' : '';
-    return text(`${verb} el lote #${entry.n} "${entry.nota}" (${entry.ops} operaciones: ${touched}).${follows}\n\nÁrbol resultante:\n${shortTree(doc)}`);
+    const follows = kind === 'undo' ? ' Lo de los lotes anteriores sigue en pie.' : '';
+    return text(`${verb} el lote #${entry.n} "${entry.note}" (${entry.ops} operaciones: ${touched}).${follows}\n\nÁrbol resultante:\n${shortTree(doc)}`);
   });
 
 server.registerTool(
@@ -168,13 +168,13 @@ server.registerTool(
       'cambió después alguna de las mismas propiedades, se niega y dice cuáles y en qué lote: deshacer pisaría su retoque.',
     inputSchema: { id },
   },
-  revert('deshacer'),
+  revert('undo'),
 );
 
 server.registerTool(
   'redo',
   { description: 'Rehace el último lote tuyo que deshiciste y dice cuál rehizo. Como undo, se niega si el usuario cambió después lo mismo.', inputSchema: { id } },
-  revert('rehacer'),
+  revert('redo'),
 );
 
 server.registerTool(
@@ -208,12 +208,12 @@ async function preview(id, doc, options, header) {
   const missing = usedAssets(doc).filter((src) => !images.has(src));
   const png = svgToPng(svg, options.width ?? width, images);
   const withoutView = [...images.keys()].filter((src) => NO_PREVIEW.has(assetMime(src)));
-  let nota = missing.length ? `\nFaltan en assets/ (esas capas image no se ven): ${missing.join(', ')}. Agrégalas con add_image.` : '';
-  if (withoutView.length) nota += `\n${withoutView.join(', ')}: WebP, que esta vista previa no sabe dibujar; sale como un recuadro gris con una cruz en su lugar y tamaño (el usuario la ve bien en el editor).`;
+  let note = missing.length ? `\nFaltan en assets/ (esas capas image no se ven): ${missing.join(', ')}. Agrégalas con add_image.` : '';
+  if (withoutView.length) note += `\n${withoutView.join(', ')}: WebP, que esta vista previa no sabe dibujar; sale como un recuadro gris con una cruz en su lugar y tamaño (el usuario la ve bien en el editor).`;
   return {
     content: [
       { type: 'image', data: Buffer.from(png).toString('base64'), mimeType: 'image/png' },
-      { type: 'text', text: (header ? `${header}\n${summary}` : summary) + nota },
+      { type: 'text', text: (header ? `${header}\n${summary}` : summary) + note },
     ],
   };
 }
@@ -246,7 +246,7 @@ server.registerTool(
     const { src, naturalWidth, naturalHeight, format, reused } = await store.saveAsset(id, name, bytes);
     const { id: layerId, ops } = planAddImage(await store.read(id), schema, { src, naturalWidth, naturalHeight, id: layer, parent: parent ?? null, index, x, y, width, height });
     if (extra) Object.assign(ops[0].props, extra);
-    const { doc, warnings } = await store.applyOps(id, ops, { origen: ORIGIN, nota: note ?? `add image ${layerId}` });
+    const { doc, warnings } = await store.applyOps(id, ops, { origin: ORIGIN, note: note ?? `add image ${layerId}` });
     const o = findObject(doc, layerId);
     const file = `${src} (${format.toUpperCase()}, ${naturalWidth}×${naturalHeight} px${reused ? ', ya estaba en assets/' : ''})`;
     return preview(id, doc, {}, `Capa image "${layerId}" con ${file}: x ${o.x}, y ${o.y}, ${o.width}×${o.height}.${warnings.length ? `\nAvisos: ${warnings.join('; ')}` : ''}`);
@@ -310,7 +310,7 @@ server.registerTool(
   },
   safe(async ({ id, path, bones, note }) => {
     const { ops, distribution } = planBindPoints(await store.read(id), schema, path, bones);
-    await store.applyOps(id, ops, { origen: ORIGIN, nota: note ?? `distribute ${path} among bones` });
+    await store.applyOps(id, ops, { origin: ORIGIN, note: note ?? `distribute ${path} among bones` });
     return text(`Vértices de ${path} por hueso: ${distribution}. Míralo con render_preview y una pose.`);
   }),
 );
@@ -333,7 +333,7 @@ server.registerTool(
   safe(async ({ id, skeleton, note }) => {
     const { ops, bindings, distribution } = planBindByProximity(await store.read(id), schema, skeleton);
     if (!ops.length) return text(`Todo el dibujo de ${skeleton} ya sigue a un hueso; no hubo nada que enlazar.`);
-    await store.applyOps(id, ops, { origen: ORIGIN, nota: note ?? `bind all by proximity in ${skeleton}` });
+    await store.applyOps(id, ops, { origin: ORIGIN, note: note ?? `bind all by proximity in ${skeleton}` });
     return text(`Enlazados ${bindings.length}: ${distribution}. Míralo con render_preview y una pose (bones: true).`);
   }),
 );
@@ -360,7 +360,7 @@ server.registerTool(
   safe(async ({ id, bone, parent, keep_in_poses, note }) => {
     const plan = planReparentBone(await store.read(id), schema, bone, parent, keep_in_poses);
     if (!plan.ops.length) return text(plan.text);
-    const { doc } = await store.applyOps(id, plan.ops, { origen: ORIGIN, nota: note ?? `reparent ${bone} to ${parent}` });
+    const { doc } = await store.applyOps(id, plan.ops, { origin: ORIGIN, note: note ?? `reparent ${bone} to ${parent}` });
     const h = findObject(doc, bone);
     return text(`${plan.text} (x ${h.x}, y ${h.y}, rotation ${h.rotation})`);
   }),
@@ -393,7 +393,7 @@ server.registerTool(
   },
   safe(async ({ id, pose, values, replace, remove, note, width, show_bones }) => {
     const ops = opsToSetPose(await store.read(id), pose, values ?? {}, replace, remove ?? []);
-    const { doc, warnings } = await store.applyOps(id, ops, { origen: ORIGIN, nota: note ?? `pose ${pose}` });
+    const { doc, warnings } = await store.applyOps(id, ops, { origin: ORIGIN, note: note ?? `pose ${pose}` });
     const saved = findObject(doc, pose).values;
     const list = Object.entries(saved).map(([h, c]) => `${h} ${JSON.stringify(c, (k, v) => (k === 'vertices' ? `(${v.length} vértices)` : v))}`).join(', ') || 'vacía';
     const notes = [...warnings, ...poseClamps(doc, schema, saved)];
@@ -455,7 +455,7 @@ server.registerTool(
   },
   safe(async ({ id, animation, keys, usage, duration, loop, description, remove, note, width, show_bones, ...live }) => {
     const plan = planSetKeys(await store.read(id), schema, animation, { keys, usage, duration, loop, description, remove, ...live });
-    const { doc, warnings } = await store.applyOps(id, plan.ops, { origen: ORIGIN, nota: note ?? `animation ${animation}` });
+    const { doc, warnings } = await store.applyOps(id, plan.ops, { origin: ORIGIN, note: note ?? `animation ${animation}` });
     const notes = [...warnings];
     if (plan.extendedFrom != null) notes.push(`duration pasó de ${plan.extendedFrom} a ${plan.duration} s para que entren los keyframes`);
     notes.push(...rotationWarnings(doc, schema, findObject(doc, animation)));
@@ -481,7 +481,7 @@ server.registerTool(
   safe(async ({ id, animation, times, targets, note }) => {
     const { ops, removed } = planDeleteKeys(await store.read(id), animation, { times, targets });
     if (!ops.length) return text(`No había keyframes que quitar en "${animation}" con esos tiempos y pistas.`);
-    const { doc } = await store.applyOps(id, ops, { origen: ORIGIN, nota: note ?? `delete keys in ${animation}` });
+    const { doc } = await store.applyOps(id, ops, { origin: ORIGIN, note: note ?? `delete keys in ${animation}` });
     return text(`Quitados ${removed} keyframes. ${animation}: ${clipSummary(schema, findObject(doc, animation))}.`);
   }),
 );
@@ -505,7 +505,7 @@ server.registerTool(
   },
   safe(async ({ id, animation, from, to, targets, note, width }) => {
     const { ops, moved } = planMoveKeys(await store.read(id), schema, animation, { from, to, targets });
-    const { doc } = await store.applyOps(id, ops, { origen: ORIGIN, nota: note ?? `move keys in ${animation} ${from} → ${to} s` });
+    const { doc } = await store.applyOps(id, ops, { origin: ORIGIN, note: note ?? `move keys in ${animation} ${from} → ${to} s` });
     return preview(id, doc, { width, animation }, `Movidos de ${from} a ${to} s: ${moved.join(', ')}.`);
   }),
 );
@@ -531,7 +531,7 @@ server.registerTool(
   safe(async ({ id, animation, duration, factor, from, to, note, width }) => {
     const plan = planScaleTime(await store.read(id), schema, animation, { duration, factor, from, to });
     const span = from == null && to == null ? '' : ` (tramo ${plan.from}…${plan.to} s → ${plan.length} s)`;
-    const { doc } = await store.applyOps(id, plan.ops, { origen: ORIGIN, nota: note ?? `scale time of ${animation}: ${plan.before} → ${plan.duration} s` });
+    const { doc } = await store.applyOps(id, plan.ops, { origin: ORIGIN, note: note ?? `scale time of ${animation}: ${plan.before} → ${plan.duration} s` });
     return preview(id, doc, { width, animation }, `${animation}: ${plan.before} → ${plan.duration} s${span}.`);
   }),
 );

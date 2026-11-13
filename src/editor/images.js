@@ -10,14 +10,14 @@ import { notify, execute, schema, state, parentForNew, selectSeveral } from './s
 const IS_IMAGE = /^image\/(png|jpeg|webp|svg\+xml)$/;
 
 /** URL con que el lienzo y el inspector piden el archivo de una capa image. */
-export const assetUrl = (src, id = state.id) => `/api/documentos/${encodeURIComponent(id)}/assets/${encodeURIComponent(src)}`;
+export const assetUrl = (src, id = state.id) => `/api/documents/${encodeURIComponent(id)}/assets/${encodeURIComponent(src)}`;
 
 /** Los archivos que son imágenes aceptadas (de un input, un drop o el portapapeles). */
 export const imagesOnly = (files) => [...(files ?? [])].filter((a) => IS_IMAGE.test(a.type) || /\.(png|jpe?g|webp|svg)$/i.test(a.name));
 
 /** Sube un archivo a assets/ y devuelve { src, ancho, alto, formato, reusado }. */
 async function upload(file) {
-  const res = await fetch(`/api/documentos/${encodeURIComponent(state.id)}/assets?name=${encodeURIComponent(file.name || 'pasted.png')}`, { method: 'POST', body: file });
+  const res = await fetch(`/api/documents/${encodeURIComponent(state.id)}/assets?name=${encodeURIComponent(file.name || 'pasted.png')}`, { method: 'POST', body: file });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error);
   return data;

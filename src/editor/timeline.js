@@ -853,9 +853,9 @@ const CHANNEL_LABELS = { opacity: 'Opacity', visible: 'Visible', fill: 'Fill', s
 
 function channelsOf(obj) {
   if (obj.type === 'param') return [{ name: 'Value', props: ['value'] }];
-  const tipo = schema.types.get(obj.type);
-  if (!tipo || tipo.resource) return [];
-  const animatable = Object.keys(tipo.properties).filter((k) => tipo.properties[k].animatable);
+  const kind = schema.types.get(obj.type);
+  if (!kind || kind.resource) return [];
+  const animatable = Object.keys(kind.properties).filter((k) => kind.properties[k].animatable);
   const channels = [];
   const used = new Set();
   for (const [name, props] of JOINED) {
