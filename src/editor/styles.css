@@ -1,5 +1,5 @@
 :root {
-  /* Gris medio cálido, como Moho: paneles claros separados por bordes oscuros y acento naranja. */
+  /* Warm mid gray, like Moho: light panels separated by dark borders and an orange accent. */
   --fondo: #353330;
   --panel: #46433f;
   --panel-2: #55514c;
@@ -8,21 +8,21 @@
   --suave: #c6beb3;
   --tenue: #9a9187;
   --acento: #f0a23a;
-  --sobre-acento: #231d15; /* texto sobre el acento */
+  --sobre-acento: #231d15; /* text on the accent */
   --seleccion: #6e5534;
   --seleccion-fuerte: #82602f;
-  --ia: #7fd4ec; /* lo que hizo la IA: celeste, para no confundirse con el acento */
+  --ia: #7fd4ec; /* what the AI did: light blue, so it is not confused with the accent */
   --error: #ff8a80;
   --lienzo: #67635d;
-  --params: #e88aa0; /* rosa viejo. Vista Parámetros: la mezcla de poses que dan los controles */
-  --pose: #f4d35e; /* amarillo. Modo pose: el lienzo se enmarca en este color, como la línea de tiempo de Moho en una acción */
-  --vivo: #7ed492; /* verde. ▶ Live (Puppet): el muñeco en marcha, como lo verá la app */
+  --params: #e88aa0; /* dusty pink. Parameters view: the blend of poses the controls give */
+  --pose: #f4d35e; /* yellow. Pose mode: the canvas is framed in this color, like Moho's timeline in an action */
+  --vivo: #7ed492; /* green. ▶ Live (Puppet): the puppet running, as the app will see it */
   color-scheme: dark;
   font: 12px/1.4 system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
-/* `hidden` oculta siempre, aunque la clase del elemento le dé otro display. */
+/* `hidden` always hides, even if the element's class gives it another display. */
 [hidden] { display: none !important; }
 
 body {
@@ -59,16 +59,16 @@ h2 {
 }
 .help { margin: 4px 0 0; color: var(--tenue); font-size: 12px; }
 
-/* ---------- Barra superior ---------- */
+/* ---------- Top bar ---------- */
 
 #header { background: var(--panel); border-bottom: 1px solid var(--borde); }
 button.icon { min-width: 28px; padding: 3px 6px; text-align: center; }
 kbd { font: 11px ui-monospace, monospace; color: var(--suave); border: 1px solid var(--borde); border-radius: 3px; padding: 0 4px; }
 
-/* Fila de pestañas */
+/* Tab row */
 #tabs-row { display: flex; align-items: flex-end; gap: 6px; padding: 6px 8px 0; background: var(--fondo); border-bottom: 1px solid var(--borde); }
 #tabs-row > .mark { align-self: center; margin-bottom: 6px; }
-/* El + va pegado a la última pestaña y apoyado en la línea de abajo, como una pestaña más. */
+/* The + sits right after the last tab and rests on the bottom line, like one more tab. */
 #tab-new, .time-tabs .tab-new { align-self: flex-end; margin: 0 0 3px -4px; width: 24px; height: 24px; min-width: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--suave); border-radius: 5px; }
 #tab-new:hover, .time-tabs .tab-new:hover { background: var(--panel-2); color: var(--texto); }
 #tab-new .ico, .time-tabs .tab-new .ico { width: 16px; height: 16px; }
@@ -87,8 +87,8 @@ kbd { font: 11px ui-monospace, monospace; color: var(--suave); border: 1px solid
 #notice { flex: 1; align-self: center; margin-bottom: 6px; text-align: right; color: var(--ia); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #notice.error { color: var(--error); }
 
-/* Fila de herramientas: íconos de línea sin borde, la flecha chica al lado elige otra del grupo;
-   la herramienta activa se marca con el color de acento, como en Rive. */
+/* Tool row: borderless line icons, the small arrow next to them picks another from the group;
+   the active tool is marked with the accent color, as in Rive. */
 #bar { display: flex; align-items: center; gap: 4px; padding: 4px 8px; }
 #bar button.icon, #bar .tools-group > button, .header button.icon, .header .tools-group > button {
   display: inline-flex; align-items: center; justify-content: center;
@@ -114,16 +114,16 @@ kbd { font: 11px ui-monospace, monospace; color: var(--suave); border: 1px solid
 .spacer { flex: 1; }
 #zoom { min-width: 56px; font-variant-numeric: tabular-nums; }
 
-/* Grupos de herramientas: botón con la herramienta activa del grupo + flecha para elegir otra */
+/* Tool groups: button with the group's active tool + arrow to pick another */
 .tools-group { display: flex; }
 .tools-group .main { border-radius: 4px 0 0 4px; min-width: 34px; }
 .tools-group .choose { border-radius: 0 4px 4px 0; border-left: none; padding: 3px 4px; color: var(--suave); font-size: 10px; }
 .tools-group.active .main, .tools-group.active .choose { background: var(--acento); color: var(--sobre-acento); border-color: var(--acento); }
 
-/* Menús desplegables */
+/* Dropdown menus */
 .dropdown { position: relative; }
 .menu {
-  position: fixed; z-index: 20; min-width: 220px; /* main.js la ubica junto a su botón */
+  position: fixed; z-index: 20; min-width: 220px; /* main.js places it next to its button */
   display: flex; flex-direction: column; padding: 4px; gap: 1px;
   background: var(--panel-2); border: 1px solid var(--borde); border-radius: 6px; box-shadow: 0 8px 24px #0008;
 }
@@ -136,7 +136,7 @@ kbd { font: 11px ui-monospace, monospace; color: var(--suave); border: 1px solid
 .menu button.marked > span:first-child::after { content: ' ✓'; color: var(--acento); }
 .menu hr { width: 100%; border: none; border-top: 1px solid var(--borde); margin: 3px 0; }
 
-/* Diálogos */
+/* Dialogs */
 dialog { background: var(--panel); color: var(--texto); border: 1px solid var(--borde); border-radius: 8px; padding: 16px 18px; min-width: 360px; }
 dialog::backdrop { background: #0008; }
 dialog h2 { margin-bottom: 10px; }
@@ -164,36 +164,36 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
   flex: 1;
   min-height: 0;
   display: grid;
-  /* minmax(0, …): un texto largo en el centro no estira la grilla ni empuja el panel derecho. */
+  /* minmax(0, …): a long text in the center does not stretch the grid or push the right panel. */
   grid-template-columns: 210px minmax(0, 1fr) 264px;
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas: "objetos lienzo derecho" "tiempo tiempo tiempo";
 }
 .panel { background: var(--panel); overflow-y: auto; }
 #objects-panel { grid-area: objetos; border-right: 1px solid var(--borde); display: flex; flex-direction: column; overflow: hidden; }
-/* La jerarquía ocupa el alto libre; los recursos quedan abajo, con su propio desplazamiento. */
+/* The hierarchy takes the free height; the assets stay at the bottom, with their own scroll. */
 #tree { flex: 1; min-height: 80px; overflow-y: auto; }
 .resources-header { border-top: 1px solid var(--borde); }
 #resources { flex: 0 0 auto; max-height: 35%; overflow-y: auto; }
-/* Assets plegado: queda solo su cabecera y Layers se lleva el resto del alto. */
+/* Assets collapsed: only its header remains and Layers takes the rest of the height. */
 body.folded-resources #resources { display: none; }
 body.folded-resources .resources-header { border-bottom: none; }
 body.folded-resources #fold-resources .ico-flecha { transform: rotate(-90deg); }
-/* Layers plegado: queda su cabecera y Assets se lleva el alto libre. */
+/* Layers collapsed: its header remains and Assets takes the free height. */
 body.folded-layers #tree { display: none; }
 body.folded-layers #resources { flex: 1; max-height: none; }
 body.folded-layers #fold-layers .ico-flecha { transform: rotate(-90deg); }
-/* El inspector con alto propio y su desplazamiento. */
+/* The inspector with its own height and its scroll. */
 #right-panel { grid-area: derecho; border-left: 1px solid var(--borde); display: flex; flex-direction: column; overflow: hidden; }
 #inspector { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
-/* Alto fijo: el panel no crece ni se achica según cuánto contenido tenga; lo que sobra se desplaza. */
+/* Fixed height: the panel does not grow or shrink with how much content it has; the overflow scrolls. */
 #timeline-area { grid-area: tiempo; border-top: 1px solid var(--borde); height: 240px; overflow-y: auto; }
-/* Parameters, a la derecha (Animate y Puppet): nombre y control en una fila, los drivers debajo. */
+/* Parameters, on the right (Animate and Puppet): name and control in one row, the drivers below. */
 #parameters-section { flex: 0 1 auto; max-height: 30%; overflow-y: auto; border-bottom: 1px solid var(--borde); }
 #parameters { padding: 0 8px 4px; display: flex; flex-direction: column; }
 #parameters > .help { margin: 4px 0; }
-/* Una fila por param: nombre y valor arriba, el control a todo el ancho y debajo las poses que mezcla (con su peso
-   como una barra). Las filas se separan con una línea fina. */
+/* One row per param: name and value on top, the control at full width and below it the poses it blends (with their
+   weight as a bar). Rows are separated by a thin line. */
 .param { display: flex; flex-direction: column; gap: 3px; padding: 5px 0 6px; border-bottom: 1px solid color-mix(in srgb, var(--borde) 70%, transparent); }
 .param:last-child { border-bottom: none; }
 .param .head-param { display: flex; align-items: center; gap: 6px; }
@@ -213,7 +213,7 @@ body.folded-layers #fold-layers .ico-flecha { transform: rotate(-90deg); }
 .header { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--borde); }
 .header h2 { flex: 1; }
 
-/* ---------- Árbol ---------- */
+/* ---------- Layers panel ---------- */
 
 .tree, .tree ul { list-style: none; margin: 0; padding: 0; }
 .tree { padding: 4px 0; }
@@ -241,7 +241,7 @@ body.folded-layers #fold-layers .ico-flecha { transform: rotate(-90deg); }
 .row .name input { width: 100%; padding: 0 3px; }
 .row .eye { border: none; background: none; padding: 0 2px; color: var(--suave); opacity: 0; }
 .row:hover .eye, .row .eye.concealed { opacity: 1; }
-/* Candado: aparece al pasar el mouse; puesto, queda a la vista en el color de acento. */
+/* Lock: appears on mouse hover; when set, it stays visible in the accent color. */
 .row .lock { border: none; background: none; padding: 0 2px; color: var(--suave); opacity: 0; display: inline-flex; align-items: center; }
 .row .lock .ico { width: 13px; height: 13px; }
 .row:hover .lock, .row .lock.set { opacity: 1; }
@@ -256,7 +256,7 @@ body.folded-layers #fold-layers .ico-flecha { transform: rotate(-90deg); }
 .tree .empty { padding: 10px; color: var(--tenue); }
 .row .binding { color: var(--pose); font-size: 11px; }
 
-/* ---------- Lienzo ---------- */
+/* ---------- Canvas ---------- */
 
 #canvas { grid-area: lienzo; position: relative; min-width: 0; background: var(--lienzo); outline: none; overflow: hidden; }
 #view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -276,12 +276,12 @@ body.folded-layers #fold-layers .ico-flecha { transform: rotate(-90deg); }
 #canvas.mode-pose { box-shadow: inset 0 0 0 2px var(--pose); cursor: default; }
 .bones { opacity: 0.45; }
 .bones.active { opacity: 1; }
-/* Cada hueso con su color (--c), como en Rive; los puntos que lo siguen se pintan igual. */
+/* Each bone with its color (--c), as in Rive; the points that follow it are painted the same. */
 .bone { fill: color-mix(in srgb, var(--c, #ffffff) 14%, transparent); stroke: var(--c, #ffffffaa); stroke-width: 1.2; }
 .bones.active .bone { pointer-events: all; cursor: grab; }
 .bone.selected { fill: color-mix(in srgb, var(--c, #f0a23a) 50%, transparent); stroke: #ffffff; }
 .bone.main { stroke-width: 2.2; }
-/* Padre e hijos del hueso elegido. */
+/* Parent and children of the picked bone. */
 .bone.parent { stroke-width: 2.4; stroke-dasharray: 5 2; }
 .bone.child { stroke-width: 1.8; fill: color-mix(in srgb, var(--c, #ffffff) 30%, transparent); }
 .bone.new-parent { stroke-width: 2.6; stroke-dasharray: 6 3; stroke: #ffffff; }
@@ -291,8 +291,8 @@ body.folded-layers #fold-layers .ico-flecha { transform: rotate(-90deg); }
 .bound { fill: color-mix(in srgb, var(--pose) 8%, transparent); stroke: var(--pose); stroke-width: 1.2; stroke-dasharray: 4 2; }
 #canvas.tool-bindLayer #view *, #canvas.tool-bindPoints #view * { cursor: copy; }
 #canvas.tool-reparent .bone { cursor: alias; }
-/* Barra de opciones: en la fila de herramientas, entre las herramientas y los modos. Una sola línea; el texto se
-   corta con … y los botones quedan siempre a la vista. */
+/* Option bar: in the tool row, between the tools and the modes. A single line; the text is
+   cut with … and the buttons always stay visible. */
 .options {
   flex: 0 1 auto;
   min-width: 0;
@@ -354,8 +354,8 @@ body.folded-layers #fold-layers .ico-flecha { transform: rotate(-90deg); }
   color: var(--suave);
 }
 .field { display: grid; grid-template-columns: 92px minmax(0, 1fr) 20px; align-items: center; gap: 6px; margin-bottom: 3px; }
-/* Pares en una fila (x/y, ancho/alto, escala), como en el inspector de Rive */
-/* La fila de par usa las mismas columnas que un campo suelto: nombre (92px) | dos mitades | y cada mitad, su letra. */
+/* Pairs in one row (x/y, width/height, scale), as in Rive's inspector */
+/* The pair row uses the same columns as a single field: name (92px) | two halves | and each half, its letter. */
 .pair { display: grid; grid-template-columns: 92px minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 6px; margin-bottom: 3px; }
 .pair .name-pair { color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pair .field { grid-template-columns: 12px minmax(0, 1fr) 14px; gap: 3px; margin-bottom: 0; }
@@ -370,7 +370,7 @@ body.folded-layers #fold-layers .ico-flecha { transform: rotate(-90deg); }
 .field .color label { color: var(--suave); font-size: 12px; white-space: nowrap; }
 .field .color.vertices span { flex: 1; min-width: 0; color: var(--suave); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .field .color.vertices button { white-space: nowrap; flex: none; }
-/* Archivo de una capa image: miniatura con damero (para ver la transparencia), nombre y botones */
+/* File of an image layer: thumbnail with a checkerboard (to see transparency), name and buttons */
 .field-asset { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 2px 6px; align-items: center; }
 .field-asset img {
   grid-row: span 2; width: 44px; height: 44px; object-fit: contain; border: 1px solid var(--borde); border-radius: 3px;
@@ -380,23 +380,23 @@ body.folded-layers #fold-layers .ico-flecha { transform: rotate(-90deg); }
 .field-asset.missing .name-asset { text-decoration: line-through; color: var(--error); }
 .field-asset .buttons-asset { display: flex; flex-wrap: wrap; gap: 4px; }
 .field-asset .buttons-asset button { white-space: nowrap; padding-inline: 6px; }
-/* El archivo no vuelve «a su valor por defecto»: se cambia con Replace… */
+/* The file does not go back «to its default value»: it is changed with Replace… */
 #inspector .field:has(.field-asset) .reset { visibility: hidden; }
 .field.default input:not([type=checkbox]):not([type=color]), .field.default select { color: var(--tenue); }
 .field .reset { border: none; background: none; padding: 0; color: var(--suave); visibility: hidden; }
 .field:not(.default) .reset { visibility: visible; }
 .field.invalid input { border-color: var(--error); }
 
-/* ---------- Historial ---------- */
+/* ---------- History ---------- */
 
-/* Historial: abajo del panel izquierdo, debajo de Assets (a la derecha quedan Clips, Parameters e inspector). */
+/* History: at the bottom of the left panel, below Assets (Clips, Parameters and the inspector are on the right). */
 #history { border-top: 1px solid var(--borde); padding: 5px 8px; flex: 0 0 26%; min-height: 100px; overflow-y: auto; }
 #history h2 { margin: 0; }
-/* Cabecera que pliega su sección (History, Assets): el título con la flecha. */
+/* Header that collapses its section (History, Assets): the title with the arrow. */
 .fold-section { display: flex; align-items: center; gap: 6px; width: 100%; padding: 0; border: none; background: none; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
 .fold-section:hover { color: var(--texto); }
 .fold-section .ico-flecha { transition: transform 0.15s; }
-/* Plegado: queda solo la cabecera y el inspector se lleva el resto del alto. */
+/* Collapsed: only the header remains and the inspector takes the rest of the height. */
 body.folded-history #history { flex: 0 0 auto; min-height: 0; overflow: hidden; }
 body.folded-history #entries { display: none; }
 body.folded-history #fold-history .ico-flecha { transform: rotate(-90deg); }
@@ -410,18 +410,18 @@ body.folded-history #fold-history .ico-flecha { transform: rotate(-90deg); }
 #entries .reverted .note { text-decoration: line-through; color: var(--tenue); }
 .kinship .bone-binding { border: none; background: none; padding: 0 2px; font-weight: 600; text-decoration: underline dotted; cursor: pointer; }
 
-/* ---------- Modos: Design · Animate · Puppet ---------- */
+/* ---------- Modes: Design · Animate · Puppet ---------- */
 #modes { display: flex; margin: 0 4px; }
 #modes button { border-radius: 0; padding: 3px 10px; background: none; color: var(--suave); margin-left: -1px; }
 #modes button:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
 #modes button:last-child { border-radius: 0 4px 4px 0; }
 #modes button[aria-selected="true"] { background: var(--acento); color: var(--sobre-acento); border-color: var(--acento); position: relative; z-index: 1; }
-/* Las poses y los params son de Puppet; Design no tiene timeline. */
+/* Poses and params belong to Puppet; Design has no timeline. */
 body[data-mode="design"] #timeline-area { display: none; }
 
-/* Biblioteca de clips (Puppet): un botón por clip */
+/* Clip library (Puppet): one button per clip */
 #clips { flex: 0 1 auto; max-height: 30%; overflow-y: auto; border-bottom: 1px solid var(--borde); }
-/* La cabecera (con ▶ Live) queda a la vista aunque la lista de clips se desplace. */
+/* The header (with ▶ Live) stays visible even if the clip list scrolls. */
 #clips > .header { position: sticky; top: 0; z-index: 1; background: var(--panel); }
 #list-clips { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px; }
 #list-clips > .help { margin: 2px 0; }
@@ -433,14 +433,14 @@ body[data-mode="design"] #timeline-area { display: none; }
 
 /* Timeline */
 #timeline:focus { outline: none; }
-/* Arriba de la timeline: pestañas de escenas (o el clip abierto) como las de los documentos, y una barra con la
-   reproducción al medio. */
+/* Above the timeline: scene tabs (or the open clip) like the documents' ones, and a bar with
+   playback in the middle. */
 .time-head { position: sticky; top: 0; z-index: 2; background: var(--panel); }
 .time-tabs { display: flex; align-items: flex-end; gap: 2px; padding: 3px 8px 0; border-bottom: 1px solid var(--borde); overflow-x: auto; scrollbar-width: none; }
 .time-tabs .tab { margin-bottom: -1px; background: var(--fondo); }
 .time-tabs .tab.active { background: var(--panel); border-bottom-color: var(--panel); }
 .time-tabs .tab-new { margin-left: 2px; }
-/* Contenido compacto, en la proporción de Rive y Moho: filas de 20 px y letra de 11–12 px. */
+/* Compact content, in the proportion of Rive and Moho: 20 px rows and 11–12 px type. */
 .time-tabs .tab { padding: 2px 4px 2px 10px; font-size: 12px; }
 .time-bar :is(button, select, input) { padding: 1px 7px; font-size: 12px; min-height: 0; height: 22px; }
 .time-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: center; padding: 3px 8px; }
@@ -466,20 +466,20 @@ body[data-mode="design"] #timeline-area { display: none; }
 .curve-shape polyline { fill: none; stroke: var(--params); stroke-width: 1.5; }
 .track-row.selected .track-name { color: var(--texto); }
 .lane { position: relative; height: 100%; margin: 0 8px; border-bottom: 1px solid #0000002e; cursor: text; }
-/* Regla: franja más oscura, segundos legibles y una rayita en cada uno (como la regla de Rive). */
+/* Ruler: darker strip, readable seconds and a small tick on each one (like Rive's ruler). */
 .track-row.ruler { height: 20px; }
 .ruler .lane { background: var(--fondo); border-bottom-color: var(--suave); border-radius: 3px 3px 0 0; }
 .tracks > .track-row:nth-child(odd):not(.ruler) .lane { background: #ffffff0a; }
 .ruler .mark { position: absolute; top: 2px; font-size: 10px; color: var(--suave); font-variant-numeric: tabular-nums; transform: translateX(-50%); pointer-events: none; }
 .ruler .mark::after { content: ''; position: absolute; left: 50%; top: 13px; height: 5px; border-left: 1px solid var(--suave); }
 .key { position: absolute; top: 50%; width: 9px; height: 9px; background: var(--pose); border: 1px solid #000a; box-shadow: 0 0 0 1px #ffffff26; transform: translate(-50%, -50%) rotate(45deg); cursor: ew-resize; }
-/* Siempre ◆ (como en Moho); el color dice la curva del tramo que sale de él. */
+/* Always ◆ (as in Moho); the color tells the curve of the span leaving it. */
 .key.curve-ease { background: var(--params); }
 .key.curve-step { background: var(--ia); }
 .key.curve-bezier { background: #9cc9d6; }
 .key.curve-mixed { background: var(--texto); }
 .key.summary { background: #ded6ca; width: 8px; height: 8px; cursor: pointer; }
-/* Canales de lo seleccionado (Moho): los que no tienen keyframes se ven apagados, listos para keyar con ◇. */
+/* Channels of the selection (Moho): those without keyframes look dimmed, ready to key with ◇. */
 .track-row.summary .track-name { color: var(--tenue); }
 .track-row.empty .track-name { color: var(--tenue); }
 .track-row.group { border-top: 1px solid var(--borde); }
@@ -496,9 +496,9 @@ body[data-mode="design"] #timeline-area { display: none; }
 .key.chosen { outline: 2px solid var(--texto); outline-offset: 1px; }
 .playhead { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--error); pointer-events: none; }
 
-/* ▶ Live (Puppet): el muñeco en marcha. El lienzo se enmarca en verde y sin manijas (no se edita); cada clip muestra
-   su peso con una barra; la timeline lista lo que suena. */
-/* Barra chica arriba de Clips (Puppet): Reset · ▶ Live · AI view, para que las secciones tengan su lugar. */
+/* ▶ Live (Puppet): the puppet running. The canvas is framed in green and without handles (it is not edited); each clip
+   shows its weight with a bar; the timeline lists what is playing. */
+/* Small bar above Clips (Puppet): Reset · ▶ Live · AI view, so the sections have their place. */
 #bar-puppet { display: flex; gap: 4px; padding: 3px 8px; border-bottom: 1px solid var(--borde); }
 #bar-puppet button { flex: 1; height: 22px; min-height: 0; padding: 0 6px; font-size: 12px; }
 body:not([data-mode="puppet"]) #bar-puppet { display: none; }
@@ -521,24 +521,24 @@ body:not([data-mode="puppet"]) #bar-puppet { display: none; }
 .live-row.leaving .filled { opacity: 0.3; }
 .live-head { display: flex; align-items: center; gap: 8px; }
 .live-head .help { flex: 1; }
-/* El manifiesto (AI view): lo que verá la IA de la app, como texto. */
+/* The manifest (AI view): what the app's AI will see, as text. */
 dialog.manifest { max-width: min(760px, 90vw); max-height: 80vh; background: var(--panel); color: var(--texto); border: 1px solid var(--borde); border-radius: 6px; padding: 12px 16px; }
 dialog.manifest::backdrop { background: rgb(0 0 0 / 0.45); }
 dialog.manifest pre { white-space: pre-wrap; font: 12px/1.45 ui-monospace, monospace; max-height: 60vh; overflow: auto; margin: 8px 0; }
 dialog.manifest form { display: flex; justify-content: flex-end; }
 
-/* Puppet: Clips, Parameters y Poses plegables (la flecha del título); plegada, queda solo la cabecera. */
+/* Puppet: Clips, Parameters and Poses collapsible (the title arrow); collapsed, only the header remains. */
 .section-puppet.folded > :not(.header), .foldable-section.folded > :not(.header) { display: none !important; }
 .section-puppet.folded .fold-section .ico-flecha, .foldable-section.folded .fold-section .ico-flecha { transform: rotate(-90deg); }
 .section-puppet .header h2, .foldable-section .header h2 { flex: 1; }
 .section-puppet.folded { flex: 0 0 auto; }
-/* El inspector, plegable en todos los modos: abierto ocupa el alto libre; plegado queda su cabecera y, en Puppet,
-   Clips, Parameters y Poses se llevan el resto del alto. */
+/* The inspector, collapsible in every mode: open it takes the free height; collapsed its header remains and, in
+   Puppet, Clips, Parameters and Poses take the rest of the height. */
 #section-inspector { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
 #section-inspector.folded { flex: 0 0 auto; }
 #right-panel:has(#section-inspector.folded) .section-puppet { max-height: none; flex: 0 1 auto; min-height: 0; }
 
-/* Poses (Puppet): una fila por pose, como los clips; dice qué params la mezclan. Abierta, en amarillo. */
+/* Poses (Puppet): one row per pose, like the clips; it says which params blend it. Open, in yellow. */
 #section-poses { flex: 0 1 auto; max-height: 22%; overflow-y: auto; border-bottom: 1px solid var(--borde); }
 #section-poses > .header { position: sticky; top: 0; z-index: 1; background: var(--panel); }
 #list-poses { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px; }
@@ -548,7 +548,7 @@ dialog.manifest form { display: flex; justify-content: flex-end; }
 .pose-row small { color: var(--params); flex: none; }
 .pose-row.open { border-color: var(--pose); color: var(--pose); }
 
-/* Cartel arriba del lienzo (Puppet): qué se edita o se ve, en el color del marco, con el botón para salir. */
+/* Banner above the canvas (Puppet): what is edited or viewed, in the frame color, with the button to leave. */
 #banner { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px); padding: 4px 6px 4px 12px; border-radius: 6px; background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--borde); box-shadow: 0 2px 8px rgb(0 0 0 / 0.25); font-size: 12px; }
 #banner span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #banner button { flex: none; padding: 2px 10px; }
@@ -562,8 +562,8 @@ dialog.manifest form { display: flex; justify-content: flex-end; }
 #banner.banner-live b { color: var(--vivo); }
 #parameters-section > .header { position: sticky; top: 0; z-index: 1; background: var(--panel); }
 
-/* Contraste entre Clips, Poses y Parameters (el inspector queda como en los otros modos): cada cabecera con fondo más oscuro y una línea gruesa arriba,
-   para ver dónde empieza y termina cada sección aunque estén todas abiertas. */
+/* Contrast between Clips, Poses and Parameters (the inspector stays as in the other modes): each header with a darker background and a thick line on top,
+   to see where each section starts and ends even when they are all open. */
 #right-panel .section-puppet > .header { background: var(--fondo); border-top: 2px solid var(--borde); border-bottom: 1px solid var(--borde); }
 #right-panel #clips > .header { border-top: none; }
 #right-panel .section-puppet .header h2 { color: var(--texto); }

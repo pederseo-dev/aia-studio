@@ -1,8 +1,8 @@
-// Modos del editor (Design · Animate · Puppet), la timeline de abajo y la biblioteca de clips de Puppet. Ver
+// Editor modes (Design · Animate · Puppet), the bottom timeline and the Puppet clip library. See
 // docs/decision-animacion.md.
 //
-// Un clip abierto se edita como una pose (estado.pose = id del clip): lo que se cambia en el lienzo o en el inspector
-// queda como keyframe en el tiempo del playhead (autokey, ver opsDePose en huesos.js).
+// An open clip is edited like a pose (state.pose = clip id): what is changed on the canvas or in the inspector
+// becomes a keyframe at the playhead time (autokey, see poseOps in editing.js).
 
 import { ICONOS } from './icons.js';
 import { clipWarnings, scaleTime, isScene, moveKey, putKey, removeKey, roundTime, localTime, keyTimes, valueToSave, setupValues } from '../core/animation.js';
@@ -26,7 +26,7 @@ const fromId = (text, prefix) => {
   return base ? (/^[a-z]/.test(base) ? base : `${prefix}_${base}`) : null;
 };
 
-/** Crea un clip nuevo (pide el nombre) y lo abre. */
+/** Creates a new clip (asks for the name) and opens it. */
 function newClip(usage) {
   if (!state.doc) return;
   const id = fromId(prompt(usage === 'puppet' ? 'Clip name (e.g. wave, blink, idle):' : 'Scene name (e.g. intro, scene_1):', ''), 'clip');
@@ -41,7 +41,7 @@ function openClip(id) {
   setState({ pose: id, time: 0, editing: null, vertex: null });
 }
 
-// ---------- Reproducción ----------
+// ---------- Playback ----------
 
 let frame = null;
 function startPlayback() {
@@ -69,7 +69,7 @@ function stop() {
   if (state.playing) setState({ playing: false });
 }
 
-// ---------- Modos ----------
+// ---------- Modes ----------
 
 export function mountModes(buttons) {
   for (const b of buttons.querySelectorAll('[data-mode]')) {
@@ -89,17 +89,17 @@ export function changeMode(mode) {
   const doc = state.doc;
   if (mode === 'design') return setState({ mode, pose: null, params: null, editing: null, vertex: null });
   if (mode === 'animate') {
-    // Se abre la primera escena, si hay.
+    // The first scene is opened, if there is one.
     const scene = doc?.objects.find((o) => o.type === 'animation' && read(schema, o, 'usage') === 'animate');
     return setState({ mode, pose: scene?.id ?? null, params: null, time: 0, editing: null, vertex: null });
   }
-  // Puppet: se ve la mezcla de los params; los clips se abren desde la biblioteca de la derecha.
+  // Puppet: the blend of the params is seen; clips are opened from the library on the right.
   setState({ mode, pose: null, params: state.params ?? {}, time: 0, editing: null, vertex: null });
 }
 
-// ---------- Biblioteca de clips (Puppet) ----------
+// ---------- Clip library (Puppet) ----------
 
-/** Cómo suena un clip en vivo, en pocas palabras: «base», «gesture», «auto: every 2–6 s», «auto: always». */
+/** How a clip plays live, in a few words: «base», «gesture», «auto: every 2–6 s», «auto: always». */
 function liveRole(clip) {
   const auto = read(schema, clip, 'auto');
   if (auto === 'repeat') return `auto · every ${n(read(schema, clip, 'repeat_min'))}–${n(read(schema, clip, 'repeat_max'))} s`;
@@ -108,7 +108,7 @@ function liveRole(clip) {
 }
 
 export function mountClips(root, list, newButton, liveButton, manifestButton, deleteButton) {
-  // 🗑 borra el clip de Puppet seleccionado (en Assets) o, si no, el abierto.
+  // 🗑 deletes the selected Puppet clip (in Assets) or, otherwise, the open one.
   const chosen = () => {
     const doc = state.doc;
     if (!doc) return null;
@@ -181,7 +181,7 @@ export function mountClips(root, list, newButton, liveButton, manifestButton, de
     return row;
   }
 
-  /** Con Live: el botón dispara el clip (los auto suenan solos); ■ lo saca. La barra de abajo es su peso. */
+  /** With Live: the button triggers the clip (auto ones play on their own); ■ takes it out. The lower bar is its weight. */
   function liveRow(clip) {
     const auto = read(schema, clip, 'auto') !== 'off';
     const row = document.createElement('div');
@@ -201,7 +201,7 @@ export function mountClips(root, list, newButton, liveButton, manifestButton, de
     return row;
   }
 
-  /** Cada cuadro: el peso de cada clip que suena, sin rehacer los botones (un clic no se perdería a mitad). */
+  /** Every frame: the weight of each playing clip, without rebuilding the buttons (so a click is not lost midway). */
   function updateLive() {
     const playing = state.liveState?.playing ?? [];
     for (const row of list.querySelectorAll('.clip.live')) {
@@ -218,17 +218,17 @@ export function mountClips(root, list, newButton, liveButton, manifestButton, de
 // ---------- Timeline ----------
 
 export function mountTimeline(root) {
-  // Keyframe elegido: { id, prop, t } (solo del editor).
+  // Picked keyframe: { id, prop, t } (editor only).
   let chosen = null;
-  // Grupos de la timeline abiertos o cerrados a mano (id → true/false); si no se tocó, solo el principal va abierto.
+  // Timeline groups opened or closed by hand (id → true/false); if untouched, only the main one is open.
   const folded = new Map();
-  // «Scale keys» al cambiar Length: se recuerda mientras el editor está abierto.
+  // «Scale keys» when changing Length: remembered while the editor is open.
   let scaleKeys = false;
   root.tabIndex = -1;
 
   subscribe((c) => {
     if ('live' in c) return draw();
-    // Con Live, cada cuadro solo rehace las filas (el botón «Stop all» no se rehace: un clic no se perdería a mitad).
+    // With Live, each frame only rebuilds the rows (the «Stop all» button is not rebuilt, so a click is not lost midway).
     if (state.live) return 'liveState' in c || 'doc' in c ? liveRows() : undefined;
     if ('doc' in c || 'previewDoc' in c || 'pose' in c || 'mode' in c || 'id' in c || 'selection' in c || 'playing' in c) draw();
     else if ('time' in c) movePlayhead();
@@ -249,8 +249,8 @@ export function mountTimeline(root) {
   }
 
   /**
-   * Con Live encendido, la timeline muestra qué suena: una fila por clip (base, gestos, auto) con su peso (la barra) y
-   * por dónde va (la marca). Se rehace en cada cuadro; no tiene nada que se pueda tocar.
+   * With Live on, the timeline shows what is playing: one row per clip (base, gestures, auto) with its weight (the bar)
+   * and where it is at (the mark). It is rebuilt on every frame; it has nothing that can be touched.
    */
   function live(doc) {
     const box = document.createElement('div');
@@ -270,7 +270,7 @@ export function mountTimeline(root) {
     return box;
   }
 
-  /** Las filas de lo que suena (Live), en su lugar; y si hay algo que parar. */
+  /** The rows of what is playing (Live), in their place; and whether there is something to stop. */
   function liveRows() {
     const doc = state.doc;
     const box = root.querySelector('.live-rows');
@@ -315,8 +315,8 @@ export function mountTimeline(root) {
   }
 
   /**
-   * Arriba, las pestañas como las de los documentos: en Animate, una por escena (× la borra, se puede deshacer); en
-   * Puppet, el clip abierto (× lo cierra). El + crea una escena o un clip.
+   * At the top, tabs like the documents' ones: in Animate, one per scene (× deletes it, it can be undone); in
+   * Puppet, the open clip (× closes it). The + creates a scene or a clip.
    */
   function tabs(doc, clip) {
     const row = document.createElement('div');
@@ -357,7 +357,7 @@ export function mountTimeline(root) {
     setState({ pose: null, params: state.params ?? {} });
   }
 
-  /** « y »: el keyframe anterior o siguiente del clip (o el principio y el final, si no hay más). */
+  /** « and »: the previous or next keyframe of the clip (or the start and the end, if there are no more). */
   function skip(clip, direction) {
     stop();
     const times = keyTimes(clip).filter((t) => !sameTime(t, state.time) && (direction < 0 ? t < state.time : t > state.time));
@@ -393,7 +393,7 @@ export function mountTimeline(root) {
     durationField.addEventListener('change', () => {
       const v = Number(durationField.value);
       if (!(v > 0)) return draw();
-      // Con «Scale keys», los keyframes se estiran o comprimen en proporción (lo mismo que scale_time del MCP).
+      // With «Scale keys», keyframes are stretched or compressed proportionally (the same as the MCP's scale_time).
       if (scaleKeys && keyTimes(clip).length) {
         let scaled;
         try {
@@ -429,13 +429,13 @@ export function mountTimeline(root) {
     left.append(durationLabel, scaleLabel, loop);
     div.append(button('◆ Key', 'Key the selected object at the playhead: its animated properties (or, if it has none, its rotation and position)', () => pinSelection(clip)));
 
-    // Una pose entera como keyframes en el playhead, y volver al montaje (lo mismo que pose y setup en set_keys).
+    // A whole pose as keyframes at the playhead, and back to the setup (the same as pose and setup in set_keys).
     const poses = doc.objects.filter((o) => o.type === 'pose');
     if (poses.length) {
       const withPose = document.createElement('select');
       withPose.title = 'Key the values of a pose at the playhead: all of it, or only what is selected (like pose with only in set_keys)';
       withPose.append(new Option('◆ Pose…', ''), ...poses.map((p) => new Option(p.id, p.id)));
-      // Lo seleccionado y lo que cuelga de ello (un grupo o un skeleton valen por sus partes).
+      // The selection and what hangs from it (a group or a skeleton counts for its parts).
       const chosen = new Set(state.selected.flatMap((id) => subtree(state.doc, id)));
       const partial = poses.filter((p) => Object.keys(p.values ?? {}).some((id) => chosen.has(id)));
       if (partial.length) {
@@ -462,11 +462,11 @@ export function mountTimeline(root) {
       pinValues(clip, values, 'setup', false);
     }));
 
-    // Drivers que suman encima de pistas del clip (lo mismo que avisan set_keys y render_preview a la IA).
+    // Drivers that add on top of the clip's tracks (the same that set_keys and render_preview warn the AI about).
     const warnings = clipWarnings(doc, schema, clip, state.params ?? {});
     if (warnings.length) div.append(Object.assign(document.createElement('span'), { className: 'notice-drivers', textContent: `⚠ ${warnings.length} driver${warnings.length > 1 ? 's' : ''} add on top`, title: warnings.join('\n') }));
 
-    // Curva y borrar del keyframe elegido (en todas las propiedades de su canal que tienen keyframe ahí).
+    // Curve and delete of the picked keyframe (in every property of its channel that has a keyframe there).
     if (chosen) {
       const keys = keysIn(clip, chosen.id, chosen.props, chosen.t);
       const curves = [...new Set(keys.map(([, c]) => JSON.stringify(c.ease ?? 'linear')))];
@@ -483,7 +483,7 @@ export function mountTimeline(root) {
         let ease = curve.value;
         if (ease === 'custom' || ease === 'mixed') return;
         if (ease === 'edit') {
-          // Como en CSS: x1, y1, x2, y2 (x entre 0 y 1; y puede pasarse para un rebote).
+          // As in CSS: x1, y1, x2, y2 (x between 0 and 1; y can overshoot for a bounce).
           const previewDoc = Array.isArray(first) ? first.join(', ') : '0.3, 1.6, 0.6, 1';
           const text = prompt('cubic-bezier x1, y1, x2, y2 (as in CSS; y outside 0…1 overshoots):', previewDoc);
           if (text == null) return draw();
@@ -517,7 +517,7 @@ export function mountTimeline(root) {
     return b;
   }
 
-  /** ◆ Key: los objetos seleccionados en el tiempo del playhead, cada uno con lo que tiene pista o, si no, rotación y posición. */
+  /** ◆ Key: the selected objects at the playhead time, each with what has a track or, if none, rotation and position. */
   function pinSelection(clip) {
     const objs = chosenObjects().filter((o) => o.type !== 'param');
     if (!objs.length) return notify('Select objects or bones to key them', true);
@@ -534,21 +534,21 @@ export function mountTimeline(root) {
     pinValues(clip, values, ids.length === 1 ? ids[0] : `${ids.length} objects`);
   }
 
-  /** Lo seleccionado que tiene canales (objetos, huesos y params; no recursos), en el orden en que se eligió. */
+  /** The selection that has channels (objects, bones and params; not assets), in the order it was picked. */
   function chosenObjects() {
-    // Los params son de Puppet: en una escena no tienen canal (pudieron quedar seleccionados al venir de Puppet).
+    // Params belong to Puppet: in a scene they have no channel (they may have stayed selected when coming from Puppet).
     const params = !isScene(schema, clipVisible());
     return state.selected.map((id) => findObject(state.doc, id)).filter((o) => o && (o.type === 'param' ? params : !schema.types.get(o.type)?.resource));
   }
 
-  /** Abierto o cerrado: lo que eligió el usuario o, si no lo tocó, abierto solo el principal (o el único). */
+  /** Open or closed: what the user chose or, if untouched, only the main one (or the only one) open. */
   function openGroup(id, howMany) {
     return folded.has(id) ? folded.get(id) : howMany === 1 || id === state.selection;
   }
 
   /**
-   * Keyframes en el playhead con estos valores ({ objeto: { propiedad: valor } }; un param, { value }). Con `vistos`,
-   * son lo que se ve y se les resta lo que suman los drivers; los de una pose o del montaje se guardan tal cual.
+   * Keyframes at the playhead with these values ({ object: { property: value } }; a param, { value }). With `seen`,
+   * they are what is seen and what the drivers add is subtracted; those of a pose or of the setup are saved as is.
    */
   function pinValues(clip, values, what, seen = true) {
     const params = state.params ?? {};
@@ -559,7 +559,7 @@ export function mountTimeline(root) {
     execute([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: key ${what} at ${n(state.time)} s`);
   }
 
-  /** Borra un canal entero (todos los keyframes de sus propiedades). */
+  /** Deletes a whole channel (all the keyframes of its properties). */
   function deleteChannel(clip, id, channel) {
     const tracks = structuredClone(clip.tracks ?? {});
     for (const prop of channel.props) delete tracks[id]?.[prop];
@@ -575,7 +575,7 @@ export function mountTimeline(root) {
     chosen = null;
   }
 
-  // Del borra el keyframe elegido mientras el foco está en la timeline (sin llegar al atajo de borrar objetos).
+  // Del deletes the picked keyframe while focus is on the timeline (without reaching the delete-objects shortcut).
   root.addEventListener('keydown', (e) => {
     if (e.target.closest('input, select')) return;
     const clip = openedClip();
@@ -586,8 +586,8 @@ export function mountTimeline(root) {
   });
 
   /**
-   * La regla, una fila con todos los keyframes del clip y, como en Moho, los canales de lo seleccionado: todos los
-   * animables, también los que todavía no tienen keyframes (◇ los keya en el playhead).
+   * The ruler, a row with all the clip's keyframes and, as in Moho, the channels of the selection: all the
+   * animatable ones, also those that have no keyframes yet (◇ keys them at the playhead).
    */
   function tracks(clip) {
     const duration = read(schema, clip, 'duration');
@@ -608,7 +608,7 @@ export function mountTimeline(root) {
     rule.append(Object.assign(document.createElement('span'), { className: 'label' }), lane);
     body.append(rule);
 
-    // Todos los keyframes del clip, en gris: para ver el ritmo y saber dónde hay algo (clic = llevar el playhead ahí).
+    // All the clip's keyframes, in gray: to see the rhythm and where there is something (click = move the playhead there).
     const all = row('All keys', 'Every keyframe of the clip, of any object. Click one to move the playhead there.');
     all.classList.add('summary');
     for (const t of keyTimes(clip)) {
@@ -619,10 +619,10 @@ export function mountTimeline(root) {
     }
     body.append(all);
 
-    // Como en Rive: un grupo por cada cosa seleccionada (en Layers o en el lienzo), plegable; abierto, sus canales como en Moho.
+    // As in Rive: one group per selected item (in Layers or on the canvas), collapsible; open, its channels as in Moho.
     const objs = chosenObjects().filter((o) => channelsOf(o).length);
     if (!objs.length) {
-      // Sin selección: qué objetos tiene animados el clip, para ir a ellos.
+      // No selection: which objects the clip has animated, to go to them.
       const help = document.createElement('div');
       help.className = 'channels-help';
       const animated = Object.keys(clip.tracks ?? {}).filter((id) => findObject(state.doc, id));
@@ -636,7 +636,7 @@ export function mountTimeline(root) {
     for (const obj of objs) {
       const channels = channelsOf(obj);
       const open = openGroup(obj.id, objs.length);
-      // La fila del objeto: ▸/▾ pliega, el nombre lo hace principal, y en el carril todos sus keyframes juntos.
+      // The object's row: ▸/▾ collapses, the name makes it the main one, and on the lane all its keyframes together.
       const head = row(obj.id, `${obj.id} (${obj.type})`);
       head.classList.add('group');
       if (obj.id === state.selection) head.classList.add('main');
@@ -663,7 +663,7 @@ export function mountTimeline(root) {
     return body;
   }
 
-  /** Una fila de canal (Position, Rotation…) de un objeto: ◇/◆ para keyarla, × para borrarla y sus keyframes. */
+  /** A channel row (Position, Rotation…) of an object: ◇/◆ to key it, × to delete it and its keyframes. */
   function channelRow(clip, obj, channel, left) {
     const withTrack = channel.props.some((p) => clip.tracks?.[obj.id]?.[p]?.length);
     const f = row(channel.name, `${obj.id}: ${channel.props.join(', ')}`);
@@ -673,7 +673,7 @@ export function mountTimeline(root) {
     const remove = button('×', `Delete the whole ${channel.name} track of ${obj.id} (all its keyframes)`, () => deleteChannel(clip, obj.id, channel), 'remove-track');
     if (!withTrack) remove.hidden = true;
     f.label.append(pin, remove);
-    // Un param mueve todas las poses de sus drivers (también las que no se ven en la timeline): se dice al lado.
+    // A param moves all the poses of its drivers (also those not seen in the timeline): it is said alongside.
     if (obj.type === 'param') {
       const poses = state.doc.objects.filter((o) => o.type === 'driver' && o.param === obj.id && findObject(state.doc, o.pose)?.type === 'pose');
       const text = poses.length ? `→ ${poses.map((d) => d.pose).join(', ')}` : '→ no driver';
@@ -693,12 +693,12 @@ export function mountTimeline(root) {
     return f;
   }
 
-  /** El playhead y el clic o arrastre en la regla o en un carril vacío para moverlo. */
+  /** The playhead and the click or drag on the ruler or on an empty lane to move it. */
   function closeTracks(body, duration) {
     const playhead = document.createElement('div');
     playhead.className = 'playhead';
     body.append(playhead);
-    // Clic o arrastre en la regla o en un carril vacío: mover el playhead (con imán a los cuadros).
+    // Click or drag on the ruler or on an empty lane: move the playhead (snapping to frames).
     body.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || e.target.closest('.key, .label, .channels-help')) return;
       const zone = body.querySelector('.lane').getBoundingClientRect();
@@ -713,7 +713,7 @@ export function mountTimeline(root) {
     return body;
   }
 
-  /** Una fila de la timeline: etiqueta a la izquierda y carril a la derecha. */
+  /** A timeline row: label on the left and lane on the right. */
   function row(text, title) {
     const div = document.createElement('div');
     div.className = 'track-row';
@@ -726,36 +726,36 @@ export function mountTimeline(root) {
     return Object.assign(div, { label, lane });
   }
 
-  /** ◇/◆ de un canal: keya sus propiedades en el playhead con lo que se ve (sin el aporte de los drivers). */
+  /** ◇/◆ of a channel: keys its properties at the playhead with what is seen (without the drivers' contribution). */
   function pinChannel(clip, obj, channel) {
     const pose = activePose();
     const values = Object.fromEntries(channel.props.map((k) => [k, obj.type === 'param' ? pose?.params?.[obj.id] : (pose?.values?.[obj.id]?.[k] ?? effectiveValue(schema, state.doc, obj, k))]));
     pinValues(clip, { [obj.id]: values }, `${obj.id} ${channel.name}`);
   }
 
-  /** Clic en un keyframe lo elige (y lleva el playhead ahí); arrastrarlo lo mueve en el tiempo, con todo su canal. */
+  /** Click on a keyframe picks it (and moves the playhead there); dragging moves it in time, with its whole channel. */
   function dragKey(e, clip, id, channel, t0, lane) {
     if (e.button !== 0) return;
     e.stopPropagation();
     stop();
     root.focus();
-    // Se mide antes de elegir: elegir redibuja la timeline y este carril deja de estar en la página.
+    // Measured before picking: picking redraws the timeline and this lane is no longer in the page.
     const zone = lane.getBoundingClientRect();
     const props = keysIn(clip, id, channel.props, t0).map(([p]) => p);
     chosen = { id, props, t: t0, channel: channel.name };
-    // Cambia la barra (curva y borrar del keyframe elegido): se redibuja ya, no solo el playhead.
+    // The bar changes (curve and delete of the picked keyframe): it is redrawn right away, not only the playhead.
     draw();
     setState({ time: t0 });
     const duration = read(schema, clip, 'duration');
     const x0 = e.clientX;
     let created = t0;
-    // moverClave falla si en el destino ya hay otro keyframe de la pista (soltarlo encima lo borraría).
+    // moveKey fails if the target already has another keyframe of the track (dropping it on top would delete it).
     const ops = (t) => {
       let tracks = clip.tracks;
       for (const p of props) tracks = moveKey(tracks, id, p, t0, t);
       return [{ op: 'set', target: clip.id, props: { tracks } }];
     };
-    // Elegir el keyframe redibuja la timeline (el rombo se reemplaza): el arrastre se sigue en window.
+    // Picking the keyframe redraws the timeline (the diamond is replaced): the drag is followed on window.
     const move = (ev) => {
       if (Math.abs(ev.clientX - x0) < 3 && created === t0) return;
       created = Math.max(0, Math.min(duration, adjustToFrame(t0 + ((ev.clientX - x0) / zone.width) * duration)));
@@ -783,8 +783,8 @@ export function mountTimeline(root) {
   }
 
   /**
-   * Un ◆ de «All keys» (id null) o de la fila de un objeto: clic lleva el playhead ahí; arrastrar mueve el momento
-   * entero (todos los keyframes de ese tiempo, del clip o del objeto), como move_keys de la IA.
+   * A ◆ of «All keys» (id null) or of an object's row: click takes the playhead there; dragging moves the whole
+   * moment (all the keyframes at that time, of the clip or of the object), like the AI's move_keys.
    */
   function dragMoment(e, clip, idOnly, t0, lane) {
     if (e.button !== 0) return;
@@ -846,7 +846,7 @@ export function mountTimeline(root) {
   new ResizeObserver(movePlayhead).observe(root);
 }
 
-// Canales como en Moho: la posición (x, y) y la escala (scaleX, scaleY) van juntas en una fila; un param, su valor.
+// Channels as in Moho: position (x, y) and scale (scaleX, scaleY) go together in one row; a param, its value.
 /** @type {[string, string[]][]} */
 const JOINED = [['Position', ['x', 'y']], ['Rotation', ['rotation']], ['Scale', ['scaleX', 'scaleY']]];
 const CHANNEL_LABELS = { opacity: 'Opacity', visible: 'Visible', fill: 'Fill', stroke: 'Stroke', strokeWidth: 'Stroke width', vertices: 'Points', active: 'Switch', width: 'Width', height: 'Height', length: 'Length', cornerRadius: 'Corner radius' };
@@ -868,14 +868,14 @@ function channelsOf(obj) {
   return channels;
 }
 
-/** Tiempos con keyframe en alguna de las propiedades de un canal. */
+/** Times with a keyframe in any of the properties of a channel. */
 function channelTimes(clip, id, props) {
   const times = [];
   for (const p of props) for (const c of clip.tracks?.[id]?.[p] ?? []) if (!times.some((t) => sameTime(t, c.t))) times.push(c.t);
   return times.sort((a, b) => a - b);
 }
 
-/** Los keyframes [propiedad, keyframe] de un canal en el tiempo t. */
+/** The keyframes [property, keyframe] of a channel at time t. */
 function keysIn(clip, id, props, t) {
   return (props ?? []).flatMap((p) => {
     const c = clip?.tracks?.[id]?.[p]?.find((k) => sameTime(k.t, t));
@@ -883,7 +883,7 @@ function keysIn(clip, id, props, t) {
   });
 }
 
-/** El color del ◆ dice la curva del tramo que sale de él (como la forma del keyframe en Moho). */
+/** The color of the ◆ tells the curve of the span leaving it (like the keyframe shape in Moho). */
 function curveClass(keys) {
   const curves = new Set(keys.map(([, c]) => (Array.isArray(c.ease) ? 'bezier' : (c.ease ?? 'linear'))));
   if (curves.size > 1) return 'curve-mixed';
@@ -891,7 +891,7 @@ function curveClass(keys) {
   return `curve${curve.startsWith('ease-') ? 'ease' : curve}`;
 }
 
-/** Un dibujito de la curva de un tramo (tiempo → avance), para ver la forma sin adivinar los números. */
+/** A small drawing of a span's curve (time → progress), to see the shape without guessing the numbers. */
 function curveShape(ease) {
   const [width, height, margin] = [36, 20, 4];
   const y = (v) => margin + (1 - v) * (height - 2 * margin);

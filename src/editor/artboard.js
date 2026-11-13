@@ -1,19 +1,19 @@
-// Herramienta Artboard: manijas en el borde del lienzo para cambiar su tamaño arrastrando. Como en Moho, el dibujo
-// queda anclado al centro: el lienzo crece o se achica por igual a cada lado (ver core/tamano.js), así que el centro
-// del marco no se mueve en pantalla (el lienzo corrige la cámara) y el tamaño sale del punto arrastrado.
+// Artboard tool: handles on the canvas edge to resize it by dragging. As in Moho, the drawing stays anchored to the
+// center: the canvas grows or shrinks equally on each side (see core/artboard.js), so the center of the frame does
+// not move on screen (the canvas corrects the camera) and the size comes from the dragged point.
 
 import { readMeta } from '../core/schema.js';
 import { artboardOps } from '../core/artboard.js';
 import { docVisible, execute, schema, state, preview } from './state.js';
 
-// Manijas: dirección en x e y (-1 izquierda/arriba, 0 medio, 1 derecha/abajo).
+// Handles: direction in x and y (-1 left/top, 0 middle, 1 right/bottom).
 const HANDLES = { no: [-1, -1], n: [0, -1], ne: [1, -1], e: [1, 0], se: [1, 1], s: [0, 1], so: [-1, 1], o: [-1, 0] };
 const CURSORS = { no: 'nwse', se: 'nwse', ne: 'nesw', so: 'nesw', n: 'ns', s: 'ns', e: 'ew', o: 'ew' };
 
 export function createArtboard(ctx) {
-  let measure = null; // "W × H" junto al puntero mientras se arrastra
+  let measure = null; // "W × H" next to the pointer while dragging
 
-  /** El marco del documento en pantalla. */
+  /** The document frame on screen. */
   function frame() {
     const doc = docVisible();
     const [zoom, , , , cx, cy] = ctx.cameraMatrix();
@@ -42,7 +42,7 @@ export function createArtboard(ctx) {
   function handle(e, name) {
     const [dx, dy] = HANDLES[name.slice('artboard-'.length)];
     const m = frame();
-    // El centro queda fijo en pantalla mientras dura el arrastre.
+    // The center stays fixed on screen for the whole drag.
     const center = [m.x + m.w / 2, m.y + m.h / 2];
     const proportion = m.width / m.height;
     let size = null;
@@ -53,7 +53,7 @@ export function createArtboard(ctx) {
         const [px, py] = ctx.screenPoint(ev);
         let width = dx ? Math.max(1, Math.round((2 * Math.abs(px - center[0])) / m.zoom)) : m.width;
         let height = dy ? Math.max(1, Math.round((2 * Math.abs(py - center[1])) / m.zoom)) : m.height;
-        // Shift: mantiene la proporción (en una manija de lado, el otro lado acompaña).
+        // Shift: keeps the proportion (on a side handle, the other side follows).
         if (ev.shiftKey) {
           if (dx && (!dy || width / m.width >= height / m.height)) height = Math.max(1, Math.round(width / proportion));
           else width = Math.max(1, Math.round(height * proportion));

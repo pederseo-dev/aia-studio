@@ -1,7 +1,7 @@
-// Árbol de objetos: muestra la jerarquía con lo que está al frente arriba (como en Moho o Figma).
-// Como en Moho, aquí solo hay capas: los huesos de un skeleton no son filas, se ven y se eligen en el lienzo.
-// Arrastrar una fila cambia el orden o el padre; doble clic renombra; el ojo muestra u oculta.
-// Ctrl + clic agrega o quita de la selección; Shift + clic selecciona el tramo de filas desde la anterior.
+// Object tree: shows the hierarchy with what is in front at the top (as in Moho or Figma).
+// As in Moho, there are only layers here: the bones of a skeleton are not rows, they are seen and picked on the canvas.
+// Dragging a row changes the order or the parent; double click renames; the eye shows or hides.
+// Ctrl + click adds or removes from the selection; Shift + click selects the span of rows from the previous one.
 
 import { TYPE_ICON, ICONOS } from './icons.js';
 import { findObject, children, subtree } from '../core/document.js';
@@ -14,10 +14,10 @@ import { toggleSelection, execute, schema, state, keepPosition, selectionRoots, 
 const isResource = (o) => schema.types.get(o.type)?.resource;
 const FROM_PUPPET = new Set(['pose', 'param', 'driver', 'animation']);
 
-/** Árbol de objetos en `raiz` y lista de recursos (estilos, degradados) en `raizRecursos`. */
+/** Object tree in `root` and asset list (styles, gradients) in `resourcesRoot`. */
 export function mountTree(root, resourcesRoot) {
   let dragged = null;
-  // Grupos plegados, por documento (estado del editor: no va en el documento).
+  // Collapsed groups, per document (editor state: it does not go in the document).
   const folded = new Map();
   const foldedOf = () => folded.get(state.id) ?? folded.set(state.id, new Set()).get(state.id);
 
@@ -31,8 +31,8 @@ export function mountTree(root, resourcesRoot) {
     const objects = branch(doc, null, 0);
     if (objects.length) root.replaceChildren(...objects);
     else root.innerHTML = '<li class="empty">Empty. Draw with the tools or ask the AI.</li>';
-    // Cada modo muestra sus recursos: Design, estilos y degradados; Animate, además los clips de escena; Puppet, todo
-    // (poses, params, drivers y clips).
+    // Each mode shows its assets: Design, styles and gradients; Animate, also the scene clips; Puppet, everything
+    // (poses, params, drivers and clips).
     const visible = (o) => !FROM_PUPPET.has(o.type) || state.mode === 'puppet' || (state.mode === 'animate' && o.type === 'animation' && o.usage !== 'puppet');
     const resources = doc.objects.filter((o) => isResource(o) && visible(o)).map((o) => {
       const li = document.createElement('li');
@@ -47,7 +47,7 @@ export function mountTree(root, resourcesRoot) {
 
   const selectionClass = (id) => (id === state.selection ? ' selected main' : state.selected.includes(id) ? ' selected' : '');
 
-  /** Filas de las capas hijas de `padre`, con lo del frente arriba. Los huesos no son capas: no salen. */
+  /** Rows of the child layers of `parent`, with the front ones at the top. Bones are not layers: they do not appear. */
   const layers = (doc, parent) => children(doc, parent).filter((o) => !isResource(o) && o.type !== 'bone');
 
   function branch(doc, parent, level) {
@@ -59,7 +59,7 @@ export function mountTree(root, resourcesRoot) {
         const withEye = 'visible' in schema.types.get(o.type).properties;
         const visible = !withEye || read(schema, o, 'visible');
         const row = document.createElement('div');
-        // En un switch, las variantes que no se ven quedan atenuadas (la seleccionada se muestra igual, para editarla).
+        // In a switch, the variants that are not seen are dimmed (the selected one is shown anyway, to edit it).
         const parent = o.parent && findObject(doc, o.parent);
         const active = parent?.type === 'switch' ? variantOf(doc, parent) : null;
         const switchedOff = active != null && o.id !== active;
@@ -105,7 +105,7 @@ export function mountTree(root, resourcesRoot) {
       set.has(id) ? set.delete(id) : set.add(id);
       return draw();
     }
-    // Botón de variante de un switch: abre la lista de sus hijos (como el menú de un switch layer de Moho).
+    // Variant button of a switch: opens the list of its children (like the menu of a Moho switch layer).
     const item = e.target.closest('[data-variant]');
     if (item) {
       item.closest('.menu').hidden = true;
@@ -122,7 +122,7 @@ export function mountTree(root, resourcesRoot) {
       execute([visible ? { op: 'set', target: id, props: { visible: false } } : { op: 'unset', target: id, props: ['visible'] }], `${visible ? 'hide' : 'show'} ${id}`);
       return;
     }
-    // Bind Layer con un hueso elegido: la fila se pega a ese hueso (o se suelta) en vez de seleccionarse.
+    // Bind Layer with a picked bone: the row is attached to that bone (or released) instead of being selected.
     const bone = boneToBind();
     if (bone) return toggleBinding(id, bone);
     if (e.ctrlKey || e.metaKey) return toggleSelection(id);
@@ -130,7 +130,7 @@ export function mountTree(root, resourcesRoot) {
     select(id);
   }
 
-  // Shift + clic: todas las filas visibles entre la del objeto principal y la clicada, en la misma lista.
+  // Shift + click: all the visible rows between the main object's and the clicked one, in the same list.
   function selectSpan(row) {
     const list = row.closest('#tree, #resources') ?? root;
     const rows = [...list.querySelectorAll('.row')].map((f) => f.dataset.id);
@@ -156,13 +156,13 @@ export function mountTree(root, resourcesRoot) {
           })
         : [Object.assign(document.createElement('span'), { className: 'help', textContent: 'Empty: drag drawings into it.' })]),
     );
-    // Fijo en la pantalla: la lista de la jerarquía tiene su propio desplazamiento y lo cortaría.
+    // Fixed on the screen: the hierarchy list has its own scroll and would clip it.
     const r = button.getBoundingClientRect();
     Object.assign(menu.style, { position: 'fixed', top: `${r.bottom + 4}px`, left: `${r.left}px`, minWidth: '160px' });
     menu.hidden = !menu.hidden;
   }
 
-  // Renombrar con doble clic.
+  // Rename with double click.
   function rename(e) {
     const name = e.target.closest('.name');
     if (!name) return;
@@ -191,7 +191,7 @@ export function mountTree(root, resourcesRoot) {
     input.addEventListener('blur', () => finish(true));
   }
 
-  // ---------- Arrastrar para reordenar o reparentar ----------
+  // ---------- Drag to reorder or reparent ----------
 
   function zone(e, row) {
     const r = row.getBoundingClientRect();
@@ -205,8 +205,8 @@ export function mountTree(root, resourcesRoot) {
     root.querySelectorAll('.release-before, .release-after, .release-inside').forEach((f) => f.classList.remove('release-before', 'release-after', 'release-inside'));
   }
 
-  // Lo que se arrastra: la selección entera si la fila es parte de ella, si no solo esa fila (los huesos elegidos en el
-  // lienzo no se mueven por aquí: viven en su skeleton).
+  // What is dragged: the whole selection if the row is part of it, otherwise only that row (bones picked on the
+  // canvas are not moved from here: they live in their skeleton).
   const draggedIds = () => (state.selected.includes(dragged) ? selectionRoots().filter((id) => findObject(state.doc, id)?.type !== 'bone') : [dragged]);
   const containsA = (ids, target) => ids.some((id) => subtree(state.doc, id).includes(target));
 
@@ -240,7 +240,7 @@ export function mountTree(root, resourcesRoot) {
     if (!ids.length || containsA(ids, row.dataset.id)) return;
     const target = findObject(state.doc, row.dataset.id);
     const name = ids.length === 1 ? ids[0] : `${ids.length} objects`;
-    // Se arma el lote paso a paso sobre una copia: cada índice depende de cómo quedó el anterior.
+    // The batch is built step by step on a copy: each index depends on how the previous one left things.
     let doc = state.doc;
     const ops = [];
     const loose = [];
@@ -248,7 +248,7 @@ export function mountTree(root, resourcesRoot) {
       doc = applyOperations(doc, lote, schema).doc;
       ops.push(...lote);
     };
-    // Un move suelta antes los enlaces que dejarían de valer (dibujo que sale del skeleton de su hueso).
+    // A move first releases the bindings that would stop being valid (drawing that leaves the skeleton of its bone).
     const move = (id, parent, index) => {
       const release = releaseOnMove(doc, id, parent);
       loose.push(...release);
@@ -262,8 +262,8 @@ export function mountTree(root, resourcesRoot) {
       for (const id of ids) move(id, target.id);
       return finish(`move ${name} into ${target.id}`);
     }
-    // En el panel, "arriba" es "delante": antes de la fila = un lugar más al frente que el destino.
-    // Se insertan de a uno junto al destino, en el orden que conserva cómo estaban entre ellos.
+    // In the panel, "up" is "front": before the row = one place further front than the target.
+    // They are inserted one at a time next to the target, in the order that keeps how they were among themselves.
     const parent = target.parent ?? null;
     for (const id of where === 'before' ? [...ids].reverse() : ids) {
       const siblings = children(doc, parent).filter((o) => o.id !== id);

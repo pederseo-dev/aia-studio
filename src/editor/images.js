@@ -1,6 +1,6 @@
-// Capas de imagen en el editor: subir el archivo a assets/ del documento (el servidor lo guarda y da su tamaño) y
-// crear la capa con el mismo plan que usa el MCP (planAgregarImagen). Entran por la opción Image de Layers, al soltar
-// archivos sobre el lienzo o al pegarlos (Ctrl+V).
+// Image layers in the editor: upload the file to the document's assets/ (the server stores it and gives its size) and
+// create the layer with the same plan the MCP uses (planAddImage). They come in through the Image option in Layers, by
+// dropping files on the canvas or by pasting them (Ctrl+V).
 
 import { findObject } from '../core/document.js';
 import { readMeta } from '../core/schema.js';
@@ -9,13 +9,13 @@ import { notify, execute, schema, state, parentForNew, selectSeveral } from './s
 
 const IS_IMAGE = /^image\/(png|jpeg|webp|svg\+xml)$/;
 
-/** URL con que el lienzo y el inspector piden el archivo de una capa image. */
+/** URL with which the canvas and the inspector request the file of an image layer. */
 export const assetUrl = (src, id = state.id) => `/api/documents/${encodeURIComponent(id)}/assets/${encodeURIComponent(src)}`;
 
-/** Los archivos que son imágenes aceptadas (de un input, un drop o el portapapeles). */
+/** The files that are accepted images (from an input, a drop or the clipboard). */
 export const imagesOnly = (files) => [...(files ?? [])].filter((a) => IS_IMAGE.test(a.type) || /\.(png|jpe?g|webp|svg)$/i.test(a.name));
 
-/** Sube un archivo a assets/ y devuelve { src, ancho, alto, formato, reusado }. */
+/** Uploads a file to assets/ and returns { src, naturalWidth, naturalHeight, format, reused }. */
 async function upload(file) {
   const res = await fetch(`/api/documents/${encodeURIComponent(state.id)}/assets?name=${encodeURIComponent(file.name || 'pasted.png')}`, { method: 'POST', body: file });
   const data = await res.json();
@@ -24,8 +24,8 @@ async function upload(file) {
 }
 
 /**
- * Agrega una capa image por archivo, en un solo paso de deshacer, y las selecciona. `punto`: dónde, en coordenadas
- * del documento (al soltar sobre el lienzo); sin él, al centro del lienzo.
+ * Adds one image layer per file, in a single undo step, and selects them. `point`: where, in document
+ * coordinates (when dropping on the canvas); without it, at the center of the canvas.
  * @param {File[]} files @param {number[]} [point]
  */
 export async function addImages(files, point) {
@@ -38,11 +38,11 @@ export async function addImages(files, point) {
     const ids = [];
     for (const [i, file] of files.entries()) {
       const { src, naturalWidth, naturalHeight } = await upload(file);
-      // Varias a la vez quedan corridas un poco, para que no se tapen del todo.
+      // Several at once are offset a little, so they do not cover each other completely.
       const base = point ?? [readMeta(schema, doc, 'width') / 2, readMeta(schema, doc, 'height') / 2];
       const offset = [base[0] + i * 20, base[1] + i * 20];
       const plan = planAddImage(doc, schema, { src, naturalWidth, naturalHeight, parent: parent, point: offset });
-      // El siguiente id libre tiene que ver los de este lote.
+      // The next free id has to see the ones in this batch.
       doc = { ...doc, objects: [...doc.objects, { id: plan.id, type: 'image' }] };
       ops.push(...plan.ops);
       ids.push(plan.id);
@@ -54,7 +54,7 @@ export async function addImages(files, point) {
   }
 }
 
-/** Cambia el archivo de una capa image: conserva el ancho y adapta el alto a la proporción del archivo nuevo. */
+/** Changes the file of an image layer: keeps the width and adapts the height to the new file's proportion. */
 export async function replaceImage(id, file) {
   try {
     const { src, naturalWidth, naturalHeight } = await upload(file);
@@ -66,7 +66,7 @@ export async function replaceImage(id, file) {
   }
 }
 
-/** Vuelve la capa al tamaño natural de su archivo. */
+/** Returns the layer to its file's natural size. */
 export async function naturalSize(id) {
   const obj = findObject(state.doc, id);
   if (!obj) return;

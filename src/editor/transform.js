@@ -1,7 +1,7 @@
-// Herramienta de selección: seleccionar (clic, Ctrl/Shift + clic, recuadro), mover y las manijas para rotar, escalar
-// y mover el pivote. Con varios objetos, las manijas rodean a todos y giran o escalan desde el centro del conjunto.
-// En una pose o un clip abierto también sirve para lo que no sigue a un hueso: mover, rotar y escalar se guardan en la
-// pose (en un clip, como keyframes en el playhead) y el montaje no cambia. El pivote solo se mueve en el montaje.
+// Selection tool: select (click, Ctrl/Shift + click, marquee), move and the handles to rotate, scale and move the
+// pivot. With several objects, the handles surround all of them and rotate or scale from the group's center.
+// In an open pose or clip it also works for what does not follow a bone: move, rotate and scale are saved in the
+// pose (in a clip, as keyframes at the playhead) and the setup does not change. The pivot only moves in the setup.
 
 import { locked, findObject, children } from '../core/document.js';
 import { read } from '../core/schema.js';
@@ -19,24 +19,24 @@ const SHAPES = 'path, rect, ellipse, circle, line, polyline, polygon, image';
 
 const IN_POSE = ['x', 'y', 'rotation', 'scaleX', 'scaleY'];
 
-/** Lo que no sigue a ningún hueso (ni por capa ni por puntos): en una pose se transforma como en el montaje. */
+/** What follows no bone (neither by layer nor by points): in a pose it is transformed as in the setup. */
 export function isFree(doc, id) {
   const o = findObject(doc, id);
   return !!o && o.type !== 'bone' && o.type !== 'skeleton' && !boneOf(doc, id) && !(o.vertices ?? []).some((v) => v.bone);
 }
 
 export function createTransform(ctx) {
-  // ---------- Pose o montaje ----------
+  // ---------- Pose or setup ----------
 
-  /** El documento como se ve: en una pose o clip, con sus valores aplicados (de ahí se leen x, rotación, escala…). */
+  /** The document as seen: in a pose or clip, with its values applied (x, rotation, scale… are read from there). */
   const seen = () => {
     const pose = state.pose && activePose();
     return pose ? applyPose(state.doc, schema, pose) : state.doc;
   };
 
   /**
-   * En una pose, los `set` del dibujo pasan a la pose que se edita (en un clip, claves en el playhead), cada uno sobre
-   * lo que dejó el anterior. Fuera de una pose quedan como están.
+   * In a pose, the drawing's `set`s go to the pose being edited (in a clip, keyframes at the playhead), each one on
+   * top of what the previous one left. Outside a pose they stay as they are.
    */
   function inPose(ops) {
     if (!ops || !state.pose) return ops;
@@ -57,12 +57,12 @@ export function createTransform(ctx) {
     if (!final) return preview(null);
     execute(final, state.pose ? `${editingName()}: ${note}` : note);
   };
-  /** Lo elegido que se transforma: en una pose, solo lo libre (los huesos y lo enlazado se posan con sus huesos). */
+  /** What is picked and transformed: in a pose, only the free ones (bones and bound things are posed with their bones). */
   const roots = () => (state.pose ? selectionRoots().filter((id) => isFree(state.doc, id)) : selectionRoots());
 
-  // ---------- Cajas en pantalla ----------
+  // ---------- Boxes on screen ----------
 
-  /** Las cuatro esquinas de la caja de un elemento, en pantalla (giradas con él). Null si no se ve. */
+  /** The four corners of an element's box, on screen (rotated with it). Null if it is not seen. */
   function cornersOf(el) {
     if (!el || el.closest('[display="none"]')) return null;
     const m = el.getCTM();
@@ -73,8 +73,8 @@ export function createTransform(ctx) {
   }
 
   /**
-   * Caja de `el` en sus coordenadas locales contando el grosor del contorno de cada forma (getBBox no lo cuenta,
-   * y en grupos con contornos gruesos la selección quedaba cortada). Las variantes ocultas de un switch no cuentan.
+   * Box of `el` in its local coordinates counting the outline width of each shape (getBBox does not count it,
+   * and in groups with thick outlines the selection was cut off). Hidden variants of a switch do not count.
    */
   function boxWithOutline(el, m) {
     const shapes = el.matches(SHAPES) ? [el] : [...el.querySelectorAll(SHAPES)];
@@ -86,7 +86,7 @@ export function createTransform(ctx) {
       if (!b.width && !b.height) continue;
       const style = getComputedStyle(f);
       const half = style.stroke && style.stroke !== 'none' ? (parseFloat(style.strokeWidth) || 0) / 2 : 0;
-      // De la forma a las coordenadas de `el`.
+      // From the shape to the coordinates of `el`.
       const a = f === el ? null : inverse.multiply(f.getCTM());
       for (const [x, y] of [[b.x - half, b.y - half], [b.x + b.width + half, b.y - half], [b.x + b.width + half, b.y + b.height + half], [b.x - half, b.y + b.height + half]]) {
         const [px, py] = a ? [a.a * x + a.c * y + a.e, a.b * x + a.d * y + a.f] : [x, y];
@@ -96,7 +96,7 @@ export function createTransform(ctx) {
     return x0 === Infinity ? null : { x0, y0, x1, y1 };
   }
 
-  /** Caja alineada a la pantalla que envuelve varias listas de esquinas. */
+  /** Screen-aligned box that wraps several lists of corners. */
   function enclosing(lists) {
     const points = lists.flat();
     if (!points.length) return null;
@@ -108,11 +108,11 @@ export function createTransform(ctx) {
 
   const several = () => state.selected.length > 1;
 
-  // ---------- Dibujo de la selección y sus manijas ----------
+  // ---------- Drawing of the selection and its handles ----------
 
   function draw() {
     if (state.pose && !state.selected.every((id) => isFree(state.doc, id))) return;
-    // Con candado (elegido desde Layers): se marca, sin manijas.
+    // Locked (picked from Layers): it is marked, without handles.
     if (state.selected.some((id) => locked(state.doc, id))) {
       for (const id of state.selected) {
         const corners = cornersOf(ctx.element(id));
@@ -145,7 +145,7 @@ export function createTransform(ctx) {
 
   function boxHandles(corners) {
     ctx.overlay.append(ctx.create('polygon', { class: 'selection', points: corners.map((p) => p.join(',')).join(' ') }));
-    // Manija de rotar: por encima del borde superior.
+    // Rotate handle: above the top edge.
     const top = [(corners[0][0] + corners[1][0]) / 2, (corners[0][1] + corners[1][1]) / 2];
     const side = [corners[0][0] - corners[3][0], corners[0][1] - corners[3][1]];
     const l = Math.hypot(...side) || 1;
@@ -158,16 +158,16 @@ export function createTransform(ctx) {
     });
   }
 
-  // ---------- Seleccionar y mover ----------
+  // ---------- Select and move ----------
 
   function selectAndMove(e) {
     const g = e.target.closest('[data-id]');
     const add = e.ctrlKey || e.metaKey || e.shiftKey;
     if (!g || !ctx.documentG.contains(g)) return marquee(e, add);
     const id = g.dataset.id;
-    // Ctrl o Shift + clic: agrega o quita sin mover.
+    // Ctrl or Shift + click: adds or removes without moving.
     if (add) return toggleSelection(id);
-    // Clic sobre algo que ya es parte de una selección múltiple: se mueven todos; si no hubo arrastre, queda solo ese.
+    // Click on something already in a multiple selection: all of them move; if there was no drag, only that one stays.
     const inGroup = several() && state.selected.includes(id);
     if (!inGroup) select(id);
     else if (state.selection !== id) selectSeveral(state.selected, id);
@@ -185,7 +185,7 @@ export function createTransform(ctx) {
       e,
       (ev) => {
         if (!ops && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 3) return;
-        // Shift: mover solo en el eje dominante de la pantalla.
+        // Shift: move only along the dominant screen axis.
         const s0 = ctx.screenPoint(e);
         let s = ctx.screenPoint(ev);
         if (ev.shiftKey) s = Math.abs(s[0] - s0[0]) > Math.abs(s[1] - s0[1]) ? [s[0], s0[1]] : [s0[0], s[1]];
@@ -205,12 +205,12 @@ export function createTransform(ctx) {
 
   const name = (objects) => (objects.length === 1 ? objects[0].id : `${objects.length} objects`);
 
-  /** Arrastrar en un lugar vacío: selecciona las formas que toca el recuadro. Con Ctrl o Shift, las suma. */
+  /** Dragging on an empty spot: selects the shapes the marquee touches. With Ctrl or Shift, adds them. */
   function marquee(e, add) {
     const base = add ? [...state.selected] : [];
     const s0 = ctx.screenPoint(e);
     const frame = ctx.create('rect', { class: 'marquee' });
-    // Cajas de las formas visibles (no contenedores: se elige lo que se ve, como con el clic).
+    // Boxes of the visible shapes (not containers: what is seen is picked, as with the click).
     const shapes = [...ctx.documentG.querySelectorAll('[data-id]')]
       .filter((el) => !['group', 'skeleton', 'switch'].includes(findObject(state.doc, el.dataset.id)?.type) && !locked(state.doc, el.dataset.id))
       .map((el) => ({ id: el.dataset.id, box: enclosing([cornersOf(el) ?? []]) }))
@@ -228,7 +228,7 @@ export function createTransform(ctx) {
         const ids = [...base, ...touched.filter((id) => !base.includes(id))];
         if (ids.join() !== state.selected.join()) selectSeveral(ids, ids.at(-1) ?? null);
         for (const [k, v] of Object.entries({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 })) frame.setAttribute(k, v);
-        ctx.overlay.append(frame); // la superposición se redibuja al cambiar la selección
+        ctx.overlay.append(frame); // the overlay is redrawn when the selection changes
       },
       () => {
         frame.remove();
@@ -237,7 +237,7 @@ export function createTransform(ctx) {
     );
   }
 
-  // ---------- Manijas ----------
+  // ---------- Handles ----------
 
   function handle(e, kind) {
     if (roots().length > 1) return multiHandle(e, kind);
@@ -251,7 +251,7 @@ export function createTransform(ctx) {
     const rot0 = read(schema, obj, 'rotation');
     const sx0 = read(schema, obj, 'scaleX');
     const sy0 = read(schema, obj, 'scaleY');
-    const pivot = apply(parent, x0, y0); // en pantalla
+    const pivot = apply(parent, x0, y0); // on screen
     let ops = null;
     const finish = (note) => () => (ops ? save(ops, note) : preview(null));
 
@@ -272,7 +272,7 @@ export function createTransform(ctx) {
     }
 
     if (kind === 'scale-free') {
-      // Herramienta Escalar: arrastrar en cualquier lugar escala de forma proporcional según la distancia al pivote.
+      // Scale tool: dragging anywhere scales proportionally according to the distance to the pivot.
       const distance = (p) => Math.hypot(p[0] - pivot[0], p[1] - pivot[1]);
       const d0 = Math.max(distance(ctx.screenPoint(e)), 8);
       return ctx.drag(
@@ -287,7 +287,7 @@ export function createTransform(ctx) {
     }
 
     if (kind.startsWith('scale')) {
-      // Coordenadas del objeto girado pero sin su escala: así el cociente da la escala nueva.
+      // Coordinates of the object rotated but without its scale: that way the quotient gives the new scale.
       const frame = invert(multiply(parent, localMatrix(schema, { ...obj, scaleX: 1, scaleY: 1 })));
       const p0 = apply(frame, ...ctx.screenPoint(e));
       return ctx.drag(
@@ -308,7 +308,7 @@ export function createTransform(ctx) {
     }
 
     if (kind === 'pivot') {
-      // Mueve el pivote y compensa el contenido (hijos o vértices) para que el dibujo no se mueva.
+      // Moves the pivot and compensates the content (children or vertices) so the drawing does not move.
       const parentInverse = invert(parent);
       const linear = invert([...localMatrix(schema, obj).slice(0, 4), 0, 0]);
       return ctx.drag(
@@ -320,7 +320,7 @@ export function createTransform(ctx) {
           if (obj.type === 'path') {
             ops[0].props.vertices = transformVertices(read(schema, obj, 'vertices'), [1, 0, 0, 1, -dx, -dy]);
           } else if (obj.type === 'rect' || obj.type === 'ellipse' || obj.type === 'image') {
-            // La forma se corre dentro de su marco: el pivote pasa a otra fracción del ancho y del alto.
+            // The shape shifts inside its frame: the pivot moves to another fraction of the width and the height.
             const [w, h] = [read(schema, obj, 'width'), read(schema, obj, 'height')];
             if (w && Math.abs(dx) > 1e-6) ops[0].props.originX = round(read(schema, obj, 'originX') + dx / w, 10000);
             if (h && Math.abs(dy) > 1e-6) ops[0].props.originY = round(read(schema, obj, 'originY') + dy / h, 10000);
@@ -336,12 +336,12 @@ export function createTransform(ctx) {
     }
   }
 
-  // Si el padre está espejado, el giro en pantalla va al revés.
+  // If the parent is mirrored, the rotation on screen goes the other way.
   const directionOf = (m) => Math.sign(m[0] * m[3] - m[1] * m[2]) || 1;
 
   /**
-   * Rotar o escalar varios objetos a la vez desde el centro de su caja común: cada uno gira o escala sobre sí mismo y
-   * su pivote se desplaza alrededor del centro. Con varios, la escala siempre es proporcional.
+   * Rotate or scale several objects at once from the center of their common box: each one rotates or scales about
+   * itself and its pivot moves around the center. With several, the scale is always proportional.
    */
   function multiHandle(e, kind) {
     const ids = roots();
@@ -401,8 +401,8 @@ export function createTransform(ctx) {
   }
 
   /**
-   * Herramientas Rotar y Escalar (como en Moho): arrastrar en cualquier parte del lienzo transforma la selección.
-   * Si se empieza sobre un objeto que no está seleccionado, primero se selecciona ese.
+   * Rotate and Scale tools (as in Moho): dragging anywhere on the canvas transforms the selection.
+   * If it starts over an object that is not selected, that one is selected first.
    */
   function withTool(e, tool) {
     const g = e.target.closest('[data-id]');

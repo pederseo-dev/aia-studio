@@ -1,7 +1,7 @@
-// Panel de parámetros (a la derecha, solo en Puppet: los params son del muñeco): un control por param (deslizador,
-// casilla o lista) y las poses que mezcla con su peso. Mover un control
-// pasa a la vista Parámetros: el lienzo muestra la mezcla de poses que dan los drivers. Los valores de los controles
-// son del editor (no se guardan); lo que se guarda son los params, los drivers y las poses.
+// Parameters panel (on the right, only in Puppet: params belong to the puppet): one control per param (slider,
+// checkbox or list) and the poses it blends with their weight. Moving a control
+// switches to the Parameters view: the canvas shows the blend of poses the drivers give. The controls' values
+// belong to the editor (they are not saved); what is saved are the params, the drivers and the poses.
 
 import { isScene } from '../core/animation.js';
 import { findObject } from '../core/document.js';
@@ -12,7 +12,7 @@ import { openedClip, poseOps, activePose } from './editing.js';
 import { putParamLive } from './live.js';
 
 export function mountParameters(root, newButton, deleteButton) {
-  // 🗑 borra el param seleccionado (en Parameters o en Assets) con sus drivers: sin param, un driver no mueve nada.
+  // 🗑 deletes the selected param (in Parameters or Assets) with its drivers: without a param, a driver moves nothing.
   const chosen = () => (state.doc && findObject(state.doc, state.selection)?.type === 'param' ? state.selection : null);
   deleteButton.addEventListener('click', () => {
     const id = chosen();
@@ -24,8 +24,8 @@ export function mountParameters(root, newButton, deleteButton) {
   subscribe((c) => {
     if ('doc' in c || 'selection' in c || 'live' in c) deleteButton.disabled = !chosen() || state.live;
   });
-  // Un deslizador agarrado: hasta soltarlo, el panel no se rehace (solo pesos y valores), aunque cambie el documento
-  // (el autokey de un clip abierto) o la vista.
+  // A grabbed slider: until it is released, the panel is not rebuilt (only weights and values), even if the document
+  // changes (the autokey of an open clip) or the view.
   let dragging = false;
   window.addEventListener('pointerup', () => {
     if (!dragging) return;
@@ -36,7 +36,7 @@ export function mountParameters(root, newButton, deleteButton) {
     if (dragging && ('doc' in c || 'params' in c || 'pose' in c || 'time' in c)) return updateWeights();
     if ('doc' in c || 'selection' in c || 'id' in c || 'pose' in c || 'mode' in c || 'live' in c) return draw();
     if ('time' in c && openedClip()) return root.contains(document.activeElement) ? updateWeights() : draw();
-    // Mientras se arrastra un control, no se rehace el panel (se cortaría el arrastre): solo se actualizan los pesos.
+    // While a control is dragged, the panel is not rebuilt (the drag would be cut): only the weights are updated.
     if ('params' in c) root.contains(document.activeElement) ? updateWeights() : draw();
   });
 
@@ -59,7 +59,7 @@ export function mountParameters(root, newButton, deleteButton) {
   function draw() {
     const doc = state.doc;
     newButton.disabled = !doc || state.live;
-    // Solo Puppet tiene params (en una escena no hay valores de params que mostrar).
+    // Only Puppet has params (in a scene there are no param values to show).
     if (!doc || state.mode !== 'puppet') return root.replaceChildren();
     const params = doc.objects.filter((o) => o.type === 'param');
     if (!params.length) {
@@ -71,23 +71,23 @@ export function mountParameters(root, newButton, deleteButton) {
   }
 
   /**
-   * Cambiar un control: pasa a la vista Parámetros con el valor nuevo. Con un clip abierto, en cambio, el valor queda
-   * como keyframe del param en el tiempo del playhead (autokey).
+   * Changing a control: switches to the Parameters view with the new value. With a clip open, instead, the value
+   * becomes a keyframe of the param at the playhead time (autokey).
    */
   const move = (id, v) => {
-    // Con Live encendido, el control es el valor de la app: va al runtime y no se guarda.
+    // With Live on, the control is the app's value: it goes to the runtime and is not saved.
     if (state.live) return putParamLive(id, v);
     const clip = openedClip();
-    // Solo se nombra `pose` si hay que cerrar una: si no, el cambio es solo de params y el panel no se rehace.
+    // `pose` is only named if one must be closed: otherwise the change is only to params and the panel is not rebuilt.
     if (!clip) return setState({ ...(state.pose ? { pose: null } : {}), params: { ...(state.params ?? {}), [id]: v } });
     execute(poseOps(state.doc, clip.id, id, { value: v }), `${clip.id}: ${id} at ${+state.time.toFixed(3)} s`, { group: `clip:${clip.id}.${id}.${state.time}` });
   };
-  /** Valores que muestran los controles: los del clip abierto en el playhead o los de la vista Parámetros. */
+  /** Values the controls show: those of the open clip at the playhead or those of the Parameters view. */
   const seenValues = (doc) => (openedClip(doc) && !isScene(schema, openedClip(doc)) ? activePose(doc).params : paramValues(doc, schema, state.params ?? {}));
 
   /**
-   * Una fila por param, en tres líneas: el nombre y el valor; el control a todo el ancho (deslizador o lista); y las
-   * poses que mezcla con su peso ahora, con «＋» para conectar otra.
+   * One row per param, in three lines: the name and the value; the control at full width (slider or list); and the
+   * poses it blends with their weight now, with «＋» to connect another.
    */
   function row(doc, param, value) {
     const kind = read(schema, param, 'kind');
@@ -109,7 +109,7 @@ export function mountParameters(root, newButton, deleteButton) {
     div.append(head);
     if (kind !== 'boolean') div.append(control(param, value, kind));
 
-    // Las poses que mezcla (por sus drivers) y con qué peso ahora; «＋» conecta otra.
+    // The poses it blends (through its drivers) and with what weight now; «＋» connects another.
     const drivers = doc.objects.filter((o) => o.type === 'driver' && o.param === param.id);
     const list = document.createElement('div');
     list.className = 'drivers';
@@ -129,7 +129,7 @@ export function mountParameters(root, newButton, deleteButton) {
     connect.addEventListener('change', () => {
       if (!connect.value) return;
       const id = freeId(`${param.id}_to_${connect.value}`.slice(0, 40));
-      // Con un enum, la pose va con la opción que está elegida ahora.
+      // With an enum, the pose goes with the option that is chosen now.
       const props = { param: param.id, pose: connect.value, ...(kind === 'enum' ? { equals: value } : {}) };
       execute([{ op: 'create', type: 'driver', id, props }], `connect ${param.id} → ${connect.value}`);
       select(id);
@@ -141,7 +141,7 @@ export function mountParameters(root, newButton, deleteButton) {
     return div;
   }
 
-  /** El texto y la barra de peso de cada pose de una fila, y el número del valor. */
+  /** The text and the weight bar of each pose in a row, and the value's number. */
   function weights(doc, row, value) {
     for (const chip of row.querySelectorAll('[data-driver]')) {
       const d = findObject(doc, chip.dataset.driver);
@@ -166,10 +166,10 @@ export function mountParameters(root, newButton, deleteButton) {
     const [min, max] = [read(schema, param, 'min'), read(schema, param, 'max')];
     const range = Object.assign(document.createElement('input'), { type: 'range', className: 'slider', min, max, step: (max - min) / 100 || 0.01, value: value });
     range.title = `${min} … ${max} (double-click: back to ${read(schema, param, 'default')})`;
-    // Mientras se arrastra, el panel no se rehace (se cortaría el arrastre): solo se actualizan los pesos.
+    // While dragging, the panel is not rebuilt (the drag would be cut): only the weights are updated.
     range.addEventListener('pointerdown', () => (dragging = true));
     range.addEventListener('input', () => move(param.id, Number(range.value)));
-    // Doble clic: vuelve al valor inicial.
+    // Double click: back to the initial value.
     range.addEventListener('dblclick', () => move(param.id, read(schema, param, 'default')));
     return range;
   }

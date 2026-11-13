@@ -1,6 +1,6 @@
-// ▶ Live (Puppet): el muñeco en marcha dentro del editor, con el mismo runtime que la app (src/core/vivo.js). Con
-// Live encendido el documento no se edita (▶ Live está en la barra de Puppet, arriba de Clips): los botones de los clips los disparan, los controles de Parameters son
-// los valores de la app (no se guardan) y el lienzo muestra lo que vería la app. Ver docs/decision-animacion.md §9.
+// ▶ Live (Puppet): the puppet running inside the editor, with the same runtime as the app (src/core/live.js). With
+// Live on the document is not edited (▶ Live is in the Puppet bar, above Clips): the clip buttons trigger them, the Parameters controls are
+// the app's values (they are not saved) and the canvas shows what the app would see. See docs/decision-animacion.md §9.
 
 import { createLive } from '../core/live.js';
 import { findObject } from '../core/document.js';
@@ -11,15 +11,15 @@ import { notify, schema, state, setState, subscribe } from './state.js';
 let live = null;
 let frame = null;
 let before = 0;
-// Los valores de Parameters de antes de Live: al apagarlo vuelven (los de Live son de la app y no se quedan).
+// The Parameters values from before Live: restored when it is turned off (Live's belong to the app and do not stay).
 let beforeParams = null;
 
-/** El runtime en marcha (o null si Live está apagado). */
+/** The running runtime (or null if Live is off). */
 export const liveRuntime = () => live;
 
 function step(now) {
   if (!live) return;
-  // Un cuadro largo (la pestaña estuvo oculta) no salta el fundido entero.
+  // A long frame (the tab was hidden) does not skip the whole fade.
   const dt = Math.min(0.1, (now - before) / 1000);
   before = now;
   live.advance(dt);
@@ -29,7 +29,7 @@ function step(now) {
 
 export function turnOnLive() {
   if (live || !state.doc || state.mode !== 'puppet') return;
-  // Solo los valores que siguen valiendo (un param pudo borrarse o perder esa opción mientras tanto).
+  // Only the values that are still valid (a param could have been deleted or lost that option in the meantime).
   const valid = Object.fromEntries(
     Object.entries(state.params ?? {}).filter(([id, v]) => {
       const p = findObject(state.doc, id);
@@ -48,7 +48,7 @@ export function turnOnLive() {
   frame = requestAnimationFrame(step);
 }
 
-/** Apaga Live. `restaurar`: los valores de Parameters vuelven a los de antes (no si se cambió de modo o de documento). */
+/** Turns Live off. `restore`: the Parameters values return to the earlier ones (not if mode or document changed). */
 export function turnOffLive({ restore = true } = {}) {
   if (!live) return;
   cancelAnimationFrame(frame);
@@ -57,12 +57,12 @@ export function turnOffLive({ restore = true } = {}) {
   beforeParams = null;
 }
 
-/** ■ Stop all: todo lo que disparó la app sale con su fundido (los auto siguen). */
+/** ■ Stop all: everything the app triggered leaves with its fade (the auto ones continue). */
 export const stopAll = () => live?.stop();
 
 /**
- * Lo que verá la IA de la app (el mismo texto que get_manifest), en un diálogo. Así la persona ve lo mismo que la IA
- * que edita: params con lo que mueven, clips con lo que pisan y los problemas.
+ * What the app's AI will see (the same text as get_manifest), in a dialog. That way the person sees the same as the AI
+ * that edits: params with what they move, clips with what they override and the problems.
  */
 export function showManifest() {
   if (!state.doc) return;
@@ -77,7 +77,7 @@ export function showManifest() {
 
 export const toggleLive = () => (live ? turnOffLive() : turnOnLive());
 
-/** Dispara un clip (play) o lo saca (stop) en vivo; los errores van al aviso. */
+/** Triggers a clip (play) or takes it out (stop) live; errors go to the notice. */
 export function triggerClip(id, { stop = false } = {}) {
   if (!live) return;
   try {
@@ -88,8 +88,8 @@ export function triggerClip(id, { stop = false } = {}) {
   }
 }
 
-/** Un valor de la app (los controles de Parameters con Live encendido). */
-/** Reset: todos los params a su valor inicial (con Live, los de la app; si no, la vista de params). */
+/** A value of the app (the Parameters controls with Live on). */
+/** Reset: all params to their initial value (with Live, the app's; otherwise, the params view). */
 export function resetParams() {
   if (!state.doc) return;
   if (!live) return setState({ ...(state.pose && findObject(state.doc, state.pose)?.type === 'pose' ? { pose: null } : {}), params: {} });
@@ -109,8 +109,8 @@ export function putParamLive(id, value) {
   }
 }
 
-// Live es de Puppet y de un documento: cambiar de modo o de documento lo apaga. Con Live no se edita a mano, pero el
-// documento puede cambiar igual (la IA por MCP, o deshacer): el runtime sigue con el nuevo.
+// Live belongs to Puppet and to one document: changing mode or document turns it off. With Live nothing is edited by
+// hand, but the document can change anyway (the AI through MCP, or undo): the runtime continues with the new one.
 subscribe((c) => {
   if (!live) return;
   if (('mode' in c && state.mode !== 'puppet') || 'id' in c) return turnOffLive({ restore: false });

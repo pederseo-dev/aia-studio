@@ -1,5 +1,5 @@
-// Estado del editor y acciones. Todo cambio al documento pasa por `ejecutar`, que usa el mismo motor de operaciones
-// que la IA: se aplica al instante en pantalla y se guarda en el servidor con origen "user".
+// Editor state and actions. Every change to the document goes through `execute`, which uses the same operation engine
+// as the AI: it is applied instantly on screen and saved on the server with origin "user".
 
 import { createSchema } from '../core/schema.js';
 import { findObject, skeletonOf, subtree } from '../core/document.js';
@@ -10,24 +10,24 @@ export const schema = createSchema(Object.values(defs));
 
 export const state = {
   documents: [],
-  tabs: [], // ids de los documentos abiertos, en orden
+  tabs: [], // ids of the open documents, in order
   id: null,
   doc: null,
-  previewDoc: null, // documento con un cambio en curso (arrastre, scrub), todavía sin guardar
-  selection: null, // el objeto principal: el último elegido, el que muestra el inspector
-  selected: [], // todos los elegidos (incluye el principal)
-  editing: null, // id del path cuyos puntos se están editando
-  vertex: null, // índice del vértice seleccionado en la edición de puntos
+  previewDoc: null, // document with a change in progress (drag, scrub), not saved yet
+  selection: null, // the main object: the last picked, the one the inspector shows
+  selected: [], // all the picked ones (includes the main one)
+  editing: null, // id of the path whose points are being edited
+  vertex: null, // index of the selected vertex in point editing
   tool: 'select',
-  mode: 'design', // 'design' (dibujo y rig), 'animate' (timeline de escena) o 'puppet' (controles y clips del muñeco)
-  // Lo que se ve y se edita encima del montaje: una pose o un clip (animation, en `tiempo`). Lo que se cambia va a la
-  // pose o, en un clip, a un keyframe en el tiempo del playhead (autokey). null = el montaje.
+  mode: 'design', // 'design' (drawing and rig), 'animate' (scene timeline) or 'puppet' (puppet controls and clips)
+  // What is seen and edited on top of the setup: a pose or a clip (animation, at `time`). What is changed goes to the
+  // pose or, in a clip, to a keyframe at the playhead time (autokey). null = the setup.
   pose: null,
-  params: null, // valores de los params en la vista Parámetros (null = no se mezcla nada)
-  time: 0, // playhead del clip abierto, en segundos
+  params: null, // param values in the Parameters view (null = nothing is blended)
+  time: 0, // playhead of the open clip, in seconds
   playing: false,
-  // ▶ Live (Puppet): el muñeco en marcha (src/editor/vivo.js). poseViva = lo que se ve en este cuadro; estadoVivo =
-  // qué suena y con qué peso. Con Live encendido el documento no se edita.
+  // ▶ Live (Puppet): the puppet running (src/editor/live.js). livePose = what is seen in this frame; liveState =
+  // what is playing and with what weight. With Live on the document is not edited.
   live: false,
   livePose: null,
   liveState: null,
@@ -42,10 +42,10 @@ export function setState(changes) {
 }
 export const docVisible = () => state.previewDoc ?? state.doc;
 
-// ---------- Servidor ----------
+// ---------- Server ----------
 
 async function request(filePath, body) {
-  // keepalive: un lote agrupado que se envía al cerrar la pestaña igual llega.
+  // keepalive: a grouped batch that is sent when the tab is closed still arrives.
   const options = body === undefined ? undefined : { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
   const res = await fetch(`/api/documents${filePath}`, options);
   const data = await res.json();
@@ -67,7 +67,7 @@ export const api = {
   },
 };
 
-// ---------- Avisos ----------
+// ---------- Notices ----------
 
 let timer;
 export function notify(text, isError = false) {
@@ -79,7 +79,7 @@ export function notify(text, isError = false) {
   timer = setTimeout(() => (notice.textContent = ''), isError ? 8000 : 4000);
 }
 
-// ---------- Acciones ----------
+// ---------- Actions ----------
 
 export async function loadDocuments() {
   setState({ documents: await api.list() });
@@ -108,11 +108,11 @@ try {
   // localStorage can be unavailable (private mode): the preferences are a convenience.
 }
 
-// ---------- Pestañas ----------
+// ---------- Tabs ----------
 
 const TABS_KEY = 'aia-studio.tabs';
 
-/** Pestañas recordadas de la última vez (solo las que siguen existiendo). Es una comodidad: si falla, no pasa nada. */
+/** Tabs remembered from last time (only those that still exist). It is a convenience: if it fails, nothing happens. */
 export function savedTabs() {
   try {
     const ids = JSON.parse(localStorage.getItem(TABS_KEY) ?? '[]');
@@ -127,11 +127,11 @@ function setTabs(tabs) {
   try {
     localStorage.setItem(TABS_KEY, JSON.stringify(tabs));
   } catch {
-    // sin almacenamiento: las pestañas no se recuerdan
+    // no storage: the tabs are not remembered
   }
 }
 
-/** Agrega una pestaña sin cambiar a ella (por ejemplo, cuando la IA crea un documento). */
+/** Adds a tab without switching to it (for example, when the AI creates a document). */
 export function addTab(id) {
   if (!state.tabs.includes(id)) setTabs([...state.tabs, id]);
 }
@@ -145,7 +145,7 @@ export async function open(id) {
   await refreshHistory();
 }
 
-/** Cierra la pestaña (el documento sigue en disco) y pasa a la vecina, si hay. */
+/** Closes the tab (the document stays on disk) and moves to the neighboring one, if any. */
 export async function closeTab(id) {
   const i = state.tabs.indexOf(id);
   if (i < 0) return;
@@ -159,10 +159,10 @@ export async function closeTab(id) {
   setState({ id: null, doc: null, previewDoc: null, selection: null, selected: [], editing: null, vertex: null, pose: null, params: null, time: 0, playing: false, history: { entries: [], user: { undo: false, redo: false } } });
 }
 
-/** Documentos que se están borrando desde este editor (para no avisar de un borrado que pidió el propio usuario). */
+/** Documents being deleted from this editor (so as not to warn about a deletion the user asked for). */
 export const deletedHere = new Set();
 
-/** Borra el documento del disco (con su historial) y cierra su pestaña. */
+/** Deletes the document from disk (with its history) and closes its tab. */
 export async function deleteDocument(id) {
   deletedHere.add(id);
   setTimeout(() => deletedHere.delete(id), 5000);
@@ -175,29 +175,29 @@ export async function refreshHistory() {
   if (state.id) setState({ history: await api.history(state.id) });
 }
 
-/** Muestra un cambio sin guardarlo (null lo descarta). Si el cambio no es válido, simplemente no se muestra. */
+/** Shows a change without saving it (null discards it). If the change is not valid, it is simply not shown. */
 export function preview(ops) {
   if (!ops) return state.previewDoc && setState({ previewDoc: null });
   if (state.live) return;
   try {
     setState({ previewDoc: applyOperations(state.doc, ops, schema).doc });
   } catch {
-    // valor intermedio inválido mientras se escribe: se ignora
+    // invalid intermediate value while typing: it is ignored
   }
 }
 
-// Los lotes se envían en orden, uno detrás de otro.
+// Batches are sent in order, one after the other.
 /** @type {Promise<any>} */
 let row = Promise.resolve();
 
-// Cambios seguidos sobre lo mismo (flechas, flechitas de un campo numérico) se juntan en un solo lote:
-// una sola entrada en el historial y un solo paso de deshacer.
+// Consecutive changes to the same thing (arrows, arrows of a number field) are merged into a single batch:
+// a single entry in the history and a single undo step.
 const GROUP_WAIT = 800;
 let pending = null;
 
 export const hasPending = () => pending !== null || underway > 0;
 
-/** Envía ya el lote agrupado que esté esperando. */
+/** Sends right away the grouped batch that is waiting. */
 export function sendPending() {
   if (!pending) return row;
   const { id, ops, note, timer } = pending;
@@ -207,8 +207,8 @@ export function sendPending() {
 }
 
 /**
- * Aplica un lote al instante en pantalla y lo guarda. Con `agrupar` (una clave como "flechas:head"), los lotes
- * seguidos con la misma clave se juntan hasta que pasa un momento sin cambios.
+ * Applies a batch instantly on screen and saves it. With `group` (a key like "flechas:head"), consecutive batches
+ * with the same key are merged until a moment passes without changes.
  */
 /** @param {any[]} ops @param {string} [note] @param {{ group?: string }} [options] */
 export function execute(ops, note, { group } = {}) {
@@ -246,7 +246,7 @@ function send(id, ops, note) {
   row = row.then(async () => {
     try {
       const { doc } = await api.applyOps(id, ops, note);
-      // Si quedan lotes por llegar al servidor, la pantalla ya va por delante: no se pisa con un estado viejo.
+      // With batches still on their way to the server, the screen is ahead: it is not overwritten with an old state.
       if (state.id === id && !pending && underway === 1) setState({ doc });
     } catch (e) {
       notify(e.message, true);
@@ -278,14 +278,14 @@ export function select(id) {
   if (id !== state.selection || state.selected.length !== (id ? 1 : 0)) setState({ selection: id, selected: id ? [id] : [] });
 }
 
-/** Selección de varios objetos; el principal es el último, salvo que se indique otro. */
+/** Selection of several objects; the main one is the last, unless another is given. */
 export function selectSeveral(ids, main = ids.at(-1) ?? null) {
   const unique = [...new Set(ids)];
   if (main && !unique.includes(main)) unique.push(main);
   setState({ selection: main, selected: unique });
 }
 
-/** Agrega o quita un objeto de la selección (Ctrl/Shift + clic). */
+/** Adds or removes an object from the selection (Ctrl/Shift + click). */
 export function toggleSelection(id) {
   if (!state.selected.includes(id)) return selectSeveral([...state.selected, id], id);
   const rest = state.selected.filter((s) => s !== id);
@@ -293,8 +293,8 @@ export function toggleSelection(id) {
 }
 
 /**
- * Los objetos seleccionados sobre los que actúan mover, rotar, borrar y duplicar: sin los que ya están dentro de otro
- * seleccionado (moverlos dos veces los desplazaría el doble) y en el orden del documento.
+ * The selected objects that move, rotate, delete and duplicate act on: without those already inside another
+ * selected one (moving them twice would offset them double) and in document order.
  */
 export function selectionRoots() {
   const ids = new Set(state.selected.filter((id) => findObject(state.doc, id)));
@@ -303,14 +303,14 @@ export function selectionRoots() {
   return state.doc.objects.filter((o) => ids.has(o.id) && !inside.has(o.id)).map((o) => o.id);
 }
 
-/** Un id libre a partir de una base: rect_1, rect_2... */
+/** A free id from a base: rect_1, rect_2... */
 export function freeId(base) {
   for (let n = 1; ; n++) if (!findObject(state.doc, `${base}_${n}`)) return `${base}_${n}`;
 }
 
 /**
- * Dónde se crea algo nuevo: dentro del contenedor seleccionado o, si no hay uno, en la raíz. Con un hueso
- * seleccionado, en su skeleton (el dibujo no va dentro de los huesos).
+ * Where something new is created: inside the selected container or, if there is none, at the root. With a bone
+ * selected, in its skeleton (the drawing does not go inside the bones).
  */
 export function parentForNew() {
   const sel = state.selection && findObject(state.doc, state.selection);
@@ -318,7 +318,7 @@ export function parentForNew() {
   return sel && schema.types.get(sel.type).container ? sel.id : null;
 }
 
-/** Al cambiar de padre, el x/y que deja al objeto en el mismo lugar de la pantalla (sobre el `doc` indicado). */
+/** When changing parent, the x/y that leaves the object in the same place on screen (on the given `doc`). */
 export function keepPosition(doc, id, newParent) {
   const obj = findObject(doc, id);
   if ((obj.parent ?? null) === newParent) return [];

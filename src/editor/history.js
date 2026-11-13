@@ -1,4 +1,4 @@
-// Historial: quién cambió qué (IA o usuario). Lo deshecho aparece tachado.
+// History: who changed what (AI or user). What was undone appears struck through.
 
 import { state, subscribe } from './state.js';
 

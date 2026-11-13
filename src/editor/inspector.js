@@ -1,7 +1,7 @@
-// Inspector generado desde el esquema: cada propiedad del tipo seleccionado (o del documento, si no hay selección)
-// tiene su campo según su tipo. Un tipo nuevo en schema/ aparece aquí sin tocar este archivo.
-// Con varios objetos seleccionados muestra las propiedades que tienen todos; lo que se cambia se aplica a todos, y los
-// campos donde los valores difieren se marcan como mixtos (muestran el valor del objeto principal).
+// Inspector generated from the schema: each property of the selected type (or of the document, if nothing is selected)
+// gets its field according to its type. A new type in schema/ appears here without touching this file.
+// With several objects selected it shows the properties they all have; what is changed applies to all, and the
+// fields where the values differ are marked as mixed (they show the main object's value).
 
 import { findObject, skeletonOf } from '../core/document.js';
 import { read, readMeta, validateValue } from '../core/schema.js';
@@ -13,17 +13,17 @@ import { execute, schema, state, setState, preview, select, subscribe } from './
 import { replaceImage, imagesOnly, naturalSize, assetUrl } from './images.js';
 
 const GROUP_ORDER = ['General', 'Imagen', 'Forma', 'Transformación', 'Apariencia', 'Degradado', 'Lienzo', 'Tiempo'];
-// Nombres de grupo del esquema, como se muestran (el esquema sigue en español).
+// Schema group names, as displayed (the schema is still in Spanish).
 const GROUP_NAMES = { General: 'General', Imagen: 'Image', Forma: 'Shape', Transformación: 'Transform', Apariencia: 'Appearance', Degradado: 'Gradient', Lienzo: 'Canvas', Tiempo: 'Time', Driver: 'Driver', Esqueleto: 'Skeleton', Hueso: 'Bone', Límites: 'Limits', Parámetro: 'Parameter', Pose: 'Pose', Switch: 'Switch', Tramo: 'Range', Otros: 'Other' };
 const PAIRS = { x: 'y', scaleX: 'scaleY', width: 'height', originX: 'originY', x1: 'y1', x2: 'y2', cx: 'cy' };
-// En una fila de par, el nombre de la fila va en la columna de etiquetas y cada mitad lleva solo su letra (como Rive).
+// In a pair row, the row name goes in the label column and each half only carries its letter (as in Rive).
 const PAIR_NAMES = { x: 'Position', scaleX: 'Scale', width: 'Size', originX: 'Pivot', x1: 'Start', x2: 'End', cx: 'Center' };
 const PAIR_LETTERS = { x: 'X', y: 'Y', scaleX: 'X', scaleY: 'Y', width: 'W', height: 'H', originX: 'X', originY: 'Y', x1: 'X', y1: 'Y', x2: 'X', y2: 'Y', cx: 'X', cy: 'Y' };
 const LABELS = { x: 'X', y: 'Y', scaleX: 'SX', scaleY: 'SY', width: 'W', height: 'H', originX: 'PX', originY: 'PY', x1: 'X1', y1: 'Y1', x2: 'X2', y2: 'Y2', cx: 'CX', cy: 'CY' };
 
 export function mountInspector(root) {
   subscribe((c) => {
-    // El tiempo cambia los valores de un clip; mientras se reproduce no se rehace (sería en cada cuadro).
+    // Time changes the values of a clip; while playing it is not rebuilt (it would be on every frame).
     if ('doc' in c || 'selection' in c || 'editing' in c || 'pose' in c || ('time' in c && !state.playing) || ('playing' in c && !state.playing)) draw();
   });
 
@@ -37,9 +37,9 @@ export function mountInspector(root) {
     const target = obj ? obj.id : 'meta';
     const data = obj ?? doc.meta;
     const others = obj ? state.selected.map((id) => findObject(doc, id)).filter((o) => o && o.id !== obj.id) : [];
-    // Con varios: solo lo que tienen todos (y que se puede editar en bloque).
+    // With several: only what they all have (and that can be edited in bulk).
     const common = ([prop, p]) => !others.length || (!['vertices', 'stops'].includes(p.type) && others.every((o) => schema.types.get(o.type).properties[prop]?.type === p.type));
-    // Lo de Live es de los clips de Puppet (una escena no se dispara), y la espera del auto, solo con auto repeat.
+    // The Live settings belong to Puppet clips (a scene is not triggered), and the auto wait, only with auto repeat.
     const fromLive = ([prop, p]) =>
       obj?.type !== 'animation' || others.length || p.group !== 'Live' || (read(schema, obj, 'usage') === 'puppet' && (!prop.startsWith('repeat_') || read(schema, obj, 'auto') === 'repeat'));
     const properties = Object.entries(kind.properties).filter(common).filter(fromLive);
@@ -58,7 +58,7 @@ export function mountInspector(root) {
       const inPair = new Set();
       for (const [prop, p] of props) {
         if (inPair.has(prop)) continue;
-        // Pares (x/y, ancho/alto, escala) en una sola fila, como en Rive.
+        // Pairs (x/y, width/height, scale) in a single row, as in Rive.
         const pair = PAIRS[prop] && props.find(([q]) => q === PAIRS[prop]);
         if (pair) {
           inPair.add(pair[0]);
@@ -77,8 +77,8 @@ export function mountInspector(root) {
   }
 
   /**
-   * Con una pose activa, lo animable del objeto en esa pose: lo que la pose fija se ve normal y lo demás (que sigue
-   * como en el montaje), atenuado. Cambiar un campo lo agrega a la pose; ↺ lo quita.
+   * With an active pose, what is animatable in the object in that pose: what the pose sets looks normal and the rest
+   * (which stays as in the setup), dimmed. Changing a field adds it to the pose; ↺ removes it.
    */
   function poseSection(obj, kind, pose) {
     const animatable = Object.entries(kind.properties).filter(([, p]) => p.animatable);
@@ -86,7 +86,7 @@ export function mountInspector(root) {
     const clip = openedClip();
     const title = clip ? `Clip “${clip.id}” at ${+state.time.toFixed(3)} s` : `Pose “${pose.id}”`;
     root.append(Object.assign(document.createElement('h3'), { className: 'in-pose', textContent: title }));
-    // En un clip, «fijado» es lo que tiene pista; el valor es el que se ve en el tiempo del playhead.
+    // In a clip, «set» is what has a track; the value is the one seen at the playhead time.
     const fixed = clip ? Object.fromEntries(Object.keys(clip.tracks?.[obj.id] ?? {}).map((k) => [k, pose.values?.[obj.id]?.[k]])) : (pose.values?.[obj.id] ?? {});
     const fromBone = obj.type === 'bone' ? boneValues(schema, obj, pose) : null;
     const value = (k) => (fromBone ? fromBone[k] : (pose.values?.[obj.id]?.[k] ?? effectiveValue(schema, state.doc, obj, k)));
@@ -127,7 +127,7 @@ export function mountInspector(root) {
     return div;
   }
 
-  // Lo que el campo necesita saber de una selección múltiple (se arma en cada dibujo).
+  // What the field needs to know about a multiple selection (built on every draw).
   let context = { others: [] };
 
   function severalTitle(obj, others) {
@@ -174,14 +174,14 @@ export function mountInspector(root) {
     const reset = Object.assign(document.createElement('button'), { type: 'button', className: 'reset', textContent: '↺', title: 'Reset to default' });
     const name = others.length ? `${targets.length} objects` : target;
 
-    // El tamaño del lienzo cambia con el dibujo centrado, como la herramienta Artboard y Project Settings.
+    // The canvas size changes with the drawing centered, like the Artboard tool and Project Settings.
     const size = target === 'meta' && (prop === 'width' || prop === 'height');
     const change = (v) =>
       size
         ? artboardOps(state.doc, schema, prop === 'width' ? v : readMeta(schema, state.doc, 'width'), prop === 'height' ? v : readMeta(schema, state.doc, 'height'))
         : targets.map((t) => ({ op: 'set', target: t, props: { [prop]: v } }));
     reset.addEventListener('click', () => execute(size ? change(p.default) : targets.map((t) => ({ op: 'unset', target: t, props: [prop] })), `${name}.${prop} reset`));
-    // Varios cambios seguidos de la misma propiedad (flechitas del campo, escribir y corregir) son un solo paso.
+    // Several changes in a row to the same property (field arrows, typing and correcting) are a single step.
     const commit = (v) => {
       if (Object.is(v, value) && !mixed) return preview(null);
       execute(change(v), `${name}.${prop}`, { group: `${targets.join()}.${prop}` });
@@ -228,7 +228,7 @@ const CONTROLS = {
       }
     });
 
-    // Arrastrar sobre el nombre cambia el valor: Shift = fino, Alt = grueso.
+    // Dragging over the name changes the value: Shift = fine, Alt = coarse.
     label.classList.add('draggable');
     label.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -298,12 +298,12 @@ const CONTROLS = {
 
   string({ p, value, commit }) {
     const input = Object.assign(document.createElement('input'), { type: 'text', value: value ?? '', placeholder: p.nullable ? 'none' : '' });
-    // Vacío en una propiedad que admite null = null (por ejemplo, la opción inicial de un param enum).
+    // Empty in a property that allows null = null (for example, the initial option of an enum param).
     input.addEventListener('change', () => commit(input.value === '' && p.nullable ? null : input.value));
     return input;
   },
 
-  // Lista de textos (las opciones de un param enum): se escribe separada por comas.
+  // List of texts (the options of an enum param): typed separated by commas.
   strings({ value, commit }) {
     const input = Object.assign(document.createElement('input'), { type: 'text', value: value.join(', '), placeholder: 'rest, a, e, o, m' });
     input.title = 'Comma-separated';
@@ -318,7 +318,7 @@ const CONTROLS = {
     return select;
   },
 
-  // Los vértices se editan en el lienzo; aquí solo se resume y se entra a editarlos.
+  // Vertices are edited on the canvas; here they are only summarized and editing is entered.
   vertices({ value, target }) {
     const box = document.createElement('div');
     box.className = 'color vertices';
@@ -332,7 +332,7 @@ const CONTROLS = {
     return box;
   },
 
-  // Una pose se edita en el lienzo: aquí se resume y se activa.
+  // A pose is edited on the canvas: here it is summarized and activated.
   pose({ value, target }) {
     const box = document.createElement('div');
     box.className = 'summary-pose';
@@ -350,7 +350,7 @@ const CONTROLS = {
     return box;
   },
 
-  // Las pistas de un clip se editan en la timeline: aquí solo se resumen.
+  // The tracks of a clip are edited in the timeline: here they are only summarized.
   tracks({ value }) {
     const list = document.createElement('ul');
     list.className = 'summary-pose';
@@ -363,7 +363,7 @@ const CONTROLS = {
     return list;
   },
 
-  // Paradas de un degradado: color, offset y quitar; más un botón para agregar.
+  // Stops of a gradient: color, offset and remove; plus a button to add.
   stops({ value, commit }) {
     const list = document.createElement('div');
     list.className = 'stops-list';
@@ -389,7 +389,7 @@ const CONTROLS = {
     return list;
   },
 
-  // El archivo de una capa image: miniatura, nombre, cambiarlo por otro y volver a su tamaño natural.
+  // The file of an image layer: thumbnail, name, replace it with another and return to its natural size.
   asset({ value, target }) {
     const box = document.createElement('div');
     box.className = 'field-asset';
@@ -416,7 +416,7 @@ const CONTROLS = {
     const select = document.createElement('select');
     if (p.nullable) select.append(new Option('(none)', ''));
     for (const o of state.doc.objects) {
-      // refScope "children": solo los hijos (el hijo activo de un switch); "skeleton": los huesos de su skeleton.
+      // refScope "children": only the children (the active child of a switch); "skeleton": the bones of its skeleton.
       const inReach = p.refScope === 'children' ? o.parent === target : p.refScope === 'skeleton' ? skeletonOf(state.doc, o.id) === skeletonOf(state.doc, target) : o.id !== target;
       if (inReach && (!p.refTypes || p.refTypes.includes(o.type))) select.append(new Option(o.id, o.id, false, o.id === value));
     }

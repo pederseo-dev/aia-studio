@@ -1,4 +1,4 @@
-// Punto de entrada del editor: monta los paneles y conecta la barra, el teclado y los avisos en vivo.
+// Editor entry point: mounts the panels and wires up the bar, the keyboard and the live notices.
 
 import { findObject, skeletonOf, children, subtree } from '../core/document.js';
 import { applyOperations } from '../core/operations.js';
@@ -24,7 +24,7 @@ import {
 } from './state.js';
 
 const $ = (s) => document.querySelector(s);
-// Íconos fijos del HTML: data-icono los pone al principio del elemento y data-flecha es la flecha de un desplegable.
+// Fixed icons of the HTML: data-icon puts them at the start of the element and data-flecha is a dropdown's arrow.
 for (const el of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-icon]'))) el.insertAdjacentHTML('afterbegin', ICONOS[el.dataset.icon]);
 for (const el of document.querySelectorAll('[data-flecha]')) el.innerHTML = FLECHA;
 
@@ -40,7 +40,7 @@ mountPoses($('#section-poses'), $('#list-poses'), $('#new-pose'), $('#delete-pos
 $('#reset-params').addEventListener('click', resetParams);
 mountBanner($('#banner'));
 
-// Clips, Parameters y Poses (Puppet) se pliegan con la flecha del título; se recuerda lo que elija el usuario.
+// Clips, Parameters and Poses (Puppet) collapse with the title arrow; the user's choice is remembered.
 for (const section of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-foldable]'))) {
   const key = `aia:folded:${section.dataset.foldable}`;
   const button = section.querySelector('.fold-section');
@@ -61,20 +61,20 @@ for (const section of /** @type {NodeListOf<HTMLElement>} */ (document.querySele
 }
 mountTimeline($('#timeline'));
 
-// Abajo, la timeline ocupa todo el panel (Design no tiene). Los params son del muñeco: el panel Parameters, a la
-// derecha, está solo en Puppet. Una escena de Animate no anima params; keya los valores mismos.
+// At the bottom, the timeline takes the whole panel (Design has none). Params belong to the puppet: the Parameters
+// panel, on the right, is only in Puppet. An Animate scene does not animate params; it keys the values themselves.
 function drawParameters() {
   $('#parameters-section').hidden = state.mode !== 'puppet';
 }
 subscribe((c) => {
   if ('mode' in c || 'doc' in c) drawParameters();
-  // Al abrir otro documento, el modo sigue: en Animate se abre su primera escena.
+  // When opening another document, the mode stays: in Animate its first scene is opened.
   if ('id' in c && state.doc && state.mode !== 'design') changeMode(state.mode);
 });
 drawParameters();
 
-// History plegable: en Animate y Puppet arranca plegado para dejarle lugar al inspector y a los paneles de animación.
-// Lo que elija el usuario se recuerda por modo.
+// Collapsible History: in Animate and Puppet it starts collapsed to leave room for the inspector and animation panels.
+// The user's choice is remembered per mode.
 const historyKey = () => `aia:folded-history:${state.mode}`;
 function foldedHistory() {
   try {
@@ -97,7 +97,7 @@ $('#fold-history').addEventListener('click', () => {
 subscribe((c) => 'mode' in c && foldHistory(foldedHistory()));
 foldHistory(foldedHistory());
 
-// Layers plegable (abierto por defecto), como Assets; se recuerda lo que elija el usuario.
+// Collapsible Layers (open by default), like Assets; the user's choice is remembered.
 function foldLayers(folded) {
   document.body.classList.toggle('folded-layers', folded);
   $('#fold-layers').setAttribute('aria-expanded', String(!folded));
@@ -113,7 +113,7 @@ try {
   foldLayers(localStorage.getItem('aia:folded-layers') === '1');
 } catch {}
 
-// Assets plegable (abierto por defecto); se recuerda lo que elija el usuario.
+// Collapsible Assets (open by default); the user's choice is remembered.
 function foldResources(folded) {
   document.body.classList.toggle('folded-resources', folded);
   $('#fold-resources').setAttribute('aria-expanded', String(!folded));
@@ -129,7 +129,7 @@ try {
   foldResources(localStorage.getItem('aia:folded-resources') === '1');
 } catch {}
 
-// ---------- Menús desplegables (menú principal, zoom, grupos de herramientas) ----------
+// ---------- Dropdown menus (main menu, zoom, tool groups) ----------
 
 function toggleMenu(menu, button) {
   const openIt = menu.hidden;
@@ -137,7 +137,7 @@ function toggleMenu(menu, button) {
   if (!openIt) return;
   menu.hidden = false;
   button?.setAttribute('aria-expanded', 'true');
-  // Posición fija junto al desplegable: así un panel con overflow (la jerarquía) no recorta el menú.
+  // Fixed position next to the dropdown: that way a panel with overflow (the hierarchy) does not clip the menu.
   const box = (menu.closest('.dropdown') ?? button).getBoundingClientRect();
   const width = menu.offsetWidth;
   const left = menu.classList.contains('right') ? box.right - width : box.left;
@@ -155,7 +155,7 @@ document.addEventListener('pointerdown', (e) => {
   if (!(/** @type {Element} */ (e.target)).closest('.dropdown')) closeMenus();
 });
 
-// ---------- Menú principal ----------
+// ---------- Main menu ----------
 
 const ACTIONS = {
   new: () => newDocument(),
@@ -177,9 +177,9 @@ const ACTIONS = {
   settings: () => showSettings(),
 };
 
-// ---------- Project Settings (como File → Project Settings de Moho) ----------
+// ---------- Project Settings (like Moho's File → Project Settings) ----------
 
-/** Diálogo con las propiedades del documento. El tamaño cambia con el dibujo centrado, igual que la herramienta Artboard. */
+/** Dialog with the document properties. The size changes with the drawing centered, same as the Artboard tool. */
 function showSettings() {
   if (!state.doc) return;
   const f = $('#form-settings').elements;
@@ -242,7 +242,7 @@ function showOpen() {
   $('#dialog-open').showModal();
 }
 
-// ---------- Pestañas ----------
+// ---------- Tabs ----------
 
 function drawTabs() {
   $('#tabs').replaceChildren(
@@ -256,14 +256,14 @@ function drawTabs() {
       tab.innerHTML = '<span class="title"></span><button type="button" class="close" title="Close tab (the document is not deleted)">×</button>';
       tab.querySelector('.title').textContent = d?.name ?? id;
       tab.addEventListener('click', (e) => ((/** @type {Element} */ (e.target)).closest('.close') ? closeTab(id) : id !== state.id && open(id)));
-      // Clic con la rueda también cierra, como en el navegador.
+      // Middle-click also closes, as in the browser.
       tab.addEventListener('auxclick', (e) => e.button === 1 && closeTab(id));
       return tab;
     }),
   );
 }
 
-// ---------- Grupos de herramientas ----------
+// ---------- Tool groups ----------
 
 const GROUPS = {
   transform: [
@@ -297,7 +297,7 @@ function drawGroups() {
     box.classList.toggle('active', !!active);
     box.innerHTML = `<button type="button" class="main" title="${visible.name}${visible.shortcut ? ` (${visible.shortcut})` : ''}" aria-label="${visible.name}">${ICONOS[visible.icon ?? visible.id]}</button>${tools.length > 1 ? `<button type="button" class="choose" aria-haspopup="menu" title="More tools">${FLECHA}</button><div class="menu" role="menu" hidden></div>` : ''}`;
     box.querySelector('.main').addEventListener('click', () => setState({ tool: visible.id }));
-    // Una herramienta sola (Artboard) no lleva menú.
+    // A lone tool (Artboard) has no menu.
     if (tools.length === 1) continue;
     const menu = box.querySelector('.menu');
     for (const h of tools) {
@@ -327,12 +327,12 @@ $('#menu-zoom').addEventListener('click', (e) => {
   else canvas.setZoom(Number(b.dataset.zoom));
 });
 
-// ---------- Estado de la barra ----------
+// ---------- Bar state ----------
 
 subscribe((c) => {
   if ('tabs' in c || 'id' in c || 'documents' in c) drawTabs();
   if ('tool' in c) drawGroups();
-  // Con Artboard, lo elegido es el lienzo: el inspector muestra sus propiedades.
+  // With Artboard, what is picked is the canvas: the inspector shows its properties.
   if ('tool' in c && state.tool === 'artboard' && state.selected.length) select(null);
   if ('id' in c) {
     for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('[data-requires-doc]'))) b.disabled = !state.id;
@@ -340,7 +340,7 @@ subscribe((c) => {
   }
   if ('selection' in c || 'doc' in c) $('#delete').disabled = $('#duplicate').disabled = !state.selected.length;
   if ('selection' in c || 'doc' in c) $('#delete-resource').disabled = !selectedResources().length;
-  // Si algo de la selección desapareció (por ejemplo, la IA borró el objeto), se quita.
+  // If something in the selection disappeared (for example, the AI deleted the object), it is removed.
   if ('doc' in c && state.doc && state.selected.some((id) => !findObject(state.doc, id))) {
     const remain = state.selected.filter((id) => findObject(state.doc, id));
     selectSeveral(remain, findObject(state.doc, state.selection ?? '') ? state.selection : (remain.at(-1) ?? null));
@@ -349,7 +349,7 @@ subscribe((c) => {
 
 $('#delete').addEventListener('click', deleteSelection);
 $('#delete-resource').addEventListener('click', deleteResources);
-// Grupo, switch y skeleton: un solo botón (carpeta con +) que abre el menú para elegir qué crear.
+// Group, switch and skeleton: a single button (folder with +) that opens the menu to choose what to create.
 const CONTAINERS = {
   group: () => (state.selected.length > 1 ? groupSelection() : newGroup()),
   switch: () => newSwitch(),
@@ -371,7 +371,7 @@ $('#image-file').addEventListener('change', (e) => {
   e.target.value = '';
   addImages(files);
 });
-// Pegar una imagen (Ctrl+V) la agrega como capa, salvo que se esté escribiendo en un campo.
+// Pasting an image (Ctrl+V) adds it as a layer, unless typing in a field.
 document.addEventListener('paste', (e) => {
   const files = imagesOnly(e.clipboardData?.files);
   if (!files.length || !state.doc || (/** @type {Element} */ (e.target)).closest?.('input, textarea, [contenteditable]')) return;
@@ -401,7 +401,7 @@ function newResource(kind, base, props) {
 
 const nameOf = (ids) => (ids.length === 1 ? ids[0] : `${ids.length} objects`);
 
-/** Duplica la selección con sus hijos, un poco desplazada, y selecciona las copias. */
+/** Duplicates the selection with its children, slightly offset, and selects the copies. */
 function duplicateSelection() {
   const roots = selectionRoots();
   if (!roots.length) return;
@@ -416,10 +416,10 @@ function duplicateSelection() {
   selectSeveral(roots.map((id) => `${id}_${suffix}`));
 }
 
-/** Los recursos (estilos, degradados) de la selección. */
+/** The assets (styles, gradients) in the selection. */
 const selectedResources = () => (state.doc ? state.selected.filter((id) => schema.types.get(findObject(state.doc, id)?.type)?.resource) : []);
 
-/** Botón de borrar de Assets: borra solo los recursos seleccionados (el núcleo limpia sus referencias). */
+/** Assets delete button: deletes only the selected assets (the core cleans up their references). */
 function deleteResources() {
   const ids = selectedResources();
   if (!ids.length) return;
@@ -442,8 +442,8 @@ function newGroup(kind = 'group') {
 }
 
 /**
- * Switch (Shift+G): mete la selección en un switch nuevo (cada objeto es una variante; se ve el primero) o, sin
- * selección, crea uno vacío. Después se le agregan variantes arrastrándolas adentro o dibujando con él seleccionado.
+ * Switch (Shift+G): puts the selection in a new switch (each object is a variant; the first one is seen) or, with no
+ * selection, creates an empty one. Later variants are added by dragging them inside or drawing with it selected.
  */
 function newSwitch() {
   const drawing = selectionRoots().filter((id) => !schema.types.get(findObject(state.doc, id).type).resource);
@@ -451,8 +451,8 @@ function newSwitch() {
 }
 
 /**
- * Skeleton (K): la capa de huesos. Con dibujo seleccionado lo mete adentro (queda quieto hasta enlazarlo); sin
- * selección crea uno vacío. Después se le dibujan huesos con la herramienta Bone.
+ * Skeleton (K): the bone layer. With drawing selected it puts it inside (it stays still until bound); with no
+ * selection it creates an empty one. Later bones are drawn on it with the Bone tool.
  */
 function newSkeleton() {
   if (!state.doc) return;
@@ -463,11 +463,11 @@ function newSkeleton() {
 }
 
 /**
- * Mete la selección en un grupo nuevo (Ctrl+G). Si todos tienen el mismo padre, el grupo queda ahí, en el lugar del
- * que estaba más al frente; si no, va a la raíz. Los objetos no se mueven de lugar en pantalla.
+ * Puts the selection in a new group (Ctrl+G). If they all have the same parent, the group stays there, in the place
+ * of the one furthest in front; otherwise, it goes to the root. The objects do not move on screen.
  */
 function groupSelection(kind = 'group') {
-  // Los huesos no se agrupan: viven en su skeleton.
+  // Bones are not grouped: they live in their skeleton.
   const roots = selectionRoots().filter((id) => !schema.types.get(findObject(state.doc, id).type).resource && findObject(state.doc, id).type !== 'bone');
   if (!roots.length) return;
   const parents = new Set(roots.map((id) => findObject(state.doc, id).parent ?? null));
@@ -480,7 +480,7 @@ function groupSelection(kind = 'group') {
   let doc = applyOperations(state.doc, ops, schema).doc;
   const loose = [];
   for (const id of roots) {
-    // Lo que entra a un skeleton nuevo deja de poder seguir a los huesos del de afuera: se suelta antes.
+    // What goes into a new skeleton can no longer follow the bones of the outer one: it is released first.
     const release = releaseOnMove(doc, id, group);
     loose.push(...release);
     const lote = [...release, { op: 'move', target: id, parent: group }, ...keepPosition(doc, id, group)];
@@ -493,8 +493,8 @@ function groupSelection(kind = 'group') {
 }
 
 /**
- * Ctrl+B: pega los objetos seleccionados al hueso seleccionado (el principal, o el único hueso de la selección).
- * Sin ningún hueso en la selección, los suelta. Como en Moho, enlazar no mueve nada: el dibujo sigue al hueso al posar.
+ * Ctrl+B: attaches the selected objects to the selected bone (the main one, or the only bone in the selection).
+ * With no bone selected, it releases them. As in Moho, binding moves nothing: the drawing follows the bone when posing.
  */
 function bindSelection() {
   const ids = state.selected.filter((id) => findObject(state.doc, id));
@@ -503,7 +503,7 @@ function bindSelection() {
   if (bones.length > 1 && !bone) return notify('To bind, leave only one bone in the selection', true);
   let objects = ids.filter((id) => 'bone' in schema.types.get(findObject(state.doc, id).type).properties);
   if (!objects.length) return notify(bone ? 'Also select the artwork to bind to the bone' : 'Select artwork and a bone (Ctrl + click)', true);
-  // Solo se enlaza lo que está en el skeleton del hueso.
+  // Only what is in the bone's skeleton is bound.
   if (bone) {
     const foreign = objects.filter((id) => reasonNotToBind(state.doc, id, bone));
     objects = objects.filter((id) => !foreign.includes(id));
@@ -515,17 +515,17 @@ function bindSelection() {
   notify(bone ? `${nameOf(objects)} follow${objects.length > 1 ? '' : 's'} ${bone}` : `${nameOf(objects)} no longer follow${objects.length > 1 ? '' : 's'} any bone`);
 }
 
-// ---------- Montaje y poses ----------
+// ---------- Setup and poses ----------
 
-// Las poses se abren desde su lista en Puppet (poses.js); antes había un desplegable «View» arriba.
+// Poses are opened from their list in Puppet (poses.js); before there was a «View» dropdown at the top.
 subscribe((c) => {
-  // Si la pose o el clip abierto desapareció (deshacer, la IA lo borró), se vuelve a la vista de params o al montaje.
+  // If the open pose or clip disappeared (undo, the AI deleted it), it goes back to the params view or the setup.
   if (('doc' in c || 'pose' in c || 'id' in c) && state.pose && !['pose', 'animation'].includes(findObject(state.doc ?? { objects: [] }, state.pose)?.type)) {
     setState({ pose: null, ...(state.mode === 'puppet' ? { params: state.params ?? {} } : {}) });
   }
 });
 
-/** Crea un documento vacío o, con `copiarDe`, una copia del documento indicado. */
+/** Creates an empty document or, with `copyFrom`, a copy of the given document. */
 async function newDocument(copyFrom) {
   const current = copyFrom && state.documents.find((d) => d.id === copyFrom);
   const name = prompt(copyFrom ? 'Name of the copy:' : 'New file name:', current ? `${current.name} (copy)` : '')?.trim();
@@ -544,7 +544,7 @@ async function newDocument(copyFrom) {
   }
 }
 
-// ---------- Teclado ----------
+// ---------- Keyboard ----------
 
 const exitEditing = () => setState({ editing: null, vertex: null });
 
@@ -579,7 +579,7 @@ window.addEventListener('keydown', (e) => {
     return bindSelection();
   }
   if (mod && key === 'a') {
-    // Todo lo que está en la raíz (sin los recursos).
+    // Everything at the root (without the assets).
     e.preventDefault();
     return selectSeveral(children(state.doc, null).filter((o) => !schema.types.get(o.type).resource && !o.locked).map((o) => o.id));
   }
@@ -590,9 +590,9 @@ window.addEventListener('keydown', (e) => {
   if (key === 'f') return canvas.adjust();
   if (key === '1') return canvas.setZoom(1);
 
-  // Pluma: Enter o Escape terminan el trazo abierto.
+  // Pen: Enter or Escape finish the open stroke.
   if (state.tool === 'path' && canvas.pen.active() && (e.key === 'Enter' || e.key === 'Escape')) return canvas.pen.finish(false);
-  // Enter entra o sale de la edición de puntos de un path.
+  // Enter enters or leaves point editing of a path.
   if (e.key === 'Enter') {
     if (state.editing) return exitEditing();
     const sel = state.selection && findObject(state.doc, state.selection);
@@ -607,10 +607,10 @@ window.addEventListener('keydown', (e) => {
     return deleteSelection();
   }
 
-  // Flechas: mover la selección 1 px (Shift: 10 px).
+  // Arrows: move the selection 1 px (Shift: 10 px).
   const flechas = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   const roots = selectionRoots();
-  // En una pose, las flechas no mueven el montaje.
+  // In a pose, the arrows do not move the setup.
   if (flechas[e.key] && roots.length && !state.pose) {
     e.preventDefault();
     const [dx, dy] = flechas[e.key].map((d) => d * (e.shiftKey ? 10 : 1));
@@ -624,10 +624,10 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('pagehide', sendPending);
 
-// ---------- Cambios desde fuera (la IA por MCP, u otro proceso) ----------
+// ---------- Changes from outside (the AI through MCP, or another process) ----------
 
 import.meta.hot?.on('aia:document', async ({ id }) => {
-  // Un documento nuevo (por ejemplo, creado por la IA) se abre en una pestaña sin quitarte de la actual.
+  // A new document (for example, created by the AI) opens in a tab without taking you away from the current one.
   if (!state.documents.some((d) => d.id === id)) {
     await loadDocuments();
     addTab(id);
@@ -643,7 +643,7 @@ import.meta.hot?.on('aia:document', async ({ id }) => {
   }
 });
 
-// Un documento borrado fuera del editor (la IA con delete_document, u otro proceso): se cierra su pestaña.
+// A document deleted outside the editor (the AI with delete_document, or another process): its tab is closed.
 import.meta.hot?.on('aia:deleted', async ({ id }) => {
   const name = state.documents.find((d) => d.id === id)?.name ?? id;
   const known = state.documents.some((d) => d.id === id) || state.tabs.includes(id);
@@ -655,7 +655,7 @@ import.meta.hot?.on('aia:deleted', async ({ id }) => {
 
 import.meta.hot?.on('aia:history', ({ id }) => id === state.id && refreshHistory());
 
-// ---------- Inicio ----------
+// ---------- Startup ----------
 
 setState({ tool: 'select', id: null });
 await loadDocuments();

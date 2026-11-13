@@ -1,6 +1,6 @@
-// Edición de puntos de un path: arrastrar anclas y tangentes, doble clic en un ancla para alternar recto/curvo,
-// clic sobre el contorno para agregar un vértice y Supr para borrar el seleccionado. Alt al arrastrar una tangente
-// la separa de la otra (pico).
+// Point editing of a path: drag anchors and tangents, double click on an anchor to toggle straight/curved,
+// click on the outline to add a vertex and Delete to remove the selected one. Alt while dragging a tangent
+// splits it from the other (cusp).
 
 import { findObject } from '../core/document.js';
 import { read } from '../core/schema.js';
@@ -13,9 +13,9 @@ import { editingName, poseOps, activePose } from './editing.js';
 const NEAR_OUTLINE = 8; // px
 
 export function createPoints(ctx) {
-  // Con una pose activa se editan los vértices de la pose (el morph); sin pose, los del montaje.
+  // With an active pose the pose's vertices are edited (the morph); without a pose, the setup's.
   const path = () => findObject(applyPose(docVisible(), schema, activePose(docVisible())), state.editing);
-  // La matriz del dibujo en pantalla tal como se ve (con huesos y pose incluidos).
+  // The drawing's matrix on screen as it is seen (with bones and pose included).
   const matrix = () => {
     const m = ctx.element(state.editing)?.getCTM();
     return m ? [m.a, m.b, m.c, m.d, m.e, m.f] : multiply(ctx.cameraMatrix(), worldMatrix(docVisible(), schema, state.editing));
@@ -50,7 +50,7 @@ export function createPoints(ctx) {
     });
   }
 
-  /** Arrastre de un ancla o de una tangente. */
+  /** Drag of an anchor or a tangent. */
   function handle(e, kind) {
     const [which, text] = kind.split('-');
     const i = Number(text);
@@ -90,7 +90,7 @@ export function createPoints(ctx) {
     );
   }
 
-  /** Clic en el lienzo fuera de las manijas. Devuelve true si lo resolvió (agregar un vértice). */
+  /** Click on the canvas outside the handles. Returns true if it handled it (adding a vertex). */
   function pointerdown(e) {
     const obj = path();
     if (!obj) return false;
@@ -112,7 +112,7 @@ export function createPoints(ctx) {
     return true;
   }
 
-  /** Doble clic en un ancla: recto ↔ curvo. */
+  /** Double click on an anchor: straight ↔ curved. */
   function toggle(i) {
     const obj = path();
     const vertices = read(schema, obj, 'vertices');
@@ -121,7 +121,7 @@ export function createPoints(ctx) {
     if ((v.mode ?? 'straight') !== 'straight') {
       created[i] = withBone(v, { x: v.x, y: v.y });
     } else {
-      // Tangente paralela a la línea entre los vecinos, de un tercio de la distancia media.
+      // Tangent parallel to the line between the neighbors, a third of the average distance long.
       const previous = vertices[(i - 1 + vertices.length) % vertices.length];
       const next = vertices[(i + 1) % vertices.length];
       const dx = next.x - previous.x;

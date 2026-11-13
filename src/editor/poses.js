@@ -1,15 +1,15 @@
-// Puppet: la lista de poses (a la derecha, debajo de Parameters) y el cartel arriba del lienzo que dice qué se está
-// editando. Las poses son fotos fijas del muñeco que los params mezclan; antes se elegían en un desplegable «View»
-// arriba, que parecía un modo de vista. Ver docs/decision-animacion.md §10.
+// Puppet: the list of poses (on the right, below Parameters) and the banner above the canvas that says what is being
+// edited. Poses are still snapshots of the puppet that the params blend; before they were picked in a «View» dropdown
+// at the top, which looked like a view mode. See docs/decision-animacion.md §10.
 
 import { findObject } from '../core/document.js';
 import { notify, execute, state, setState, subscribe } from './state.js';
 import { toggleLive } from './live.js';
 
-/** Los params que mueven una pose (por sus drivers). */
+/** The params that move a pose (through their drivers). */
 const poseParams = (doc, pose) => [...new Set(doc.objects.filter((d) => d.type === 'driver' && d.pose === pose && d.param).map((d) => d.param))];
 
-/** Abre una pose para editarla (o la cierra si ya está abierta): lo que se cambia va a la pose, no al montaje. */
+/** Opens a pose to edit it (or closes it if it is already open): what is changed goes to the pose, not the setup. */
 export function openPose(id) {
   if (state.live) return notify('Live is on: turn it off (■ Live) to edit a pose.', true);
   if (state.pose === id) return setState({ pose: null, params: state.params ?? {}, editing: null, vertex: null });
@@ -17,7 +17,7 @@ export function openPose(id) {
 }
 
 export function mountPoses(root, list, newButton, deleteButton) {
-  // 🗑 borra la pose seleccionada (en Assets) o, si no, la abierta. Sus drivers quedan sin pose (no mueven nada).
+  // 🗑 deletes the selected pose (in Assets) or else the open one. Its drivers are left without a pose (they move nothing).
   const chosen = () => {
     const doc = state.doc;
     if (!doc) return null;
@@ -74,8 +74,8 @@ export function mountPoses(root, list, newButton, deleteButton) {
 }
 
 /**
- * Cartel arriba del lienzo (solo Puppet): qué se está editando o viendo, en el color del marco, con el botón para
- * salir. Reemplaza al desplegable «View».
+ * Banner above the canvas (Puppet only): what is being edited or viewed, in the frame color, with the button to
+ * leave. It replaces the «View» dropdown.
  */
 export function mountBanner(el) {
   subscribe((c) => {
@@ -102,7 +102,7 @@ export function mountBanner(el) {
       button = ['Done', 'Stop editing the pose and go back to the parameter preview', () => openPose(open.id)];
     } else {
       [className, text] = ['params', 'Previewing <b>parameters</b>: the canvas shows the poses they blend. To change a pose, open it under Poses.'];
-      button = null; // Reset está en la barra de Puppet, arriba de Clips
+      button = null; // Reset is in the Puppet bar, above Clips
     }
     el.className = `banner${className}`;
     el.innerHTML = `<span>${text}</span>`;

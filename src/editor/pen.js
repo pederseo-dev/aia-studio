@@ -1,14 +1,14 @@
-// Pluma: clic agrega un vértice recto; clic y arrastrar agrega uno curvo (mirrored). Clic en el primer vértice
-// cierra la forma; Enter o Escape la terminan abierta.
+// Pen: click adds a straight vertex; click and drag adds a curved one (mirrored). Click on the first vertex
+// closes the shape; Enter or Escape finish it open.
 
 import { apply, invert, worldMatrix, multiply } from '../core/geometry.js';
 import { vertexFromTangents, verticesAD } from '../core/paths.js';
 import { execute, schema, state, setState, freeId, parentForNew, select } from './state.js';
 
-const NEAR = 9; // px en pantalla para cerrar en el primer vértice
+const NEAR = 9; // px on screen to close on the first vertex
 
 export function createPen(ctx) {
-  // Puntos en pantalla: { p, entrada, salida } con las tangentes como vectores.
+  // Points on screen: { p, in, out } with the tangents as vectors.
   let points = [];
   let cursor = null;
 
@@ -59,7 +59,7 @@ export function createPen(ctx) {
     });
   }
 
-  /** Crea el path con los puntos dibujados (en coordenadas del padre) y vuelve a la herramienta de selección. */
+  /** Creates the path with the drawn points (in the parent's coordinates) and returns to the selection tool. */
   function finish(closed) {
     const drawn = points;
     points = [];

@@ -1,5 +1,5 @@
-// Barra de opciones sobre el lienzo (como la de Moho): dice qué se puede hacer con la herramienta y lo seleccionado,
-// y ofrece como botones las acciones que tienen atajo. Así no hace falta saberse los atajos para descubrir qué sigue.
+// Option bar over the canvas (like Moho's): says what can be done with the tool and the selection, and offers as
+// buttons the actions that have a shortcut, so knowing the shortcuts is not needed to discover what comes next.
 
 import { findObject, skeletonOf, bonesOf } from '../core/document.js';
 import { read, readMeta } from '../core/schema.js';
@@ -11,10 +11,10 @@ import { boneColor, activeSkeleton, reparentPlan } from './bones.js';
 import { chooseVariant, poseOps, variantOf, variantsToShow } from './editing.js';
 
 /**
- * `acciones`: lo que vive en main.js y la barra también ofrece (agrupar, enlazar la selección, enlazar todo por
- * cercanía...).
+ * `actions`: what lives in main.js and the bar also offers (group, bind the selection, bind everything by
+ * proximity...).
  */
-// Tamaños comunes del lienzo: [nombre, ancho, alto].
+// Common canvas sizes: [name, width, height].
 const SIZES = [
   ['Square', 512, 512],
   ['Square', 800, 800],
@@ -42,7 +42,7 @@ export function mountOptions(root, actions) {
     root.hidden = !doc;
     if (!doc) return;
     root.replaceChildren(...content(doc));
-    // En la barra el texto entra en una línea; entero, al pasar el mouse.
+    // In the bar the text fits in one line; in full, on mouse hover.
     for (const t of root.querySelectorAll('.text')) t.title = t.textContent;
     root.classList.toggle('in-pose', !!state.pose);
     root.classList.toggle('binding', ['bindLayer', 'bindPoints'].includes(state.tool) && !state.pose);
@@ -53,7 +53,7 @@ export function mountOptions(root, actions) {
     const several = state.selected.length > 1;
     const bones = doc.objects.filter((o) => o.type === 'bone');
 
-    // Reparent Bone, Bind Layer y Bind Points trabajan sobre el hueso elegido: dicen qué hacer con él.
+    // Reparent Bone, Bind Layer and Bind Points work on the picked bone: they say what to do with it.
     if (!state.pose && !state.params && ['reparent', 'bindLayer', 'bindPoints'].includes(state.tool)) return bindingOptions(doc, sel?.type === 'bone' ? sel : null);
 
     if (state.pose && findObject(doc, state.pose)?.type === 'animation') {
@@ -86,7 +86,7 @@ export function mountOptions(root, actions) {
     }
 
     if (state.params) {
-      // En Puppet, el cartel del lienzo ya dice que se ven los params (y cómo abrir una pose).
+      // In Puppet, the canvas banner already says that the params are seen (and how to open a pose).
       return state.mode === 'puppet' ? [] : [text('Parameters: the canvas shows the pose blend set by the controls on the right.')];
     }
 
@@ -146,7 +146,7 @@ export function mountOptions(root, actions) {
     if (sel && !schema.types.get(sel.type).resource) {
       const parent = sel.parent && findObject(doc, sel.parent);
       if (parent?.type === 'switch') {
-        // Una variante de un switch: avisar si se ve solo porque está seleccionada, y dejar elegir la que se ve.
+        // A variant of a switch: warn if it is seen only because it is selected, and let the user choose the one seen.
         const fromView = variantsToShow(doc)[parent.id] === sel.id;
         return [
           text(`${code(sel.id)} is a variant of switch ${code(parent.id)}.${fromView ? ' It shows while selected so you can edit it, but the switch displays another one.' : ''}`),
@@ -163,7 +163,7 @@ export function mountOptions(root, actions) {
       } else if (bone) {
         parts.push(text(`Follows ${code(bone)} through its group.`));
       } else if (sel.vertices?.some((v) => v.bone)) {
-        // Enlace por punto: cuántos puntos sigue cada hueso, con su color.
+        // Point binding: how many points each bone follows, with its color.
         const count = {};
         for (const v of sel.vertices) if (v.bone) count[v.bone] = (count[v.bone] ?? 0) + 1;
         const list = Object.entries(count).map(([h, n]) => `<b style="color:${boneColor(doc, h)}">${h}</b> ${n}`).join(', ');
@@ -189,8 +189,8 @@ export function mountOptions(root, actions) {
   }
 
   /**
-   * Artboard: arrastrar las manijas cambia el tamaño con el dibujo centrado (como Moho). Además, tamaños comunes,
-   * ajustar al contenido y el diálogo de Project Settings.
+   * Artboard: dragging the handles changes the size with the drawing centered (like Moho). Also, common sizes,
+   * fit to content and the Project Settings dialog.
    */
   function artboardOptions(doc) {
     const w = readMeta(schema, doc, 'width');
@@ -211,7 +211,7 @@ export function mountOptions(root, actions) {
     ];
   }
 
-  /** Caja del dibujo (lo que se ve, en coordenadas del documento) más un margen; centra el contenido en el lienzo nuevo. */
+  /** Drawing box (what is seen, in document coordinates) plus a margin; centers the content in the new canvas. */
   function fitToContent(margin = 20) {
     const frame = document.querySelector('#document > .document-frame')?.getBoundingClientRect();
     if (!frame?.width) return;
@@ -226,18 +226,18 @@ export function mountOptions(root, actions) {
     const box = { x: (x0 - frame.left) / scale, y: (y0 - frame.top) / scale, w: (x1 - x0) / scale, h: (y1 - y0) / scale };
     const width = Math.max(1, Math.ceil(box.w + 2 * margin));
     const height = Math.max(1, Math.ceil(box.h + 2 * margin));
-    // Corre el dibujo para que su caja quede en el medio del lienzo nuevo.
+    // Shifts the drawing so its box ends up in the middle of the new canvas.
     const offset = [Math.round(width / 2 - (box.x + box.w / 2)), Math.round(height / 2 - (box.y + box.h / 2))];
     execute(artboardOps(state.doc, schema, width, height, offset), `artboard fit to content (${width} × ${height})`);
   }
 
   /**
-   * Enlace por punto: el hueso que sigue el vértice elegido, y repartir todos entre los huesos cercanos. Así un solo
-   * path se dobla con una cadena de huesos.
+   * Point binding: the bone the picked vertex follows, and spreading all of them among the nearby bones. That way a
+   * single path bends with a chain of bones.
    */
   function pointBones(doc) {
     const path = findObject(doc, state.editing);
-    // Solo los huesos del skeleton del path.
+    // Only the bones of the path's skeleton.
     const skeleton = skeletonOf(doc, path.id);
     const bones = skeleton ? bonesOf(doc, skeleton) : [];
     if (!bones.length) return [];
@@ -270,20 +270,20 @@ export function mountOptions(root, actions) {
     return parts;
   }
 
-  /** Switch: qué variante se ve (en el montaje) y cómo agregarle más. */
+  /** Switch: which variant is seen (in the setup) and how to add more. */
   function switchOptions(doc, sw) {
     const variants = doc.objects.filter((o) => o.parent === sw.id);
     if (!variants.length) {
       return [text(`Switch ${code(sw.id)} is empty: drag drawings into it in Layers, or draw with it selected. Each child is a variant, shown one at a time.`)];
     }
     const parts = [variantSelector(doc, sw), text(`${variants.length} variant${variants.length === 1 ? '' : 's'}: to add more, drag drawings into it or draw with the switch selected.`)];
-    // Solo información: qué params eligen la variante (por drivers hacia poses que fijan active).
+    // Information only: which params choose the variant (through drivers to poses that set active).
     const params = switchParams(doc, sw.id);
     if (params.length) parts.push(text(`Chosen by parameter${params.length === 1 ? '' : 's'} ${params.map(code).join(', ')} (in Parameters, below).`));
     return parts;
   }
 
-  /** «X muestra [lista]»: en una pose cambia la pose; si no, el montaje. */
+  /** «X shows [list]»: in a pose it changes the pose; otherwise, the setup. */
   function variantSelector(doc, sw) {
     const variants = doc.objects.filter((o) => o.parent === sw.id);
     const label = Object.assign(document.createElement('label'), { className: 'text', textContent: `${state.pose ? `In pose ${state.pose}, ` : ''}${sw.id} shows ` });
@@ -295,7 +295,7 @@ export function mountOptions(root, actions) {
     return label;
   }
 
-  /** Skeleton: cuántos huesos tiene, qué parte del dibujo todavía no sigue a ninguno, y enlazarlo todo de una vez. */
+  /** Skeleton: how many bones it has, which part of the drawing does not follow any yet, and binding it all at once. */
   function skeletonOptions(doc, skeleton) {
     const bones = bonesOf(doc, skeleton.id);
     if (!bones.length) {
@@ -317,7 +317,7 @@ export function mountOptions(root, actions) {
     return parts;
   }
 
-  /** «Parent: x · Children: a, b»: nombres que se tocan para ir a ese hueso (o al skeleton). */
+  /** «Parent: x · Children: a, b»: names that are clicked to go to that bone (or to the skeleton). */
   function kinship(doc, bone) {
     const box = Object.assign(document.createElement('span'), { className: 'text kinship' });
     const go = (id) => {
@@ -336,8 +336,8 @@ export function mountOptions(root, actions) {
   }
 
   /**
-   * Reparent Bone, como en Blender: se eligen los hijos y al final el padre (Shift + clic), y un botón hace el cambio.
-   * Nada cambia con solo hacer clic.
+   * Reparent Bone, as in Blender: the children are picked and finally the parent (Shift + click), and a button makes
+   * the change. Nothing changes just by clicking.
    */
   function reparentOptions(doc, bone) {
     const plan = reparentPlan(doc);
@@ -372,7 +372,7 @@ export function mountOptions(root, actions) {
     return parts;
   }
 
-  /** Reparent Bone, Bind Layer y Bind Points: qué hacer según haya o no un hueso elegido. */
+  /** Reparent Bone, Bind Layer and Bind Points: what to do depending on whether there is a picked bone. */
   function bindingOptions(doc, bone) {
     const h = bone && code(bone.id);
     const skeleton = bone && skeletonOf(doc, bone.id);

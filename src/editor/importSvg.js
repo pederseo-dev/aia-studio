@@ -1,20 +1,20 @@
-// Importar SVG: convierte las formas de un archivo SVG en paths editables dentro de un grupo nuevo.
-// El SVG se monta oculto en la página (sin scripts ni eventos) para que el navegador resuelva transformaciones y
-// estilos; de ahí se toman la geometría y los colores. Lo que no es geometría (texto, imágenes, filtros) se ignora.
+// Import SVG: converts the shapes of an SVG file into editable paths inside a new group.
+// The SVG is mounted hidden in the page (without scripts or events) so the browser resolves transforms and
+// styles; geometry and colors are taken from there. What is not geometry (text, images, filters) is ignored.
 
 import { parseD, transformVertices } from '../core/paths.js';
 
 const SHAPES = 'path, rect, circle, ellipse, line, polyline, polygon';
 const DANGEROUS = 'script, foreignObject, iframe, object, embed, image, use, a';
 
-/** Devuelve las operaciones para crear el grupo importado, o lanza si el archivo no sirve. */
+/** Returns the operations to create the imported group, or throws if the file is not usable. */
 export function importOperations(text, { doc, parent, name }) {
   const svg = new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
   if (svg.nodeName !== 'svg' || svg.querySelector('parsererror')) throw new Error('The file is not a valid SVG');
   clean(svg);
 
   const container = document.createElement('div');
-  // Fuera de pantalla y transparente; sin visibility:hidden, que heredarían las formas y se descartarían.
+  // Off screen and transparent; without visibility:hidden, which the shapes would inherit and be discarded.
   container.style.cssText = 'position:fixed;left:-10000px;top:0;opacity:0;pointer-events:none';
   container.append(document.importNode(svg, true));
   document.body.append(container);
@@ -54,7 +54,7 @@ function convert(root, { doc, parent, name }) {
     if (style.display === 'none' || style.visibility === 'hidden') continue;
     const d = pathOf(el);
     if (!d) continue;
-    // Matriz del elemento en las coordenadas del SVG raíz (incluye viewBox y todos los transform).
+    // Matrix of the element in the coordinates of the root SVG (includes viewBox and every transform).
     const m = rootInverse.multiply(el.getScreenCTM());
     const matrix = [m.a, m.b, m.c, m.d, m.e, m.f];
     const scale = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c));
@@ -68,7 +68,7 @@ function convert(root, { doc, parent, name }) {
     for (const s of subpaths) {
       const vertices = transformVertices(s.vertices, matrix);
       if (vertices.length < 2) continue;
-      // Pivote en el centro de las anclas, y vértices relativos a él.
+      // Pivot at the center of the anchors, and vertices relative to it.
       const xs = vertices.map((v) => v.x);
       const ys = vertices.map((v) => v.y);
       const cx = Math.round(((Math.min(...xs) + Math.max(...xs)) / 2) * 10) / 10;
@@ -81,7 +81,7 @@ function convert(root, { doc, parent, name }) {
   return { ops, group };
 }
 
-/** Geometría de cualquier forma SVG como un `d`. */
+/** Geometry of any SVG shape as a `d`. */
 function pathOf(el) {
   const a = (name) => parseFloat(el.getAttribute(name)) || 0;
   switch (el.nodeName) {

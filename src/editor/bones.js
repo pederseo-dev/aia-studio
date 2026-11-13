@@ -1,22 +1,22 @@
-// Huesos en el lienzo: se dibujan en la superposición (no son parte del personaje ni filas de Layers) y se manejan con
-// dos herramientas, como en Moho:
+// Bones on the canvas: they are drawn in the overlay (they are not part of the character nor rows in Layers) and are
+// handled with two tools, as in Moho:
 //
-// - Add Bone (B): solo crea. Arrastrar en vacío crea un hueso (hijo del seleccionado o, si no hay hueso seleccionado,
-//   raíz del skeleton seleccionado o del que contiene la selección; sin ninguno, se crea un skeleton). Arrastrar desde
-//   la punta del hueso seleccionado encadena uno nuevo. Un clic en un hueso lo elige (para colgarle hijos).
-// - Manipulate Bones (M): solo ajusta. Arrastrar un hueso lo gira; la manija del origen lo mueve y la de la punta
-//   cambia dirección y largo.
-// - Reparent Bone: nada pasa solo al hacer clic. Clic elige un hueso, Shift/Ctrl + clic suma más, clic en vacío
-//   suelta la selección. Los botones de la barra hacen el cambio: «Parent to …» cuelga los elegidos del último que
-//   se eligió, y «Clear parent» los deja como raíz. No se mueven en pantalla. Mientras está activa se dibuja la
-//   jerarquía.
-// - Bind Layer (L): clic en un hueso y después en el dibujo (o su fila de Layers) para que lo siga entero; otro clic lo
-//   suelta. Alt + clic toma el grupo que lo contiene.
-// - Bind Points: clic en un hueso y después en puntos de los paths de su skeleton (o un recuadro alrededor) para que
-//   sigan a ese hueso; Alt suelta. Cada hueso tiene un color y sus puntos se pintan con él.
+// - Add Bone (B): only creates. Dragging on empty space creates a bone (child of the selected one or, if no bone is
+//   selected, root of the selected skeleton or the one containing the selection; with none, a skeleton is created).
+//   Dragging from the tip of the selected bone chains a new one. A click on a bone picks it (to hang children on it).
+// - Manipulate Bones (M): only adjusts. Dragging a bone rotates it; the origin handle moves it and the tip handle
+//   changes direction and length.
+// - Reparent Bone: nothing happens just by clicking. Click picks a bone, Shift/Ctrl + click adds more, click on empty
+//   space drops the selection. The bar buttons make the change: «Parent to …» hangs the picked ones from the last one
+//   picked, and «Clear parent» makes them roots. They do not move on screen. While it is active the hierarchy is
+//   drawn.
+// - Bind Layer (L): click on a bone and then on the drawing (or its row in Layers) so it follows it whole; another
+//   click releases it. Alt + click takes the group that contains it.
+// - Bind Points: click on a bone and then on points of the paths of its skeleton (or a marquee around them) so they
+//   follow that bone; Alt releases. Each bone has a color and its points are painted with it.
 //
-// En el montaje esos ajustes cambian el reposo. Con una pose activa, cualquier herramienta posa: arrastrar un hueso (o
-// el dibujo enlazado a él) lo gira dentro de la pose y el origen lo desplaza.
+// In the setup those adjustments change the rest pose. With an active pose, any tool poses: dragging a bone (or the
+// drawing bound to it) rotates it within the pose and the origin offsets it.
 
 import { locked, findObject, skeletonOf } from '../core/document.js';
 import { read } from '../core/schema.js';
@@ -28,10 +28,10 @@ import { toggleSelection, notify, docVisible, execute, schema, state, freeId, pr
 
 const round = (v, d = 10) => Math.round(v * d) / d;
 
-/** Herramientas del grupo de huesos (con cualquiera de ellas, los huesos se pueden tocar en el lienzo). */
+/** Tools of the bone group (with any of them, bones can be touched on the canvas). */
 export const BONE_TOOLS = ['bone', 'manipulate', 'reparent', 'bindLayer', 'bindPoints'];
 
-// Un color por hueso (como en Rive), para ver qué puntos y qué dibujo siguen a cuál.
+// One color per bone (as in Rive), to see which points and which drawing follow which.
 const COLORS = ['#ff6b6b', '#ffa94d', '#e9d94a', '#69db7c', '#3bc9db', '#5c9dff', '#b197fc', '#f783ac'];
 
 export function boneColor(doc, id) {
@@ -39,30 +39,30 @@ export function boneColor(doc, id) {
   return i < 0 ? '#ffffffaa' : COLORS[i % COLORS.length];
 }
 
-/** El hueso elegido, si lo hay. */
+/** The picked bone, if any. */
 const chosenBone = (doc = state.doc) => {
   const sel = state.selection && findObject(doc, state.selection);
   return sel?.type === 'bone' ? sel : null;
 };
 
 /**
- * Reparent Bone: lo que harían los botones con la selección actual. Los hijos son los huesos elegidos menos el
- * principal (el último elegido), que es el padre. Devuelve { padre, hijos, ops, problema } para «Parent to…» y
- * { sueltos, ops } para «Clear parent» (los elegidos que no son raíz).
+ * Reparent Bone: what the buttons would do with the current selection. The children are the picked bones minus the
+ * main one (the last picked), which is the parent. Returns { parent, children, ops, problem } for «Parent to…» and
+ * { loose, ops } for «Clear parent» (the picked ones that are not roots).
  */
 export function reparentPlan(doc = state.doc) {
   return planReparentBones(doc, schema, state.selected, state.selection);
 }
 
-/** El hueso al que enlaza Bind Layer: el elegido, con esa herramienta activa (y fuera de una pose). */
+/** The bone Bind Layer binds to: the picked one, with that tool active (and outside a pose). */
 export function boneToBind(doc = state.doc) {
   return state.tool === 'bindLayer' && !state.pose ? (chosenBone(doc)?.id ?? null) : null;
 }
 const DEGREES = 180 / Math.PI;
 
 /**
- * El skeleton donde trabaja la herramienta Hueso: el seleccionado, el del hueso seleccionado o el que contiene la
- * selección. null si no hay ninguno.
+ * The skeleton the Bone tool works on: the selected one, the one of the selected bone or the one containing the
+ * selection. null if there is none.
  */
 export function activeSkeleton(doc = state.doc) {
   const sel = state.selection && findObject(doc, state.selection);
@@ -70,10 +70,10 @@ export function activeSkeleton(doc = state.doc) {
   return sel.type === 'skeleton' ? sel.id : skeletonOf(doc, sel.id);
 }
 
-// Lo usan el árbol y main.js; vive en el núcleo.
+// Used by the Layers panel and main.js; it lives in the core.
 export { reasonNotToBind };
 
-/** Pega un objeto al hueso o, si ya estaba pegado a ese, lo suelta. */
+/** Attaches an object to the bone or, if it was already attached to that one, releases it. */
 export function toggleBinding(id, bone) {
   const obj = findObject(state.doc, id);
   if (!obj || !('bone' in (schema.types.get(obj.type)?.properties ?? {}))) return;
@@ -83,7 +83,7 @@ export function toggleBinding(id, bone) {
   execute([{ op: 'set', target: id, props: { bone: bone } }], `bind ${id} to ${bone}`);
 }
 
-/** «Bind all by proximity»: el dibujo del skeleton que no sigue a ningún hueso va al más cercano. */
+/** «Bind all by proximity»: the skeleton's drawing that follows no bone goes to the nearest one. */
 export function bindByProximity(skeletonId) {
   let plan;
   try {
@@ -98,14 +98,14 @@ export function bindByProximity(skeletonId) {
 }
 
 /**
- * Antes de mover `id` a `padre`: lo que suelta los enlaces que dejarían de valer (dibujo que sale del skeleton de su
- * hueso, o huesos que se van a otro skeleton). Va en el mismo lote, antes del move.
+ * Before moving `id` to `parent`: what releases the bindings that would stop being valid (drawing that leaves the
+ * skeleton of its bone, or bones that go to another skeleton). It goes in the same batch, before the move.
  */
 export function releaseOnMove(doc, id, parent) {
   return opsToReleaseOnMove(doc, schema, id, parent);
 }
 
-/** Aviso para lo que soltarAlMover soltó. */
+/** Notice for what releaseOnMove released. */
 export function notifyLoose(ops) {
   const ids = [...new Set(ops.map((o) => o.target))];
   if (ids.length) notify(`Unbound ${ids.join(', ')}: a drawing only follows bones of its own skeleton`);
@@ -116,7 +116,7 @@ export function createBones(ctx) {
   const adjusting = () => state.tool === 'manipulate' || !!state.pose;
   const isBone = (id) => findObject(state.doc, id)?.type === 'bone';
 
-  // ---------- Dibujo ----------
+  // ---------- Drawing ----------
 
   function draw() {
     const doc = docVisible();
@@ -131,13 +131,13 @@ export function createBones(ctx) {
       const o = apply(m, 0, 0);
       const t = apply(m, read(schema, h, 'length'), 0);
       const length = Math.hypot(t[0] - o[0], t[1] - o[1]);
-      // El padre y los hijos del hueso elegido, marcados para ver la cadena.
-      // Con Reparent Bone y varios elegidos, el principal es el padre que se va a usar: se marca distinto.
+      // The parent and the children of the picked bone, marked to see the chain.
+      // With Reparent Bone and several picked, the main one is the parent that will be used: it is marked differently.
       const reparenting = state.tool === 'reparent' && state.selected.length > 1;
       const kinship = reparenting ? (h.id === state.selection ? ' new-parent' : '') : chosen && h.id === chosen.parent ? ' parent' : chosen && h.parent === chosen.id ? ' child' : '';
       const className = `bone${state.selected.includes(h.id) ? ' selected' : ''}${h.id === state.selection ? ' main' : ''}${kinship}`;
       const color = { style: `--c: ${boneColor(doc, h.id)}` };
-      // Unión punteada cuando el hueso no nace en la punta de su padre.
+      // Dotted joint when the bone does not start at its parent's tip.
       const parent = h.parent && findObject(doc, h.parent);
       if (parent?.type === 'bone') {
         const mp = multiply(camera, posed.get(parent.id));
@@ -148,14 +148,14 @@ export function createBones(ctx) {
         layer.append(ctx.create('circle', { class: className, 'data-bone': h.id, cx: o[0], cy: o[1], r: 4, ...color }, h.id));
         continue;
       }
-      // Forma de rombo alargado, como en Moho: ancho cerca del origen, en punta hacia el final.
+      // Elongated diamond shape, as in Moho: wide near the origin, pointed towards the end.
       const [dx, dy] = [(t[0] - o[0]) / length, (t[1] - o[1]) / length];
       const width = Math.min(9, Math.max(3, length * 0.12));
       const q = [o[0] + dx * length * 0.2, o[1] + dy * length * 0.2];
       const points = [o, [q[0] - dy * width, q[1] + dx * width], t, [q[0] + dy * width, q[1] - dx * width]];
       layer.append(ctx.create('polygon', { class: className, 'data-bone': h.id, points: points.map((p) => p.join(',')).join(' '), ...color }, h.id));
     }
-    // Reparent Bone: la jerarquía entera, una línea de cada hueso a la mitad de su padre.
+    // Reparent Bone: the whole hierarchy, a line from each bone to the middle of its parent.
     if (state.tool === 'reparent' && !state.pose) {
       for (const h of bones) {
         const parent = findObject(doc, h.parent);
@@ -168,7 +168,7 @@ export function createBones(ctx) {
     ctx.overlay.append(layer);
     if (state.tool === 'bindPoints' && !state.pose) drawPoints(doc);
 
-    // Lo que mueve el hueso elegido, marcado en el dibujo.
+    // What the picked bone moves, marked on the drawing.
     const marked = chosen?.id;
     if (marked) {
       for (const o of doc.objects.filter((x) => x.bone === marked)) {
@@ -182,8 +182,8 @@ export function createBones(ctx) {
       }
     }
 
-    // Manijas del hueso principal seleccionado: con Manipulate (o en una pose), origen y punta para ajustarlo; con Add
-    // Bone, solo la punta, para encadenar.
+    // Handles of the main selected bone: with Manipulate (or in a pose), origin and tip to adjust it; with Add
+    // Bone, only the tip, to chain.
     const sel = active() && state.selection && findObject(doc, state.selection);
     if (sel?.type === 'bone') {
       const m = multiply(camera, posed.get(sel.id));
@@ -195,7 +195,7 @@ export function createBones(ctx) {
     }
   }
 
-  /** Bind Points: los puntos de los paths del skeleton activo, con el color del hueso que siguen. */
+  /** Bind Points: the points of the active skeleton's paths, with the color of the bone they follow. */
   function drawPoints(doc) {
     const skeleton = activeSkeleton(doc);
     if (!skeleton) return;
@@ -213,29 +213,29 @@ export function createBones(ctx) {
     ctx.overlay.append(layer);
   }
 
-  // ---------- Matrices de trabajo ----------
+  // ---------- Working matrices ----------
 
-  /** Lo que hace falta para arrastrar un hueso: su matriz en pantalla y la del marco de su padre. */
+  /** What is needed to drag a bone: its matrix on screen and that of its parent's frame. */
   function frames(id) {
     const doc = state.doc;
     const pose = activePose(doc);
-    // Lo que se ve: con la pose aplicada también al skeleton y a sus grupos de arriba.
+    // What is seen: with the pose also applied to the skeleton and to its groups above.
     const seen = pose ? applyPose(doc, schema, pose) : doc;
     const ev = evaluateSkeleton(seen, schema, pose);
     const world = pose ? ev.posed : ev.rest;
     const h = findObject(doc, id);
     const camera = ctx.cameraMatrix();
-    // El marco del padre: el hueso padre o, para un hueso raíz, su skeleton.
+    // The parent's frame: the parent bone or, for a root bone, its skeleton.
     const fromBone = findObject(doc, h.parent)?.type === 'bone';
     const parent = multiply(camera, fromBone ? world.get(h.parent) : childFrame(seen, schema, h.parent));
-    // El giro se mide contra el padre, salvo con ángulo independiente (solo hereda la posición del hueso padre).
+    // Rotation is measured against the parent, except with an independent angle (it only inherits the parent's position).
     const rotation = !fromBone || !read(schema, h, 'independentAngle') ? parent : camera;
     return { doc, pose, h, values: boneValues(schema, h, pose), own: multiply(camera, world.get(id)), parent, rotation };
   }
 
   const directionOf = (m) => Math.sign(m[0] * m[3] - m[1] * m[2]) || 1;
 
-  /** Lote para cambiar un hueso: en la pose activa si la hay, si no en el montaje. */
+  /** Batch to change a bone: in the active pose if there is one, otherwise in the setup. */
   function change(id, fields) {
     const pose = activePose();
     if (pose) {
@@ -247,9 +247,9 @@ export function createBones(ctx) {
 
   const note = (id, what) => (state.pose ? `${editingName()}: ${what} ${id}` : `${what} ${id}`);
 
-  // ---------- Interacción ----------
+  // ---------- Interaction ----------
 
-  /** Girar un hueso arrastrando alrededor de su origen. */
+  /** Rotate a bone by dragging around its origin. */
   function rotate(e, id) {
     const { values, own, rotation } = frames(id);
     const origin = apply(own, 0, 0);
@@ -262,7 +262,7 @@ export function createBones(ctx) {
       e,
       (ev) => {
         const a = angle(ctx.screenPoint(ev));
-        // Sin saltos al cruzar ±180°.
+        // No jumps when crossing ±180°.
         accumulated += ((a - previous + 540) % 360) - 180;
         previous = a;
         let rot = values.rotation + direction * accumulated;
@@ -295,7 +295,7 @@ export function createBones(ctx) {
     }
 
     if (kind === 'bone-tip') {
-      // En la pose, la punta solo gira. Con Add Bone encadena uno nuevo; con Manipulate cambia dirección y largo.
+      // In the pose, the tip only rotates. Add Bone chains a new one; Manipulate changes direction and length.
       if (state.pose) return rotate(e, id);
       if (!adjusting()) return create(e);
       const inverse = invert(rotation);
@@ -316,14 +316,14 @@ export function createBones(ctx) {
     }
   }
 
-  /** Add Bone en el montaje: un clic en un hueso lo elige; arrastrar en vacío crea uno. */
+  /** Add Bone in the setup: a click on a bone picks it; dragging on empty space creates one. */
   function pointerdown(e) {
     const id = e.target.closest('[data-bone]')?.dataset.bone;
     if (id) return select(id);
     create(e);
   }
 
-  /** Manipulate Bones en el montaje: arrastrar un hueso lo gira; Ctrl + clic lo suma o lo quita; un clic en vacío suelta la selección. */
+  /** Manipulate Bones in the setup: dragging a bone rotates it; Ctrl + click adds or removes it; click on empty drops the selection. */
   function pointerdownManipulate(e) {
     const id = e.target.closest('[data-bone]')?.dataset.bone;
     if (!id) return boneMarquee(e, e.ctrlKey || e.metaKey || e.shiftKey);
@@ -333,21 +333,21 @@ export function createBones(ctx) {
   }
 
   /**
-   * Arrastrar en un lugar vacío: elige los huesos que toca el recuadro (con Ctrl o Shift, los suma). Clic: suelta
-   * todo. Con `conFormas` (en una pose o un clip) también elige las formas que toca, para keyar varias a la vez.
+   * Dragging on an empty spot: picks the bones the marquee touches (with Ctrl or Shift, adds them). Click: drops
+   * everything. With `withShapes` (in a pose or a clip) it also picks the shapes it touches, to key several at once.
    */
   function boneMarquee(e, add, withShapes = false) {
     const doc = docVisible();
     const base = add ? (withShapes ? [...state.selected] : state.selected.filter(isBone)) : [];
     const { posed } = evaluateInPose(doc, schema, viewedPose(doc));
     const camera = ctx.cameraMatrix();
-    // Cada hueso como unos puntos a lo largo de su eje, en pantalla: lo toca el recuadro si alguno cae adentro.
+    // Each bone as a few points along its axis, on screen: the marquee touches it if any falls inside.
     const bones = doc.objects.filter((o) => o.type === 'bone').map((h) => {
       const m = multiply(camera, posed.get(h.id));
       const length = read(schema, h, 'length');
       return { id: h.id, points: Array.from({ length: 13 }, (_, i) => apply(m, (length * i) / 12, 0)) };
     });
-    // Formas visibles (no contenedores, como con el clic), con su caja en pantalla; las ocultas miden 0 y quedan afuera.
+    // Visible shapes (not containers, as with the click), with their box on screen; hidden ones measure 0 and stay out.
     const CONTAINERS = ['group', 'skeleton', 'switch'];
     const shapes = !withShapes ? [] : [...ctx.documentG.querySelectorAll('[data-id]')]
       .filter((el) => !CONTAINERS.includes(findObject(doc, el.dataset.id)?.type) && !locked(doc, el.dataset.id))
@@ -374,7 +374,7 @@ export function createBones(ctx) {
         const ids = [...base, ...touched.filter((t) => !base.includes(t))];
         if (ids.join() !== state.selected.join()) selectSeveral(ids, ids.at(-1) ?? null);
         for (const [k, v] of Object.entries({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 })) box.setAttribute(k, v);
-        ctx.overlay.append(box); // la superposición se redibuja al cambiar la selección
+        ctx.overlay.append(box); // the overlay is redrawn when the selection changes
       },
       () => {
         box.remove();
@@ -386,8 +386,8 @@ export function createBones(ctx) {
   const touchedBone = (e) => e.target.closest('[data-bone]')?.dataset.bone ?? null;
 
   /**
-   * Reparent Bone: el clic solo selecciona (Shift/Ctrl + clic suma o quita; clic en vacío suelta todo). El cambio lo
-   * hacen los botones de la barra de opciones (ver planDeReparentar).
+   * Reparent Bone: the click only selects (Shift/Ctrl + click adds or removes; click on empty space drops everything).
+   * The change is made by the option bar buttons (see reparentPlan).
    */
   function pointerdownReparent(e) {
     const touched = touchedBone(e);
@@ -395,7 +395,7 @@ export function createBones(ctx) {
     select(touched);
   }
 
-  /** Bind Layer: clic en un hueso lo elige; clic en el dibujo lo enlaza a él (o lo suelta). Alt: su grupo. */
+  /** Bind Layer: click on a bone picks it; click on the drawing binds it to it (or releases it). Alt: its group. */
   function pointerdownBindLayer(e) {
     const touched = touchedBone(e);
     if (touched) return select(touched);
@@ -408,8 +408,8 @@ export function createBones(ctx) {
   }
 
   /**
-   * Bind Points: clic en un hueso lo elige; clic en un punto lo enlaza a ese hueso (o lo suelta si ya era suyo);
-   * arrastrar hace un recuadro y enlaza todos los puntos de adentro (con Alt, los suelta).
+   * Bind Points: click on a bone picks it; click on a point binds it to that bone (or releases it if it was already
+   * its own); dragging makes a marquee and binds all the points inside (with Alt, releases them).
    */
   function pointerdownBindPoints(e) {
     const doc = state.doc;
@@ -423,7 +423,7 @@ export function createBones(ctx) {
       const v = read(schema, findObject(doc, pathId), 'vertices')[i];
       return savePoints(new Map([[pathId, new Map([[i, e.altKey || v.bone === bone.id ? null : bone.id]])]]), bone.id);
     }
-    // Recuadro.
+    // Marquee.
     const s0 = ctx.screenPoint(e);
     const box = ctx.create('rect', { class: 'marquee', x: s0[0], y: s0[1], width: 0, height: 0 });
     ctx.overlay.append(box);
@@ -456,7 +456,7 @@ export function createBones(ctx) {
     );
   }
 
-  /** Lote con los vértices nuevos de cada path: cambios = Map(pathId → Map(índice → hueso o null)). */
+  /** Batch with the new vertices of each path: changes = Map(pathId → Map(index → bone or null)). */
   function savePoints(changes, bone) {
     const ops = [];
     let n = 0;
@@ -473,7 +473,7 @@ export function createBones(ctx) {
     execute(ops, loose ? `unbind ${n} point${n === 1 ? '' : 's'}` : `bind ${n} point${n === 1 ? '' : 's'} to ${bone}`);
   }
 
-  /** Con una pose activa: se gira el hueso tocado, o el hueso del dibujo tocado. */
+  /** With an active pose: the touched bone is rotated, or the bone of the touched drawing. */
   function pointerdownPose(e) {
     let id = e.target.closest('[data-bone]')?.dataset.bone;
     if (!id) {
@@ -482,13 +482,13 @@ export function createBones(ctx) {
       id = boneOf(state.doc, g.dataset.id) ?? nearestBoneToPoints(g.dataset.id, ctx.screenPoint(e));
       if (!id) return e.ctrlKey || e.metaKey ? toggleSelection(g.dataset.id) : select(g.dataset.id);
     }
-    // Ctrl + clic: suma o quita de la selección sin girar (para ver y keyar varios en la timeline).
+    // Ctrl + click: adds or removes from the selection without rotating (to see and key several in the timeline).
     if (e.ctrlKey || e.metaKey) return toggleSelection(id);
     select(id);
     rotate(e, id);
   }
 
-  /** Path enlazado por punto: el hueso (de los que siguen sus vértices) más cercano al clic, en la pose. */
+  /** Path bound by point: the bone (among those its vertices follow) closest to the click, in the pose. */
   function nearestBoneToPoints(pathId, point) {
     const path = findObject(state.doc, pathId);
     const ids = [...new Set((path?.vertices ?? []).map((v) => v.bone).filter(Boolean))];
@@ -510,8 +510,8 @@ export function createBones(ctx) {
   }
 
   /**
-   * Arrastrar en vacío crea un hueso. Es hijo del hueso seleccionado (si se empieza en su punta, se encadena) o un
-   * hueso raíz del skeleton activo. Sin skeleton, se crea uno en la raíz en el mismo paso.
+   * Dragging on empty space creates a bone. It is a child of the selected bone (if it starts at its tip, it chains) or
+   * a root bone of the active skeleton. Without a skeleton, one is created at the root in the same step.
    */
   function create(e) {
     const doc = state.doc;

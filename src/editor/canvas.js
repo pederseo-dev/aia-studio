@@ -1,5 +1,5 @@
-// Lienzo: dibuja el documento, maneja la cámara (pan y zoom) y reparte los eventos entre las herramientas:
-// seleccionar (con manijas), pluma, edición de puntos, creación de formas y huesos (con la pose activa, si hay).
+// Canvas: draws the document, handles the camera (pan and zoom) and dispatches events among the tools:
+// select (with handles), pen, point editing, creating shapes and bones (with the active pose, if any).
 
 import { findObject } from '../core/document.js';
 import { readMeta } from '../core/schema.js';
@@ -25,10 +25,10 @@ export function mountCanvas(container) {
   const camera = { x: 0, y: 0, zoom: 1 };
   let adjustedFor = null;
   let space = false;
-  let showing = '{}'; // variantes de switch que se muestran por la selección
-  let drawnSize = null; // { id, w, h } del último dibujo: si cambia el tamaño, el centro queda quieto en pantalla
+  let showing = '{}'; // switch variants that are shown because of the selection
+  let drawnSize = null; // { id, w, h } of the last draw: if the size changes, the center stays still on screen
 
-  // Lo que comparten las herramientas. "Pantalla" = píxeles dentro del lienzo, el espacio de la superposición.
+  // What the tools share. "Screen" = pixels inside the canvas, the overlay's space.
   const ctx = {
     documentG,
     overlay,
@@ -58,7 +58,7 @@ export function mountCanvas(container) {
     if ('params' in c) container.classList.toggle('mode-params', !!state.params && !state.pose);
     if ('live' in c) container.classList.toggle('in-live', state.live);
     if ('doc' in c || 'previewDoc' in c || 'pose' in c || 'params' in c || 'time' in c || 'livePose' in c) drawDocument();
-    // Seleccionar una variante oculta de un switch la muestra (solo en la vista): hay que redibujar el documento.
+    // Selecting a hidden variant of a switch shows it (only in the view): the document must be redrawn.
     else if ('selection' in c && JSON.stringify(variantsToShow()) !== showing) drawDocument();
     else if ('selection' in c || 'editing' in c || 'vertex' in c) drawOverlay();
     if ('tool' in c) {
@@ -67,14 +67,14 @@ export function mountCanvas(container) {
       if (state.tool !== 'select' && state.editing) setState({ editing: null, vertex: null });
       drawOverlay();
     }
-    // Salir de la edición de puntos si cambia la selección o el path desaparece.
+    // Leave point editing if the selection changes or the path disappears.
     if (state.editing && ('selection' in c || 'doc' in c) && (state.selection !== state.editing || state.selected.length > 1 || !findObject(state.doc, state.editing))) {
       setState({ editing: null, vertex: null });
     }
     if ('id' in c && state.doc && adjustedFor !== state.id) adjust();
   });
 
-  // Soltar imágenes sobre el lienzo: una capa image por archivo, donde se soltó.
+  // Dropping images on the canvas: one image layer per file, where it was dropped.
   view.addEventListener('dragover', (e) => {
     if (!state.doc || !e.dataTransfer?.types.includes('Files')) return;
     e.preventDefault();
@@ -90,28 +90,28 @@ export function mountCanvas(container) {
 
   new ResizeObserver(() => state.doc && (adjustedFor === state.id ? applyCamera() : adjust())).observe(container);
 
-  // ---------- Dibujo ----------
+  // ---------- Drawing ----------
 
   function drawDocument() {
     const doc = docVisible();
     if (!doc) return documentG.replaceChildren();
     const w = readMeta(schema, doc, 'width');
     const h = readMeta(schema, doc, 'height');
-    // El tamaño cambia anclado al centro (core/tamano.js): la cámara se corre para que el centro no salte.
+    // The size changes anchored to the center (core/artboard.js): the camera shifts so the center does not jump.
     if (drawnSize?.id === state.id && (drawnSize.w !== w || drawnSize.h !== h)) {
       camera.x -= ((w - drawnSize.w) / 2) * camera.zoom;
       camera.y -= ((h - drawnSize.h) / 2) * camera.zoom;
       cameraG.setAttribute('transform', `translate(${camera.x} ${camera.y}) scale(${camera.zoom})`);
     }
     drawnSize = { id: state.id, w, h };
-    // Lo que se ve: la pose que se edita, la mezcla de los params (vista Parámetros) o el montaje.
+    // What is seen: the pose being edited, the blend of the params (Parameters view) or the setup.
     const clip = openedClip(doc);
-    // Con Live encendido, lo que da el runtime en este cuadro (como lo vería la app).
+    // With Live on, what the runtime gives in this frame (as the app would see it).
     const view = state.live ? { pose: state.livePose } : clip ? { animation: clip.id, time: state.time, params: state.params ?? {} } : state.pose ? { pose: state.pose } : state.params ? { params: state.params } : {};
     const show = state.live || (state.params && !state.pose) ? {} : variantsToShow(doc);
     showing = JSON.stringify(show);
     documentG.innerHTML = `${svgContent(doc, schema, { ...view, show, assets: (src) => assetUrl(src) })}<rect class="document-frame" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
-    // Con candado: los clics pasan de largo (llegan a lo de abajo), y sus hijos lo heredan.
+    // Locked: clicks pass through (they reach what is below), and its children inherit it.
     for (const o of doc.objects) if (o.locked) ctx.element(o.id)?.style.setProperty('pointer-events', 'none');
     drawOverlay();
   }
@@ -122,7 +122,7 @@ export function mountCanvas(container) {
     if (state.editing) {
       const el = ctx.element(state.editing);
       if (el) {
-        // Contorno del path en edición, encima de todo.
+        // Outline of the path being edited, on top of everything.
         const outline = el.querySelector(':scope > path')?.cloneNode();
         if (outline) {
           const m = el.getCTM();
@@ -133,7 +133,7 @@ export function mountCanvas(container) {
       }
       points.draw();
     } else {
-      // En una pose, las manijas solo salen para lo que no sigue a un hueso (transformar.dibujar lo decide).
+      // In a pose, handles only appear for what does not follow a bone (transform.draw decides).
       transform.draw();
     }
     bones.draw();
@@ -141,7 +141,7 @@ export function mountCanvas(container) {
     if (state.tool === 'artboard') artboard.draw();
   }
 
-  // ---------- Cámara ----------
+  // ---------- Camera ----------
 
   function applyCamera() {
     cameraG.setAttribute('transform', `translate(${camera.x} ${camera.y}) scale(${camera.zoom})`);
@@ -149,7 +149,7 @@ export function mountCanvas(container) {
     drawOverlay();
   }
 
-  /** Zoom fijo, manteniendo el centro de la vista. */
+  /** Fixed zoom, keeping the center of the view. */
   function setZoom(zoom) {
     const r = container.getBoundingClientRect();
     const [cx, cy] = [r.width / 2, r.height / 2];
@@ -198,12 +198,12 @@ export function mountCanvas(container) {
   });
   window.addEventListener('keyup', (e) => e.code === 'Space' && (space = false));
 
-  // Sigue el puntero hasta soltarlo.
+  // Follows the pointer until it is released.
   function drag(e, move, release) {
     try {
       view.setPointerCapture(e.pointerId);
     } catch {
-      // puntero que ya no está activo (o evento sintético): se sigue sin captura
+      // pointer that is no longer active (or synthetic event): it is followed without capture
     }
     const onRelease = (ev) => {
       view.removeEventListener('pointermove', move);
@@ -216,7 +216,7 @@ export function mountCanvas(container) {
     view.addEventListener('pointercancel', onRelease);
   }
 
-  // ---------- Eventos ----------
+  // ---------- Events ----------
 
   view.addEventListener('pointerdown', (e) => {
     container.focus();
@@ -226,17 +226,17 @@ export function mountCanvas(container) {
     const handle = e.target.closest('[data-handle]')?.dataset.handle;
     if (handle?.startsWith('bone')) return bones.handle(e, handle);
     if (handle?.startsWith('artboard-')) return artboard.handle(e, handle);
-    // Artboard: el lienzo queda elegido (el inspector muestra sus propiedades); fuera de las manijas no hace nada.
+    // Artboard: the canvas stays picked (the inspector shows its properties); outside the handles it does nothing.
     if (state.tool === 'artboard') return state.selection && select(null);
     if (handle) return state.editing ? points.handle(e, handle) : transform.handle(e, handle);
-    // Con una pose activa, el lienzo posa: se giran huesos (o el dibujo a través de su hueso).
-    // Lo que no sigue a un hueso se elige, mueve, gira y escala como en el montaje; queda en la pose (o en el clip).
+    // With an active pose, the canvas poses: bones are rotated (or the drawing through its bone).
+    // What follows no bone is picked, moved, rotated and scaled as in the setup; it stays in the pose (or the clip).
     if (state.pose) {
       const g = e.target.closest('[data-id]');
       if (g && documentG.contains(g) && !e.target.closest('[data-bone]') && isFree(state.doc, g.dataset.id)) return transform.selectAndMove(e);
       return bones.pointerdownPose(e);
     }
-    // En la vista Parámetros se mira la mezcla: un clic solo selecciona.
+    // In the Parameters view the blend is viewed: a click only selects.
     if (state.params) {
       const g = e.target.closest('[data-id]');
       return select(g && documentG.contains(g) ? g.dataset.id : null);
@@ -260,7 +260,7 @@ export function mountCanvas(container) {
 
   view.addEventListener('dblclick', (e) => {
     if (state.tool !== 'select') return;
-    // Por la captura del puntero, el doble clic llega a la vista: se busca qué hay debajo.
+    // Because of pointer capture, the double click reaches the view: what is below is looked up.
     const below = document.elementFromPoint(e.clientX, e.clientY) ?? e.target;
     const handle = below.closest('[data-handle^="anchor"]')?.dataset.handle;
     if (handle && state.editing) return points.toggle(Number(handle.split('-')[1]));
@@ -295,7 +295,7 @@ export function mountCanvas(container) {
       const s = ctx.screenPoint(ev);
       let dx = s[0] - s0[0];
       let dy = s[1] - s0[1];
-      // Shift: cuadrado o círculo.
+      // Shift: square or circle.
       if (ev.shiftKey) {
         const side = Math.max(Math.abs(dx), Math.abs(dy));
         dx = Math.sign(dx || 1) * side;
