@@ -53,6 +53,10 @@ test('a config without mcpServers, empty or missing gets just our entry', () => 
     assert.deepEqual(after.mcpServers, { 'aia-studio': entry });
   }
   assert.deepEqual(JSON.parse(addEntry(JSON.stringify({ preferences: { a: 1 } }), entry).text).preferences, { a: 1 });
+  // Saved by Notepad, with a byte order mark.
+  const withBom = JSON.parse(addEntry('﻿' + existing, entry).text);
+  assert.equal(Object.keys(withBom.mcpServers).length, 3);
+  assert.equal(entryStatus('﻿' + addEntry(existing, entry).text, entry), 'current');
 });
 
 test('an old entry (the app moved) is replaced; key order does not matter', () => {

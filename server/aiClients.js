@@ -57,6 +57,8 @@ export function findClaudeDesktopConfig(system = {}) {
 
 /** @param {string | null | undefined} text @returns {Record<string, any>} */
 function parseConfig(text) {
+  // A file saved with Notepad may start with a byte order mark.
+  text = text?.replace(/^﻿/, '');
   if (!text?.trim()) return {};
   let config;
   try {

@@ -389,3 +389,30 @@ for shapes with a hole, as in Rive.
   keys. It stays editable from Layers and the inspector, is saved in the document and can be undone.
 - ✅ The AI sees it: `get_document` marks "(locked by the user)" (and "(hidden)") and the guide tells it not to change
   a locked layer unless asked.
+
+## Electron packaging (2026-11-13)
+
+Decided with the user: stay in JS, local-first (no hosted web app, no remote MCP), and ship a desktop app so people
+can use aia-studio without Node, the repo or a terminal. The MCP stays stdio, launched by the AI client, but it runs
+the app's own executable as Node (`ELECTRON_RUN_AS_NODE=1`), so it is always the same version as the editor. The app
+guides the connection with a button; the user never has to ask the AI chat to set itself up.
+
+- ✅ **Server without `vite dev`**: `server/api.js` (the `/api/documents` routes as a plain Node handler) is mounted
+  by the Vite plugin in dev and by `server/app.js` in production, which serves the `vite build` output on
+  `127.0.0.1`. Cross-site `Origin` and foreign `Host` headers are refused.
+- ✅ **Live notices without Vite's websocket**: our own `fs.watch` on the documents folder (`server/events.js`) and
+  Server-Sent Events on `/api/events` (`document`, `history`, `deleted`, `ai`), in dev and in the app alike. The
+  editor listens with `EventSource` (`src/editor/serverEvents.js`) instead of `import.meta.hot`.
+- ✅ **Configurable documents folder** (`server/folder.js`): `--documents`, `AIA_DOCUMENTS`, or the repo's
+  `documents/`. The installed app uses `%APPDATA%\aia-studio\documents` and writes it into the AI client entry.
+- ✅ **Electron shell** (`electron/main.js`): starts the server on a stable port (kept in `settings.json`, so
+  localStorage survives), opens the window, single instance, external links open outside.
+- ✅ **Connect your AI**: welcome on first launch, ☰ → Connect your AI…, header chip. Claude Desktop's config is
+  found in its three Windows locations (classic `%APPDATA%\Claude`, MSIX `Packages\Claude_*\LocalCache`, and
+  `%LOCALAPPDATA%\Claude-Data\<package>`) and on macOS; connect/disconnect touch only our entry, with a backup; each
+  launch repairs an entry that points at an old location. Each MCP server leaves `<documents>/.aia/mcp/<pid>.json`
+  with its client while it runs, so the editor shows "Claude Desktop connected". Claude Code command, Cursor and VS
+  Code install links; ChatGPT / claude.ai web shown as not available.
+- ✅ **Build**: `npm run dist:win` (electron-builder, NSIS per-user installer, unsigned; `@resvg/resvg-js` unpacked
+  from the asar).
+- Later: macOS build, code signing (SmartScreen / Gatekeeper), auto-update, a "Reveal documents folder" action.

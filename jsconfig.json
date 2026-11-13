@@ -12,5 +12,5 @@
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "types": ["node", "vite/client"]
   },
-  "include": ["src/**/*.js", "mcp/**/*.js", "server/**/*.js", "scripts/**/*.js"]
+  "include": ["src/**/*.js", "mcp/**/*.js", "server/**/*.js", "scripts/**/*.js", "electron/**/*.js"]
 }

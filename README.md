@@ -56,6 +56,19 @@ Not yet: exporting the character for use inside other apps (a JS runtime, video 
 
 ## Getting started
 
+### Desktop app (Windows)
+
+Download `aia-studio-Setup-<version>.exe` from the
+[releases](https://github.com/pederseo-dev/aia-studio/releases) and run it. It installs for your user only (no admin
+rights) and needs nothing else: no Node.js, no terminal.
+
+The installer is not signed yet, so Windows SmartScreen may say "Windows protected your PC". Click **More info →
+Run anyway**. Signing (and macOS builds) will come later.
+
+Your documents are saved in `%APPDATA%\aia-studio\documents`.
+
+### From source
+
 Requires Node.js 20.19+ or 22.12+.
 
 ```bash
@@ -63,17 +76,39 @@ npm install
 npm run dev        # editor at http://localhost:5173
 npm test           # tests
 npm run typecheck  # type check (tsc over JS with JSDoc)
+npm run app        # the desktop app from the repo (Electron)
+npm run dist:win   # build the Windows installer into release/
 ```
 
-Documents live in `documents/<id>/` (ignored by git).
+From source, documents live in the repo's `documents/<id>/` (ignored by git). Set `AIA_DOCUMENTS` to use another
+folder; the editor and the MCP server both read it.
 
 ## Connect your AI
 
-The AI you already use drives the documents through a local MCP server, `mcp/server.js`, over stdio (no API key). It
-works on the same files as the editor, so what the AI does shows up live in the browser.
+The AI you already use drives the documents through a local MCP server over stdio (no API key, no account). It
+works on the same files as the editor, so what the AI does shows up live.
+
+**In the desktop app** you don't have to configure anything by hand: on first launch (and any time from
+☰ → **Connect your AI…**) the app offers:
+
+- **Claude Desktop:** the **Connect to Claude Desktop** button adds an `aia-studio` entry to Claude Desktop's
+  settings file (keeping your other servers, with a backup next to it as `claude_desktop_config.json.aia-backup`).
+  Then **fully quit Claude Desktop** (on Windows, right-click its icon in the taskbar tray → Quit) and open it again.
+  The header of aia-studio shows **● Claude Desktop connected** once Claude starts it. **Disconnect** removes the
+  entry. If you move or reinstall the app, the entry is updated on the next launch.
+- **Claude Code:** a **Copy command** button with the `claude mcp add …` line to run once.
+- **Cursor and VS Code:** one-click install links.
+- **ChatGPT and claude.ai on the web** can't connect: they only reach servers on the internet, and aia-studio stays
+  on your computer.
+
+The entry runs the app's own executable as Node (`ELECTRON_RUN_AS_NODE=1`) with its bundled `mcp/server.js`, so the
+MCP server is always the same version as the editor.
+
+**From source:**
 
 - **Claude Code:** already configured in [.mcp.json](.mcp.json); approve it when you open the folder.
-- **Claude Desktop and other MCP clients:** add a server with the command `node <path-to>/aia-studio/mcp/server.js`.
+- **Claude Desktop and other MCP clients:** add a server with the command `node <path-to>/aia-studio/mcp/server.js`
+  (or use ☰ → Connect your AI… in `npm run dev`, which writes the same thing for you).
 
 The AI starts with the `get_guide` tool, which explains the format and every tool.
 
@@ -85,7 +120,8 @@ The AI starts with the `get_guide` tool, which explains the format and every too
 | `src/core/` | Document, operations, skeleton, animation and live runtime (no DOM; browser and Node). |
 | `src/render/` | SVG renderer. |
 | `src/editor/` | The visual editor. |
-| `server/` | Disk storage, history and the local API (Vite plugin). |
+| `server/` | Disk storage, history, the local API and live notices (mounted by Vite in dev and by the desktop app), AI client setup. |
+| `electron/` | The desktop app's main process. |
 | `mcp/` | MCP server for the AI. |
 | `tests/` | Tests (`node --test`). |
 
@@ -108,7 +144,7 @@ not affiliated with any of them.
 
 ## Security
 
-aia-studio is a local tool: keep the dev server off public networks. See [SECURITY.md](SECURITY.md) for details and
+aia-studio is a local tool: its server only listens on your own computer; keep the dev server off public networks. See [SECURITY.md](SECURITY.md) for details and
 how to report a vulnerability privately.
 
 ## License
