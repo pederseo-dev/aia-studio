@@ -80,7 +80,7 @@ test('listing and document errors', () =>
   withStore(async (a) => {
     await a.create('b', { name: 'Bee' }, { origin: 'user' });
     await a.create('a', {}, { origin: 'user' });
-    assert.deepEqual(await a.list(), [{ id: 'a', name: 'Sin nombre' }, { id: 'b', name: 'Bee' }].map((d) => (d.id === 'a' ? { id: 'a', name: 'a' } : d)));
+    assert.deepEqual(await a.list(), [{ id: 'a', name: 'Untitled' }, { id: 'b', name: 'Bee' }].map((d) => (d.id === 'a' ? { id: 'a', name: 'a' } : d)));
     await assert.rejects(a.create('a', {}, { origin: 'user' }), /already exists/);
     await a.applyOps('b', [{ op: 'create', type: 'rect', id: 'r' }], { origin: 'user' });
     const copy = await a.create('c', { name: 'Bee 2' }, { origin: 'ai', copyFrom: 'b' });

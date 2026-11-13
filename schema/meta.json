@@ -3,7 +3,7 @@
   "description": "General document data.",
   "help": "General data of the document.",
   "properties": {
-    "name": { "type": "string", "default": "Sin nombre", "group": "General", "help": "Display name of the file.", "description": "Display name of the document." },
+    "name": { "type": "string", "default": "Untitled", "group": "General", "help": "Display name of the file.", "description": "Display name of the document." },
     "width": { "type": "number", "default": 800, "min": 1, "group": "Canvas", "help": "Canvas width in px.", "description": "Canvas width in px." },
     "height": { "type": "number", "default": 800, "min": 1, "group": "Canvas", "help": "Canvas height in px.", "description": "Canvas height in px." },
     "background": { "type": "color", "default": "#f4f1ea", "nullable": true, "group": "Canvas", "help": "Background color. Empty = transparent.", "description": "Background color. null = transparent." },
