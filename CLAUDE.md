@@ -1,15 +1,21 @@
 # aia-studio
 
-## Idioma
+## Language
 
-- **La interfaz del editor va toda en inglés**: textos del HTML, `title`/`aria-label`, menús, avisos, ayudas, notas del historial que ve el usuario. Se usan los términos de Rive/Moho (Layers, Assets, Bone, Pose, Setup, Parameters, Switch…).
-- El código (identificadores), los comentarios y la documentación de `docs/` siguen en español.
-- La conversación con el usuario es en español.
-- **Mensajes de error del núcleo (`src/core/`) y del servidor (`servidor/`, `mcp/`): en inglés.** Llegan tal cual
-  al aviso del editor y a la IA, que los entiende igual. Los nuevos se escriben en inglés; muchos viejos siguen en
-  español (validación, operaciones, esquema, trazado, `sugerir`) y se traducen al tocarlos, junto con las pruebas
-  que los buscan.
-- Las notas del historial (las por defecto de `servidor/almacen.js` y las que pone el MCP) van en inglés: el usuario
-  las ve. El texto de las respuestas del MCP, que solo lee la IA, puede seguir en español.
-- Esquema: `description` (español) es para la guía de la IA; `help` (inglés) es la ayuda que muestra el inspector.
-  Todo tipo y propiedad nuevos llevan las dos (una prueba lo exige).
+- **Everything in the project is in English**: the editor UI (HTML, `title`/`aria-label`, menus, notices, help, history
+  notes the user sees), code (identifiers, file names), comments, error messages, the schema (`description` and
+  `help`), the AI guide (`src/core/guide.js`), MCP tool descriptions and responses, and the docs in use
+  (`README.md`, `docs/plan.md`, `docs/sintesis.md`, `docs/decision-animacion.md`). UI terms follow Rive/Moho (Layers,
+  Assets, Bone, Pose, Setup, Parameters, Switch…).
+- **The conversation with the user stays in Spanish.**
+- Historical records stay as they were written, in Spanish: `docs/auditorias.md`, `docs/pruebas-ia/`,
+  `docs/investigacion/`. New entries in them can be written in English.
+- Schema: `description` is the long text for the AI guide; `help` is the short help the inspector shows. Every new type
+  and property carries both (a test requires it).
+
+## Checks
+
+- `npm test` and `npm run typecheck` (tsc over JS with JSDoc) must pass before each commit.
+- Documents live in `documents/` (ignored by git; never commit it). To try something in the browser, use `prueba_*`
+  documents and delete them afterwards.
+- `git config blame.ignoreRevsFile .git-blame-ignore-revs` skips the mechanical rename commits in `git blame`.

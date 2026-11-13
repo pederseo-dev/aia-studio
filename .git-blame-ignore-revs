@@ -1,0 +1,8 @@
+# Mechanical rename commits (moving the code to English, 2026-11). To make `git blame` skip them:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# Files and folders in English (paths and imports only)
+9ecae3ce6174696bea84ca7448d0dc6895181af3
+# Identifiers in English (rename over the AST)
+90aabf4f289a8f181dc7476af32a4e33393039ac
+# Editor HTML, CSS and internal values
+6a2d0e5779907b39c06fc6b0cb7d94d4e11f9fa6

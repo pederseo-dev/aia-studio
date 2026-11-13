@@ -1,380 +1,380 @@
-# Plan de construcción
+# Build plan
 
-> Estado: **fase 5 en construcción: núcleo, MCP y editor básicos listos y probados con IA (8/8)** (2026-11-05). Se basa en [sintesis.md](sintesis.md) y en la investigación de
-> [Moho](investigacion/moho-lua.md) y [Rive](investigacion/rive-runtime.md).
+> Status: **phase 5 under construction: core, MCP and basic editor ready and AI-tested (8/8)** (2026-11-05). Based on [sintesis.md](sintesis.md) and on the research into
+> [Moho](investigacion/moho-lua.md) and [Rive](investigacion/rive-runtime.md).
 
-## Cómo trabajamos
+## How we work
 
-Avanzamos por **fases cortas**. Cada fase deja algo usable y se cierra con tres pruebas:
+We move in **short phases**. Each phase leaves something usable and closes with three tests:
 
-1. **Pruebas automáticas** del núcleo (`npm test`).
-2. **Prueba a mano en el editor**: lo que se agregó se puede hacer y corregir con el mouse.
-3. **Prueba con IA por MCP**: le damos a una IA una lista fija de tareas en lenguaje natural y anotamos cómo le fue
-   en [pruebas-ia/](pruebas-ia/). Eso nos dice qué partes del formato o de las herramientas confunden a la IA, y las
-   corregimos antes de seguir.
+1. **Automated tests** of the core (`npm test`).
+2. **Manual test in the editor**: what was added can be done and corrected with the mouse.
+3. **AI test over MCP**: we give an AI a fixed list of tasks in natural language and record how it did
+   in [pruebas-ia/](pruebas-ia/). That tells us which parts of the format or the tools confuse the AI, and we
+   fix them before moving on.
 
-Reglas que valen para todas las fases:
+Rules that apply to every phase:
 
-- **Todo cambio es una operación.** El editor y el MCP usan el mismo motor de operaciones, con validación, deshacer y
-  registro de origen (`ai` / `user`). El DOM SVG es solo una vista.
-- **El esquema manda** *(de Rive)*. Cada tipo se describe una vez en `schema/`; de ahí salen la validación, el
-  inspector del editor y la guía que lee la IA. Agregar un tipo nuevo no debería tocar el editor ni el MCP a mano.
-- **IDs de texto estables y lista plana con `parent`** *(lo contrario de los dos)*.
-- **Rig separado de la animación** *(de Moho: frame 0 = pose de montaje)*.
+- **Every change is an operation.** The editor and the MCP use the same operations engine, with validation, undo and
+  origin tracking (`ai` / `user`). The SVG DOM is just a view.
+- **The schema rules** *(from Rive)*. Each type is described once in `schema/`; validation, the editor's
+  inspector and the guide the AI reads all come from it. Adding a new type shouldn't require touching the editor or the MCP by hand.
+- **Stable text IDs and a flat list with `parent`** *(the opposite of both)*.
+- **Rig separate from animation** *(from Moho: frame 0 = setup pose)*.
 
-### Medir a la IA
+### Measuring the AI
 
-Cada fase tiene su archivo `pruebas-ia/fase-N.md` con las tareas y, por cada corrida, una fila con: cliente y modelo,
-tareas logradas, lotes rechazados por el validador, correcciones que hizo falta hacer a mano y notas sobre qué la
-confundió. Corremos al menos con el cliente que más se use (Claude Desktop o Claude Code).
+Each phase has its `pruebas-ia/fase-N.md` file with the tasks and, for each run, a row with: client and model,
+tasks achieved, batches rejected by the validator, corrections that had to be made by hand and notes on what
+confused it. We run at least with the most used client (Claude Desktop or Claude Code).
 
 ---
 
-## Fase 0: preparación ✅ (2026-11-02)
+## Phase 0: preparation ✅ (2026-11-02)
 
-- Iniciar git. Guardar el prototipo actual en la etiqueta `prototipo-0` para poder consultarlo, y borrarlo del árbol
-  de trabajo.
-- Estructura nueva:
+- Initialize git. Save the current prototype under the tag `prototipo-0` for reference, and remove it from the working
+  tree.
+- New structure:
 
   ```
-  schema/      defs de tipos (fuente única de verdad)
-  src/core/    documento, validación, operaciones, evaluación (sin DOM, corre en Node y navegador)
-  src/render/  renderer SVG
-  src/editor/  interfaz
-  mcp/         servidor MCP
-  servidor/    disco + API local para el editor (plugin de Vite)
-  personajes/  documentos
+  schema/      type defs (single source of truth)
+  src/core/    document, validation, operations, evaluation (no DOM, runs in Node and the browser)
+  src/render/  SVG renderer
+  src/editor/  interface
+  mcp/         MCP server
+  server/      disk + local API for the editor (Vite plugin)
+  documents/   documents
   docs/pruebas-ia/
   ```
 
-- Decidir lo que falta de la síntesis: tiempo en **segundos** (con `fps` solo para mostrar y para snapping),
-  coordenadas con **Y hacia abajo** y ángulos en grados.
+- Settle what the synthesis left open: time in **seconds** (with `fps` only for display and snapping),
+  coordinates with **Y down** and angles in degrees.
 
-**Listo cuando:** el repo arranca vacío pero con `npm run dev`, `npm test` y `npm run mcp` funcionando.
+**Done when:** the repo starts empty but with `npm run dev`, `npm test` and `npm run mcp` working.
 
-## Fase 1: esquema, documento y cáscara del editor ✅ (2026-11-02)
+## Phase 1: schema, document and editor shell ✅ (2026-11-02)
 
-La prueba con IA salió 8/8 sin rechazos ([resultados](pruebas-ia/fase-1.md)). Ajustes hechos con lo que encontró:
-- El editor junta los cambios seguidos sobre lo mismo (flechas, campos numéricos) en un solo lote: una entrada de
-  historial y un paso de deshacer.
-- Operación `duplicate` (objeto con sus hijos) y `create_document` con `copy_from` y `background`. En el editor:
-  `Ctrl+D` y ☰ → «Make a copy…» del documento.
-- `apply_ops`, `undo` y `redo` devuelven el árbol resultante y dicen qué lote tocaron; `get_history` es un resumen
-  por defecto (qué propiedades tocó cada lote) y se puede filtrar por origen.
-- La guía fija que izquierda y derecha son las del personaje (`_l`, `_r`).
+The AI test came out 8/8 with no rejections ([results](pruebas-ia/fase-1.md)). Adjustments made from what it found:
+- The editor merges consecutive changes to the same thing (arrows, numeric fields) into a single batch: one history
+  entry and one undo step.
+- `duplicate` operation (object with its children) and `create_document` with `copy_from` and `background`. In the editor:
+  `Ctrl+D` and ☰ → «Make a copy…» of the document.
+- `apply_ops`, `undo` and `redo` return the resulting tree and say which batch they touched; `get_history` is a summary
+  by default (which properties each batch touched) and can be filtered by origin.
+- The guide states that left and right are the character's (`_l`, `_r`).
 
-Notas de lo construido:
-- Las operaciones son `create`, `set`, `unset`, `delete`, `move` y `rename`, dirigidas por id (`target`) y no por
-  rutas: a la IA le resulta más natural y los errores se explican mejor (con sugerencias de ids parecidos).
-- Deshacer y rehacer van **por origen** y se calculan desde el historial: la IA deshace solo lo suyo y el usuario
-  solo lo suyo. Si el documento cambió y la inversa ya no encaja, se avisa en vez de romper nada.
-- Al reparentar desde el árbol, el editor conserva la posición en pantalla. Por MCP, `move` no toca `x`/`y`.
-- Pendiente para más adelante: copiar/pegar entre documentos.
+Notes on what was built:
+- The operations are `create`, `set`, `unset`, `delete`, `move` and `rename`, addressed by id (`target`) and not by
+  paths: it feels more natural to the AI and errors are easier to explain (with suggestions of similar ids).
+- Undo and redo go **by origin** and are computed from the history: the AI undoes only its own changes and the user
+  only theirs. If the document changed and the inverse no longer fits, it warns instead of breaking anything.
+- When reparenting from the tree, the editor keeps the on-screen position. Over MCP, `move` doesn't touch `x`/`y`.
+- Pending for later: copy/paste between documents.
 
-**Núcleo**
-- Formato de defs inspirado en Rive (`type`, `extends`, propiedades con `type`, `default`, `animatable`, `range`,
-  `enum`, `description`) y su cargador.
-- Documento: `format`, `meta` (tamaño, fps), lista plana `objects` con `type` y `parent`. Tipos iniciales: `group`
-  (transformación + opacidad) y `shape` con primitivas `rect` y `ellipse`.
-- Motor de operaciones: `set`, `add`, `remove`, `move` (reparentar y reordenar), lotes atómicos, deshacer/rehacer,
-  historial con origen. Conserva propiedades desconocidas (*compatibilidad hacia adelante, de los dos*).
-- Validación generada desde los defs, con mensajes pensados para que la IA pueda corregirse.
+**Core**
+- Def format inspired by Rive (`type`, `extends`, properties with `type`, `default`, `animatable`, `range`,
+  `enum`, `description`) and its loader.
+- Document: `format`, `meta` (size, fps), flat list `objects` with `type` and `parent`. Initial types: `group`
+  (transform + opacity) and `shape` with `rect` and `ellipse` primitives.
+- Operations engine: `set`, `add`, `remove`, `move` (reparent and reorder), atomic batches, undo/redo,
+  history with origin. Keeps unknown properties (*forward compatibility, from both*).
+- Validation generated from the defs, with messages designed so the AI can correct itself.
 
 **Editor**
-- Layout completo aunque varios paneles estén vacíos: barra de herramientas, árbol de objetos, lienzo con pan y
-  zoom, inspector, línea de tiempo (vacía) e historial.
-- Árbol con arrastrar para reordenar y reparentar. Inspector **generado desde los defs**.
-- Selección en lienzo y árbol, deshacer/rehacer, guardado automático y aviso en vivo cuando la IA cambia algo.
+- Full layout even though several panels are empty: toolbar, object tree, canvas with pan and
+  zoom, inspector, timeline (empty) and history.
+- Tree with drag to reorder and reparent. Inspector **generated from the defs**.
+- Selection on canvas and tree, undo/redo, autosave and a live notice when the AI changes something.
 
 **MCP**
-- `get_guide` (generada desde los defs, no escrita a mano), `list_documents`, `get_document`, `create_document`,
+- `get_guide` (generated from the defs, not handwritten), `list_documents`, `get_document`, `create_document`,
   `apply_ops`, `undo`, `get_history`.
-- `render_preview`: devuelve una **imagen PNG** para que la IA vea lo que hizo (por ejemplo con `resvg-js`).
+- `render_preview`: returns a **PNG image** so the AI sees what it did (e.g. with `resvg-js`).
 
-**Prueba con IA:** armar la estructura de un personaje simple con grupos y primitivas; renombrar y reordenar;
-corregir algo que el usuario cambió a mano sin pisarlo.
+**AI test:** build the structure of a simple character with groups and primitives; rename and reorder;
+fix something the user changed by hand without overwriting it.
 
-## Fase 2: dibujo ✅ (2026-11-03)
+## Phase 2: drawing ✅ (2026-11-03)
 
-La prueba con IA salió 7/7 sin rechazos; las tareas 8 a 10 no se corrieron ([resultados](pruebas-ia/fase-2.md)).
-Lo que pidió la IA (herencia entre estilos, degradados atados al color, duplicar en espejo, vista previa con zoom)
-queda anotado allí para más adelante.
+The AI test came out 7/7 with no rejections; tasks 8 to 10 were not run ([results](pruebas-ia/fase-2.md)).
+What the AI asked for (inheritance between styles, gradients tied to the color, mirrored duplicate, zoomed preview)
+is noted there for later.
 
-Después de la prueba (pedido del usuario):
-- **Selección múltiple:** Ctrl o Shift + clic en el lienzo; recuadro arrastrando en un lugar vacío (toca formas, no
-  grupos); en la jerarquía, Ctrl + clic agrega o quita y Shift + clic toma el tramo. Mover, flechas, rotar y escalar
-  (desde el centro del conjunto, proporcional), duplicar, borrar y arrastrar en la jerarquía actúan sobre todos.
-  `Ctrl+G` agrupa la selección y `Ctrl+A` selecciona todo. El inspector muestra lo que tienen en común y marca los
-  valores distintos.
-- Assets va en la parte de abajo del panel izquierdo, separado de Layers.
+After the test (user request):
+- **Multiple selection:** Ctrl or Shift + click on the canvas; marquee by dragging in an empty spot (hits shapes, not
+  groups); in the hierarchy, Ctrl + click adds or removes and Shift + click takes the range. Move, arrows, rotate and scale
+  (from the center of the set, proportional), duplicate, delete and dragging in the hierarchy act on all of them.
+  `Ctrl+G` groups the selection and `Ctrl+A` selects all. The inspector shows what they have in common and flags
+  differing values.
+- Assets goes at the bottom of the left panel, separate from Layers.
 
-Notas de lo construido:
-- `path` con vértices en polares (straight con `radius`, mirrored, asymmetric, detached). La IA puede pasar `d` de
-  SVG (todos los comandos, arcos incluidos) y se convierte a vértices.
-- Recursos `style`, `linear_gradient` y `radial_gradient`: van en la raíz, no se dibujan y las formas los usan por
-  id (`style`, `fillGradient`). Valor propio → estilo → valor por defecto.
-- Editor: manijas para rotar, escalar desde el pivote y mover el pivote (grupos y paths, compensando el contenido),
-  pluma, edición de puntos (arrastrar anclas y tangentes, Alt separa, doble clic recto/curvo, clic en el contorno
-  agrega, Supr borra) e importar SVG (formas con transformaciones y colores; se descartan scripts y eventos).
-- Interfaz más cercana a Rive y Moho (pedido del usuario): menú ☰, pestañas de documentos que se pueden cerrar,
-  herramientas agrupadas (Transformar: Mover, Rotar, Escalar; Crear: Pluma, Rectángulo, Elipse), herramientas de
-  rotar y escalar arrastrando en cualquier parte (como en Moho), jerarquía plegable, inspector con pares en una
-  fila (X/Y, ancho/alto, escala) y menú de zoom.
-- **Cambios respecto del plan:** los rellenos y contornos apilables quedan para más adelante (por ahora se logra
-  con formas duplicadas). Un path tiene un solo contorno: los agujeros (anillos) todavía no se pueden hacer, y al
-  importar, cada subtrazado se vuelve un path aparte.
+Notes on what was built:
+- `path` with vertices in polar form (straight with `radius`, mirrored, asymmetric, detached). The AI can pass SVG `d`
+  (all commands, arcs included) and it is converted to vertices.
+- `style`, `linear_gradient` and `radial_gradient` assets: they live at the root, aren't drawn, and shapes use them by
+  id (`style`, `fillGradient`). Own value → style → default value.
+- Editor: handles to rotate, scale from the pivot and move the pivot (groups and paths, compensating the content),
+  pen, point editing (drag anchors and tangents, Alt splits, double click straight/curved, click on the outline
+  adds, Del deletes) and SVG import (shapes with transforms and colors; scripts and events are discarded).
+- Interface closer to Rive and Moho (user request): ☰ menu, closable document tabs,
+  grouped tools (Transform: Move, Rotate, Scale; Create: Pen, Rectangle, Ellipse), rotate and scale tools that
+  work by dragging anywhere (as in Moho), collapsible hierarchy, inspector with pairs on one
+  row (X/Y, width/height, scale) and zoom menu.
+- **Changes from the plan:** stackable fills and strokes are left for later (for now done
+  with duplicated shapes). A path has a single outline: holes (rings) can't be made yet, and on
+  import each subpath becomes a separate path.
 
-- Paths con vértices editables. Un solo tipo de vértice con `mode`: `straight` (con `radius`), `mirrored`,
-  `asymmetric`, `detached`, y tangentes en **polares** (ángulo + distancia) *(de Rive)*.
-- Rellenos y contornos apilables, gradientes, y **estilos compartidos por referencia** *(de Moho)*.
-- Editor: herramientas de transformar (mover, rotar, escalar con pivote), pluma y edición de vértices, importar SVG
-  (convertido a nuestros paths).
-- MCP: sin herramientas nuevas, salvo ayudas si la IA tiene problemas creando paths.
+- Paths with editable vertices. A single vertex type with `mode`: `straight` (with `radius`), `mirrored`,
+  `asymmetric`, `detached`, and tangents in **polar form** (angle + distance) *(from Rive)*.
+- Stackable fills and strokes, gradients, and **styles shared by reference** *(from Moho)*.
+- Editor: transform tools (move, rotate, scale with pivot), pen and vertex editing, SVG import
+  (converted to our paths).
+- MCP: no new tools, except helpers if the AI has trouble creating paths.
 
-**Prueba con IA:** dibujar un personaje original a partir de una descripción; corregir proporciones; cambiar la
-paleta usando los estilos compartidos.
+**AI test:** draw an original character from a description; fix proportions; change the
+palette using the shared styles.
 
-## Fase 3: huesos ✅ (2026-11-03)
+## Phase 3: bones ✅ (2026-11-03)
 
-La prueba con IA salió 9/9 con un rechazo ([resultados](pruebas-ia/fase-3.md)). Lo más importante que mostró: una
-forma no se dobla con varios huesos (la IA partió la cola en segmentos), y crear huesos con coordenadas relativas
-cuesta. Quedan como candidatos: deformación por pesos, huesos con `from`/`to` en coordenadas del documento, valores
-finales en `get_history` y avisos de `set_pose` al recortar ángulos.
+The AI test came out 9/9 with one rejection ([results](pruebas-ia/fase-3.md)). The most important thing it showed: a
+shape doesn't bend with several bones (the AI split the tail into segments), and creating bones with relative coordinates
+is hard. Candidates left: weight-based deformation, bones with `from`/`to` in document coordinates, final
+values in `get_history` and `set_pose` warnings when clamping angles.
 
-Ajustes hechos con lo que encontró:
-- **Enlace por punto** (el manual de Moho): cada vértice de un path acepta `bone` y, en una pose, se mueve con sus
-  tangentes según ese hueso. Un solo path se dobla con una cadena de huesos, sin partir el dibujo. En el editor, al
-  editar puntos, la barra de opciones elige el hueso del punto o «Distribute among bones» (el más cercano); por MCP,
-  `bind_points`. En una pose, arrastrar ese path gira el hueso más cercano al clic. Los pesos entre varios huesos
-  por punto siguen para más adelante.
-- Huesos con `from`/`to` en coordenadas del documento (se convierten a `x`, `y`, `rotation` y `length`).
-- `get_history` muestra el valor final de lo que fijó cada lote; `set_pose` avisa cuando un límite recorta un
-  ángulo; `undo` dice qué deshizo; un id repetido al crear un hueso sugiere el sufijo `_bone`, que también propone la
-  guía.
+Adjustments made from what it found:
+- **Point binding** (from the Moho manual): each vertex of a path accepts `bone` and, in a pose, moves with its
+  tangents according to that bone. A single path bends with a chain of bones, without splitting the drawing. In the editor, when
+  editing points, the options bar picks the point's bone or «Distribute among bones» (the nearest); over MCP,
+  `bind_points`. In a pose, dragging that path rotates the bone nearest to the click. Weights across several bones
+  per point remain for later.
+- Bones with `from`/`to` in document coordinates (converted to `x`, `y`, `rotation` and `length`).
+- `get_history` shows the final value of what each batch set; `set_pose` warns when a limit clamps an
+  angle; `undo` says what it undid; a repeated id when creating a bone suggests the `_bone` suffix, which the
+  guide also proposes.
 
-**Cambio al modelo de capa de huesos de Moho (2026-11-04).** Al usarlo a mano, tener los huesos como filas sueltas
-de la jerarquía, mezcladas con el dibujo, y el enlace escondido en una propiedad que podía apuntar a cualquier hueso
-del documento resultó confuso. Se pasó al modelo de Moho:
-- Tipo `skeleton` (la *bone layer*): un contenedor transformable, como un `group`, que tiene adentro el dibujo que
-  mueve y sus huesos. Los `bone` solo pueden estar dentro de un skeleton (los raíz) o de otro hueso
-  (`requiresParent` en el esquema); el marco de los huesos raíz es el del skeleton, así que moverlo, girarlo o
-  escalarlo lleva dibujo y esqueleto juntos. Un skeleton puede ir dentro de otro y seguir a un hueso de aquel.
-- El `bone` de un objeto o de un vértice solo puede apuntar a huesos del skeleton que lo contiene (`refScope:
-  "skeleton"`), con mensajes que dicen qué huesos sirven. Siguen el enlace por capa, el enlace por punto y que enlazar
-  no mueve nada.
-- Sin enlace automático: el dibujo de un skeleton queda quieto hasta enlazarlo. «Bind all by proximity» (barra de
-  opciones y `bind_by_proximity` en el MCP) enlaza cada pieza sin hueso al más cercano al centro de su caja, con las
-  piezas más grandes posibles: un grupo sin nada enlazado adentro va entero; si ya tiene algo enlazado, se baja a sus
-  hijos. Elegimos la caja (y no el pivote) porque el pivote de los grupos suele estar en la articulación, que cae
-  justo entre dos huesos.
-- En Layers solo hay capas, como en Moho: los huesos no son filas (probamos un subnodo «Bones (N)» y se quitó; en
-  Moho la jerarquía de huesos se ve en el lienzo). Dos herramientas, como en Moho: **Add Bone** (B) solo crea (en el
-  skeleton seleccionado o el de la selección; si no hay ninguno, crea uno y avisa) y **Manipulate Bones** (M) solo
-  ajusta (girar, mover el origen, dirección y largo). Antes una sola herramienta hacía todo y resultaba tosca.
-- Enlazar y emparentar también son herramientas, como en Moho: **Reparent Bone** (como en Blender: se eligen los hijos y al
-  final el padre, y un botón de la barra hace el cambio; «Clear parent» los deja como raíz; nada pasa solo con un
-  clic, que en la primera versión resultó demasiado automático. Cambia el padre sin mover el hueso; `opsParaReparentar` recalcula sus valores en el marco nuevo, también los de las poses), **Bind Layer** (L,
-  reemplaza al modo «Bind drawing…») y **Bind Points** (clic o recuadro sobre los puntos, sin entrar a editar el
-  path). De Rive tomamos los colores por hueso, que también pintan los puntos enlazados, para ver qué sigue a qué.
-  Los pesos por punto de Rive (un punto con varios huesos) quedan para más adelante. Sacar un dibujo del skeleton de su hueso suelta el enlace y avisa.
-- Migración determinista (`npm run migrar`, `src/core/migracion.js`): si todo el dibujo enlazado está en un grupo
-  de la raíz (`cat` en los gatos), ese grupo pasa a ser el skeleton y los huesos se llevan a su marco (también en
-  las poses); si no, se crea un skeleton nuevo con el tramo de la raíz que tiene el dibujo enlazado. Deja una entrada
-  "migracion" en el historial que corta deshacer, porque las inversas de antes hablan del marco viejo.
-  `gato_rig`, `gato_expresiones` y `test_4` se migraron y se ven igual en el montaje, las poses y las mezclas de
-  params (comparado píxel a píxel; las únicas diferencias son de antialiasing, por el redondeo del SVG viejo).
+**Switch to Moho's bone layer model (2026-11-04).** Using it by hand, having bones as loose rows
+in the hierarchy, mixed with the drawing, and the binding hidden in a property that could point to any bone
+in the document turned out confusing. We moved to Moho's model:
+- `skeleton` type (the *bone layer*): a transformable container, like a `group`, that holds the drawing it
+  moves and its bones. `bone`s can only be inside a skeleton (root bones) or another bone
+  (`requiresParent` in the schema); the frame of root bones is the skeleton's, so moving, rotating or
+  scaling it carries drawing and skeleton together. A skeleton can go inside another and follow one of its bones.
+- The `bone` of an object or a vertex can only point to bones of the skeleton that contains it (`refScope:
+  "skeleton"`), with messages saying which bones are valid. Layer binding, point binding and the rule that binding
+  doesn't move anything all remain.
+- No automatic binding: a skeleton's drawing stays still until bound. «Bind all by proximity» (options
+  bar and `bind_by_proximity` in the MCP) binds each unbound piece to the bone nearest the center of its box, with the
+  largest pieces possible: a group with nothing bound inside goes whole; if something inside is already bound, it goes down to its
+  children. We chose the box (and not the pivot) because group pivots tend to sit at the joint, which falls
+  right between two bones.
+- Layers only has layers, as in Moho: bones aren't rows (we tried a «Bones (N)» subnode and removed it; in
+  Moho the bone hierarchy is seen on the canvas). Two tools, as in Moho: **Add Bone** (B) only creates (in the
+  selected skeleton or the selection's; if there is none, it creates one and says so) and **Manipulate Bones** (M) only
+  adjusts (rotate, move the origin, direction and length). Before, a single tool did everything and felt clumsy.
+- Binding and parenting are tools too, as in Moho: **Reparent Bone** (as in Blender: pick the children and the
+  parent last, and a bar button makes the change; «Clear parent» leaves them as roots; nothing happens with a single
+  click, which in the first version proved too automatic. It changes the parent without moving the bone; `opsToReparent` recomputes its values in the new frame, poses included), **Bind Layer** (L,
+  replaces the «Bind drawing…» mode) and **Bind Points** (click or marquee over points, without entering path
+  editing). From Rive we took per-bone colors, which also paint the bound points, to see what follows what.
+  Rive's per-point weights (one point with several bones) are left for later. Taking a drawing out of the skeleton of its bone releases the binding and warns.
+- Deterministic migration (`npm run migrate`, `src/core/migration.js`): if all the bound drawing is in a root
+  group (`cat` in the cats), that group becomes the skeleton and the bones are moved into its frame (also in
+  the poses); otherwise, a new skeleton is created with the stretch of the root that has the bound drawing. It leaves a
+  "migration" entry in the history that stops undo, because earlier inverses refer to the old frame.
+  `gato_rig`, `gato_expresiones` and `test_4` were migrated and look the same in the setup, the poses and the param
+  blends (compared pixel by pixel; the only differences are antialiasing, due to the old SVG's rounding).
 
-Notas de lo construido (antes del cambio a la capa de huesos):
-- `bone` con `x`, `y`, `rotation`, escala, `length`, `independentAngle` y límites `minAngle`/`maxAngle`. Los huesos
-  **solo tienen huesos como hijos** (`parentTypes`/`childTypes` en el esquema): el esqueleto va aparte del dibujo y
-  el orden de dibujo queda libre.
-- **Layer binding** con la propiedad `bone` de cualquier objeto transformable. Un objeto sin `bone` sigue al hueso de
-  su padre. Como en Moho, enlazar no mueve nada: el objeto sigue el *delta* del hueso (de dónde está en el montaje a
-  dónde está en la pose).
-- **Poses con nombre** como recurso `pose` (`bones: { hueso: { rotation, x, y, scaleX, scaleY } }`, valores
-  absolutos). Es el puente hacia las acciones de la fase 4: una pose es una acción de un solo cuadro.
-- Borrar un hueso suelta lo enlazado y lo quita de las poses (deshacer lo devuelve); renombrarlo actualiza todo.
-- Editor: herramienta Hueso (B) para crear arrastrando (hijo del seleccionado; desde su punta, encadenado), girar,
-  mover el origen y ajustar la punta (Alt, o con Mover). `Ctrl+B` y soltar en Layers enlazan. Selector
-  «View: Setup / Pose» en la barra; en una pose el lienzo se enmarca en verde, arrastrar un hueso (o el dibujo
-  enlazado) lo gira en la pose y el inspector muestra los valores de la pose arriba de los del montaje.
-- Ajustes tras probarlo a mano: una **barra de opciones** sobre el lienzo explica qué se puede hacer según la
-  herramienta y la selección, con botones (con un hueso: «Bind Layer» por clics, ver lo enlazado, hueso hijo,
-  probar en una pose). Rectángulos y elipses tienen pivote movible (`originX`/`originY`, como en Rive).
-- MCP: `set_pose` (suma a la pose y devuelve la imagen), `render_preview` con `pose`, `region` (recorte, que pidió la
-  IA en la fase 2) y `bones` (el esqueleto encima, con nombres). `get_document` muestra dónde queda cada hueso en el
-  documento, para no tener que sumar ángulos relativos.
-- **Cambios respecto del plan:** el runtime incremental (dirty flags, límite de pasadas) queda para la fase 5, cuando
-  haya cuadros que recalcular; por ahora el esqueleto se evalúa entero en cada dibujo, que alcanza de sobra.
+Notes on what was built (before the switch to the bone layer):
+- `bone` with `x`, `y`, `rotation`, scale, `length`, `independentAngle` and limits `minAngle`/`maxAngle`. Bones
+  **only have bones as children** (`parentTypes`/`childTypes` in the schema): the skeleton is separate from the drawing and
+  drawing order stays free.
+- **Layer binding** with the `bone` property of any transformable object. An object without `bone` follows its
+  parent's bone. As in Moho, binding doesn't move anything: the object follows the bone's *delta* (from where it is in the setup to
+  where it is in the pose).
+- **Named poses** as a `pose` asset (`bones: { bone: { rotation, x, y, scaleX, scaleY } }`, absolute
+  values). It's the bridge to phase 4 actions: a pose is a one-frame action.
+- Deleting a bone releases what's bound and removes it from the poses (undo brings it back); renaming it updates everything.
+- Editor: Bone tool (B) to create by dragging (child of the selected one; from its tip, chained), rotate,
+  move the origin and adjust the tip (Alt, or with Move). `Ctrl+B` and dropping onto Layers bind. A
+  «View: Setup / Pose» selector on the bar; in a pose the canvas gets a green frame, dragging a bone (or the bound
+  drawing) rotates it in the pose and the inspector shows the pose values above the setup ones.
+- Adjustments after trying it by hand: an **options bar** over the canvas explains what can be done depending on the
+  tool and the selection, with buttons (with a bone: «Bind Layer» by clicks, show what's bound, child bone,
+  try in a pose). Rectangles and ellipses have a movable pivot (`originX`/`originY`, as in Rive).
+- MCP: `set_pose` (adds to the pose and returns the image), `render_preview` with `pose`, `region` (crop, which the
+  AI asked for in phase 2) and `bones` (the skeleton on top, with names). `get_document` shows where each bone sits in the
+  document, so relative angles don't need to be summed.
+- **Changes from the plan:** the incremental runtime (dirty flags, pass limit) is left for phase 5, when
+  there are frames to recompute; for now the skeleton is evaluated whole on each draw, which is more than enough.
 
-- Huesos con `length`, cinemática directa, `independentAngle` y límites de ángulo *(de Moho)*.
-- **Layer binding**: un objeto pegado a un hueso, sin deformar.
-- Runtime incremental: dirty flags y orden topológico, con límite de pasadas por frame *(de Rive)*.
-- Editor: herramienta de huesos (crear arrastrando, rotar, mover el pivote), superposición, enlazar objetos a huesos
-  y modo pose frente a modo montaje.
-- MCP: `set_pose` para probar poses sin modificar el montaje.
+- Bones with `length`, forward kinematics, `independentAngle` and angle limits *(from Moho)*.
+- **Layer binding**: an object attached to a bone, without deforming.
+- Incremental runtime: dirty flags and topological order, with a pass limit per frame *(from Rive)*.
+- Editor: bone tool (create by dragging, rotate, move the pivot), overlay, bind objects to bones
+  and pose mode vs. setup mode.
+- MCP: `set_pose` to try poses without modifying the setup.
 
-**Prueba con IA:** riggear el personaje de la fase 2; posarlo ("saludando", "mirando hacia arriba").
+**AI test:** rig the character from phase 2; pose it ("waving", "looking up").
 
-## Fase 4: switch, params, drivers y acciones ✅ (2026-11-05)
+## Phase 4: switch, params, drivers and actions ✅ (2026-11-05)
 
-Notas de lo construido:
-- **Las poses son las acciones.** En vez de un tipo nuevo, la `pose` de la fase 3 se generalizó: `values` fija
-  cualquier propiedad animable de cualquier objeto (huesos, vértices de una boca, colores, opacidad, el hijo de un
-  switch). Con la misma cantidad de vértices que el montaje, una forma se interpola (morph). Las animaciones cortas
-  con tiempo quedan para la fase 5. Los documentos con `bones` en las poses se migraron a `values`.
-- **`switch`**: un grupo que muestra un solo hijo (`active`, una referencia limitada a sus hijos con `refScope`).
-- **`param`** (`number`, `boolean`, `enum`) y **`driver`** (param → pose, tramo `inMin…inMax` → peso
-  `outMin…outMax`, o `equals` para un enum). Las poses activas se suman sobre el montaje: los números por
-  diferencias, colores y vértices interpolados, y lo discreto con peso ≥ 0.5. El trigger queda para la fase 6.
-- Editor: «View» suma «Parameters (blend)» (lienzo en naranja). El panel de abajo tiene un control por param, los
-  drivers con su peso en vivo y «＋ Pose…» para conectar. En una pose, el inspector muestra arriba todo lo animable
-  del objeto (lo cambiado va a la pose) y la edición de puntos guarda el morph en la pose.
-- MCP: `set_pose` con `values` (acepta `d`), `render_preview` con `params` (dice qué poses quedaron activas y con
-  qué peso) y el árbol muestra params, drivers y switches.
-- Primera auditoría (agente `auditor`): el enlace por punto es del montaje (una pose no guarda `bone` en sus vértices
-  y, al aplicarla o mezclarla, cada vértice toma el del montaje con el mismo índice; lo viejo se ignora al leer y se
-  limpia al guardar la pose); la mezcla parte del valor que se ve (con el estilo); deshacer y rehacer se niegan si
-  un lote posterior del otro origen tocó las mismas propiedades; `reparent_bone` avisa en qué poses el hueso cambia
-  de lugar y con `keep_in_poses` las compensa (en el editor, «Keep poses»); los huesos dibujados encima siguen a una
-  pose que mueve el skeleton; `meta` es un id reservado; se validan `initial`/`equals` contra `options` y
-  `min ≤ max`. Herramientas nuevas para la IA: `move` con `keepPosition`, `create_switch_control` (quitada después,
-  junto con «Create control» del editor: el switch quedó simple, como en Moho, y la variante se elige con `active`) y
-  `delete_document`. La lógica de las herramientas del MCP
-  vive en `mcp/herramientas.js`, con pruebas.
-- Pendiente: **importar SVG desde el MCP.** El importador del editor (`src/editor/importar.js`) monta el SVG en la
-  página para que el navegador resuelva transformaciones, viewBox, estilos CSS y unidades: lee la matriz de cada
-  forma con `getScreenCTM` y los colores con `getComputedStyle`. En Node no hay DOM: habría que sumar un parser (por
-  ejemplo `linkedom`) y reimplementar a mano la cascada de estilos y la composición de transform y viewBox. Mientras tanto, la IA puede pasar cada forma como `d` en un `path`.
-- Pendiente: traducir al inglés los mensajes de error viejos del núcleo y del servidor (ver `CLAUDE.md`).
-- Prueba con IA: 8/8 (`docs/pruebas-ia/fase-4.md`). Lo que pidió para más adelante: un aviso cuando dos poses
-  activas muestran cosas que se tapan, mostrar u ocultar sin opacidad intermedia, desplazar un hueso en coordenadas
-  del documento dentro de una pose, una cuadrícula de params en `render_preview` y máscaras.
+Notes on what was built:
+- **Poses are the actions.** Instead of a new type, the phase 3 `pose` was generalized: `values` sets
+  any animatable property of any object (bones, vertices of a mouth, colors, opacity, a
+  switch's child). With the same number of vertices as the setup, a shape interpolates (morph). Short animations
+  with time are left for phase 5. Documents with `bones` in their poses were migrated to `values`.
+- **`switch`**: a group that shows a single child (`active`, a reference limited to its children with `refScope`).
+- **`param`** (`number`, `boolean`, `enum`) and **`driver`** (param → pose, range `inMin…inMax` → weight
+  `outMin…outMax`, or `equals` for an enum). Active poses are added on top of the setup: numbers by
+  differences, colors and vertices interpolated, and discrete values with weight ≥ 0.5. The trigger is left for phase 6.
+- Editor: «View» adds «Parameters (blend)» (canvas in orange). The bottom panel has one control per param, the
+  drivers with their live weight and «＋ Pose…» to connect. In a pose, the inspector shows at the top everything animatable
+  on the object (what's changed goes to the pose) and point editing saves the morph in the pose.
+- MCP: `set_pose` with `values` (accepts `d`), `render_preview` with `params` (says which poses ended up active and with
+  what weight) and the tree shows params, drivers and switches.
+- First audit (`auditor` agent): point binding belongs to the setup (a pose doesn't store `bone` in its vertices
+  and, when applying or blending it, each vertex takes the setup's at the same index; old data is ignored on read and
+  cleaned on saving the pose); blending starts from the visible value (with the style); undo and redo refuse if
+  a later batch from the other origin touched the same properties; `reparent_bone` warns in which poses the bone changes
+  place and with `keep_in_poses` compensates them (in the editor, «Keep poses»); bones drawn on top follow a
+  pose that moves the skeleton; `meta` is a reserved id; `initial`/`equals` are validated against `options` and
+  `min ≤ max`. New tools for the AI: `move` with `keepPosition`, `create_switch_control` (removed later,
+  along with the editor's «Create control»: the switch stayed simple, as in Moho, and the variant is chosen with `active`) and
+  `delete_document`. The logic of the MCP tools
+  lives in `mcp/tools.js`, with tests.
+- Pending: **import SVG from the MCP.** The editor's importer (`src/editor/importSvg.js`) mounts the SVG in the
+  page so the browser resolves transforms, viewBox, CSS styles and units: it reads each
+  shape's matrix with `getScreenCTM` and the colors with `getComputedStyle`. Node has no DOM: we'd need to add a parser (for
+  example `linkedom`) and reimplement by hand the style cascade and the composition of transform and viewBox. Meanwhile, the AI can pass each shape as `d` in a `path`.
+- Pending: translate the old error messages of the core and the server into English (see `CLAUDE.md`).
+- AI test: 8/8 (`docs/pruebas-ia/fase-4.md`). What it asked for later: a warning when two active
+  poses show things that overlap, show or hide without intermediate opacity, move a bone in document
+  coordinates inside a pose, a params grid in `render_preview`, and masks.
 
 
-- **Switch** (Moho switch layer ≈ Rive Solo): un hijo visible, elegido por un valor de texto.
-- **Acciones**: poses o animaciones cortas con nombre *(de Moho)*.
-- **Params** tipados (number, bool, enum, trigger) como interfaz principal *(view model de Rive)*.
-- **Drivers** explícitos `param → acción` con tramo de entrada y salida *(smart bones de Moho, sin convenciones de
-  nombre)*.
-- Editor: panel de params con sliders, "entrar" a editar una acción (la línea de tiempo cambia de color, como en
-  Moho) y editor de drivers.
+- **Switch** (Moho switch layer ≈ Rive Solo): one visible child, chosen by a text value.
+- **Actions**: named poses or short animations *(from Moho)*.
+- Typed **params** (number, bool, enum, trigger) as the main interface *(Rive's view model)*.
+- Explicit **drivers** `param → action` with input and output range *(Moho's smart bones, without naming
+  conventions)*.
+- Editor: params panel with sliders, "entering" an action to edit it (the timeline changes color, as in
+  Moho) and driver editor.
 
-**Prueba con IA:** crear expresiones (feliz, triste, sorpresa) y el giro de cabeza como params; preparar visemas para
+**AI test:** create expressions (happy, sad, surprise) and the head turn as params; prepare visemes for
 lip-sync.
 
-## Fase 5: animación (Design · Animate · Puppet)
+## Phase 5: animation (Design · Animate · Puppet)
 
-Diseño acordado en [decision-animacion.md](decision-animacion.md): tres modos con un solo motor de clips.
+Design agreed in [decision-animacion.md](decision-animacion.md): three modes with a single clip engine.
 
-- **Núcleo:** recurso `animation` (`usage` animate/puppet, `duration`, `loop` once/loop/pingpong, `description`,
-  `tracks` con la forma de `values` de una pose). Keyframes `{ t, value, ease }` con la curva por keyframe: `linear`,
-  `step`, `ease-in`, `ease-out`, `ease-in-out` y `cubic-bezier` `[x1, y1, x2, y2]`. Los params también tienen pista.
-  Evaluación: montaje → clip en t → params → drivers suman sus poses encima. Rename y delete actualizan las pistas.
-- **MCP (a la par del núcleo):** `set_keys` (por momentos, con `values`, `params` o una `pose` entera),
-  `delete_keys`, `render_preview` con `animation` + `time` y tira de cuadros con `times`, y el árbol que resume cada
+- **Core:** `animation` asset (`usage` animate/puppet, `duration`, `loop` once/loop/pingpong, `description`,
+  `tracks` shaped like a pose's `values`). Keyframes `{ t, value, ease }` with the curve per keyframe: `linear`,
+  `step`, `ease-in`, `ease-out`, `ease-in-out` and `cubic-bezier` `[x1, y1, x2, y2]`. Params also have a track.
+  Evaluation: setup → clip at t → params → drivers add their poses on top. Rename and delete update the tracks.
+- **MCP (alongside the core):** `set_keys` (by moments, with `values`, `params` or a whole `pose`),
+  `delete_keys`, `render_preview` with `animation` + `time` and a frame strip with `times`, and the tree summarizing each
   clip.
-- **Editor:** pestañas de modo **Design / Animate / Puppet**. Las poses, params y drivers salen de Design y pasan a
-  Puppet. Timeline con playhead, play/loop, keyframes por propiedad, autokey (en un clip, lo que se cambia va a un
-  keyframe en el tiempo del playhead) y curva por keyframe. En Puppet, la biblioteca de clips como botones a la
-  derecha; en Animate, una timeline larga.
-- **Después dentro de la fase:** clips de Puppet insertados por referencia en Animate, editor de curvas, dope sheet
-  con mover/escalar tiempos, runtime incremental (dirty flags, anotado en la fase 3).
+- **Editor:** mode tabs **Design / Animate / Puppet**. Poses, params and drivers leave Design and move to
+  Puppet. Timeline with playhead, play/loop, keyframes per property, autokey (in a clip, what's changed goes to a
+  keyframe at the playhead time) and curve per keyframe. In Puppet, the clip library as buttons on the
+  right; in Animate, a long timeline.
+- **Later within the phase:** Puppet clips inserted by reference in Animate, curve editor, dope sheet
+  with move/scale times, incremental runtime (dirty flags, noted in phase 3).
 
-Construido (2026-11-05):
-- Núcleo: `animation`, curvas (`src/core/curvas.js`), evaluador (`src/core/animacion.js`: `poseDeClip`,
-  `ponerClave`, `quitarClave`) y render con `animation` + `time`; tira de cuadros `svgTira`.
-- MCP: `set_keys`, `delete_keys`, `render_preview` con `animation`/`time`/`times`; el árbol resume cada clip.
-- Editor (`src/editor/timeline.js`): pestañas **Design / Animate / Puppet**. Design ya no muestra «View» ni la
-  timeline, y en Assets solo estilos y degradados. Un clip abierto se edita como una pose (`estado.pose` = id del
-  clip): girar huesos, el inspector, los puntos y los sliders de params guardan keyframes en el playhead (autokey).
-  Timeline con regla, play/pausa (respeta `loop`), duración, loop, «◆ Key», keyframes que se eligen, se arrastran
-  (con imán a los cuadros), cambian de curva y se borran con <kbd>Del</kbd>. Puppet: biblioteca de clips a la
-  derecha (clic = editar, ▶ = reproducir), Parameters también a la derecha y la timeline sola abajo, con la
-  descripción del clip. Animate: una pestaña por escena (+ crea, × borra), como las de los documentos. La
-  reproducción va al medio de la barra: «, ▶ y » (keyframe anterior y siguiente).
-- Prueba con IA: 8/8 sin rechazos ([resultados](pruebas-ia/fase-5.md)). Con lo que encontró: `setup: true` y
-  momentos con solo `ease` en `set_keys`, y `undo`/`redo` por pista en los clips (como por clave en las poses).
-- Tercera auditoría (fase 5): en un loop, `t = duration` es el final; lo que no se suma (switch, colores,
-  vértices) lo decide la pista del clip y no un driver activo ([decisión §4](decision-animacion.md)); el autokey
-  guarda el valor sin el aporte de los drivers; una sola tolerancia de «mismo tiempo» (1 ms). Paridad: la IA tiene
-  `move_keys`, avisos de drivers que suman encima y las pistas con sus keyframes en `get_document`; el editor tiene
-  «◆ Pose…», «◆ Setup», `cubic-bezier` a mano y borrar una pista entera. Los params son solo de Puppet: una escena
-  no los anima y se ve sin drivers (ver [decision-animacion.md](decision-animacion.md) §4).
-- Segunda prueba con IA: 9/9 ([resultados](pruebas-ia/fase-5.md#segunda-ronda-2026-11-06-timeline-escenas-y-clips-de-puppet)).
-  Con lo que pidió: `scale_time` (y «Scale keys» en Length), `pose` con `only`/`except` (y «Only the selection» en
-  «◆ Pose…»), valores relativos al montaje (`"+=14"`), curvas fuertes con nombre (y su forma dibujada en la
-  timeline), y la lista de poses que mueve cada param animado en `set_keys`, `render_preview` y el canal del param.
-- Falta en la fase: clips de Puppet insertados en Animate (lo pidió la IA en la prueba), editor de curvas
-  (arrastrar las manijas), elegir y escalar varios keyframes sueltos a la vez (el editor ya mueve un momento entero
-  arrastrando el ◆ de «All keys» o de la fila de un objeto, como `move_keys`), que un hueso no herede la escala (respirar sin agrandar la cabeza), una vista previa después de
-  `undo` y el runtime incremental.
+Built (2026-11-05):
+- Core: `animation`, curves (`src/core/curves.js`), evaluator (`src/core/animation.js`: `clipPose`,
+  `putKey`, `removeKey`) and render with `animation` + `time`; frame strip `svgStrip`.
+- MCP: `set_keys`, `delete_keys`, `render_preview` with `animation`/`time`/`times`; the tree summarizes each clip.
+- Editor (`src/editor/timeline.js`): **Design / Animate / Puppet** tabs. Design no longer shows «View» or the
+  timeline, and Assets only has styles and gradients. An open clip is edited like a pose (`state.pose` = clip
+  id): rotating bones, the inspector, points and param sliders save keyframes at the playhead (autokey).
+  Timeline with ruler, play/pause (respects `loop`), duration, loop, «◆ Key», keyframes that can be selected, dragged
+  (snapping to frames), change curve and are deleted with <kbd>Del</kbd>. Puppet: clip library on the
+  right (click = edit, ▶ = play), Parameters also on the right and the timeline alone at the bottom, with the
+  clip description. Animate: one tab per scene (+ creates, × deletes), like the document tabs.
+  Playback goes in the middle of the bar: «, ▶ and » (previous and next keyframe).
+- AI test: 8/8 with no rejections ([results](pruebas-ia/fase-5.md)). From what it found: `setup: true` and
+  moments with only `ease` in `set_keys`, and `undo`/`redo` per track in clips (like per key in poses).
+- Third audit (phase 5): in a loop, `t = duration` is the end; what isn't additive (switch, colors,
+  vertices) is decided by the clip's track and not by an active driver ([decision §4](decision-animacion.md)); autokey
+  saves the value without the drivers' contribution; a single "same time" tolerance (1 ms). Parity: the AI has
+  `move_keys`, warnings about drivers adding on top and the tracks with their keyframes in `get_document`; the editor has
+  «◆ Pose…», «◆ Setup», hand-typed `cubic-bezier` and deleting a whole track. Params are Puppet-only: a scene
+  doesn't animate them and is shown without drivers (see [decision-animacion.md](decision-animacion.md) §4).
+- Second AI test: 9/9 ([results](pruebas-ia/fase-5.md#segunda-ronda-2026-11-06-timeline-escenas-y-clips-de-puppet)).
+  From what it asked for: `scale_time` (and «Scale keys» in Length), `pose` with `only`/`except` (and «Only the selection» in
+  «◆ Pose…»), values relative to the setup (`"+=14"`), strong named curves (with their shape drawn in the
+  timeline), and the list of poses each animated param moves in `set_keys`, `render_preview` and the param's channel.
+- Still missing in the phase: Puppet clips inserted in Animate (the AI asked for it in the test), curve editor
+  (dragging the handles), selecting and scaling several loose keyframes at once (the editor already moves a whole moment
+  by dragging the ◆ of «All keys» or of an object's row, like `move_keys`), a bone not inheriting scale (breathing without enlarging the head), a preview after
+  `undo` and the incremental runtime.
 
-**Prueba con IA:** animar un ciclo de reposo, un saludo y un parpadeo (clips de Puppet) y una escena corta en
-Animate; retocar timing a mano y pedirle a la IA que siga sin pisarlo.
+**AI test:** animate an idle cycle, a wave and a blink (Puppet clips) and a short scene in
+Animate; tweak timing by hand and ask the AI to continue without overwriting it.
 
-## Fase 6: comportamiento (Puppet en vivo)
+## Phase 6: behavior (live Puppet)
 
-Decisión en [decision-animacion.md §9](decision-animacion.md): **sin state machine por ahora** (en pausa: en una
-app con un LLM, el LLM decide el estado).
+Decision in [decision-animacion.md §9](decision-animacion.md): **no state machine for now** (on hold: in an
+app with an LLM, the LLM decides the state).
 
-- ✅ Runtime en vivo `src/core/vivo.js` (el que exporta la fase 7): `play(clip)`, `set(param, valor)` y
-  `stop(clip)`. Un clip en loop es la **base** (fundido cruzado); uno `once` es un **gesto** encima que pisa solo sus
-  pistas y sale solo. Los params de la app se mezclan con el peso del clip que los anima.
-- ✅ Datos del clip de Puppet: `fade`, `next` (encadenar), `blend` (`additive`) y `auto` (`repeat` cada
-  `repeat_min`…`repeat_max` s, como el parpadeo; `always`, como la respiración). El param gana `description`.
-- ✅ Editor: **▶ Live** en Puppet (los botones disparan clips, Parameters son los valores de la app, la timeline muestra
-  qué suena con su peso; el documento no se edita) y el grupo Live del inspector.
-- ✅ MCP: `set_keys` con lo de Live, `render_preview` con un guion `live` y `get_manifest` (el manifiesto que recibe la
-  IA de la app: `src/core/manifiesto.js`). Guía al día.
-- En pausa: state machine (estados, transiciones con condiciones, blend 1D, exit time), máscaras explícitas.
+- ✅ Live runtime `src/core/live.js` (the one phase 7 exports): `play(clip)`, `set(param, value)` and
+  `stop(clip)`. A looping clip is the **base** (crossfade); a `once` one is a **gesture** on top that overrides only its
+  tracks and exits on its own. The app's params blend with the weight of the clip that animates them.
+- ✅ Puppet clip data: `fade`, `next` (chaining), `blend` (`additive`) and `auto` (`repeat` every
+  `repeat_min`…`repeat_max` s, like blinking; `always`, like breathing). The param gains `description`.
+- ✅ Editor: **▶ Live** in Puppet (buttons trigger clips, Parameters are the app's values, the timeline shows
+  what's playing with its weight; the document isn't edited) and the inspector's Live group.
+- ✅ MCP: `set_keys` with the Live fields, `render_preview` with a `live` script and `get_manifest` (the manifest the
+  app's AI receives: `src/core/manifest.js`). Guide up to date.
+- On hold: state machine (states, transitions with conditions, 1D blend, exit time), explicit masks.
 
-**Prueba con IA:** comportamiento de asistente (reposo, escuchando, pensando, hablando, reacción).
+**AI test:** assistant behavior (idle, listening, thinking, speaking, reaction).
 
-## Imágenes como capa ✅ (2026-11-12)
+## Images as a layer ✅ (2026-11-12)
 
-- ✅ Tipo `image` (`schema/image.json`): `src` (tipo de propiedad nuevo `asset`: el nombre de un archivo de la carpeta
-  `assets/` del documento), `width`/`height` animables, pivote `originX`/`originY` como `rect` y `pixelated`. Hereda
-  posición, giro, escala, opacidad, `visible` y `bone`: va en grupos, switches y skeletons, se pega a huesos y se anima
-  en poses y clips. Para cambiar de imagen, un `switch` con una por variante.
-- ✅ Archivos en `personajes/<doc>/assets/` (no embebidos: el JSON y el historial quedan livianos). PNG, JPG, WebP y SVG
-  (entero, sin editar sus formas; para formas editables sigue Import SVG). Tamaño leído de la cabecera en
-  `src/core/imagenes.js`; los mismos bytes se reusan y un nombre ocupado lleva `_2`. Deshacer quita la capa, no el
-  archivo. Copiar un documento copia sus assets. El servidor los sirve en `/api/documentos/<id>/assets/<archivo>`
-  (los SVG con CSP) y los recibe por POST.
-- ✅ Un solo plan para crear la capa (`planAgregarImagen`): centrada, de tamaño natural o achicada para entrar.
-- ✅ Editor: **Image…** en el menú de capas (junto a Group, Switch y Skeleton, como en Moho), soltar archivos sobre el
-  lienzo o pegarlos con Ctrl+V; en el inspector, miniatura, **Replace…** y **Original size**.
-- ✅ MCP: `add_image` (ruta local o URL) y `render_preview` con las imágenes. resvg no lee WebP: en la vista previa de
-  la IA una WebP sale como un recuadro gris con una cruz y el texto lo dice. Guía al día.
+- ✅ `image` type (`schema/image.json`): `src` (new `asset` property type: the name of a file in the document's
+  `assets/` folder), animatable `width`/`height`, `originX`/`originY` pivot like `rect`, and `pixelated`. It inherits
+  position, rotation, scale, opacity, `visible` and `bone`: it goes in groups, switches and skeletons, attaches to bones and is animated
+  in poses and clips. To change image, a `switch` with one per variant.
+- ✅ Files in `documents/<doc>/assets/` (not embedded: the JSON and the history stay light). PNG, JPG, WebP and SVG
+  (whole, without editing its shapes; for editable shapes there's still Import SVG). Size read from the header in
+  `src/core/images.js`; the same bytes are reused and a taken name gets `_2`. Undo removes the layer, not the
+  file. Copying a document copies its assets. The server serves them at `/api/documents/<id>/assets/<file>`
+  (SVGs with CSP) and receives them by POST.
+- ✅ A single plan to create the layer (`planAddImage`): centered, at natural size or shrunk to fit.
+- ✅ Editor: **Image…** in the layers menu (next to Group, Switch and Skeleton, as in Moho), dropping files on the
+  canvas or pasting them with Ctrl+V; in the inspector, thumbnail, **Replace…** and **Original size**.
+- ✅ MCP: `add_image` (local path or URL) and `render_preview` with images. resvg doesn't read WebP: in the AI's
+  preview a WebP comes out as a gray box with a cross and the text says so. Guide up to date.
 
-## Fase 7: exportación y uso
+## Phase 7: export and use
 
-- **Prioridad: `.aia` + runtime JS** (`src/core` + `src/render`, sin dependencias) con manifiesto para la IA de la
-  app: params, clips de Puppet con su ficha y estados → herramientas para el LLM. Ver
-  [decision-animacion.md §5](decision-animacion.md). El `.aia` lleva también los archivos de `assets/` y el runtime
-  recibe cómo resolver el `src` de cada imagen (la opción `assets` de `contenidoSvg`).
-- **Video** (mp4/webm/gif, PNG por cuadro) muestreando el mismo evaluador con resvg y ffmpeg.
-- **Lottie y SVG/CSS**: pistas simples directas; huesos y mezclas horneados cuadro a cuadro.
-- Demo: un avatar en una página, controlado por un LLM, con lip-sync desde el audio.
+- **Priority: `.aia` + JS runtime** (`src/core` + `src/render`, no dependencies) with a manifest for the app's
+  AI: params, Puppet clips with their card and states → tools for the LLM. See
+  [decision-animacion.md §5](decision-animacion.md). The `.aia` also carries the `assets/` files and the runtime
+  receives how to resolve each image's `src` (the `assets` option of `svgContent`).
+- **Video** (mp4/webm/gif, PNG per frame) sampling the same evaluator with resvg and ffmpeg.
+- **Lottie and SVG/CSS**: simple tracks directly; bones and blends baked frame by frame.
+- Demo: an avatar on a page, controlled by an LLM, with lip-sync from the audio.
 
-## Ideas anotadas
+## Noted ideas
 
-Grabar una actuación de Puppet como pistas de Animate (Rec), atajos de teclado por botón, escenas con varios
-personajes (instancias de otros documentos), lo procedural (parpadeo, mirada) como dato del personaje y curvas
-elastic/bounce/«a dos». Detalle en [decision-animacion.md §7](decision-animacion.md).
+Recording a Puppet performance as Animate tracks (Rec), keyboard shortcuts per button, scenes with several
+characters (instances of other documents), procedural behavior (blinking, gaze) as character data, and
+elastic/bounce/«two-way» curves. Details in [decision-animacion.md §7](decision-animacion.md).
 
-## Después
+## Later
 
-Deformación por pesos (máximo 4 huesos por vértice), IK de dos huesos, constraints de copiar transformación con
-factor y retardo, dinámica secundaria, morph entre formas con igual número de vértices y mallas de imagen (una imagen que se
-deforma con varios huesos) en una capa canvas.
+Weight-based deformation (at most 4 bones per vertex), two-bone IK, copy-transform constraints with
+factor and delay, secondary dynamics, morph between shapes with the same number of vertices, and image meshes (an image that
+deforms with several bones) in a canvas layer.
 
-**Capa vectorial con malla compartida, como en Moho** (decidido el 2026-11-12, para más adelante). Hoy cada forma es
-un objeto con sus propios vértices y el `group` hace de capa. La idea es una capa vectorial con una malla de puntos
-compartida: las formas son rellenos y contornos sobre esos puntos, y dos formas pueden compartir puntos soldados (un
-brazo y su manga se mueven juntos sin enlazar dos veces). Es el cambio más grande de los tres que se debatieron:
-toca vértices, `bind_points`, poses, timeline, render, herramienta Points e importador SVG. Hay que pensar cómo la
-IA nombra un punto de la malla sin depender del índice, que es frágil. Antes conviene hacer dos pasos más chicos:
-Layers que distinga grupos (capas) de formas (hijos plegados), y `path` con varios subtrazados y regla de relleno
-para formas con agujero, como en Rive.
+**Vector layer with a shared mesh, as in Moho** (decided on 2026-11-12, for later). Today each shape is
+an object with its own vertices and the `group` acts as the layer. The idea is a vector layer with a shared
+point mesh: shapes are fills and strokes over those points, and two shapes can share welded points (an
+arm and its sleeve move together without binding twice). It's the biggest of the three changes debated:
+it touches vertices, `bind_points`, poses, timeline, render, the Points tool and the SVG importer. We need to think about how the
+AI names a mesh point without depending on the index, which is fragile. Before that, two smaller steps are worth doing:
+Layers that tells groups (layers) apart from shapes (folded children), and `path` with several subpaths and a fill rule
+for shapes with a hole, as in Rive.
