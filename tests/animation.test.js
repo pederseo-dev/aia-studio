@@ -434,6 +434,7 @@ test('set_keys: pose with only or except, values relative to the setup and named
   assert.equal(t.arm_bone.rotation[0].value, 14);
   near(t.arm.opacity[0].value, 0.5);
   assert.throws(() => tracks([{ t: 0, values: { face: { fill: '+=1' } } }]), /relative to the setup.*number properties/);
+  assert.throws(() => tracks([{ t: 0, values: { arm_bone: { rotation: '-=-140' } } }]), /"-=-140" is not a relative value: write "\+=n" or "-=n" with a positive number/);
   // Strong curves: named, valid and with the expected shape.
   assert.equal(curveError('ease-in-expo'), null);
   assert.ok(applyCurve('ease-in-expo', 0.5) < 0.1, 'ease-in-expo barely moves at the halfway point');

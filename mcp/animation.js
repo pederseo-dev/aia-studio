@@ -72,7 +72,12 @@ function momentValues(doc, schema, tracks, k, i) {
     const own = { ...fields };
     for (const [prop, v] of Object.entries(own)) {
       const m = typeof v === 'string' && v.match(RELATIVE);
-      if (!m) continue;
+      if (!m) {
+        if (typeof v === 'string' && /^\s*[+-]=/.test(v)) {
+          throw new Error(`keys[${i}].values.${id}.${prop}: "${v}" is not a relative value: write "+=n" or "-=n" with a positive number n (for example "+=140" or "-=140")`);
+        }
+        continue;
+      }
       const obj = findObject(doc, id);
       if (!obj || obj.type === 'param' || schema.types.get(obj.type)?.properties[prop]?.type !== 'number') {
         throw new Error(`keys[${i}].values.${id}.${prop}: "${v}" (relative to the setup) only works on number properties of objects${obj ? '' : ` and there is no object "${id}"`}`);
