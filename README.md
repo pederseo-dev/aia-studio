@@ -12,7 +12,18 @@ designed the other way around: so the AI has complete control, and the human can
 
 It takes the rigging ideas of **Moho** (bone layers, smart bones, switch layers), the runtime ideas of **Rive**
 (clips, a declarative runtime) and the live puppet ideas of **Adobe Character Animator** (triggers, gestures over a
-base, automatic blinking and breathing), and is built with HTML, CSS, JS and SVG.
+base, automatic blinking and breathing).
+
+## Why HTML, CSS, JS and SVG
+
+That choice is the point. A character made here is not locked inside a video or a proprietary player: it is plain
+web technology.
+
+- **Easy to integrate.** It drops into any web app or component (a UI, a mascot, an assistant's face) with no plugin
+  or heavy runtime.
+- **Easy to use.** Anyone who knows the web can style it, script it and debug it with the browser's own tools.
+- **Full control for the AI.** SVG, CSS and JS are text the AI already reads and writes fluently, so it can drive the
+  character down to the last detail, both while building it and live inside the app.
 
 ## How it works
 
