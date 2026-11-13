@@ -32,7 +32,7 @@ async function withStore(fn) {
   }
 }
 
-test('leerImagen: formato y tamaño de PNG, JPEG, WebP (lossy, lossless, extendido) y SVG', () => {
+test('readImage: format and size of PNG, JPEG, WebP (lossy, lossless, extended) and SVG', () => {
   assert.deepEqual(readImage(png(30, 20)), { format: 'png', naturalWidth: 30, naturalHeight: 20 });
   // JPEG: SOI, an APP0 and the SOF0 with height 200 and width 320.
   const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 4, 0, 0, 0xff, 0xc0, 0, 17, 8, 0, 200, 1, 64, 3, 0, 0, 0, 0, 0, 0]);
@@ -53,7 +53,7 @@ test('leerImagen: formato y tamaño de PNG, JPEG, WebP (lossy, lossless, extendi
   assert.throws(() => readImage(new Uint8Array()), /empty/);
 });
 
-test('nombres de asset: limpios, con la extensión de su formato real, y libres', () => {
+test('asset names: clean, with the extension of their real format, and free', () => {
   assert.equal(assetName('C:\\fotos\\Mi Foto Ñandú.JPEG', 'jpeg'), 'mi_foto_nandu.jpg');
   assert.equal(assetName('logo.png', 'webp'), 'logo.webp');
   assert.equal(assetName('...', 'png'), 'image.png');
@@ -62,7 +62,7 @@ test('nombres de asset: limpios, con la extensión de su formato real, y libres'
   for (const bad of ['../x.png', 'a/b.png', 'X.png', 'sol.gif', 'sol']) assert.match(validateValue(schema.types.get('image').properties.src, bad), /asset/);
 });
 
-test('planAgregarImagen: centrada, de tamaño natural o achicada, con id libre y en las coordenadas del padre', () => {
+test('planAddImage: centered, at natural size or shrunk, with a free id and in the parent coordinates', () => {
   let doc = op(createDocument({ width: 400, height: 300 }), { op: 'create', type: 'group', id: 'g', props: { x: 100, y: 50 } });
   const { id, ops } = planAddImage(doc, schema, { src: 'sun.png', naturalWidth: 40, naturalHeight: 20 });
   assert.equal(id, 'sun');
@@ -81,7 +81,7 @@ test('planAgregarImagen: centrada, de tamaño natural o achicada, con id libre y
   assert.deepEqual(validate(doc, schema).errors, []);
 });
 
-test('render: image en el SVG (pivote, estirada, pixelated) y en el PNG con los bytes del asset', () => {
+test('render: image in the SVG (pivot, stretched, pixelated) and in the PNG with the asset bytes', () => {
   const doc = op(
     createDocument({ width: 100, height: 100, background: '#ffffff' }),
     { op: 'create', type: 'image', id: 'a', props: { src: 'rojo.png', x: 25, y: 50, width: 50, height: 100 } },
@@ -101,7 +101,7 @@ test('render: image en el SVG (pivote, estirada, pixelated) y en el PNG con los 
   assert.match(webp, /^<rect x="-5" y="-5" width="10" height="20" [^>]*\/><path d="M-5 -5L5 15M5 -5L-5 15"/);
 });
 
-test('una image se pega a un hueso y se anima en poses y clips como las demás capas', () => {
+test('an image sticks to a bone and is animated in poses and clips like the other layers', () => {
   const doc = op(
     createDocument({}),
     { op: 'create', type: 'skeleton', id: 'rig' },
@@ -118,7 +118,7 @@ test('una image se pega a un hueso y se anima en poses y clips como las demás c
   assert.deepEqual(boxOf(doc, schema, 'foto'), [-50, -50, 50, 50]);
 });
 
-test('almacén: guarda assets (reusa los iguales, renombra los distintos), los sirve, avisa los que faltan y los copia', () =>
+test('store: saves assets (reuses identical ones, renames different ones), serves them, warns about missing ones and copies them', () =>
   withStore(async (a, folder) => {
     await a.create('doc', { width: 200, height: 200 }, { origin: 'user' });
     const red = png(10, 10);
@@ -126,7 +126,7 @@ test('almacén: guarda assets (reusa los iguales, renombra los distintos), los s
     assert.deepEqual(await a.saveAsset('doc', 'otro.png', red), { src: 'sol.png', naturalWidth: 10, naturalHeight: 10, format: 'png', reused: true });
     assert.equal((await a.saveAsset('doc', 'sol.png', png(10, 10, '#00ff00'))).src, 'sol_2.png');
     await assert.rejects(a.saveAsset('doc', 'x.png', new TextEncoder().encode('hola')), /Not a PNG/);
-    await assert.rejects(a.saveAsset('nada', 'x.png', red), /No existe/);
+    await assert.rejects(a.saveAsset('nada', 'x.png', red), /There is no document/);
     assert.deepEqual(await a.listAssets('doc'), ['sol.png', 'sol_2.png']);
     const { bytes, mime } = await a.readAsset('doc', 'sol.png');
     assert.equal(mime, 'image/png');
@@ -146,7 +146,7 @@ test('almacén: guarda assets (reusa los iguales, renombra los distintos), los s
     assert.ok(Buffer.from(red).equals(await readFile(path.join(folder, 'copia', 'assets', 'sol.png'))));
   }));
 
-test('MCP: bytesDeImagen lee rutas absolutas y rechaza lo demás; el árbol muestra el archivo', async () => {
+test('MCP: imageBytes reads absolute paths and rejects the rest; the tree shows the file', async () => {
   const folder = await mkdtemp(path.join(tmpdir(), 'aia-img-'));
   try {
     const file = path.join(folder, 'Logo.png');

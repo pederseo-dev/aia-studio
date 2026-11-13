@@ -18,7 +18,7 @@ async function withStore(fn) {
   }
 }
 
-test('deshacer y rehacer van por origen', () =>
+test('undo and redo go by origin', () =>
   withStore(async (a) => {
     await a.create('robot', { name: 'Robot' }, { origin: 'ai' });
     await a.applyOps('robot', [{ op: 'create', type: 'rect', id: 'torso' }], { origin: 'ai', note: 'torso' });
@@ -44,7 +44,7 @@ test('deshacer y rehacer van por origen', () =>
     assert.deepEqual(user, { undo: false, redo: true });
   }));
 
-test('deshacer se niega si un lote posterior del otro origen tocó lo mismo', () =>
+test('undo refuses if a later batch from the other origin touched the same thing', () =>
   withStore(async (a) => {
     await a.create('robot', {}, { origin: 'user' });
     await a.applyOps('robot', [{ op: 'create', type: 'rect', id: 'r' }], { origin: 'ai', note: 'crear' });
@@ -66,7 +66,7 @@ test('deshacer se niega si un lote posterior del otro origen tocó lo mismo', ()
     await a.undo('robot', 'user');
   }));
 
-test('deshacer la creación de un contenedor se niega si el otro origen le metió algo o lo renombró', () =>
+test('undoing the creation of a container refuses if the other origin put something in it or renamed it', () =>
   withStore(async (a) => {
     await a.create('robot', {}, { origin: 'user' });
     await a.applyOps('robot', [{ op: 'create', type: 'group', id: 'head' }], { origin: 'ai' });
@@ -76,22 +76,22 @@ test('deshacer la creación de un contenedor se niega si el otro origen le meti�
     await assert.rejects(a.undo('robot', 'ai'), /head \(changed by the user in #4 "renombrar"\)/);
   }));
 
-test('listar y errores de documento', () =>
+test('listing and document errors', () =>
   withStore(async (a) => {
     await a.create('b', { name: 'Bee' }, { origin: 'user' });
     await a.create('a', {}, { origin: 'user' });
     assert.deepEqual(await a.list(), [{ id: 'a', name: 'Sin nombre' }, { id: 'b', name: 'Bee' }].map((d) => (d.id === 'a' ? { id: 'a', name: 'a' } : d)));
-    await assert.rejects(a.create('a', {}, { origin: 'user' }), /Ya existe/);
+    await assert.rejects(a.create('a', {}, { origin: 'user' }), /already exists/);
     await a.applyOps('b', [{ op: 'create', type: 'rect', id: 'r' }], { origin: 'user' });
     const copy = await a.create('c', { name: 'Bee 2' }, { origin: 'ai', copyFrom: 'b' });
     assert.deepEqual(copy.objects.map((o) => o.id), ['r']);
     assert.equal(copy.meta.name, 'Bee 2');
     assert.deepEqual((await a.history('c')).entries.map((e) => e.note), ['copy of b']);
-    await assert.rejects(a.read('zzz'), /No existe/);
-    await assert.rejects(a.read('../x'), /inválido/);
+    await assert.rejects(a.read('zzz'), /There is no document/);
+    await assert.rejects(a.read('../x'), /Invalid document id/);
   }));
 
-test('en una pose, deshacer compara y restaura por objeto y propiedad, no la pose entera', () =>
+test('in a pose, undo compares and restores per object and property, not the whole pose', () =>
   withStore(async (a) => {
     await a.create('cara', {}, { origin: 'user' });
     await a.applyOps('cara', [{ op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'rect', id: 'q' }, { op: 'create', type: 'pose', id: 'po' }], { origin: 'ai', note: 'base' });
@@ -107,16 +107,16 @@ test('en una pose, deshacer compara y restaura por objeto y propiedad, no la pos
     await assert.rejects(a.undo('cara', 'ai'), /po\.values\.r\.x \(changed by the user/);
   }));
 
-test('eliminar borra el documento y su historial, y avisa si no existe', () =>
+test('delete removes the document and its history, and warns if it does not exist', () =>
   withStore(async (a) => {
     await a.create('borrame', {}, { origin: 'user' });
     await a.delete('borrame');
     assert.deepEqual(await a.list(), []);
-    await assert.rejects(a.read('borrame'), /No existe/);
-    await assert.rejects(a.delete('borrame'), /No existe el documento "borrame"/);
+    await assert.rejects(a.read('borrame'), /There is no document/);
+    await assert.rejects(a.delete('borrame'), /There is no document "borrame"/);
   }));
 
-test('en un clip, deshacer compara y restaura por pista, no el clip entero', () =>
+test('in a clip, undo compares and restores per track, not the whole clip', () =>
   withStore(async (a) => {
     await a.create('clip', {}, { origin: 'user' });
     await a.applyOps('clip', [{ op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'animation', id: 'c', props: { usage: 'puppet' } }], { origin: 'ai', note: 'base' });
@@ -131,7 +131,7 @@ test('en un clip, deshacer compara y restaura por pista, no el clip entero', () 
     await assert.rejects(a.undo('clip', 'ai'), /c\.tracks\.r\.x \(changed by the user/);
   }));
 
-test('leer migra una escena vieja que anima params: pasa a Puppet una sola vez, con una entrada en el historial', async () => {
+test('reading migrates an old scene that animates params: it becomes Puppet only once, with one history entry', async () => {
   const { readFile, writeFile } = await import('node:fs/promises');
   const folder = await mkdtemp(path.join(tmpdir(), 'aia-'));
   try {
@@ -157,7 +157,7 @@ test('leer migra una escena vieja que anima params: pasa a Puppet una sola vez, 
   }
 });
 
-test('formato viejo en disco: personajes/, documento.json e historial.jsonl en español pasan al nuevo una vez', async () => {
+test('old on-disk format: Spanish personajes/, documento.json and historial.jsonl move to the new one once', async () => {
   const { migrateLegacyFolder, entryFromLegacy } = await import('../server/store.js');
   const base = await fs.mkdtemp(path.join(os.tmpdir(), 'aia-legacy-'));
   try {

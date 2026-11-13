@@ -30,7 +30,7 @@ function puppet(tracks = {}, clip = {}) {
   );
 }
 
-test('curvas: linear, step, ease y cubic-bezier como en CSS', () => {
+test('curves: linear, step, ease and cubic-bezier as in CSS', () => {
   assert.equal(applyCurve(undefined, 0.3), 0.3);
   assert.equal(applyCurve('step', 0.99), 0);
   near(applyCurve('ease-in-out', 0.5), 0.5, 1e-4);
@@ -42,7 +42,7 @@ test('curvas: linear, step, ease y cubic-bezier como en CSS', () => {
   assert.equal(curveError([0.1, -0.5, 0.9, 1.5]), null);
 });
 
-test('tiempo local según loop: once, loop y pingpong', () => {
+test('local time by loop: once, loop and pingpong', () => {
   const clip = (loop) => ({ type: 'animation', duration: 2, loop });
   assert.equal(localTime(schema, clip('once'), 3), 2);
   assert.equal(localTime(schema, clip('loop'), 3), 1);
@@ -51,7 +51,7 @@ test('tiempo local según loop: once, loop y pingpong', () => {
   assert.equal(localTime(schema, clip('pingpong'), 4.5), 0.5);
 });
 
-test('valor de una pista: antes del primero, entre keyframes, después del último y step', () => {
+test('value of a track: before the first, between keyframes, after the last and step', () => {
   const keys = [{ t: 0.5, value: 10 }, { t: 1, value: 20, ease: 'step' }, { t: 2, value: 40 }];
   assert.equal(trackValue(keys, 0, 'number'), 10);
   assert.equal(trackValue(keys, 0.75, 'number'), 15);
@@ -61,7 +61,7 @@ test('valor de una pista: antes del primero, entre keyframes, después del últi
   assert.equal(trackValue([{ t: 0, value: 'a' }, { t: 1, value: 'b' }], 0.9, 'ref'), 'a');
 });
 
-test('un clip anima huesos, colores, switch, morph y params; los drivers suman encima', () => {
+test('a clip animates bones, colors, switch, morph and params; the drivers add on top', () => {
   const doc = puppet({
     arm_bone: { rotation: [{ t: 0, value: 0 }, { t: 1, value: -60 }] },
     mouth: { active: [{ t: 0, value: 'mouth_rest' }, { t: 0.5, value: 'mouth_o' }] },
@@ -89,7 +89,7 @@ test('un clip anima huesos, colores, switch, morph y params; los drivers suman e
   assert.deepEqual(keyTimes(findObject(doc, 'wave')), [0, 0.5, 1]);
 });
 
-test('validación de pistas: objetos, propiedades, tiempos, orden, curvas y params', () => {
+test('track validation: objects, properties, times, order, curves and params', () => {
   const errors = (tracks, clip) => {
     try {
       return validate(puppet(tracks, clip), schema).errors.join('\n');
@@ -102,13 +102,13 @@ test('validación de pistas: objetos, propiedades, tiempos, orden, curvas y para
   assert.match(errors({ arm: { x: [{ t: 2, value: 1 }] } }), /outside the clip \(0…1 s\)/);
   assert.match(errors({ arm: { x: [{ t: 0.5, value: 1 }, { t: 0.2, value: 2 }] } }), /in order of t/);
   assert.match(errors({ arm: { x: [{ t: 0, value: 1, ease: 'boing' }] } }), /ease must be one of/);
-  assert.match(errors({ arm: { x: [{ t: 0, value: 'a' }] } }), /value debe ser un número/);
+  assert.match(errors({ arm: { x: [{ t: 0, value: 'a' }] } }), /value must be a number/);
   assert.match(errors({ happiness: { rotation: [{ t: 0, value: 1 }] } }), /a param only animates "value"/);
   assert.match(errors({ mouth: { active: [{ t: 0, value: 'face' }] } }), /Clip "wave" makes switch mouth show "face" at t 0 s.*delete_keys with targets \["mouth\.active"\] and times \[0\]/);
   assert.equal(errors({ arm: { x: [{ t: 0, value: 1 }] } }, { duration: 3, loop: 'pingpong', usage: 'puppet' }), '');
 });
 
-test('renombrar y borrar objetos actualiza las pistas', () => {
+test('renaming and deleting objects updates the tracks', () => {
   let doc = puppet({
     arm_bone: { rotation: [{ t: 0, value: 0 }] },
     mouth: { active: [{ t: 0, value: 'mouth_rest' }, { t: 0.5, value: 'mouth_o' }] },
@@ -124,7 +124,7 @@ test('renombrar y borrar objetos actualiza las pistas', () => {
   assert.deepEqual(findObject(returned, 'wave').tracks, findObject(doc, 'wave').tracks);
 });
 
-test('set_keys: momentos con values, pose y params; reemplaza en el mismo t, alarga la duración y quita pistas', async () => {
+test('set_keys: moments with values, pose and params; replaces at the same t, extends the duration and removes tracks', async () => {
   const { planSetKeys, planDeleteKeys, clipSummary, timesForStrip } = await import('../mcp/animation.js');
   const { treeOutline } = await import('../mcp/tools.js');
   let doc = puppet();
@@ -154,7 +154,7 @@ test('set_keys: momentos con values, pose y params; reemplaza en el mismo t, ala
   assert.throws(() => planSetKeys(doc, schema, 'wave', { keys: [{ t: 0, pose: 'hapy' }] }), /there is no pose "hapy".*"happy"/);
   assert.throws(() => planSetKeys(doc, schema, 'wave', { keys: [{ t: 0 }] }), /sets nothing/);
   assert.throws(() => planSetKeys(doc, schema, 'face', {}), /is a ellipse/);
-  assert.match(clipSummary(schema, findObject(doc, 'wave')), /^puppet, 1.5 s, once, gesto, fade 0.2 s; anima arm_bone.rotation, happiness.value, face.fill; keys en 0, 0.5, 1.5$/);
+  assert.match(clipSummary(schema, findObject(doc, 'wave')), /^puppet, 1.5 s, once, gesture, fade 0.2 s; animates arm_bone.rotation, happiness.value, face.fill; keys at 0, 0.5, 1.5$/);
   assert.match(treeOutline(doc, schema), /- wave \(animation\) puppet, 1.5 s/);
   assert.deepEqual(timesForStrip(findObject(doc, 'wave')), [0, 0.5, 1.5]);
   // delete_keys: by time and track, or the whole track.
@@ -167,7 +167,7 @@ test('set_keys: momentos con values, pose y params; reemplaza en el mismo t, ala
   assert.throws(() => planDeleteKeys(doc, 'wav', { times: [0] }), /no animation "wav".*"wave"/);
 });
 
-test('tira de cuadros: un cuadro por tiempo con su rótulo, y se convierte a PNG', async () => {
+test('frame strip: one frame per time with its label, and it converts to PNG', async () => {
   const { svgStrip } = await import('../src/render/svg.js');
   const { svgToPng } = await import('../server/png.js');
   const doc = puppet({ arm_bone: { rotation: [{ t: 0, value: 0 }, { t: 1, value: -90 }] } });
@@ -178,7 +178,7 @@ test('tira de cuadros: un cuadro por tiempo con su rótulo, y se convierte a PNG
   assert.ok(png.length > 1000);
 });
 
-test('ponerClave y quitarClave: reemplazan en el mismo t, conservan la curva y no tocan las pistas recibidas', async () => {
+test('putKey and removeKey: replace at the same t, keep the curve and do not touch the tracks they receive', async () => {
   const { putKey, removeKey } = await import('../src/core/animation.js');
   const tracks = { a: { x: [{ t: 0, value: 1 }, { t: 0.5, value: 2, ease: 'step' }] } };
   const others = putKey(tracks, 'a', 'x', 0.5, 9);
@@ -189,7 +189,7 @@ test('ponerClave y quitarClave: reemplazan en el mismo t, conservan la curva y n
   assert.deepEqual(removeKey(removeKey(tracks, 'a', 'x', 0), 'a', 'x', 0.5), {});
 });
 
-test('set_keys: setup vuelve al montaje y un momento con solo ease cambia la curva', async () => {
+test('set_keys: setup goes back to the setup and a moment with only ease changes the curve', async () => {
   const { planSetKeys } = await import('../mcp/animation.js');
   let doc = puppet();
   doc = op(doc, { op: 'delete', target: 'wave' });
@@ -236,7 +236,7 @@ function withDrivers(tracks = {}) {
   );
 }
 
-test('loop: el final de la vuelta es el final, no el principio', () => {
+test('loop: the end of the cycle is the end, not the start', () => {
   const doc = withDrivers({ box: { rotation: [{ t: 0, value: 0 }, { t: 2, value: 90 }] } });
   const clip = findObject(doc, 'talk');
   assert.equal(localTime(schema, clip, 2), 2);
@@ -246,7 +246,7 @@ test('loop: el final de la vuelta es el final, no el principio', () => {
   assert.equal(evaluateClip(doc, schema, clip, 2).values.box.rotation, 90);
 });
 
-test('una pista del clip en algo que no se suma gana sobre un driver activo (enum en peso 1)', () => {
+test('a clip track on something that does not add up wins over an active driver (enum at weight 1)', () => {
   const doc = withDrivers({ mouth: { active: [{ t: 0, value: 'mouth_o' }, { t: 1, value: 'mouth_rest' }] } });
   assert.equal(clipPose(doc, schema, 'talk', 0.5).values.mouth.active, 'mouth_o');
   assert.equal(clipPose(doc, schema, 'talk', 1.5).values.mouth.active, 'mouth_rest');
@@ -255,7 +255,7 @@ test('una pista del clip en algo que no se suma gana sobre un driver activo (enu
   assert.equal(clipPose(withoutTrack, schema, 'talk', 0, { viseme: 'o' }).values.mouth.active, 'mouth_o');
 });
 
-test('autokey con drivers: se guarda lo que fija el clip, sin lo que suman los drivers', async () => {
+test('autokey with drivers: what the clip sets is stored, without what the drivers add', async () => {
   const { valueToSave, clipWarnings } = await import('../src/core/animation.js');
   const doc = withDrivers({ box: { rotation: [{ t: 0, value: 0 }] } });
   // 30 shows (0 from the clip + 30 from the lean driver = 1). To show 30, the clip stores 0; to see 45, it stores 15.
@@ -271,7 +271,7 @@ test('autokey con drivers: se guarda lo que fija el clip, sin lo que suman los d
   assert.match(warnings[0], /^box\.rotation: the clip keys it and driver d_lean \(lean = 1\) adds pose leaning on top/);
 });
 
-test('moverClave y la tolerancia compartida de «mismo tiempo»', async () => {
+test('moveKey and the shared "same time" tolerance', async () => {
   const { moveKey, putKey, removeKey } = await import('../src/core/animation.js');
   const tracks = { a: { x: [{ t: 0, value: 1 }, { t: 0.5, value: 2, ease: 'ease-out' }, { t: 1, value: 3 }] } };
   assert.deepEqual(moveKey(tracks, 'a', 'x', 0.5, 0.75).a.x, [{ t: 0, value: 1 }, { t: 0.75, value: 2, ease: 'ease-out' }, { t: 1, value: 3 }]);
@@ -285,7 +285,7 @@ test('moverClave y la tolerancia compartida de «mismo tiempo»', async () => {
   assert.throws(() => withDrivers({ box: { x: [{ t: 0.3333, value: 1 }, { t: 0.3335, value: 2 }] } }), /at least 1 ms apart/);
 });
 
-test('MCP: duration corta, setup sin pistas, move_keys, delete_keys con tiempos cercanos y resumen de pistas', async () => {
+test('MCP: short duration, setup without tracks, move_keys, delete_keys with close times and track summary', async () => {
   const { planDeleteKeys, planMoveKeys, planSetKeys, trackLines } = await import('../mcp/animation.js');
   const { treeOutline } = await import('../mcp/tools.js');
   let doc = withDrivers({ box: { rotation: [{ t: 0, value: 0 }, { t: 1.5, value: 10, ease: 'ease-out' }] } });
@@ -307,7 +307,7 @@ test('MCP: duration corta, setup sin pistas, move_keys, delete_keys con tiempos 
   assert.match(treeOutline(doc, schema), /- talk \(animation\) puppet, 2 s, loop, base, fade 0.2 s; .*\n {4}box\.rotation: 0 = 0/);
 });
 
-test('render_preview con animation: tira, avisos de drivers y opciones incompatibles', async () => {
+test('render_preview with animation: strip, driver warnings and incompatible options', async () => {
   const { planClipView, previewError } = await import('../mcp/animation.js');
   const doc = withDrivers({ box: { rotation: [{ t: 0, value: 0 }, { t: 2, value: 90 }] }, viseme: { value: [{ t: 0, value: 'o' }] } });
   const strip = planClipView(doc, schema, { animation: 'talk' });
@@ -315,18 +315,18 @@ test('render_preview con animation: tira, avisos de drivers y opciones incompati
   assert.equal((strip.svg.match(/t = /g) ?? []).length, 2);
   assert.match(strip.svg, /t = 2 s/);
   assert.match(strip.svg, /rotate\(120\)/); // 90 from the clip + 30 from the lean driver
-  assert.match(strip.text, /el clip anima los params viseme/);
-  assert.match(strip.text, /Ojo, drivers que suman encima del clip:\n- box\.rotation: the clip keys it and driver d_lean/);
+  assert.match(strip.text, /the clip animates the params viseme/);
+  assert.match(strip.text, /Careful, drivers that add on top of the clip:\n- box\.rotation: the clip keys it and driver d_lean/);
   const frame = planClipView(doc, schema, { animation: 'talk', time: 1, params: { lean: 0 } });
   assert.match(frame.svg, /rotate\(45\)/);
-  assert.doesNotMatch(frame.text, /Ojo/);
+  assert.doesNotMatch(frame.text, /Careful/);
   assert.throws(() => planClipView(doc, schema, { animation: 'tlak' }), /no animation "tlak".*"talk"/);
   assert.match(previewError({ pose: 'v_o', animation: 'talk' }), /either pose or animation/);
   assert.match(previewError({ time: 1 }), /need animation/);
   assert.equal(previewError({ animation: 'talk', time: 1 }), null);
 });
 
-test('una escena de Animate no anima params; un clip de Puppet sí', () => {
+test('an Animate scene does not animate params; a Puppet clip does', () => {
   const base = op(
     createDocument({ name: 'P' }),
     { op: 'create', type: 'param', id: 'happiness' },
@@ -337,7 +337,7 @@ test('una escena de Animate no anima params; un clip de Puppet sí', () => {
   assert.equal(evaluateClip(doc, schema, findObject(doc, 'gesto'), 1).params.happiness, 1);
 });
 
-test('una escena de Animate se ve sin drivers: montaje + keyframes, sin avisos; render_preview rechaza params', async () => {
+test('an Animate scene is seen without drivers: setup + keyframes, no warnings; render_preview rejects params', async () => {
   const { planClipView } = await import('../mcp/animation.js');
   // lean starts at 1: in a Puppet clip its driver turns the box 30°; in a scene, it does not.
   const tracks = { box: { x: [{ t: 0, value: 0 }, { t: 1, value: 50 }] } };
@@ -356,7 +356,7 @@ test('una escena de Animate se ve sin drivers: montaje + keyframes, sin avisos; 
   assert.doesNotThrow(() => planClipView(doc, schema, { animation: 'escena', time: 0 }));
 });
 
-test('params en una escena: pasar un clip de Puppet a Animate, set_keys sobre una escena nueva y la migración', async () => {
+test('params in a scene: turning a Puppet clip into Animate, set_keys on a new scene and the migration', async () => {
   const { planSetKeys } = await import('../mcp/animation.js');
   const { migrateScenesWithParams } = await import('../src/core/migration.js');
   const doc = puppet({ happiness: { value: [{ t: 0, value: 0 }, { t: 1, value: 1 }] } });
@@ -378,7 +378,7 @@ test('params en una escena: pasar un clip de Puppet a Animate, set_keys sobre un
   assert.equal(migrateScenesWithParams(doc, schema).doc, doc);
 });
 
-test('move_keys: con targets mueve solo esas pistas; from == to es un error', async () => {
+test('move_keys: with targets it moves only those tracks; from == to is an error', async () => {
   const { planMoveKeys } = await import('../mcp/animation.js');
   let doc = withDrivers({ box: { rotation: [{ t: 0, value: 0 }, { t: 1, value: 10 }], x: [{ t: 0, value: 0 }, { t: 1, value: 50 }] } });
   doc = op(doc, ...planMoveKeys(doc, schema, 'talk', { from: 1, to: 1.5, targets: ['box.x'] }).ops);
@@ -387,7 +387,7 @@ test('move_keys: con targets mueve solo esas pistas; from == to es un error', as
   assert.throws(() => planMoveKeys(doc, schema, 'talk', { from: 1, to: 1.0004 }), /same time.*nothing to move/);
 });
 
-test('scale_time: el clip entero en proporción, un tramo con los de después corridos, factor y errores', async () => {
+test('scale_time: the whole clip in proportion, a span with the later ones shifted, factor and errors', async () => {
   const { planScaleTime } = await import('../mcp/animation.js');
   const tracks = { arm_bone: { rotation: [{ t: 0, value: 0 }, { t: 0.9, value: 40, ease: 'ease-out' }, { t: 1.8, value: 0 }] }, happiness: { value: [{ t: 0.6, value: 1 }] } };
   let doc = puppet(tracks, { duration: 1.8 });
@@ -413,7 +413,7 @@ test('scale_time: el clip entero en proporción, un tramo con los de después co
   assert.throws(() => planScaleTime(doc, schema, 'wave', { duration: 0.0005 }), /same time/);
 });
 
-test('set_keys: pose con only o except, valores relativos al montaje y curvas fuertes con nombre', async () => {
+test('set_keys: pose with only or except, values relative to the setup and named strong curves', async () => {
   const { planSetKeys } = await import('../mcp/animation.js');
   const doc = puppet();
   const tracks = (keys) => planSetKeys(doc, schema, 'wave', { keys }).ops[0].props.tracks;
@@ -436,26 +436,26 @@ test('set_keys: pose con only o except, valores relativos al montaje y curvas fu
   assert.throws(() => tracks([{ t: 0, values: { face: { fill: '+=1' } } }]), /relative to the setup.*number properties/);
   // Strong curves: named, valid and with the expected shape.
   assert.equal(curveError('ease-in-expo'), null);
-  assert.ok(applyCurve('ease-in-expo', 0.5) < 0.1, 'ease-in-expo casi no se mueve a la mitad');
-  assert.ok(applyCurve('ease-out-back', 0.7) > 1, 'ease-out-back se pasa del valor');
-  assert.ok(applyCurve('ease-in-back', 0.2) < 0, 'ease-in-back toma impulso hacia atrás');
+  assert.ok(applyCurve('ease-in-expo', 0.5) < 0.1, 'ease-in-expo barely moves at the halfway point');
+  assert.ok(applyCurve('ease-out-back', 0.7) > 1, 'ease-out-back overshoots the value');
+  assert.ok(applyCurve('ease-in-back', 0.2) < 0, 'ease-in-back winds up backwards');
   t = tracks([{ t: 0, values: { arm_bone: { rotation: 0 } }, ease: 'ease-in-out-cubic' }, { t: 1, values: { arm_bone: { rotation: 10 } } }]);
   assert.equal(t.arm_bone.rotation[0].ease, 'ease-in-out-cubic');
 });
 
-test('qué poses mueve cada param animado: set_keys y render_preview lo listan; una escena no', async () => {
+test('which poses each animated param moves: set_keys and render_preview list them; a scene does not', async () => {
   const { planClipView } = await import('../mcp/animation.js');
   const { paramPoseLines } = await import('../src/core/animation.js');
   let doc = puppet({ happiness: { value: [{ t: 0, value: 0 }, { t: 1, value: 1 }] } });
   doc = op(doc, { op: 'create', type: 'pose', id: 'look_up', props: { values: { arm_bone: { rotation: -5 } } } }, { op: 'create', type: 'driver', id: 'd_look', props: { param: 'happiness', pose: 'look_up' } });
   assert.deepEqual(paramPoseLines(doc, schema, 'wave'), ['happiness → happy (face, arm_bone), look_up (arm_bone)']);
   const { text } = planClipView(doc, schema, { animation: 'wave', time: 0.5 });
-  assert.match(text, /poses que mueven[\s\S]*happiness → happy \(face, arm_bone\), look_up \(arm_bone\)/);
+  assert.match(text, /poses they move[\s\S]*happiness → happy \(face, arm_bone\), look_up \(arm_bone\)/);
   doc = op(doc, { op: 'set', target: 'wave', props: { usage: 'animate', tracks: {} } });
   assert.deepEqual(paramPoseLines(doc, schema, 'wave'), []);
 });
 
-test('cada curva con nombre tiene su descripción en la guía', async () => {
+test('every named curve has its description in the guide', async () => {
   const { CURVE_DESCRIPTIONS, CURVE_NAMES } = await import('../src/core/curves.js');
   const described = CURVE_DESCRIPTIONS.flatMap(([names]) => names.split(', '));
   assert.deepEqual([...described].sort(), [...CURVE_NAMES].sort());

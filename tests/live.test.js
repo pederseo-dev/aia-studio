@@ -37,7 +37,7 @@ function puppet(extra = []) {
 }
 const rot = (pose, id) => pose.values[id]?.rotation;
 
-test('una base entra con fundido cruzado y reemplaza a la anterior', () => {
+test('a base comes in with a crossfade and replaces the previous one', () => {
   const live = createLive(puppet(), schema);
   assert.equal(rot(live.pose(), 'arm_bone'), undefined); // nothing playing: the setup
   live.play('talking');
@@ -55,7 +55,7 @@ test('una base entra con fundido cruzado y reemplaza a la anterior', () => {
   assert.equal(live.state().playing.length, 1);
 });
 
-test('un gesto pisa solo sus pistas encima de la base y sale solo al final', () => {
+test('a gesture overrides only its tracks on top of the base and leaves by itself at the end', () => {
   const live = createLive(puppet(), schema);
   live.play('talking');
   live.advance(0.5);
@@ -71,7 +71,7 @@ test('un gesto pisa solo sus pistas encima de la base y sale solo al final', () 
   assert.deepEqual(live.state().playing.map((s) => s.clip), ['talking']);
 });
 
-test('el param de la app vuelve suave cuando sale el clip que lo anima', () => {
+test('the app param returns smoothly when the clip that animates it leaves', () => {
   const live = createLive(puppet(), schema, { params: { happiness: 0.2 } });
   live.play('wave');
   live.advance(0.5);
@@ -80,12 +80,12 @@ test('el param de la app vuelve suave cuando sale el clip que lo anima', () => {
   near(live.pose().params.happiness, 1);
   live.advance(0.4); // t = 0.9: halfway through the fade-out (started at 0.8)
   const h = live.pose().params.happiness;
-  assert.ok(h > 0.4 && h < 1, `entre la app y el clip: ${h}`);
+  assert.ok(h > 0.4 && h < 1, `between the app and the clip: ${h}`);
   live.advance(0.2);
   near(live.pose().params.happiness, 0.4);
 });
 
-test('next encadena un gesto con una base, y stop saca un clip', () => {
+test('next chains a gesture with a base, and stop takes a clip out', () => {
   const doc = op(puppet(), { op: 'set', target: 'wave', props: { next: 'idle' } });
   const live = createLive(doc, schema);
   live.play('talking');
@@ -100,7 +100,7 @@ test('next encadena un gesto con una base, y stop saca un clip', () => {
   assert.equal(live.state().playing.length, 0);
 });
 
-test('capas auto: el parpadeo se repite solo y la respiración suma encima', () => {
+test('auto layers: the blink repeats by itself and the breathing adds on top', () => {
   const doc = puppet([
     { op: 'create', type: 'animation', id: 'blink', props: { usage: 'puppet', duration: 0.2, fade: 0, auto: 'repeat', repeat_min: 1, repeat_max: 1, tracks: { eye: { scaleY: [key(0, 0.1), key(0.2, 0.1)] } } } },
     { op: 'create', type: 'animation', id: 'breath', props: { usage: 'puppet', duration: 2, loop: 'loop', auto: 'always', blend: 'additive', tracks: { head_bone: { rotation: [key(0, 0), key(1, 4, 'ease-in-out'), key(2, 0)] } } } },
@@ -117,19 +117,19 @@ test('capas auto: el parpadeo se repite solo y la respiración suma encima', () 
   assert.throws(() => createLive(doc, schema).play('blink'), /auto clip/);
 });
 
-test('el mismo guion da la misma tira (azar con semilla) y los errores dicen qué hay', () => {
+test('the same script gives the same strip (seeded randomness) and the errors say what there is', () => {
   const doc = puppet([{ op: 'create', type: 'animation', id: 'blink', props: { usage: 'puppet', duration: 0.2, fade: 0, auto: 'repeat', tracks: { eye: { scaleY: still(0.1, 0.2) } } } }]);
   const times = Array.from({ length: 200 }, (_, i) => i * 0.05);
   const a = runScript(doc, schema, [], times).map((c) => c.pose.values.eye?.scaleY ?? 1);
   const b = runScript(doc, schema, [], times).map((c) => c.pose.values.eye?.scaleY ?? 1);
   assert.deepEqual(a, b);
-  assert.ok(a.includes(0.1), 'parpadea en 10 s');
+  assert.ok(a.includes(0.1), 'blinks within 10 s');
   const live = createLive(doc, schema);
   assert.throws(() => live.play('wav'), /Clips you can play: idle, talking, wave/);
   assert.throws(() => live.set('joy', 1), /Params: happiness/);
 });
 
-test('validación: lo de Live es de Puppet, next apunta a un clip once y a uno que la app dispara', () => {
+test('validation: Live settings belong to Puppet, next goes from a once clip to one the app triggers', () => {
   const doc = puppet([{ op: 'create', type: 'animation', id: 'scene_1', props: { duration: 2 } }]);
   assert.throws(() => op(doc, { op: 'set', target: 'scene_1', props: { auto: 'always' } }), /only work in Puppet clips/);
   assert.throws(() => op(doc, { op: 'set', target: 'idle', props: { next: 'wave' } }), /only once clips end/);
@@ -140,7 +140,7 @@ test('validación: lo de Live es de Puppet, next apunta a un clip once y a uno q
   assert.equal(renamed.objects.find((o) => o.id === 'wave').next, 'rest');
 });
 
-test('el manifiesto dice params con sus poses, clips que se disparan y los automáticos', () => {
+test('the manifest lists params with their poses, triggerable clips and the automatic ones', () => {
   const doc = puppet([{ op: 'create', type: 'animation', id: 'blink', props: { usage: 'puppet', duration: 0.2, auto: 'repeat', description: 'Blinks', tracks: { eye: { scaleY: still(0.1, 0.2) } } } }]);
   const m = manifest(doc, schema);
   assert.equal(m.name, 'Bot');
@@ -156,7 +156,7 @@ test('el manifiesto dice params con sus poses, clips que se disparan y los autom
   assert.match(text, /Problems for the app’s AI:\n- clips without description: talking/);
 });
 
-test('el manifiesto avisa del param que maneja un auto y lista sus params; render_preview live con times, until y auto: false', async () => {
+test('the manifest warns about the param an auto clip drives and lists its params; render_preview live with times, until and auto: false', async () => {
   const { planLiveView, previewError, rotationWarnings } = await import('../mcp/animation.js');
   const doc = puppet([
     { op: 'create', type: 'param', id: 'blinking' },
@@ -170,35 +170,35 @@ test('el manifiesto avisa del param que maneja un auto y lista sus params; rende
   // live with times (before, "time and times need animation") and the auto repetition, which falls between frames.
   assert.equal(previewError({ live: [], times: [1] }), null);
   const view = planLiveView(doc, schema, { live: [{ t: 0, play: 'idle' }], times: [0.5, 2] });
-  assert.match(view.text, /Clips auto repeat que sonaron .*blink 1–1\.1\d* s/);
-  assert.doesNotMatch(planLiveView(doc, schema, { live: [{ t: 0, play: 'idle' }], auto: false, until: 2 }).text, /sonaron|blink \(auto/);
+  assert.match(view.text, /Auto repeat clips that played .*blink 1–1\.1\d* s/);
+  assert.doesNotMatch(planLiveView(doc, schema, { live: [{ t: 0, play: 'idle' }], auto: false, until: 2 }).text, /that played|blink \(auto/);
   // long until: 24 frames spread out and it says so; by default, until the end of the last gesture.
-  assert.match(planLiveView(doc, schema, { live: [{ t: 0, play: 'idle' }], until: 9.2 }).text, /24 cuadros \(cada 0.4 s hasta 9.2 s; para ver más de cerca/);
-  assert.match(planLiveView(doc, schema, { live: [{ t: 0, play: 'idle' }, { t: 1, play: 'wave' }] }).text, /cada 0.25 s hasta 2.25 s/);
+  assert.match(planLiveView(doc, schema, { live: [{ t: 0, play: 'idle' }], until: 9.2 }).text, /24 frames \(every 0.4 s until 9.2 s; to look closer/);
+  assert.match(planLiveView(doc, schema, { live: [{ t: 0, play: 'idle' }, { t: 1, play: 'wave' }] }).text, /every 0.25 s until 2.25 s/);
   // An angle more than 180° from the setup turns almost a full turn in the fade.
   const rotation = op(doc, { op: 'set', target: 'wave', props: { tracks: { arm_bone: { rotation: still(300) } } } });
-  assert.match(rotationWarnings(rotation, schema, rotation.objects.find((o) => o.id === 'wave')).join(), /arm_bone.rotation: 300 en t 0, 300 en t 1 queda a más de 180° del montaje \(0\).*usa -60/);
+  assert.match(rotationWarnings(rotation, schema, rotation.objects.find((o) => o.id === 'wave')).join(), /arm_bone.rotation: 300 at t 0, 300 at t 1 is more than 180° from the setup \(0\).*use -60/);
 });
 
-test('MCP: set_keys guarda lo de Live, render_preview con live corre el guion y el resumen lo dice', async () => {
+test('MCP: set_keys stores the Live settings, render_preview with live runs the script and the summary says so', async () => {
   const { planSetKeys, planLiveView, previewError, clipSummary } = await import('../mcp/animation.js');
   let doc = puppet();
   const plan = planSetKeys(doc, schema, 'surprised', { usage: 'puppet', duration: 0.5, fade: 0.1, next: 'idle', keys: [{ t: 0, values: { arm_bone: { rotation: 30 } } }, { t: 0.5, values: { arm_bone: { rotation: 30 } } }] });
   doc = op(doc, ...plan.ops);
   const clip = doc.objects.find((o) => o.id === 'surprised');
   assert.equal(clip.next, 'idle');
-  assert.equal(clipSummary(schema, clip), 'puppet, 0.5 s, once, gesto, fade 0.1 s, next idle; anima arm_bone.rotation; keys en 0, 0.5');
+  assert.equal(clipSummary(schema, clip), 'puppet, 0.5 s, once, gesture, fade 0.1 s, next idle; animates arm_bone.rotation; keys at 0, 0.5');
   const view = planLiveView(doc, schema, { live: [{ t: 0, play: 'talking' }, { t: 0.5, play: 'surprised' }], times: [0.25, 0.75, 1.5] });
   assert.match(view.svg, /^<svg/);
   assert.match(view.text, /t = 0.25 s: talking \(base, 50%\)/);
-  assert.match(view.text, /t = 0.75 s: talking \(base, 100%\), surprised \(gesto, 100%\)/);
+  assert.match(view.text, /t = 0.75 s: talking \(base, 100%\), surprised \(gesture, 100%\)/);
   assert.match(view.text, /t = 1.5 s: idle \(base, 100%\)/);
   assert.throws(() => planLiveView(doc, schema, { live: [{ t: 0, play: 'idle', set: { happiness: 1 } }] }), /exactly one of play, stop or set/);
   assert.throws(() => planLiveView(doc, schema, { live: [{ t: 0, play: 'wav' }] }), /Clips you can play/);
   assert.match(previewError({ live: [], animation: 'wave' }), /does not go with animation/);
 });
 
-test('auditoría: fundido entre bases iguales, always con loop once, fade largo, stop desconocido, volver a una base y actualizar', () => {
+test('audit: fade between equal bases, always with loop once, long fade, unknown stop, returning to a base and update', () => {
   const doc = puppet([
     { op: 'create', type: 'animation', id: 'a', props: { usage: 'puppet', loop: 'loop', fade: 0.5, tracks: { arm_bone: { rotation: still(30) } } } },
     { op: 'create', type: 'animation', id: 'b', props: { usage: 'puppet', loop: 'loop', fade: 0.5, tracks: { arm_bone: { rotation: still(30) } } } },
@@ -241,11 +241,11 @@ test('auditoría: fundido entre bases iguales, always con loop once, fade largo,
   assert.deepEqual(v.state().playing, []);
 });
 
-test('auditoría: next en un auto es un error; set_keys sin momentos no toca tracks; live dice el param mezclado y el de la app', async () => {
+test('audit: next on an auto clip is an error; set_keys without moments does not touch tracks; live shows the blended param and the app one', async () => {
   const { planSetKeys, planLiveView } = await import('../mcp/animation.js');
   const doc = puppet([{ op: 'create', type: 'animation', id: 'blink', props: { usage: 'puppet', duration: 0.2, auto: 'repeat', tracks: { eye: { scaleY: still(0.1, 0.2) } } } }]);
   assert.throws(() => op(doc, { op: 'set', target: 'blink', props: { next: 'idle' } }), /auto clip and plays by itself/);
   assert.deepEqual(planSetKeys(doc, schema, 'wave', { fade: 0.4 }).ops, [{ op: 'set', target: 'wave', props: { fade: 0.4 } }]);
   const view = planLiveView(doc, schema, { live: [{ t: 0, play: 'wave' }], times: [0.5], auto: false });
-  assert.match(view.text, /Params en el último cuadro \(mezclados con los clips\): happiness 1 \(la app: 0\)/);
+  assert.match(view.text, /Params in the last frame \(blended with the clips\): happiness 1 \(the app: 0\)/);
 });

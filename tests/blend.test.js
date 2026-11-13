@@ -32,7 +32,7 @@ function face() {
   );
 }
 
-test('valores iniciales de los params y peso de los drivers', () => {
+test('initial values of the params and weight of the drivers', () => {
   const doc = face();
   assert.deepEqual(paramValues(doc, schema), { happiness: 0, head_turn: 0, viseme: 'rest' });
   assert.deepEqual(paramValues(doc, schema, { head_turn: 5, viseme: 'x' }).head_turn, 1);
@@ -41,7 +41,7 @@ test('valores iniciales de los params y peso de los drivers', () => {
   assert.equal(driverWeight(doc, schema, findObject(doc, 'd_o'), 'o'), 1);
 });
 
-test('la mezcla suma números, interpola vértices y elige el switch', () => {
+test('the blend adds numbers, interpolates vertices and picks the switch', () => {
   const doc = face();
   const half = blendPoses(doc, schema, { happiness: 0.5, head_turn: 1, viseme: 'o' }).values;
   assert.equal(half.head.opacity, 0.75);
@@ -57,13 +57,13 @@ test('la mezcla suma números, interpola vértices y elige el switch', () => {
   assert.match(svgDocument(doc, schema), /data-id="mouth_rest"/);
 });
 
-test('una pose solo acepta propiedades animables que existan', () => {
-  assert.throws(() => op(face(), { op: 'set', target: 'happy', props: { values: { smile: { width: 3 } } } }), /no tiene "width" animable/);
+test('a pose only accepts animatable properties that exist', () => {
+  assert.throws(() => op(face(), { op: 'set', target: 'happy', props: { values: { smile: { width: 3 } } } }), /has no animatable "width"/);
   assert.throws(() => op(face(), { op: 'set', target: 'happy', props: { values: { mouth: { active: 'smile' } } } }), /is not a child of mouth/);
-  assert.throws(() => op(face(), { op: 'set', target: 'mouth', props: { active: 'nada' } }), /no existe/);
+  assert.throws(() => op(face(), { op: 'set', target: 'mouth', props: { active: 'nada' } }), /object "nada" does not exist/);
 });
 
-test('renombrar y borrar actualizan las poses, también los ids que son valores', () => {
+test('renaming and deleting update the poses, also the ids that are values', () => {
   let doc = op(face(), { op: 'rename', target: 'mouth_o', id: 'mouth_open' });
   assert.deepEqual(findObject(doc, 'viseme_o').values, { mouth: { active: 'mouth_open' } });
   doc = op(doc, { op: 'delete', target: 'mouth_open' });
@@ -85,7 +85,7 @@ function tail() {
   return op(doc, { op: 'set', target: 'tail', props: { vertices } }, { op: 'create', type: 'pose', id: 'bend', props: { values: { b2: { rotation: 90 }, tail: { d: 'M0 100 L100 110 L200 100' } } } });
 }
 
-test('una pose que cambia la forma conserva el enlace por punto del montaje', () => {
+test('a pose that changes the shape keeps the per-point binding of the setup', () => {
   const doc = tail();
   // The pose does not store bone in its vertices.
   assert.ok(findObject(doc, 'bend').values.tail.vertices.every((v) => v.bone === undefined));
@@ -96,7 +96,7 @@ test('una pose que cambia la forma conserva el enlace por punto del montaje', ()
   assert.match(svgDocument(withParam, schema, { params: { p: 1 } }), /data-id="tail"><path d="M0 100L100 110L100 200"/);
 });
 
-test('el bone que una pose vieja guardó en sus vértices se ignora', () => {
+test('the bone an old pose stored in its vertices is ignored', () => {
   const doc = tail();
   // Simulates an older document: the pose stores an old bone (or one that no longer exists) in each vertex.
   const old = structuredClone(doc);
@@ -107,7 +107,7 @@ test('el bone que una pose vieja guardó en sus vértices se ignora', () => {
   assert.ok(findObject(clean, 'bend').values.tail.vertices.every((v) => v.bone === undefined));
 });
 
-test('la mezcla parte del valor que se ve, con el estilo', () => {
+test('the blend starts from the visible value, with the style', () => {
   const doc = op(
     createDocument({}),
     { op: 'create', type: 'style', id: 'skin', props: { fill: '#ff0000', strokeWidth: 10, stroke: '#000000' } },
@@ -119,7 +119,7 @@ test('la mezcla parte del valor que se ve, con el estilo', () => {
   assert.deepEqual(blendPoses(doc, schema, { p: 0.5 }).values, { face: { fill: '#ff0000', strokeWidth: 10 } });
 });
 
-test('escribir en una pose: el mismo lote para el editor y para set_pose', async () => {
+test('writing to a pose: the same batch for the editor and for set_pose', async () => {
   const { mergePose, opsToSetPose } = await import('../src/core/blend.js');
   const previous = { a: { x: 1, y: 2 }, b: { rotation: 5 } };
   // What the editor sends: an object and its fields; undefined removes the property and, if nothing is left, the
@@ -134,7 +134,7 @@ test('escribir en una pose: el mismo lote para el editor y para set_pose', async
   assert.deepEqual(opsToSetPose(doc, 'p', { r: { x: 4 } }), [{ op: 'set', target: 'p', props: { values: { ...previous, r: { x: 4 } } } }]);
 });
 
-test('autokey: opsParaClavesEnClip pone y quita keyframes en el tiempo pedido', async () => {
+test('autokey: opsForKeysInClip sets and removes keyframes at the requested time', async () => {
   const { opsForKeysInClip } = await import('../src/core/animation.js');
   let doc = op(createDocument({}), { op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'animation', id: 'c', props: { duration: 2 } });
   doc = op(doc, ...opsForKeysInClip(doc, schema, 'c', 'r', { x: 10, opacity: 0.5 }, 1));

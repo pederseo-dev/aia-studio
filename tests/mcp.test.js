@@ -11,7 +11,7 @@ import { checkDeleted, treeOutline, planBindByProximity, planBindPoints, planRep
 const schema = loadSchema();
 const op = (doc, ...ops) => applyOperations(doc, ops, schema).doc;
 
-test('cada bloque JSON de la guía se aplica sin errores', () => {
+test('every JSON block in the guide applies without errors', () => {
   const blocks = [...guideForAI(schema).matchAll(/```json\n([\s\S]*?)```/g)].map((m) => JSON.parse(m[1]));
   assert.ok(blocks.length >= 4);
   // What the examples assume already exists in the character.
@@ -28,15 +28,15 @@ test('cada bloque JSON de la guía se aplica sin errores', () => {
   for (const [i, block] of blocks.entries()) {
     if (block.format) {
       // The full document example.
-      assert.deepEqual(validate(block, schema).errors, [], `bloque ${i}`);
+      assert.deepEqual(validate(block, schema).errors, [], `block ${i}`);
       continue;
     }
     const ops = Array.isArray(block) ? block : [block];
-    assert.doesNotThrow(() => op(base, ...ops), `bloque ${i}`);
+    assert.doesNotThrow(() => op(base, ...ops), `block ${i}`);
   }
 });
 
-test('set_pose suma a lo que había, saca objetos con {} y un d reemplaza los vértices', () => {
+test('set_pose adds to what was there, removes objects with {} and a d replaces the vertices', () => {
   const previous = { head_bone: { rotation: 10 }, mouth: { active: 'a' }, smile: { vertices: [{ x: 0, y: 0 }], opacity: 0.5 } };
   assert.deepEqual(mergePose(previous, { head_bone: { x: 5 }, mouth: {}, smile: { d: 'M0 0 L1 1' } }), {
     head_bone: { rotation: 10, x: 5 },
@@ -51,9 +51,9 @@ test('set_pose suma a lo que había, saca objetos con {} y un d reemplaza los v�
   assert.deepEqual(findObject(withPose, 'happy').values.smile.vertices.map((v) => v.y), [5, 5]);
 });
 
-test('set_pose avisa lo que recortan minAngle y maxAngle', () => {
+test('set_pose warns about what minAngle and maxAngle clamp', () => {
   const doc = op(createDocument({}), { op: 'create', type: 'skeleton', id: 'rig' }, { op: 'create', type: 'bone', id: 'b', parent: 'rig', props: { minAngle: -20, maxAngle: 20 } });
-  assert.deepEqual(poseClamps(doc, schema, { b: { rotation: 45 } }), ['b.rotation 45 queda en 20 por minAngle/maxAngle']);
+  assert.deepEqual(poseClamps(doc, schema, { b: { rotation: 45 } }), ['b.rotation 45 ends up at 20 due to minAngle/maxAngle']);
   assert.deepEqual(poseClamps(doc, schema, { b: { rotation: 10 } }), []);
 });
 
@@ -69,11 +69,11 @@ function rig() {
   );
 }
 
-test('bind_points y bind_by_proximity reparten por cercanía', () => {
+test('bind_points and bind_by_proximity distribute by proximity', () => {
   const doc = rig();
   const points = planBindPoints(doc, schema, 'tail');
   assert.equal(points.distribution, 'a [0, 1]; b [2]');
-  assert.throws(() => planBindPoints(doc, schema, 'near_a'), /no es un path/);
+  assert.throws(() => planBindPoints(doc, schema, 'near_a'), /is not a path/);
   assert.equal(planBindByProximity(doc, schema, 'rig').distribution, 'a ← near_a, tail; b ← near_b');
   // A path bound per point is not touched; after binding, nothing is left.
   const byPoint = op(doc, ...points.ops);
@@ -83,14 +83,14 @@ test('bind_points y bind_by_proximity reparten por cercanía', () => {
   assert.equal(planBindByProximity(bound, schema, 'rig').ops.length, 0);
 });
 
-test('reparent_bone avisa en qué poses el hueso cambia de lugar y, si se pide, las compensa', () => {
+test('reparent_bone warns in which poses the bone changes place and, if asked, compensates them', () => {
   const doc = op(rig(), { op: 'create', type: 'pose', id: 'up', props: { values: { a: { rotation: -90 } } } }, { op: 'create', type: 'pose', id: 'bend', props: { values: { b: { rotation: 30 } } } });
   const tip = (d, pose) => tipOf(schema, findObject(d, 'b'), evaluateInPose(d, schema, findObject(d, pose)).posed.get('b')).map(Math.round);
   assert.deepEqual(tip(doc, 'up'), [0, -200]);
   // Without compensating: in "up" (which turns the old parent) the bone ends up elsewhere, and the response says so.
   const notice = planReparentBone(doc, schema, 'b', 'rig');
   assert.deepEqual(notice.moved, ['up']);
-  assert.match(notice.text, /en las poses up ahora queda en otro lugar/);
+  assert.match(notice.text, /in the poses up it now ends up elsewhere/);
   assert.deepEqual(tip(op(doc, ...notice.ops), 'bend'), tip(doc, 'bend'));
   // Compensating: it stays where it was in all poses.
   const still = planReparentBone(doc, schema, 'b', 'rig', true);
@@ -102,10 +102,10 @@ test('reparent_bone avisa en qué poses el hueso cambia de lugar y, si se pide, 
 });
 
 
-test('el switch se maneja igual en el editor y en el MCP: set active, sin herramienta aparte', () => {
+test('the switch is handled the same in the editor and in the MCP: set active, no separate tool', () => {
   const guide = guideForAI(schema);
   assert.doesNotMatch(guide, /create_switch_control|Create control/);
-  assert.match(guide, /`set` con `\{ "active": "<hijo>" \}`/);
+  assert.match(guide, /`set` with `\{ "active": "<child>" \}`/);
   // What the editor's picker does (chooseVariant) is this same set.
   const doc = op(
     createDocument({}),
@@ -117,7 +117,7 @@ test('el switch se maneja igual en el editor y en el MCP: set active, sin herram
   assert.equal(findObject(doc, 'mouth').active, 'mouth_o');
 });
 
-test('set_pose con remove saca una sola propiedad, y así la variante puede salir del switch', () => {
+test('set_pose with remove takes out a single property, so the variant can leave the switch', () => {
   const doc = op(
     createDocument({}),
     { op: 'create', type: 'switch', id: 'mouth' },
@@ -136,13 +136,13 @@ test('set_pose con remove saca una sola propiedad, y así la variante puede sali
   assert.throws(() => mergePose({}, {}, false, ['a.b.c']), /should be "object\.property"/);
 });
 
-test('delete_document pide repetir el id en confirm', () => {
+test('delete_document asks to repeat the id in confirm', () => {
   assert.doesNotThrow(() => checkDeleted('prueba_x', 'prueba_x'));
   assert.throws(() => checkDeleted('prueba_x', 'otro'), /confirm has to be "prueba_x"/);
   assert.throws(() => checkDeleted('prueba_x', undefined), /can't be undone/);
 });
 
-test('el árbol dice qué params eligen la variante de un switch', () => {
+test('the tree says which params choose the variant of a switch', () => {
   const doc = op(
     createDocument({}),
     { op: 'create', type: 'switch', id: 'mouth' },
@@ -154,11 +154,11 @@ test('el árbol dice qué params eligen la variante de un switch', () => {
     { op: 'create', type: 'switch', id: 'eyes' },
   );
   const tree = treeOutline(doc, schema);
-  assert.match(tree, /- mouth \(switch\) \(muestra el primero; lo elige el param viseme\)/);
-  assert.match(tree, /- eyes \(switch\) \(muestra el primero\)/);
+  assert.match(tree, /- mouth \(switch\) \(shows the first; chosen by the param viseme\)/);
+  assert.match(tree, /- eyes \(switch\) \(shows the first\)/);
 });
 
-test('lecturas del MCP sin el servidor: get_document, get_history y render_preview', async () => {
+test('MCP reads without the server: get_document, get_history and render_preview', async () => {
   const { planPreview, historySummary, documentText } = await import('../mcp/tools.js');
   const doc = op(
     createDocument({}),
@@ -168,7 +168,7 @@ test('lecturas del MCP sin el servidor: get_document, get_history y render_previ
     { op: 'create', type: 'driver', id: 'd', props: { param: 'p', pose: 'up' } },
   );
   // get_document: tree and JSON; without JSON if requested.
-  assert.match(documentText(doc, schema), /^Árbol \(del fondo al frente\):[\s\S]*JSON:\n\{/);
+  assert.match(documentText(doc, schema), /^Tree \(back to front\):[\s\S]*JSON:\n\{/);
   assert.doesNotMatch(documentText(doc, schema, { json: false }), /JSON:/);
   // get_history: filters by origin, truncates and summarizes what each batch touched.
   const entries = [
@@ -177,14 +177,14 @@ test('lecturas del MCP sin el servidor: get_document, get_history y render_previ
   ];
   const summary = historySummary(entries, { origin: 'ai' });
   assert.equal(summary.length, 1);
-  assert.deepEqual(summary[0].values, { 'r.x': 2, 'r.vertices': '(3 elementos)' });
+  assert.deepEqual(summary[0].values, { 'r.x': 2, 'r.vertices': '(3 items)' });
   assert.equal(summary[0].inverses, undefined);
   assert.deepEqual(historySummary(entries, { limit: 1, detail: true })[0].ops, entries[1].ops);
   // render_preview: the setup, a pose, params with their weights, and clear errors.
-  assert.match(planPreview(doc, schema).text, /en el montaje/);
-  assert.match(planPreview(doc, schema, { pose: 'up' }).text, /en la pose "up"/);
+  assert.match(planPreview(doc, schema).text, /in the setup/);
+  assert.match(planPreview(doc, schema, { pose: 'up' }).text, /in the pose "up"/);
   assert.match(planPreview(doc, schema, { params: { p: 1 } }).text, /poses: up 100%/);
   assert.equal(planPreview(doc, schema).width, 600);
-  assert.throws(() => planPreview(doc, schema, { pose: 'nada' }), /no existe la pose "nada"/);
-  assert.throws(() => planPreview(doc, schema, { params: { q: 1 } }), /no existe el param "q"/);
+  assert.throws(() => planPreview(doc, schema, { pose: 'nada' }), /there is no pose "nada"/);
+  assert.throws(() => planPreview(doc, schema, { params: { q: 1 } }), /there is no param "q"/);
 });

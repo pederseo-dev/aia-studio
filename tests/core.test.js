@@ -21,7 +21,7 @@ function robot() {
   ).doc;
 }
 
-test('el esquema resuelve la herencia y solo expone tipos concretos', () => {
+test('the schema resolves inheritance and only exposes concrete types', () => {
   assert.deepEqual([...schema.types.keys()].sort(), ['animation', 'bone', 'driver', 'ellipse', 'group', 'image', 'linear_gradient', 'param', 'path', 'pose', 'radial_gradient', 'rect', 'skeleton', 'style', 'switch']);
   assert.equal(schema.types.get('style').resource, true);
   assert.equal(schema.types.get('path').resource, false);
@@ -31,11 +31,11 @@ test('el esquema resuelve la herencia y solo expone tipos concretos', () => {
   assert.equal(rect.container, false);
 });
 
-test('cada tipo concreto que no es recurso tiene cómo dibujarse', () => {
-  for (const [name, kind] of schema.types) if (!kind.resource) assert.ok(name in DRAW, `falta DIBUJAR.${name}`);
+test('every concrete non-asset type knows how to draw itself', () => {
+  for (const [name, kind] of schema.types) if (!kind.resource) assert.ok(name in DRAW, `missing DRAW.${name}`);
 });
 
-test('crear arma la jerarquía y el orden de dibujo', () => {
+test('create builds the hierarchy and the draw order', () => {
   const doc = robot();
   assert.deepEqual(validate(doc, schema).errors, []);
   assert.deepEqual(doc.objects.map((o) => o.id), ['body', 'torso', 'head', 'eye_l', 'eye_r']);
@@ -43,7 +43,7 @@ test('crear arma la jerarquía y el orden de dibujo', () => {
   assert.deepEqual(background.objects.filter((o) => o.parent === 'head').map((o) => o.id), ['antenna', 'eye_l', 'eye_r']);
 });
 
-test('cada operación se deshace exactamente con sus inversas', () => {
+test('every operation is undone exactly by its inverses', () => {
   const doc = robot();
   const lotes = [
     [{ op: 'set', target: 'torso', props: { width: 10, fill: '#ff0000' } }],
@@ -62,7 +62,7 @@ test('cada operación se deshace exactamente con sus inversas', () => {
   }
 });
 
-test('duplicate copia el subárbol con ids nuevos y se deshace', () => {
+test('duplicate copies the subtree with new ids and can be undone', () => {
   const doc = robot();
   const { doc: copy, inverses } = op(doc, { op: 'duplicate', target: 'head', id: 'head_b', suffix: 'b', props: { x: 50 } });
   const ids = copy.objects.map((o) => o.id);
@@ -71,70 +71,70 @@ test('duplicate copia el subárbol con ids nuevos y se deshace', () => {
   assert.deepEqual(copy.objects.filter((o) => o.parent === 'head_b').map((o) => o.id), ['eye_l_b', 'eye_r_b']);
   assert.equal(copy.objects.find((o) => o.id === 'head_b').x, 50);
   assert.deepEqual(op(copy, ...inverses).doc, doc);
-  assert.throws(() => op(copy, { op: 'duplicate', target: 'head', suffix: 'b' }), /ya existe un objeto "head_b"/);
-  assert.throws(() => op(copy, { op: 'duplicate', target: 'head', id: 'head_c', suffix: 'b' }), /ya existe un objeto "eye_l_b"/);
+  assert.throws(() => op(copy, { op: 'duplicate', target: 'head', suffix: 'b' }), /an object "head_b" already exists/);
+  assert.throws(() => op(copy, { op: 'duplicate', target: 'head', id: 'head_c', suffix: 'b' }), /an object "eye_l_b" already exists/);
   const root = op(doc, { op: 'duplicate', target: 'eye_l', parent: null, index: 0 }).doc;
   assert.equal(root.objects.filter((o) => (o.parent ?? null) === null)[0].id, 'eye_l_copy');
 });
 
-test('compactar junta los set seguidos y el resumen es legible', () => {
+test('compact merges consecutive sets and the summary is readable', () => {
   const ops = [
     { op: 'set', target: 'head', props: { x: 1 } },
     { op: 'set', target: 'head', props: { x: 2, y: 5 } },
     { op: 'set', target: 'torso', props: { x: 3 } },
   ];
   assert.deepEqual(compact(ops), [{ op: 'set', target: 'head', props: { x: 2, y: 5 } }, ops[2]]);
-  assert.deepEqual(summarizeOperations([...ops, { op: 'create', type: 'rect', id: 'a' }]), ['head.x', 'head.y', 'torso.x', 'crear a']);
+  assert.deepEqual(summarizeOperations([...ops, { op: 'create', type: 'rect', id: 'a' }]), ['head.x', 'head.y', 'torso.x', 'create a']);
 });
 
-test('rename actualiza a los hijos', () => {
+test('rename updates the children', () => {
   const doc = op(robot(), { op: 'rename', target: 'head', id: 'cabeza' }).doc;
   assert.equal(doc.objects.find((o) => o.id === 'eye_l').parent, 'cabeza');
 });
 
-test('los errores son claros y el lote no se aplica a medias', () => {
+test('errors are clear and the batch is never half-applied', () => {
   const doc = robot();
-  assert.throws(() => op(doc, { op: 'set', target: 'hed', props: { x: 1 } }), /Operación 1 \(set\): no existe el objeto "hed". ¿Quisiste decir "head"\?/);
-  assert.throws(() => op(doc, { op: 'create', type: 'rectangle', id: 'x' }), /¿Quisiste decir "rect"\?/);
-  assert.throws(() => op(doc, { op: 'create', type: 'rect', id: 'r', parent: 'torso' }), /no puede tener hijos/);
-  assert.throws(() => op(doc, { op: 'move', target: 'body', parent: 'head' }), /dentro de sí mismo/);
-  assert.throws(() => op(doc, { op: 'set', target: 'torso', props: { fill: 'red' } }), /torso.fill debe ser un color/);
+  assert.throws(() => op(doc, { op: 'set', target: 'hed', props: { x: 1 } }), /Operation 1 \(set\): object "hed" does not exist. Did you mean "head"\?/);
+  assert.throws(() => op(doc, { op: 'create', type: 'rectangle', id: 'x' }), /Did you mean "rect"\?/);
+  assert.throws(() => op(doc, { op: 'create', type: 'rect', id: 'r', parent: 'torso' }), /cannot have children/);
+  assert.throws(() => op(doc, { op: 'move', target: 'body', parent: 'head' }), /inside itself/);
+  assert.throws(() => op(doc, { op: 'set', target: 'torso', props: { fill: 'red' } }), /torso.fill must be a color/);
   assert.throws(() => op(doc, { op: 'set', target: 'torso', props: { opacity: 2 } }), /≤ 1/);
-  assert.throws(() => op(doc, { op: 'set', target: 'torso', props: { parent: 'head' } }), /usa move/);
+  assert.throws(() => op(doc, { op: 'set', target: 'torso', props: { parent: 'head' } }), /use move/);
   assert.throws(
     () => op(doc, { op: 'set', target: 'torso', props: { x: 5 } }, { op: 'delete', target: 'nada' }),
-    /Operación 2/,
+    /Operation 2/,
   );
   assert.equal(doc.objects.find((o) => o.id === 'torso').x, undefined);
 });
 
-test('las propiedades desconocidas se conservan con un aviso', () => {
+test('unknown properties are kept with a warning', () => {
   const { doc, warnings } = op(robot(), { op: 'set', target: 'torso', props: { widht: 5 } });
   assert.equal(doc.objects.find((o) => o.id === 'torso').widht, 5);
-  assert.match(warnings[0], /desconocida "widht".*¿Quisiste decir "width"\?/);
+  assert.match(warnings[0], /unknown property "widht".*Did you mean "width"\?/);
 });
 
-test('la matriz del mundo compone la jerarquía', () => {
+test('the world matrix composes the hierarchy', () => {
   const doc = op(robot(), { op: 'set', target: 'head', props: { rotation: 90 } }).doc;
   const [x, y] = apply(worldMatrix(doc, schema, 'eye_l'), 0, 0);
   // body (300,400) → head (0,-100) turned 90° → eye_l (-30,-60) becomes (60,-30)
   assert.ok(Math.abs(x - 360) < 1e-9 && Math.abs(y - 270) < 1e-9, `${x},${y}`);
 });
 
-test('el SVG respeta jerarquía, valores por defecto y orden', () => {
+test('the SVG respects hierarchy, default values and order', () => {
   const svg = svgDocument(robot(), schema);
   assert.match(svg, /^<svg[^>]+viewBox="0 0 800 800"/);
   assert.match(svg, /<g data-id="head" transform="translate\(0 -100\)"><g data-id="eye_l"/);
   assert.match(svg, /<rect x="-80" y="-100" width="160" height="200" fill="#c8c2d4"\/>/);
 });
 
-test('la guía para la IA sale del esquema', () => {
+test('the AI guide comes from the schema', () => {
   const guide = guideForAI(schema);
   for (const kind of schema.types.keys()) assert.ok(guide.includes(`### \`${kind}\``));
   assert.ok(guide.includes('`cornerRadius`'));
 });
 
-test('originX/originY corren el pivote dentro de rectángulos y elipses', () => {
+test('originX/originY shift the pivot inside rectangles and ellipses', () => {
   const { doc } = op(
     createDocument({ name: 'Origen' }),
     { op: 'create', type: 'rect', id: 'r', props: { width: 40, height: 20, originY: 1 } },
@@ -145,7 +145,7 @@ test('originX/originY corren el pivote dentro de rectángulos y elipses', () => 
   assert.match(svg, /<ellipse cx="20" rx="20" ry="10"/);
 });
 
-test('meta es un id reservado: no se crea, no se renombra a meta ni se duplica con ese id', () => {
+test('meta is a reserved id: it cannot be created, renamed to or duplicated as', () => {
   const doc = op(createDocument({}), { op: 'create', type: 'rect', id: 'r' }).doc;
   assert.throws(() => op(doc, { op: 'create', type: 'rect', id: 'meta' }), /reserved id/);
   assert.throws(() => op(doc, { op: 'rename', target: 'r', id: 'meta' }), /reserved id/);
@@ -153,7 +153,7 @@ test('meta es un id reservado: no se crea, no se renombra a meta ni se duplica c
   assert.match(validate({ ...doc, objects: [{ id: 'meta', type: 'rect' }] }, schema).errors.join(), /reserved id/);
 });
 
-test('params y drivers: initial y equals tienen que ser opciones, y min no puede pasar a max', () => {
+test('params and drivers: initial and equals must be options, and min cannot exceed max', () => {
   const base = op(createDocument({}), { op: 'create', type: 'param', id: 'v', props: { kind: 'enum', options: ['a', 'b'] } }, { op: 'create', type: 'pose', id: 'pp' }).doc;
   assert.throws(() => op(base, { op: 'set', target: 'v', props: { initial: 'zz' } }), /v\.initial "zz" is not one of its options: "a", "b"/);
   assert.throws(() => op(base, { op: 'create', type: 'driver', id: 'dd', props: { param: 'v', pose: 'pp', equals: 'c' } }), /param v has options "a", "b", but driver dd\.equals "c" uses a value that is not among them/);
@@ -167,7 +167,7 @@ test('params y drivers: initial y equals tienen que ser opciones, y min no puede
   assert.doesNotThrow(() => op(two, { op: 'set', target: 'v', props: { options: ['a'] } }, { op: 'set', target: 'dd', props: { equals: 'a' } }, { op: 'delete', target: 'dd2' }));
 });
 
-test('sacar de un switch una variante que usa una pose dice las dos salidas', () => {
+test('taking a variant a pose uses out of a switch names both ways out', () => {
   const doc = op(
     createDocument({}),
     { op: 'create', type: 'switch', id: 'mouth' },
@@ -178,7 +178,7 @@ test('sacar de un switch una variante que usa una pose dice las dos salidas', ()
   assert.throws(() => op(doc, { op: 'move', target: 'm_o', parent: null }), /Pose "o" makes switch mouth show "m_o".*remove only mouth's active from pose "o".*Puppet → View → Pose: o, select mouth and click ↺ next to active.*set_pose with remove: \["mouth\.active"\].*or keep "m_o" inside mouth/);
 });
 
-test('move con keepPosition deja el objeto en el mismo lugar de la pantalla, y se deshace', () => {
+test('move with keepPosition leaves the object in the same place on screen, and can be undone', () => {
   const doc = op(createDocument({}), { op: 'create', type: 'group', id: 'g', props: { x: 100, y: 50, rotation: 90 } }, { op: 'create', type: 'rect', id: 'r', props: { x: 10, y: 20 } }).doc;
   const { doc: moved, inverses } = op(doc, { op: 'move', target: 'r', parent: 'g', keepPosition: true });
   assert.deepEqual(apply(worldMatrix(moved, schema, 'r'), 0, 0).map(Math.round), [10, 20]);
@@ -188,7 +188,7 @@ test('move con keepPosition deja el objeto en el mismo lugar de la pantalla, y s
   assert.throws(() => op(op(moved, { op: 'create', type: 'skeleton', id: 's' }, { op: 'create', type: 'bone', id: 'b', parent: 's' }).doc, { op: 'move', target: 'b', parent: 'g', keepPosition: true }), /reparent_bone/);
 });
 
-test('cada tipo y propiedad tiene una ayuda en inglés para el editor', () => {
+test('every type and property has English help for the editor', () => {
   const withoutHelp = [];
   for (const t of [schema.meta, ...schema.types.values()]) {
     if (!t.help) withoutHelp.push(t.name);
@@ -197,7 +197,7 @@ test('cada tipo y propiedad tiene una ayuda en inglés para el editor', () => {
   assert.deepEqual(withoutHelp, []);
 });
 
-test('opsDeTamano cambia el lienzo con el dibujo anclado al centro (raíz, poses y clips)', async () => {
+test('artboardOps resizes the artboard with the drawing anchored to the center (root, poses and clips)', async () => {
   const { artboardOps } = await import('../src/core/artboard.js');
   const doc = op(
     createDocument({ width: 600, height: 400 }),
@@ -211,7 +211,7 @@ test('opsDeTamano cambia el lienzo con el dibujo anclado al centro (raíz, poses
   const get = (id) => r.objects.find((o) => o.id === id);
   assert.deepEqual([r.meta.width, r.meta.height], [800, 500]);
   assert.deepEqual([get('body').x, get('body').y], [400, 250]);
-  assert.equal(get('torso').x, 5, 'lo anidado se mueve con su padre');
+  assert.equal(get('torso').x, 5, 'nested objects move with their parent');
   assert.deepEqual(get('salto').values, { body: { y: 200, rotation: 5 }, torso: { x: 9 } });
   assert.deepEqual(get('paso').tracks.body.x.map((c) => c.value), [400, 420]);
   // Same size: only width/height.

@@ -16,14 +16,14 @@ function shape(vertices, closed) {
   return Array.from({ length: spans }, (_, i) => sampleSpan(vertices, i, 8).map((m) => m.p)).flat();
 }
 
-test('líneas y comandos relativos', () => {
+test('lines and relative commands', () => {
   const [s] = parseD('M10 10 h20 v20 l-20 0 z');
   assert.equal(s.closed, true);
   assert.deepEqual(s.vertices, [{ x: 10, y: 10 }, { x: 30, y: 10 }, { x: 30, y: 30 }, { x: 10, y: 30 }]);
   assert.equal(verticesAD(s.vertices, true), 'M10 10L30 10L30 30L10 30L10 10Z');
 });
 
-test('las curvas se guardan como tangentes en polares y vuelven a la misma forma', () => {
+test('curves are stored as polar tangents and come back to the same shape', () => {
   const d = 'M0 0 C 0 -40 60 -40 60 0 S 120 40 120 0';
   const [s] = parseD(d);
   assert.equal(s.closed, false);
@@ -36,7 +36,7 @@ test('las curvas se guardan como tangentes en polares y vuelven a la misma forma
   });
 });
 
-test('cuadráticas, T y arcos se convierten a cúbicas', () => {
+test('quadratics, T and arcs are converted to cubics', () => {
   const [q] = parseD('M0 0 Q50 -50 100 0 T200 0');
   assert.equal(q.vertices.length, 3);
   const [circle] = parseD('M-50 0 A50 50 0 1 0 50 0 A50 50 0 1 0 -50 0 Z');
@@ -44,15 +44,15 @@ test('cuadráticas, T y arcos se convierten a cúbicas', () => {
   // All sampled points are 50 from the center.
   for (const [x, y] of shape(circle.vertices, true)) assert.ok(Math.abs(Math.hypot(x, y) - 50) < 0.2, `${x},${y}`);
   assert.deepEqual(parseD('M0 0L10 0M20 0L30 0').length, 2);
-  assert.throws(() => parseD('M0 0 X10'), /comando desconocido/);
+  assert.throws(() => parseD('M0 0 X10'), /unknown command/);
 });
 
-test('esquina redondeada', () => {
+test('rounded corner', () => {
   const d = verticesAD([{ x: 0, y: 0, radius: 10 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }], true);
   assert.match(d, /^M0 10C0 4\.477 4\.477 0 10 0L100 0/);
 });
 
-test('transformar y dividir conservan la forma', () => {
+test('transforming and splitting keep the shape', () => {
   const [s] = parseD('M0 0 C0 -40 60 -40 60 0');
   const moved = transformVertices(s.vertices, [0, 1, -1, 0, 10, 5]); // rotate 90° and translate
   const original = shape(s.vertices, false);
@@ -67,7 +67,7 @@ test('transformar y dividir conservan la forma', () => {
   assert.deepEqual(splitSpan([{ x: 0, y: 0 }, { x: 100, y: 0 }], 0, 0.25), [{ x: 0, y: 0 }, { x: 25, y: 0 }, { x: 100, y: 0 }]);
 });
 
-test('un path acepta d, valida sus vértices y se dibuja', () => {
+test('a path accepts d, validates its vertices and is drawn', () => {
   let doc = op(createDocument(), { op: 'create', type: 'path', id: 'ear', props: { x: 100, y: 100, d: 'M0 0 L20 -40 L40 0 Z', fill: '#ff8800' } }).doc;
   const ear = doc.objects[0];
   assert.equal(ear.d, undefined);
@@ -76,13 +76,13 @@ test('un path acepta d, valida sus vértices y se dibuja', () => {
   assert.match(svgDocument(doc, schema), /<path d="M0 0L20 -40L40 0L0 0Z" fill="#ff8800"/);
   doc = op(doc, { op: 'set', target: 'ear', props: { d: 'M0 0 L10 10' } }).doc;
   assert.equal(doc.objects[0].closed, false);
-  assert.throws(() => op(doc, { op: 'set', target: 'ear', props: { vertices: [{ x: 0, y: 0, mode: 'mirrored' }] } }), /vertices \[0\] falta angle/);
-  assert.throws(() => op(doc, { op: 'set', target: 'ear', props: { vertices: [{ x: 0, y: 0, cx: 1 }] } }), /campo "cx" no va/);
-  assert.throws(() => op(doc, { op: 'set', target: 'ear', props: { d: 'M0 0L1 1M5 5L6 6' } }), /2 subtrazados/);
-  assert.throws(() => op(createDocument(), { op: 'create', type: 'rect', id: 'r', props: { d: 'M0 0' } }), /solo sirve en tipos con vértices/);
+  assert.throws(() => op(doc, { op: 'set', target: 'ear', props: { vertices: [{ x: 0, y: 0, mode: 'mirrored' }] } }), /vertices \[0\] angle is missing/);
+  assert.throws(() => op(doc, { op: 'set', target: 'ear', props: { vertices: [{ x: 0, y: 0, cx: 1 }] } }), /field "cx" does not belong/);
+  assert.throws(() => op(doc, { op: 'set', target: 'ear', props: { d: 'M0 0L1 1M5 5L6 6' } }), /2 subpaths/);
+  assert.throws(() => op(createDocument(), { op: 'create', type: 'rect', id: 'r', props: { d: 'M0 0' } }), /only works on types with vertices/);
 });
 
-test('estilos compartidos y degradados', () => {
+test('shared styles and gradients', () => {
   let doc = op(
     createDocument(),
     { op: 'create', type: 'linear_gradient', id: 'skin_shade', props: { stops: [{ offset: 0, color: '#ffe0c0' }, { offset: 1, color: '#e0a080', opacity: 0.5 }] } },
@@ -100,7 +100,7 @@ test('estilos compartidos y degradados', () => {
   doc = op(doc, { op: 'set', target: 'skin', props: { fill: '#c08060' } }).doc;
   assert.match(svgDocument(doc, schema), /data-id="face"><ellipse rx="50" ry="50" fill="#c08060"/);
 
-  assert.throws(() => op(doc, { op: 'set', target: 'face', props: { style: 'skin_shade' } }), /es un linear_gradient; se esperaba style/);
-  assert.throws(() => op(doc, { op: 'create', type: 'style', id: 's2', parent: 'face' }), /no puede tener hijos|va en la raíz/);
-  assert.throws(() => op(doc, { op: 'set', target: 'skin_shade', props: { stops: [{ offset: 1, color: '#fff' }, { offset: 0, color: '#000' }] } }), /orden de offset/);
+  assert.throws(() => op(doc, { op: 'set', target: 'face', props: { style: 'skin_shade' } }), /is a linear_gradient; expected style/);
+  assert.throws(() => op(doc, { op: 'create', type: 'style', id: 's2', parent: 'face' }), /cannot have children|goes at the root/);
+  assert.throws(() => op(doc, { op: 'set', target: 'skin_shade', props: { stops: [{ offset: 1, color: '#fff' }, { offset: 0, color: '#000' }] } }), /order of offset/);
 });
