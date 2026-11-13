@@ -1,14 +1,14 @@
-// SVG → PNG en Node, para que la IA pueda ver lo que hizo.
+// SVG → PNG in Node, so the AI can see what it did.
 
 import { Resvg } from '@resvg/resvg-js';
 import { assetMime } from '../src/core/images.js';
 
-/** Formatos que resvg no sabe dibujar: en la vista previa van como un recuadro gris con una cruz, en su lugar. */
+/** Formats resvg cannot draw: in the preview they show as a gray box with a cross, in their place. */
 export const NO_PREVIEW = new Set(['image/webp']);
 
 /**
- * Las capas image nombran su archivo por su src (ver DIBUJAR.image): aquí pasan a data: URI con los bytes de
- * `imagenes` (src → bytes); las que no están se quitan (resvg no lee archivos sueltos).
+ * Image layers name their file by their src (see DRAW.image): here they become data: URIs with the bytes from
+ * `images` (src → bytes); the missing ones are removed (resvg does not read loose files).
  * @param {string} svg @param {Map<string, Uint8Array>} images
  */
 export function embedImages(svg, images) {
@@ -26,10 +26,10 @@ export function embedImages(svg, images) {
   });
 }
 
-/** @param {string} svg @param {number} width @param {Map<string, Uint8Array>} [images] los archivos de las capas image */
+/** @param {string} svg @param {number} width @param {Map<string, Uint8Array>} [images] the files of the image layers */
 export function svgToPng(svg, width, images = new Map()) {
   svg = embedImages(svg, images);
-  // Las fuentes del sistema solo hacen falta para los nombres de los huesos; cargarlas cuesta, así que solo si hay texto.
+  // System fonts are only needed for bone names; loading them is costly, so only if there is text.
   const withText = svg.includes('<text');
   const font = withText ? { loadSystemFonts: true, defaultFontFamily: 'Arial' } : { loadSystemFonts: false };
   return new Resvg(svg, { fitTo: { mode: 'width', value: Math.round(width) }, font }).render().asPng();

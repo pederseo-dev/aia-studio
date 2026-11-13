@@ -1,4 +1,4 @@
-// Carga el esquema desde schema/*.json en Node (el editor lo carga con import.meta.glob).
+// Loads the schema from schema/*.json in Node (the editor loads it with import.meta.glob).
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { createSchema } from '../src/core/schema.js';

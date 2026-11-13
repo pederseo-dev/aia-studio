@@ -25,7 +25,7 @@ test('deshacer y rehacer van por origen', () =>
     await a.applyOps('robot', [{ op: 'set', target: 'torso', props: { fill: '#ff0000' } }], { origin: 'user', note: 'rojo' });
     await a.applyOps('robot', [{ op: 'create', type: 'ellipse', id: 'head' }], { origin: 'ai', note: 'cabeza' });
 
-    // La IA deshace lo suyo; el retoque del usuario se mantiene.
+    // The AI undoes its own; the user's touch-up stays.
     let { doc, in: entry } = await a.undo('robot', 'ai');
     assert.deepEqual(doc.objects.map((o) => o.id), ['torso']);
     assert.equal(doc.objects[0].fill, '#ff0000');
@@ -50,18 +50,18 @@ test('deshacer se niega si un lote posterior del otro origen tocó lo mismo', ()
     await a.applyOps('robot', [{ op: 'create', type: 'rect', id: 'r' }], { origin: 'ai', note: 'crear' });
     await a.applyOps('robot', [{ op: 'set', target: 'r', props: { x: 10 } }], { origin: 'ai', note: 'ai x' });
     await a.applyOps('robot', [{ op: 'set', target: 'r', props: { x: 20 } }], { origin: 'user', note: 'user x' });
-    // La IA no puede deshacer su x: pisaría la del usuario. El error dice qué y quién.
+    // The AI cannot undo its x: it would overwrite the user's. The error says what and who.
     await assert.rejects(a.undo('robot', 'ai'), /r\.x \(changed by the user in #4 "user x"\)/);
     assert.equal((await a.read('robot')).objects[0].x, 20);
-    // Si el usuario deshace lo suyo, el cambio se anula y la IA ya puede.
+    // If the user undoes their own, the change cancels out and the AI can now.
     await a.undo('robot', 'user');
     const { doc } = await a.undo('robot', 'ai');
     assert.equal(doc.objects[0].x, undefined);
-    // Vale igual al revés: el usuario no pisa lo que la IA cambió después.
+    // The same holds the other way around: the user does not overwrite what the AI changed later.
     await a.applyOps('robot', [{ op: 'set', target: 'r', props: { fill: '#ff0000' } }], { origin: 'user', note: 'rojo' });
     await a.applyOps('robot', [{ op: 'set', target: 'r', props: { fill: '#00ff00' } }], { origin: 'ai', note: 'verde' });
     await assert.rejects(a.undo('robot', 'user'), /r\.fill \(changed by the AI/);
-    // Otras propiedades no chocan.
+    // Other properties do not clash.
     await a.applyOps('robot', [{ op: 'set', target: 'r', props: { y: 5 } }], { origin: 'user', note: 'y' });
     await a.undo('robot', 'user');
   }));
@@ -97,12 +97,12 @@ test('en una pose, deshacer compara y restaura por objeto y propiedad, no la pos
     await a.applyOps('cara', [{ op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'rect', id: 'q' }, { op: 'create', type: 'pose', id: 'po' }], { origin: 'ai', note: 'base' });
     await a.applyOps('cara', [{ op: 'set', target: 'po', props: { values: { r: { x: 1 } } } }], { origin: 'ai', note: 'ai r' });
     await a.applyOps('cara', [{ op: 'set', target: 'po', props: { values: { r: { x: 1 }, q: { y: 2 } } } }], { origin: 'user', note: 'user q' });
-    // La IA deshace lo suyo (r) y lo del usuario en la misma pose (q) se queda.
+    // The AI undoes its own (r) and the user's in the same pose (q) stays.
     let { doc } = await a.undo('cara', 'ai');
     assert.deepEqual(doc.objects.find((o) => o.id === 'po').values, { q: { y: 2 } });
     ({ doc } = await a.redo('cara', 'ai'));
     assert.deepEqual(doc.objects.find((o) => o.id === 'po').values, { q: { y: 2 }, r: { x: 1 } });
-    // Si el usuario cambia la misma propiedad de la pose, sí choca, y el error nombra la clave.
+    // If the user changes the same property of the pose, it does clash, and the error names the key.
     await a.applyOps('cara', [{ op: 'set', target: 'po', props: { values: { r: { x: 5 }, q: { y: 2 } } } }], { origin: 'user', note: 'user r' });
     await assert.rejects(a.undo('cara', 'ai'), /po\.values\.r\.x \(changed by the user/);
   }));
@@ -138,7 +138,7 @@ test('leer migra una escena vieja que anima params: pasa a Puppet una sola vez, 
     const a = createStore({ schema, folder });
     await a.create('viejo', { name: 'Viejo' }, { origin: 'user' });
     await a.applyOps('viejo', [{ op: 'create', type: 'param', id: 'happiness' }, { op: 'create', type: 'animation', id: 'escena', props: { usage: 'puppet', duration: 1, tracks: { happiness: { value: [{ t: 0, value: 1 }] } } } }], { origin: 'user', note: 'clip' });
-    // Como lo dejaba la versión de antes: una escena con pista de param (hoy no valida).
+    // As the previous version left it: a scene with a param track (it does not validate today).
     const file = path.join(folder, 'viejo', 'document.json');
     const old = JSON.parse(await readFile(file, 'utf8'));
     old.objects.find((o) => o.id === 'escena').usage = 'animate';
@@ -149,7 +149,7 @@ test('leer migra una escena vieja que anima params: pasa a Puppet una sola vez, 
     const { entries } = await a.history('viejo');
     assert.equal(entries.filter((e) => e.kind === 'migration').length, 1);
     assert.match(entries.at(-1).note, /Scene "escena" animated parameters/);
-    // Y vuelve a aceptar operaciones.
+    // And it accepts operations again.
     await a.applyOps('viejo', [{ op: 'set', target: 'escena', props: { duration: 2 } }], { origin: 'user' });
     assert.match(await readFile(file, 'utf8'), /"usage": "puppet"/);
   } finally {
@@ -171,16 +171,16 @@ test('formato viejo en disco: personajes/, documento.json e historial.jsonl en e
     await fs.writeFile(path.join(old, 'historial.jsonl'), lines.map((l) => JSON.stringify(l) + '\n').join(''));
     const folder = path.join(base, 'documents');
     migrateLegacyFolder(folder);
-    migrateLegacyFolder(folder); // repetible
+    migrateLegacyFolder(folder); // repeatable
     const dir = path.join(folder, 'gato');
     assert.deepEqual((await fs.readdir(dir)).sort(), ['document.json', 'history.jsonl']);
     const entries = (await fs.readFile(path.join(dir, 'history.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
     assert.deepEqual(entries[1], { n: 2, date: '2026-01-01T00:00:01Z', origin: 'user', kind: 'undo', ref: 1, note: 'undo: x', ops: [], inverses: [] });
-    // El almacén lee lo migrado: deshacer y rehacer siguen funcionando sobre esas entradas.
+    // The store reads what was migrated: undo and redo keep working on those entries.
     const a = createStore({ schema, folder });
     assert.equal((await a.read('gato')).meta.name, 'Gato');
     assert.deepEqual((await a.history('gato')).entries.map((e) => `${e.origin}:${e.kind}`), ['ai:create', 'user:undo']);
-    // Una entrada nueva queda igual.
+    // A new entry stays the same.
     assert.deepEqual(entryFromLegacy(entries[0]), entries[0]);
   } finally {
     await fs.rm(base, { recursive: true, force: true });

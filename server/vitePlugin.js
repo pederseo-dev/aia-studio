@@ -1,5 +1,5 @@
-// API local del editor (origen "user") y aviso en vivo cuando un documento cambia en disco, por ejemplo porque lo
-// editó la IA por MCP.
+// Local editor API (origin "user") and live notice when a document changes on disk, for example because the AI
+// edited it over MCP.
 
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -37,7 +37,7 @@ function serveAsset(res, { bytes, mime }) {
   res.setHeader('Content-Type', mime);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'no-cache');
-  // Un SVG abierto suelto no puede correr scripts ni cargar nada de afuera (dentro de <image> ya no puede).
+  // An SVG opened on its own cannot run scripts or load anything from outside (inside <image> it already can't).
   if (mime === 'image/svg+xml') res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
   res.end(bytes);
 }
@@ -52,8 +52,8 @@ export function aiaDocuments() {
         try {
           const [id, action, ...rest] = req.url.split('?')[0].split('/').filter(Boolean).map(decodeURIComponent);
           const method = req.method;
-          // Imágenes: GET /api/documents/<id>/assets/<archivo> lo sirve; POST /api/documents/<id>/assets?name=<original>
-          // con los bytes en el cuerpo lo guarda y devuelve { src, ancho, alto, formato, reusado }.
+          // Images: GET /api/documents/<id>/assets/<file> serves it; POST /api/documents/<id>/assets?name=<original>
+          // with the bytes in the body saves it and returns { src, naturalWidth, naturalHeight, format, reused }.
           if (action === 'assets' && method === 'GET' && rest.length === 1) return serveAsset(res, await store.readAsset(id, rest[0]));
           if (action === 'assets' && method === 'POST' && !rest.length) {
             const original = new URL(req.url, 'http://x').searchParams.get('name') ?? 'image';
@@ -82,7 +82,7 @@ export function aiaDocuments() {
       });
 
       server.watcher.add(DOCUMENTS_FOLDER);
-      // El historial se escribe después del documento, así que también se avisa por separado.
+      // The history is written after the document, so it is also notified separately.
       const EVENTS = { 'document.json': 'aia:document', 'history.jsonl': 'aia:history' };
       const notify = (file) => {
         const event = EVENTS[path.basename(file)];
@@ -90,8 +90,8 @@ export function aiaDocuments() {
       };
       server.watcher.on('change', notify);
       server.watcher.on('add', notify);
-      // Un documento borrado (por ejemplo, con delete_document desde el MCP): el editor cierra su pestaña. Escribir
-      // usa un temporal y rename, así que un unlink de document.json se confirma un momento después.
+      // A deleted document (for example, with delete_document from the MCP): the editor closes its tab. Writing
+      // uses a temp file and rename, so an unlink of document.json is confirmed a moment later.
       const root = path.resolve(DOCUMENTS_FOLDER);
       const deleted = (id) => server.ws.send({ type: 'custom', event: 'aia:deleted', data: { id } });
       server.watcher.on('unlinkDir', (folder) => path.dirname(path.resolve(folder)) === root && deleted(path.basename(folder)));

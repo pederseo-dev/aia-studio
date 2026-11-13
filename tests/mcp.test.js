@@ -14,7 +14,7 @@ const op = (doc, ...ops) => applyOperations(doc, ops, schema).doc;
 test('cada bloque JSON de la guía se aplica sin errores', () => {
   const blocks = [...guideForAI(schema).matchAll(/```json\n([\s\S]*?)```/g)].map((m) => JSON.parse(m[1]));
   assert.ok(blocks.length >= 4);
-  // Lo que los ejemplos dan por hecho que ya existe en el personaje.
+  // What the examples assume already exists in the character.
   const base = op(
     createDocument({}),
     { op: 'create', type: 'group', id: 'body' },
@@ -27,7 +27,7 @@ test('cada bloque JSON de la guía se aplica sin errores', () => {
   );
   for (const [i, block] of blocks.entries()) {
     if (block.format) {
-      // El ejemplo de documento completo.
+      // The full document example.
       assert.deepEqual(validate(block, schema).errors, [], `bloque ${i}`);
       continue;
     }
@@ -43,7 +43,7 @@ test('set_pose suma a lo que había, saca objetos con {} y un d reemplaza los v�
     smile: { opacity: 0.5, d: 'M0 0 L1 1' },
   });
   assert.deepEqual(mergePose(previous, { head_bone: { x: 5 } }, true), { head_bone: { x: 5 } });
-  // El lote: create si no existe, set si existe; y no pisa un objeto que no es pose.
+  // The batch: create if it does not exist, set if it does; and it does not overwrite an object that is not a pose.
   const doc = op(createDocument({}), { op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'path', id: 'smile', props: { d: 'M0 0 L10 0' } });
   assert.equal(setPoseOps(doc, 'happy', { r: { x: 1 } })[0].op, 'create');
   assert.throws(() => setPoseOps(doc, 'r', {}), /already exists and is a rect/);
@@ -75,7 +75,7 @@ test('bind_points y bind_by_proximity reparten por cercanía', () => {
   assert.equal(points.distribution, 'a [0, 1]; b [2]');
   assert.throws(() => planBindPoints(doc, schema, 'near_a'), /no es un path/);
   assert.equal(planBindByProximity(doc, schema, 'rig').distribution, 'a ← near_a, tail; b ← near_b');
-  // Un path enlazado por punto no se toca; después de enlazar, no queda nada.
+  // A path bound per point is not touched; after binding, nothing is left.
   const byPoint = op(doc, ...points.ops);
   const near = planBindByProximity(byPoint, schema, 'rig');
   assert.equal(near.distribution, 'a ← near_a; b ← near_b');
@@ -87,12 +87,12 @@ test('reparent_bone avisa en qué poses el hueso cambia de lugar y, si se pide, 
   const doc = op(rig(), { op: 'create', type: 'pose', id: 'up', props: { values: { a: { rotation: -90 } } } }, { op: 'create', type: 'pose', id: 'bend', props: { values: { b: { rotation: 30 } } } });
   const tip = (d, pose) => tipOf(schema, findObject(d, 'b'), evaluateInPose(d, schema, findObject(d, pose)).posed.get('b')).map(Math.round);
   assert.deepEqual(tip(doc, 'up'), [0, -200]);
-  // Sin compensar: en "up" (que gira al padre viejo) el hueso queda en otro lugar, y la respuesta lo dice.
+  // Without compensating: in "up" (which turns the old parent) the bone ends up elsewhere, and the response says so.
   const notice = planReparentBone(doc, schema, 'b', 'rig');
   assert.deepEqual(notice.moved, ['up']);
   assert.match(notice.text, /en las poses up ahora queda en otro lugar/);
   assert.deepEqual(tip(op(doc, ...notice.ops), 'bend'), tip(doc, 'bend'));
-  // Compensando: queda donde estaba en todas las poses.
+  // Compensating: it stays where it was in all poses.
   const still = planReparentBone(doc, schema, 'b', 'rig', true);
   assert.deepEqual(still.moved, []);
   const after = op(doc, ...still.ops);
@@ -106,7 +106,7 @@ test('el switch se maneja igual en el editor y en el MCP: set active, sin herram
   const guide = guideForAI(schema);
   assert.doesNotMatch(guide, /create_switch_control|Create control/);
   assert.match(guide, /`set` con `\{ "active": "<hijo>" \}`/);
-  // Lo que hace el selector del editor (elegirVariante) es este mismo set.
+  // What the editor's picker does (chooseVariant) is this same set.
   const doc = op(
     createDocument({}),
     { op: 'create', type: 'switch', id: 'mouth' },
@@ -126,12 +126,12 @@ test('set_pose con remove saca una sola propiedad, y así la variante puede sali
     { op: 'create', type: 'pose', id: 'turn', props: { values: { mouth: { x: 12, active: 'mouth_o' } } } },
   );
   assert.throws(() => op(doc, { op: 'move', target: 'mouth_o', parent: null }), /remove: \["mouth\.active"\]/);
-  // {} sacaría también la x; remove saca solo active.
+  // {} would also remove x; remove removes only active.
   assert.deepEqual(mergePose(findObject(doc, 'turn').values, { mouth: {} }), {});
   const withoutActive = op(doc, ...setPoseOps(doc, 'turn', {}, false, ['mouth.active']));
   assert.deepEqual(findObject(withoutActive, 'turn').values, { mouth: { x: 12 } });
   assert.doesNotThrow(() => op(withoutActive, { op: 'move', target: 'mouth_o', parent: null }));
-  // Un id solo saca el objeto entero; un nombre mal formado avisa.
+  // An id alone removes the whole object; a malformed name warns.
   assert.deepEqual(mergePose({ a: { x: 1 }, b: { y: 2 } }, {}, false, ['a']), { b: { y: 2 } });
   assert.throws(() => mergePose({}, {}, false, ['a.b.c']), /should be "object\.property"/);
 });
@@ -167,10 +167,10 @@ test('lecturas del MCP sin el servidor: get_document, get_history y render_previ
     { op: 'create', type: 'param', id: 'p' },
     { op: 'create', type: 'driver', id: 'd', props: { param: 'p', pose: 'up' } },
   );
-  // get_document: árbol y JSON; sin JSON si se pide.
+  // get_document: tree and JSON; without JSON if requested.
   assert.match(documentText(doc, schema), /^Árbol \(del fondo al frente\):[\s\S]*JSON:\n\{/);
   assert.doesNotMatch(documentText(doc, schema, { json: false }), /JSON:/);
-  // get_history: filtra por origen, corta y resume lo que tocó cada lote.
+  // get_history: filters by origin, truncates and summarizes what each batch touched.
   const entries = [
     { n: 1, origin: 'ai', note: 'a', ops: [{ op: 'set', target: 'r', props: { x: 2, vertices: [1, 2, 3] } }], inverses: [] },
     { n: 2, origin: 'user', note: 'b', ops: [{ op: 'set', target: 'r', props: { y: 3 } }], inverses: [] },
@@ -180,7 +180,7 @@ test('lecturas del MCP sin el servidor: get_document, get_history y render_previ
   assert.deepEqual(summary[0].values, { 'r.x': 2, 'r.vertices': '(3 elementos)' });
   assert.equal(summary[0].inverses, undefined);
   assert.deepEqual(historySummary(entries, { limit: 1, detail: true })[0].ops, entries[1].ops);
-  // render_preview: el montaje, una pose, params con sus pesos, y errores claros.
+  // render_preview: the setup, a pose, params with their weights, and clear errors.
   assert.match(planPreview(doc, schema).text, /en el montaje/);
   assert.match(planPreview(doc, schema, { pose: 'up' }).text, /en la pose "up"/);
   assert.match(planPreview(doc, schema, { params: { p: 1 } }).text, /poses: up 100%/);

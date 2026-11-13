@@ -19,7 +19,7 @@ import { imageBytes, treeOutline } from '../mcp/tools.js';
 const schema = loadSchema();
 const op = (doc, ...ops) => applyOperations(doc, ops, schema).doc;
 
-/** Un PNG de verdad (lo dibuja resvg): un cuadrado de un color, de ancho × alto. */
+/** A real PNG (drawn by resvg): a square of one color, width × height. */
 const png = (naturalWidth, naturalHeight, color = '#ff0000') =>
   new Uint8Array(svgToPng(`<svg xmlns="http://www.w3.org/2000/svg" width="${naturalWidth}" height="${naturalHeight}"><rect width="${naturalWidth}" height="${naturalHeight}" fill="${color}"/></svg>`, naturalWidth));
 
@@ -34,16 +34,16 @@ async function withStore(fn) {
 
 test('leerImagen: formato y tamaño de PNG, JPEG, WebP (lossy, lossless, extendido) y SVG', () => {
   assert.deepEqual(readImage(png(30, 20)), { format: 'png', naturalWidth: 30, naturalHeight: 20 });
-  // JPEG: SOI, un APP0 y el SOF0 con alto 200 y ancho 320.
+  // JPEG: SOI, an APP0 and the SOF0 with height 200 and width 320.
   const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 4, 0, 0, 0xff, 0xc0, 0, 17, 8, 0, 200, 1, 64, 3, 0, 0, 0, 0, 0, 0]);
   assert.deepEqual(readImage(jpeg), { format: 'jpeg', naturalWidth: 320, naturalHeight: 200 });
   const riff = (piece, body) => Uint8Array.from([...'RIFF'].map((c) => c.charCodeAt(0)).concat([0, 0, 0, 0], [...`WEBP${piece}`].map((c) => c.charCodeAt(0)), [0, 0, 0, 0], body, Array(10).fill(0)));
-  // VP8L: 0x2f y ancho-1, alto-1 en 14 bits cada uno (99 → 100, 49 → 50).
+  // VP8L: 0x2f and width-1, height-1 in 14 bits each (99 → 100, 49 → 50).
   const bits = 99 | (49 << 14);
   assert.deepEqual(readImage(riff('VP8L', [0x2f, bits & 255, (bits >> 8) & 255, (bits >> 16) & 255, (bits >>> 24) & 255])), { format: 'webp', naturalWidth: 100, naturalHeight: 50 });
-  // VP8X: banderas, 3 reservados, ancho-1 y alto-1 en 24 bits.
+  // VP8X: flags, 3 reserved, width-1 and height-1 in 24 bits.
   assert.deepEqual(readImage(riff('VP8X', [0, 0, 0, 0, 255, 1, 0, 127, 0, 0])), { format: 'webp', naturalWidth: 512, naturalHeight: 128 });
-  // VP8: etiqueta de cuadro, código de inicio, ancho y alto en 14 bits.
+  // VP8: frame tag, start code, width and height in 14 bits.
   assert.deepEqual(readImage(riff('VP8 ', [0, 0, 0, 0x9d, 0x01, 0x2a, 64, 1, 240, 0])), { format: 'webp', naturalWidth: 320, naturalHeight: 240 });
   const svg = (s) => new TextEncoder().encode(s);
   assert.deepEqual(readImage(svg('<?xml version="1.0"?>\n<!-- hola --><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 10"></svg>')), { format: 'svg', naturalWidth: 40, naturalHeight: 10 });
@@ -68,13 +68,13 @@ test('planAgregarImagen: centrada, de tamaño natural o achicada, con id libre y
   assert.equal(id, 'sun');
   assert.deepEqual(ops[0], { op: 'create', type: 'image', id: 'sun', parent: null, props: { src: 'sun.png', x: 200, y: 150, width: 40, height: 20 } });
   doc = op(doc, ...ops);
-  // Grande: entra en el 90 % del lienzo, en proporción. El id ya está tomado: sun_2. Dentro de g: el centro visto desde g.
+  // Large: fits in 90 % of the canvas, in proportion. The id is taken: sun_2. Inside g: the center seen from g.
   const large = planAddImage(doc, schema, { src: 'sun.png', naturalWidth: 1000, naturalHeight: 500, parent: 'g' });
   assert.equal(large.id, 'sun_2');
   assert.deepEqual(large.ops[0].props, { src: 'sun.png', x: 100, y: 100, width: 360, height: 180 });
-  // Solo width: alto en proporción; un punto del documento (donde se soltó) también pasa a las coordenadas del padre.
+  // Only width: height in proportion; a document point (where it was dropped) also goes to the parent's coordinates.
   assert.deepEqual(planAddImage(doc, schema, { src: 'sun.png', naturalWidth: 40, naturalHeight: 20, width: 10, parent: 'g', point: [110, 60] }).ops[0].props, { src: 'sun.png', x: 10, y: 10, width: 10, height: 5 });
-  // Nombre de archivo que no sirve como id.
+  // File name that does not work as an id.
   assert.equal(planAddImage(doc, schema, { src: '2024-foto.png', naturalWidth: 1, naturalHeight: 1 }).id, 'foto');
   assert.throws(() => planAddImage(doc, schema, { src: 'sun.png', naturalWidth: 1, naturalHeight: 1, id: 'g' }), /already/);
   assert.deepEqual(usedAssets(doc), ['sun.png']);
@@ -91,12 +91,12 @@ test('render: image en el SVG (pivote, estirada, pixelated) y en el PNG con los 
   assert.match(svg, /<image href="rojo\.png" x="-25" y="-50" width="50" height="100" preserveAspectRatio="none"\/>/);
   assert.match(svg, /<image href="falta\.png" x="0" y="0" width="50" height="100" preserveAspectRatio="none" style="image-rendering:pixelated"\/>/);
   assert.match(svgDocument(doc, schema, { assets: (src) => `/x/${src}` }), /href="\/x\/rojo\.png"/);
-  // A PNG: el asset que está se ve; el que falta no se dibuja (queda el fondo).
+  // To PNG: the asset that exists is shown; the missing one is not drawn (the background remains).
   const result = new Resvg(embedImages(svg, new Map([['rojo.png', png(4, 4)]]))).render();
   const pixel = (x, y) => [...result.pixels.subarray((y * 100 + x) * 4, (y * 100 + x) * 4 + 3)];
   assert.deepEqual(pixel(10, 50), [255, 0, 0]);
   assert.deepEqual(pixel(90, 90), [255, 255, 255]);
-  // WebP (resvg no lo lee): un recuadro gris con una cruz en su lugar.
+  // WebP (resvg does not read it): a gray box with a cross in its place.
   const webp = embedImages('<image href="w.webp" x="-5" y="-5" width="10" height="20" preserveAspectRatio="none"/>', new Map([['w.webp', new Uint8Array([1])]]));
   assert.match(webp, /^<rect x="-5" y="-5" width="10" height="20" [^>]*\/><path d="M-5 -5L5 15M5 -5L-5 15"/);
 });
@@ -114,7 +114,7 @@ test('una image se pega a un hueso y se anima en poses y clips como las demás c
   assert.match(svgDocument(doc, schema, { pose: 'grande' }), /data-id="foto"[^>]*opacity="0\.5" display="none"><image href="foto\.png" x="-150" y="-50" width="300"/);
   assert.match(svgDocument(doc, schema, { animation: 'clip', time: 0.5 }), /<image href="foto\.png" x="-75" y="-50" width="150"/);
   assert.throws(() => op(doc, { op: 'set', target: 'grande', props: { values: { foto: { src: 'otra.png' } } } }), /src/);
-  // Su caja cuenta para enlazar por cercanía (como la de un rect): 100 × 100 centrada en el origen.
+  // Its box counts for binding by proximity (like a rect's): 100 × 100 centered on the origin.
   assert.deepEqual(boxOf(doc, schema, 'foto'), [-50, -50, 50, 50]);
 });
 
@@ -140,7 +140,7 @@ test('almacén: guarda assets (reusa los iguales, renombra los distintos), los s
     const images = await a.imagesOf('doc', await a.read('doc'));
     assert.deepEqual([...images.keys()], ['sol.png']);
 
-    // Una copia del documento lleva sus assets.
+    // A copy of the document carries its assets.
     await a.create('copia', {}, { origin: 'user', copyFrom: 'doc' });
     assert.deepEqual(await a.listAssets('copia'), ['sol.png', 'sol_2.png']);
     assert.ok(Buffer.from(red).equals(await readFile(path.join(folder, 'copia', 'assets', 'sol.png'))));

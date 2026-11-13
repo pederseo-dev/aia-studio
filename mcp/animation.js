@@ -1,5 +1,5 @@
-// Lógica de las herramientas de animación del MCP (set_keys, delete_keys, move_keys y el resumen de un clip), sin el
-// transporte, para probarlas sin levantar el servidor. Los textos de error los lee la IA y el aviso del editor.
+// Logic of the MCP animation tools (set_keys, delete_keys, move_keys and the clip summary), without the
+// transport, to test them without starting the server. The error texts are read by the AI and the editor notice.
 
 import { clipWarnings, scaleTime, isScene, evaluateClip, paramPoseLines, moveKey, putKey, keyTimes, setupValues } from '../src/core/animation.js';
 import { sameTime } from '../src/core/curves.js';
@@ -19,12 +19,13 @@ function clipOf(doc, animation) {
   throw new Error(`there is no animation "${animation}".${suggest(animation, clips)} Animations: ${clips.join(', ') || 'none'}`);
 }
 
-/** ¿La pista id.prop está entre `targets` ("objeto.propiedad" o un id; "d" vale por "vertices")? Sin targets, todas. */
+/** Is the track id.prop among `targets` ("object.property" or an id; "d" stands for "vertices")? No targets, all. */
 const chosen = (targets, id, prop) => !targets?.length || targets.some((x) => x === id || x === `${id}.${prop}` || (prop === 'vertices' && x === `${id}.d`));
 
 /**
- * Los values de la pose de un momento, filtrados por `only` o `except` ("objeto.propiedad" o un id; "d" vale por
- * "vertices"). Error si la pose no existe, si se pasan los dos filtros o si uno nombra algo que la pose no fija.
+ * The values of a moment's pose, filtered by `only` or `except` ("object.property" or an id; "d" stands for
+ * "vertices"). Error if the pose does not exist, if both filters are given or if one names something the pose does
+ * not set.
  */
 function poseValues(doc, k, i) {
   if (k.pose == null) {
@@ -53,18 +54,18 @@ function poseValues(doc, k, i) {
   return remain;
 }
 
-/** "+=14" o "-=2.5": un valor relativo al del montaje (solo en propiedades numéricas). */
+/** "+=14" or "-=2.5": a value relative to the setup one (numeric properties only). */
 const RELATIVE = /^([+-])=\s*(\d+(?:\.\d+)?|\.\d+)$/;
 
 /**
- * Lo que fija un momento de set_keys: con `setup`, el montaje de todo lo que el clip ya anima (y de lo que trae la
- * pose del momento); después los valores de su pose (filtrada con only o except), values (con "d" convertido y los
- * relativos "+=n" sumados al montaje) y params.
+ * What a set_keys moment sets: with `setup`, the setup of everything the clip already animates (and of what the
+ * moment's pose brings); then the values of its pose (filtered with only or except), values (with "d" converted and
+ * the relative "+=n" added to the setup) and params.
  */
 function momentValues(doc, schema, tracks, k, i) {
   let values = {};
   const fromPose = poseValues(doc, k, i);
-  // Con setup, la pose solo dice qué propiedades vuelven al montaje (no se copian sus valores).
+  // With setup, the pose only says which properties go back to the setup (its values are not copied).
   if (k.setup) values = setupValues(doc, schema, tracks, fromPose);
   else if (fromPose) values = fromPose;
   for (const [id, fields] of Object.entries(k.values ?? {})) {
@@ -97,18 +98,19 @@ function momentValues(doc, schema, tracks, k, i) {
   return values;
 }
 
-/** Propiedades de un clip de Puppet para Live, que set_keys acepta además de usage, loop y description. */
+/** Properties of a Puppet clip for Live, which set_keys accepts besides usage, loop and description. */
 export const LIVE_PROPS = ['fade', 'next', 'blend', 'auto', 'repeat_min', 'repeat_max'];
 
 /**
- * set_keys: cada momento ({ t, values, params, pose, setup, ease, targets }) se vuelve keyframes del clip. `pose`
- * copia los valores de esa pose; `setup` pone el montaje en todo lo que el clip anima; `values` (como en set_pose,
- * acepta "d") los suma o pisa; `params` anima params. Un momento con solo `ease` (y `targets`) cambia la curva de los
- * keyframes que ya hay en ese tiempo. Un keyframe en un tiempo que ya tenía uno lo reemplaza (y conserva su ease si no
- * se pasa otro). `remove` ("objeto.propiedad" o un id) saca pistas enteras antes de agregar. Crea el clip si no existe
- * y alarga la duración si un keyframe la pasa; una `duration` más corta que los keyframes es un error.
+ * set_keys: each moment ({ t, values, params, pose, setup, ease, targets }) becomes keyframes of the clip. `pose`
+ * copies the values of that pose; `setup` puts the setup on everything the clip animates; `values` (as in set_pose,
+ * accepts "d") adds or overwrites them; `params` animates params. A moment with only `ease` (and `targets`) changes
+ * the curve of the keyframes already at that time. A keyframe at a time that already had one replaces it (and keeps
+ * its ease if no other is given). `remove` ("object.property" or an id) removes whole tracks before adding. Creates
+ * the clip if it does not exist and extends the duration if a keyframe goes past it; a `duration` shorter than the
+ * keyframes is an error.
  */
-/** @param {any} doc @param {any} schema @param {string} animation @param {Record<string, any>} [options] keys, usage, duration, loop, description, remove y lo de Live */
+/** @param {any} doc @param {any} schema @param {string} animation @param {Record<string, any>} [options] keys, usage, duration, loop, description, remove and the Live ones */
 export function planSetKeys(doc, schema, animation, { keys = [], usage, duration, loop, description, remove = [], ...live } = {}) {
   const existing = findObject(doc, animation);
   if (existing && existing.type !== 'animation') throw new Error(`"${animation}" already exists and is a ${existing.type}; choose another id for the animation`);
@@ -122,14 +124,14 @@ export function planSetKeys(doc, schema, animation, { keys = [], usage, duration
       if (!Object.keys(tracks[object]).length) delete tracks[object];
     }
   }
-  // Los momentos con setup van al final: así vuelven al montaje también las pistas que agregan los demás momentos.
+  // Moments with setup go last: that way the tracks added by the other moments also go back to the setup.
   const order = keys.map((k, i) => [i, k]).sort(([, a], [, b]) => Number(!!a?.setup) - Number(!!b?.setup));
   for (const [i, k] of order) {
     if (typeof k?.t !== 'number' || !Number.isFinite(k.t) || k.t < 0) throw new Error(`keys[${i}].t must be a number of seconds ≥ 0`);
     const values = momentValues(doc, schema, tracks, k, i);
     if (!Object.keys(values).length) {
       if (k.setup) throw new Error(`keys[${i}] (t ${k.t}): setup keys the setup values of what the clip already animates, and this clip animates nothing yet. Add the other moments first (in the same call is fine), or pass pose to say which properties go back to the setup`);
-      // Solo una curva: cambia la de los keyframes que ya hay en ese tiempo (sin tocar sus valores).
+      // Only a curve: changes the one of the keyframes already at that time (without touching their values).
       if (k.ease === undefined) throw new Error(`keys[${i}] (t ${k.t}) sets nothing: pass values, params, pose or setup (or only ease, to change the ease of the keyframes already at that time)`);
       let changed = 0;
       for (const [id, fields] of Object.entries(tracks)) {
@@ -153,9 +155,10 @@ export function planSetKeys(doc, schema, animation, { keys = [], usage, duration
   }
   const requested = duration ?? read(schema, existing ?? { type: 'animation' }, 'duration');
   const final = Math.max(requested, last);
-  // Sin momentos ni remove no se tocan las pistas (cambiar solo fade o loop no ensucia el historial con tracks).
+  // Without moments or remove the tracks are not touched (changing only fade or loop does not clutter the history
+  // with tracks).
   const props = keys.length || remove.length || !existing ? { tracks: tracks } : {};
-  // Lo de Live (fade, next, blend, auto, repeat_min, repeat_max) pasa tal cual: la validación dice si no corresponde.
+  // The Live ones (fade, next, blend, auto, repeat_min, repeat_max) pass as is: validation says if they do not apply.
   for (const [k, v] of Object.entries({ usage, loop, description })) if (v !== undefined) props[k] = v;
   for (const k of LIVE_PROPS) if (live[k] !== undefined) props[k] = live[k];
   if (duration !== undefined || final !== requested || !existing) props.duration = final;
@@ -164,8 +167,8 @@ export function planSetKeys(doc, schema, animation, { keys = [], usage, duration
 }
 
 /**
- * delete_keys: quita keyframes de un clip. `times` (segundos) elige los momentos; `targets` ("objeto.propiedad" o
- * un id) elige las pistas; sin times, la pista entera; sin targets, todas. Una pista que queda vacía sale.
+ * delete_keys: removes keyframes from a clip. `times` (seconds) picks the moments; `targets` ("object.property" or
+ * an id) picks the tracks; without times, the whole track; without targets, all. A track left empty is removed.
  */
 /** @param {any} doc @param {string} animation @param {{ times?: number[], targets?: string[] }} [options] */
 export function planDeleteKeys(doc, animation, { times, targets } = {}) {
@@ -184,16 +187,16 @@ export function planDeleteKeys(doc, animation, { times, targets } = {}) {
 }
 
 /**
- * move_keys: mueve los keyframes de un momento (`from`) a otro (`to`), con su valor y su curva, en las pistas de
- * `targets` (o en todas). Falla si en `to` ya hay un keyframe en alguna de esas pistas (lo borraría) o si `to` pasa
- * la duración.
+ * move_keys: moves the keyframes of one moment (`from`) to another (`to`), with their value and curve, on the
+ * `targets` tracks (or on all). Fails if `to` already has a keyframe on any of those tracks (it would delete it) or
+ * if `to` goes past the duration.
  */
 /** @param {any} doc @param {any} schema @param {string} animation @param {{ from?: number, to?: number, targets?: string[] }} [options] */
 export function planMoveKeys(doc, schema, animation, { from, to, targets } = {}) {
   const clip = clipOf(doc, animation);
   const newDuration = read(schema, clip, 'duration');
   if (!(to >= 0) || to > newDuration + 1e-9) throw new Error(`to must be between 0 and the clip's duration (${n(newDuration)} s); to move a keyframe later, first make duration longer`);
-  // Mover al mismo tiempo no cambia nada: error, para no dejar en el historial una entrada vacía.
+  // Moving to the same time changes nothing: error, so as not to leave an empty entry in the history.
   if (sameTime(from, to)) throw new Error(`from and to are the same time (${n(from)} s): nothing to move`);
   let tracks = clip.tracks ?? {};
   const moved = [];
@@ -210,7 +213,7 @@ export function planMoveKeys(doc, schema, animation, { from, to, targets } = {})
   return { ops: [{ op: 'set', target: animation, props: { tracks: tracks } }], moved };
 }
 
-/** Una línea que resume un clip: uso, duración, loop, qué anima y en qué tiempos. */
+/** A line summarizing a clip: usage, duration, loop, what it animates and at which times. */
 export function clipSummary(schema, clip) {
   const tracks = Object.entries(clip.tracks ?? {}).flatMap(([id, fields]) => Object.keys(fields).map((k) => `${id}.${k}`));
   const frameTimes = keyTimes(clip);
@@ -218,7 +221,7 @@ export function clipSummary(schema, clip) {
   return `${base}${live(schema, clip)}; ${tracks.length ? `anima ${tracks.join(', ')}; keys en ${frameTimes.map(n).join(', ')}` : 'sin keyframes'}`;
 }
 
-/** Lo de Live de un clip de Puppet, para el resumen: «, gesto, fade 0.2 s, next idle». Vacío en una escena. */
+/** The Live part of a Puppet clip, for the summary: ", gesto, fade 0.2 s, next idle". Empty in a scene. */
 function live(schema, clip) {
   if (read(schema, clip, 'usage') !== 'puppet') return '';
   const auto = read(schema, clip, 'auto');
@@ -230,8 +233,8 @@ function live(schema, clip) {
 }
 
 /**
- * Las pistas de un clip, una línea por pista con sus keyframes («t = valor (curva)»), para leer un clip sin el JSON
- * entero: los vértices se resumen por cantidad de puntos.
+ * The tracks of a clip, one line per track with its keyframes ("t = value (curve)"), to read a clip without the
+ * whole JSON: vertices are summarized by point count.
  */
 export function trackLines(clip) {
   const value = (v) => (Array.isArray(v) ? `(${v.length} puntos)` : typeof v === 'number' ? n(v) : JSON.stringify(v));
@@ -241,7 +244,7 @@ export function trackLines(clip) {
   );
 }
 
-/** Tiempos para una tira de cuadros de un clip: los de sus keyframes (como mucho 12, repartidos) o, si no hay, 0. */
+/** Times for a frame strip of a clip: those of its keyframes (at most 12, spread out) or, if there are none, 0. */
 export function timesForStrip(clip, max = 12) {
   const frameTimes = keyTimes(clip);
   if (frameTimes.length <= max) return frameTimes.length ? frameTimes : [0];
@@ -249,13 +252,13 @@ export function timesForStrip(clip, max = 12) {
 }
 
 /**
- * render_preview con animation: un cuadro (time) o una tira de cuadros (times, o los tiempos de sus keyframes), con
- * el texto para la IA (qué params anima el clip y qué drivers suman encima). Devuelve { svg, ancho, texto }; el
- * servidor lo pasa a PNG.
+ * render_preview with animation: one frame (time) or a frame strip (times, or the times of its keyframes), with
+ * the text for the AI (which params the clip animates and which drivers add on top). Returns { svg, width, text };
+ * the server turns it into PNG.
  */
 export function planClipView(doc, schema, { region, bones, params, animation, time, times }) {
   const clip = clipOf(doc, animation);
-  // Una escena se ve sin params ni drivers (como se exporta): params ahí no cambiaría nada y confundiría.
+  // A scene is shown without params or drivers (as it is exported): params there would change nothing and confuse.
   if (isScene(schema, clip) && Object.keys(params ?? {}).length) throw new Error(`"${animation}" is a scene (Animate): scenes play without params or drivers (setup + keyframes). Drop params, or to see an expression in the scene, key it with set_keys and pose`);
   const frameTimes = time != null ? [time] : times?.length ? times : timesForStrip(clip);
   const options = { animation, params: params ?? {}, region, bones: bones };
@@ -270,7 +273,7 @@ export function planClipView(doc, schema, { region, bones, params, animation, ti
   return { svg, width: frameTimes.length === 1 ? 600 : 1000, text };
 }
 
-/** Por qué una combinación de opciones de render_preview no sirve (null si sirve). */
+/** Why a combination of render_preview options does not work (null if it works). */
 /** @param {Record<string, any>} [options] pose, animation, time, times, live */
 export function previewError({ pose, animation, time, times, live } = {}) {
   if (live && (animation || pose || time != null)) return 'live runs a script on the live puppet (its clips with fades); it does not go with animation, pose or time. To see one clip by itself use animation; for frames of the script use times';
@@ -280,9 +283,9 @@ export function previewError({ pose, animation, time, times, live } = {}) {
 }
 
 /**
- * scale_time: estira o comprime en proporción el tiempo de un clip (o del tramo from…to) para que dure `duration`
- * (o `factor` veces lo que dura). Los keyframes de después del tramo se corren y la duración del clip cambia lo mismo.
- * Un solo paso de deshacer.
+ * scale_time: stretches or compresses proportionally the time of a clip (or of the span from…to) so it lasts
+ * `duration` (or `factor` times its length). Keyframes after the span shift and the clip's duration changes by the
+ * same amount. A single undo step.
  */
 /** @param {any} doc @param {any} schema @param {string} animation @param {{ duration?: number, factor?: number, from?: number, to?: number }} [options] */
 export function planScaleTime(doc, schema, animation, { duration, factor, from, to } = {}) {
@@ -298,9 +301,9 @@ export function planScaleTime(doc, schema, animation, { duration, factor, from, 
 }
 
 /**
- * Rotaciones de un clip de Puppet que quedan a más de 180° del montaje: en vivo, el fundido interpola los números, así
- * que un brazo en 140 cuando el montaje lo tiene en -178 da casi una vuelta entera al entrar o salir (aunque en
- * pantalla se vea parecido). Devuelve una línea por pista.
+ * Rotations of a Puppet clip that end up more than 180° from the setup: live, the fade interpolates the numbers, so
+ * an arm at 140 when the setup has it at -178 makes almost a full turn when entering or leaving (even if on
+ * screen it looks similar). Returns one line per track.
  */
 export function rotationWarnings(doc, schema, clip) {
   if (read(schema, clip, 'usage') !== 'puppet') return [];
@@ -318,16 +321,16 @@ export function rotationWarnings(doc, schema, clip) {
   return warnings;
 }
 
-/** Las líneas «param → poses (objetos)» de un clip de Puppet, como texto para la IA (vacío si no anima params). */
+/** The "param → poses (objects)" lines of a Puppet clip, as text for the AI (empty if it animates no params). */
 export function paramPoseText(doc, schema, clip) {
   const lines = paramPoseLines(doc, schema, clip);
   return lines.length ? `Params animados y las poses que mueven (por sus drivers; todas se suman):\n${lines.map((l) => `- ${l}`).join('\n')}` : '';
 }
 
 /**
- * render_preview con live: corre un guion ([{ t, play | stop | set }]) en el runtime en vivo (el mismo de la app) y
- * devuelve la tira de cuadros en `times` (por defecto, cada 0.25 s hasta 0.5 s después del último evento; como mucho
- * 24), con el texto de qué suena en cada cuadro. Devuelve { svg, ancho, texto }.
+ * render_preview with live: runs a script ([{ t, play | stop | set }]) in the live runtime (the same one as the app)
+ * and returns the frame strip at `times` (by default, every 0.25 s until 0.5 s after the last event; at most
+ * 24), with the text of what is playing in each frame. Returns { svg, width, text }.
  */
 /** @param {any} doc @param {any} schema @param {Record<string, any>} options live, times, until, auto, params, region, bones */
 export function planLiveView(doc, schema, { live, times, until, auto, params, region, bones }) {
@@ -335,8 +338,8 @@ export function planLiveView(doc, schema, { live, times, until, auto, params, re
     const verbs = ['play', 'stop', 'set'].filter((k) => e[k] !== undefined);
     if (verbs.length !== 1) throw new Error(`live[${i}] (t ${e.t}) needs exactly one of play, stop or set${verbs.length ? ` (it has ${verbs.join(' and ')}; split it into two events at the same t)` : ''}`);
   }
-  // Hasta cuándo: `until` o, si no, hasta que termine lo último que se disparó (un gesto entero; una base, medio
-  // segundo más). Cada 0.25 s si entra en 24 cuadros; si no, 24 cuadros repartidos (el texto dice cada cuánto).
+  // Until when: `until` or, if not, until the last thing triggered ends (a whole gesture; a base, half a
+  // second more). Every 0.25 s if it fits in 24 frames; if not, 24 frames spread out (the text says how often).
   const end =
     until ??
     Math.max(
@@ -356,7 +359,7 @@ export function planLiveView(doc, schema, { live, times, until, auto, params, re
     const playing = c.state.playing.filter((s) => s.weight > 0).map((s) => `${s.clip} (${s.layer === 'gesture' ? 'gesto' : s.layer}, ${pct(s.weight)}${s.leaving ? ', saliendo' : ''})`);
     return `- t = ${n(c.t)} s: ${playing.join(', ') || 'nada (montaje y params)'}`;
   });
-  // En el último cuadro: el valor que se ve (mezclado con los clips que animan params) y, si difiere, el de la app.
+  // In the last frame: the visible value (blended with the clips that animate params) and, if it differs, the app's.
   const last = frames.at(-1);
   const value = (v) => (typeof v === 'number' ? n(v) : v);
   const withValue = Object.entries(last?.pose.params ?? {}).map(([k, v]) => {

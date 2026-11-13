@@ -1,7 +1,7 @@
-// Documentos en disco: documents/<id>/document.json y su historial (history.jsonl).
-// Lo usan el servidor del editor (origen "user") y el MCP (origen "ai"), así que los dos trabajan sobre los mismos
-// archivos. Cada lote queda en el historial con su origen y sus inversas; deshacer y rehacer se calculan desde ahí,
-// por origen: la IA deshace solo lo suyo y el usuario solo lo suyo.
+// Documents on disk: documents/<id>/document.json and its history (history.jsonl).
+// Used by the editor server (origin "user") and the MCP (origin "ai"), so both work on the same
+// files. Each batch stays in the history with its origin and its inverses; undo and redo are computed from there,
+// per origin: the AI undoes only its own and the user only theirs.
 
 import fs from 'node:fs/promises';
 import { existsSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -16,20 +16,20 @@ import { IMAGE_FORMATS, usedAssets, readImage, assetMime, assetName, freeName } 
 export const DOCUMENTS_FOLDER = fileURLToPath(new URL('../documents/', import.meta.url));
 const DOCUMENT_ID = /^[a-z][a-z0-9_-]*$/;
 
-// Operaciones que cambian la estructura de un objeto (no una propiedad suelta): tocan "todo" el objeto.
+// Operations that change the structure of an object (not a single property): they touch the "whole" object.
 const STRUCTURAL = new Set(['create', 'delete', 'move', 'rename', 'duplicate', '_restore', '_place']);
 
 const isObject = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
-// Propiedades que se deshacen por (objeto, propiedad) y no enteras: los `values` de una pose y las `tracks` de un
-// clip. Así una pose o un clip que editaron los dos orígenes en objetos o pistas distintas no bloquea el deshacer.
+// Properties undone per (object, property) and not whole: a pose's `values` and a clip's `tracks`.
+// That way a pose or clip both origins edited on different objects or tracks does not block undo.
 const BY_KEY = { values: 'pose', tracks: 'animation' };
-// En una pose o una pista, "d" es azúcar para los vértices: tocar uno es tocar los otros.
+// In a pose or a track, "d" is sugar for the vertices: touching one is touching the other.
 const keyOf = (field, object, prop) => `${field}.${object}.${prop === 'd' ? 'vertices' : prop}`;
 
 /**
- * Cambios de un lote en los `values` de las poses y las `tracks` de los clips, por (objeto, propiedad). Devuelve
- * Map destino → { campo, antes, despues, claves } (antes = lo que restauran sus inversas; despues = lo que fijaron
- * sus operaciones).
+ * Changes of a batch to the poses' `values` and the clips' `tracks`, per (object, property). Returns
+ * Map target → { field, before, after, keys } (before = what its inverses restore; after = what its
+ * operations set).
  */
 function changesByKey(entry) {
   const last = (ops) => {
@@ -37,7 +37,7 @@ function changesByKey(entry) {
     for (const op of ops ?? []) {
       for (const field of Object.keys(BY_KEY)) {
         if (op.op === 'set' && isObject(op.props?.[field])) m.set(op.target, { field, value: op.props[field] });
-        // Una pose o un clip que no tenía el campo: su inversa es un unset, que equivale a vacío.
+        // A pose or clip that did not have the field: its inverse is an unset, which amounts to empty.
         else if (op.op === 'unset' && op.props?.includes(field)) m.set(op.target, { field, value: {} });
       }
     }
@@ -53,7 +53,7 @@ function changesByKey(entry) {
     for (const object of new Set([...Object.keys(a ?? {}), ...Object.keys(d ?? {})])) {
       const [ca, cd] = [a?.[object] ?? {}, d?.[object] ?? {}];
       for (const prop of new Set([...Object.keys(ca), ...Object.keys(cd)])) {
-        // Sin las dos versiones (por ejemplo, una pose que no tenía values) cuenta todo lo que se ve.
+        // Without both versions (for example, a pose that had no values) everything visible counts.
         if (!a || !d || JSON.stringify(ca[prop]) !== JSON.stringify(cd[prop])) keys.add(keyOf(field, object, prop));
       }
     }
@@ -63,9 +63,9 @@ function changesByKey(entry) {
 }
 
 /**
- * Las inversas de un lote, con los `values` de pose y las `tracks` de clip aplicados por clave sobre cómo están
- * ahora: deshacer un cambio en un objeto de la pose (o en una pista del clip) no se lleva lo que el otro origen
- * cambió después en otro objeto o pista.
+ * The inverses of a batch, with the pose `values` and clip `tracks` applied per key over how they are
+ * now: undoing a change to one object of the pose (or one track of the clip) does not take away what the other
+ * origin changed later on another object or track.
  */
 function inversesByKey(doc, entry) {
   const changes = changesByKey(entry);
@@ -92,7 +92,7 @@ function inversesByKey(doc, entry) {
   });
 }
 
-/** (id, propiedad) que toca un lote, con sus inversas: Map id → Set de propiedades ("*" = el objeto entero). */
+/** (id, property) touched by a batch, with its inverses: Map id → Set of properties ("*" = the whole object). */
 function touched(entry) {
   const map = new Map();
   const add = (id, prop) => id != null && (map.get(id) ?? map.set(id, new Set()).get(id)).add(prop);
@@ -105,7 +105,8 @@ function touched(entry) {
     else if (STRUCTURAL.has(op.op)) {
       add(op.target ?? op.id, '*');
       if (op.op === 'rename' || op.op === 'create') add(op.id, '*');
-      // Meter algo en un contenedor también lo toca: deshacer la creación del contenedor se llevaría ese hijo.
+      // Putting something into a container also touches it: undoing the container's creation would take that
+      // child away.
       if (op.parent != null) add(op.parent, 'children');
       for (const { obj } of op.entries ?? []) add(obj?.id, '*');
     }
@@ -113,10 +114,10 @@ function touched(entry) {
   return map;
 }
 
-/** ¿Dos propiedades se pisan? Iguales, o una contiene a la otra ("values" contiene a "values.mouth.x"). */
+/** Do two properties overlap? Equal, or one contains the other ("values" contains "values.mouth.x"). */
 const overlap = (p, q) => p === q || p.startsWith(`${q}.`) || q.startsWith(`${p}.`);
 
-/** Nombres "id.prop" (o "id", si alguno cambió el objeto entero) que dos lotes tocan en común. */
+/** "id.prop" names (or "id", if either changed the whole object) that two batches touch in common. */
 function common(a, b) {
   const output = new Set();
   for (const [id, propsA] of a) {
@@ -128,33 +129,33 @@ function common(a, b) {
   return output;
 }
 
-// ---------- Formato viejo en disco ----------
-// Hasta la etapa de traducción (2026-11) los documentos vivían en personajes/<id>/documento.json, con el historial en
-// historial.jsonl y sus campos en español. Se pasa al formato nuevo una sola vez, al crear el almacén; es repetible y
-// no toca lo que ya está migrado.
+// ---------- Old on-disk format ----------
+// Until the translation stage (2026-11) documents lived in personajes/<id>/documento.json, with the history in
+// historial.jsonl and its fields in Spanish. They are moved to the new format once, when the store is created; it is
+// repeatable and does not touch what is already migrated.
 
 const KIND_FROM_LEGACY = { crear: 'create', cambio: 'change', migracion: 'migration', deshacer: 'undo', rehacer: 'redo' };
 
-/** Una entrada del historial viejo con sus campos en inglés (las nuevas quedan igual). */
+/** An old history entry with its fields in English (new ones stay the same). */
 export function entryFromLegacy(e) {
   if (!('fecha' in e) && !('origen' in e) && !('tipo' in e)) return e;
   const { fecha, origen, tipo, nota, inversas, ...rest } = e;
   const entry = { ...rest, date: fecha, origin: origen, kind: KIND_FROM_LEGACY[tipo] ?? tipo };
   if (nota !== undefined) entry.note = nota;
   if (inversas !== undefined) entry.inverses = inversas;
-  // El orden de los campos de antes: n, date, origin, kind, [ref], note, ops, inverses.
+  // The previous field order: n, date, origin, kind, [ref], note, ops, inverses.
   const { n, date, origin, kind, ref, note, ops, inverses, ...extra } = entry;
   return Object.fromEntries(Object.entries({ n, date, origin, kind, ref, note, ops, inverses, ...extra }).filter(([, v]) => v !== undefined));
 }
 
-/** Pasa `folder` (y la carpeta vieja personajes/ al lado, si `folder` todavía no existe) al formato nuevo. */
+/** Moves `folder` (and the old personajes/ folder next to it, if `folder` does not exist yet) to the new format. */
 export function migrateLegacyFolder(folder) {
   const legacy = path.join(path.dirname(path.resolve(folder)), 'personajes');
   if (!existsSync(folder) && existsSync(legacy)) {
     try {
       renameSync(legacy, folder);
     } catch (e) {
-      // Otro proceso (el editor o el MCP) pudo moverla primero.
+      // Another process (the editor or the MCP) may have moved it first.
       if (!existsSync(folder)) throw e;
     }
   }
@@ -177,7 +178,7 @@ export function migrateLegacyFolder(folder) {
 
 export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
   migrateLegacyFolder(folder);
-  // Las escrituras de este proceso van en fila para no pisarse entre sí.
+  // This process's writes are queued so they do not overwrite each other.
   /** @type {Promise<any>} */
   let row = Promise.resolve();
   /** @template T @param {() => Promise<T>} fn @returns {Promise<T>} */
@@ -188,8 +189,8 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     return path.join(folder, id, file);
   };
 
-  // Archivos de las capas image: personajes/<id>/assets/<src>. No entran en el historial (deshacer quita la capa, no
-  // el archivo).
+  // Image layer files: documents/<id>/assets/<src>. They are not part of the history (undo removes the layer, not
+  // the file).
   const assetPath = (id, src) => {
     if (!ASSET_FILE.test(src ?? '')) throw new Error(`Invalid asset name "${src}"`);
     return filePath(id, path.join('assets', src));
@@ -205,7 +206,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     }
   }
 
-  /** Avisos de capas image del lote cuyo archivo no está en assets/. */
+  /** Warnings for image layers of the batch whose file is not in assets/. */
   async function assetWarnings(id, doc, ops) {
     const touched = new Set(ops.filter((o) => o.op === 'create' || o.op === 'set').map((o) => o.op === 'create' ? o.id : o.target));
     const missing = [];
@@ -224,8 +225,8 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     return migrateOnRead(id, doc);
   }
 
-  // Migraciones del formato que se hacen solas al leer (ver src/core/migracion.js): se guardan una vez, con una
-  // entrada «migracion» en el historial. Una promesa por documento, para que dos lecturas a la vez no migren dos veces.
+  // Format migrations done automatically on read (see src/core/migration.js): saved once, with a
+  // "migration" entry in the history. One promise per document, so two reads at once do not migrate twice.
   const migrating = new Map();
   async function migrateOnRead(id, doc) {
     const { doc: migrated, changes } = migrateScenesWithParams(doc, schema);
@@ -241,7 +242,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
   }
 
   async function write(id, doc) {
-    // Temporal + rename: nadie lee nunca un archivo a medio escribir.
+    // Temp file + rename: nobody ever reads a half-written file.
     const target = filePath(id, 'document.json');
     await fs.writeFile(target + '.tmp', JSON.stringify(doc, null, 2) + '\n');
     await fs.rename(target + '.tmp', target);
@@ -264,12 +265,12 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     return complete;
   }
 
-  // Pilas de deshacer/rehacer de un origen, reconstruidas desde el historial.
+  // Undo/redo stacks of an origin, rebuilt from the history.
   function stacks(entries, origin) {
     const undo = [];
     const redo = [];
     for (const e of entries) {
-      // Una migración del formato (de cualquier origen) corta las pilas: las inversas de antes ya no encajan.
+      // A format migration (from any origin) cuts the stacks: the inverses from before no longer fit.
       if (e.kind === 'migration') {
         undo.length = 0;
         redo.length = 0;
@@ -291,18 +292,18 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
   }
 
   /**
-   * Lotes de otro origen posteriores a `entrada` que siguen en pie y tocan alguna de sus mismas (id, propiedad):
-   * deshacerla o rehacerla los pisaría. Un cambio que su origen ya deshizo (o un deshacer que ya rehizo) se cancela y
-   * no cuenta. Devuelve [{ quien, n, nota, props: ["r.x", ...] }].
+   * Batches from another origin after `entry` that are still standing and touch any of its same (id, property):
+   * undoing or redoing it would overwrite them. A change its origin already undid (or an undo it already redid)
+   * cancels out and does not count. Returns [{ who, n, note, props: ["r.x", ...] }].
    */
   function conflictsWithOthers(entries, entry) {
     const own = touched(entry);
-    const standing = new Map(); // origen → Map(n → entrada)
+    const standing = new Map(); // origin → Map(n → entry)
     for (const e of entries.slice(entry.n)) {
-      if (e.kind === 'migration') return []; // la migración ya cortó las pilas
+      if (e.kind === 'migration') return []; // the migration already cut the stacks
       if (e.origin === entry.origin || !['change', 'undo', 'redo'].includes(e.kind)) continue;
       const fromOrigin = standing.get(e.origin) ?? standing.set(e.origin, new Map()).get(e.origin);
-      // Deshacer un lote (o rehacer un deshacer) que también es posterior: se anulan entre sí.
+      // Undoing a batch (or redoing an undo) that is also later: they cancel each other out.
       if (e.kind !== 'change' && fromOrigin.has(e.ref)) fromOrigin.delete(e.ref);
       else fromOrigin.set(e.n, e);
     }
@@ -336,7 +337,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
       throw new Error(`Can't ${kind === 'undo' ? 'undo' : 'redo'}: the document changed afterwards and it no longer fits.\n${e.message}`);
     }
     await write(id, result.doc);
-    // La nota la ve el usuario en el historial: en inglés (los prefijos viejos en español también se limpian).
+    // The user sees the note in the history: in English (old Spanish prefixes are cleaned up too).
     const note = entry.note?.replace(/^(deshacer|rehacer|undo|redo): /, '') ?? '';
     await record(id, { origin, kind, ref: entry.n, note: `${kind === 'undo' ? 'undo' : 'redo'}: ${note}`, ops: inverses, inverses: result.inverses });
     return { doc: result.doc, in: { n: entry.n, note, ops: entry.ops.length, lote: entry.ops } };
@@ -354,13 +355,13 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
         try {
           list.push({ id, name: (await read(id)).meta.name ?? id });
         } catch {
-          // carpeta sin documento: se ignora
+          // folder without a document: ignored
         }
       }
       return list;
     },
 
-    /** Crea un documento vacío o, con `copiarDe`, una copia de otro (sin su historial). */
+    /** Creates an empty document or, with `copyFrom`, a copy of another one (without its history). */
     /** @param {string} id @param {Record<string, any>} meta @param {{ origin: string, note?: string, copyFrom?: string }} options */
     create: (id, meta, { origin, note, copyFrom }) =>
       enqueue(async () => {
@@ -379,14 +380,14 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
         const { errors } = validate(doc, schema);
         if (errors.length) throw new ValidationError(errors);
         await fs.mkdir(path.dirname(filePath(id, 'document.json')), { recursive: true });
-        // La copia lleva también los archivos de sus imágenes.
+        // The copy also carries its images' files.
         if (copyFrom && (await listAssets(copyFrom)).length) await fs.cp(path.dirname(assetPath(copyFrom, 'x.png')), path.dirname(assetPath(id, 'x.png')), { recursive: true });
         await write(id, doc);
         await record(id, { origin, kind: 'create', note: note ?? 'document created', ops: [], inverses: [] });
         return doc;
       }),
 
-    /** Aplica un lote sobre la versión en disco. Devuelve el documento y los avisos. */
+    /** Applies a batch on the version on disk. Returns the document and the warnings. */
     applyOps: (id, ops, { origin, note }) =>
       enqueue(async () => {
         const { doc, inverses, warnings } = applyOperations(await read(id), ops, schema);
@@ -395,7 +396,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
         return { doc, warnings: [...warnings, ...(await assetWarnings(id, doc, ops))] };
       }),
 
-    /** Borra el documento y su historial. No se puede deshacer. */
+    /** Deletes the document and its history. Cannot be undone. */
     delete: (id) =>
       enqueue(async () => {
         await read(id);
@@ -403,9 +404,9 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
       }),
 
     /**
-     * Guarda un archivo de imagen en assets/ y devuelve { src, ancho, alto, formato, reusado }. El nombre sale del
-     * original; si ya hay un archivo con los mismos bytes, se reusa ese, y si el nombre está ocupado por otro, se le
-     * agrega _2, _3...
+     * Saves an image file in assets/ and returns { src, naturalWidth, naturalHeight, format, reused }. The name
+     * comes from the original; if there is already a file with the same bytes, that one is reused, and if the name
+     * is taken by another, _2, _3... is appended.
      * @param {string} id @param {string} original @param {Uint8Array} bytes
      */
     saveAsset: (id, original, bytes) =>
@@ -421,7 +422,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
         return { src, naturalWidth, naturalHeight, format, reused: false };
       }),
 
-    /** Bytes y tipo MIME de un asset. */
+    /** Bytes and MIME type of an asset. */
     async readAsset(id, src) {
       try {
         return { bytes: await fs.readFile(assetPath(id, src)), mime: assetMime(src) };
@@ -433,7 +434,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
 
     listAssets,
 
-    /** Los archivos de las imágenes que usa el documento (src → bytes), para dibujarlo fuera del navegador. */
+    /** The image files the document uses (src → bytes), to draw it outside the browser. */
     async imagesOf(id, doc) {
       const map = new Map();
       for (const src of usedAssets(doc)) {
@@ -450,7 +451,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     undo: (id, origin) => enqueue(() => revert(id, origin, 'undo')),
     redo: (id, origin) => enqueue(() => revert(id, origin, 'redo')),
 
-    /** Últimas entradas, de la más vieja a la más nueva, más qué puede deshacer/rehacer cada origen. */
+    /** Latest entries, from oldest to newest, plus what each origin can undo/redo. */
     async history(id, limit = 50) {
       const entries = await history(id);
       const available = (origin) => {

@@ -12,7 +12,7 @@ const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} ≈ ${
 const key = (t, value, ease) => ({ t, value, ...(ease ? { ease } : {}) });
 const still = (value, d = 1) => [key(0, value), key(d, value)];
 
-// Un muñeco con brazo, cabeza, ojo, boca (switch), un param que mueve una pose y clips de base, gesto y auto.
+// A puppet with arm, head, eye, mouth (switch), a param that moves a pose and base, gesture and auto clips.
 function puppet(extra = []) {
   return op(
     createDocument({ name: 'Bot' }),
@@ -27,10 +27,10 @@ function puppet(extra = []) {
     { op: 'create', type: 'pose', id: 'happy', props: { values: { head_bone: { rotation: 10 } } } },
     { op: 'create', type: 'param', id: 'happiness', props: { description: 'How happy it looks' } },
     { op: 'create', type: 'driver', id: 'd_happy', props: { param: 'happiness', pose: 'happy' } },
-    // Base: idle mueve la cabeza 0 → 0 (quieta); talking abre la boca.
+    // Base: idle moves the head 0 → 0 (still); talking opens the mouth.
     { op: 'create', type: 'animation', id: 'idle', props: { usage: 'puppet', loop: 'loop', duration: 2, fade: 0.5, description: 'Rest', tracks: { arm_bone: { rotation: still(0, 2) } } } },
     { op: 'create', type: 'animation', id: 'talking', props: { usage: 'puppet', loop: 'loop', duration: 1, fade: 0.5, tracks: { arm_bone: { rotation: still(20) }, mouth: { active: [key(0, 'mouth_o')] } } } },
-    // Gesto: wave lleva el brazo a -60 durante 1 s y anima happiness a 1.
+    // Gesture: wave takes the arm to -60 for 1 s and animates happiness to 1.
     { op: 'create', type: 'animation', id: 'wave', props: { usage: 'puppet', duration: 1, fade: 0.2, description: 'Waves', tracks: { arm_bone: { rotation: still(-60) }, happiness: { value: still(1) } } } },
     ...extra,
   );
@@ -39,10 +39,10 @@ const rot = (pose, id) => pose.values[id]?.rotation;
 
 test('una base entra con fundido cruzado y reemplaza a la anterior', () => {
   const live = createLive(puppet(), schema);
-  assert.equal(rot(live.pose(), 'arm_bone'), undefined); // nada suena: el montaje
+  assert.equal(rot(live.pose(), 'arm_bone'), undefined); // nothing playing: the setup
   live.play('talking');
-  live.advance(0.25); // mitad del fundido de 0.5 s
-  near(rot(live.pose(), 'arm_bone'), 10); // suave(0.5) = 0.5 → mitad de 0 a 20
+  live.advance(0.25); // halfway through the 0.5 s fade
+  near(rot(live.pose(), 'arm_bone'), 10); // smooth(0.5) = 0.5 → halfway from 0 to 20
   live.advance(0.25);
   near(rot(live.pose(), 'arm_bone'), 20);
   assert.equal(live.pose().values.mouth.active, 'mouth_o');
@@ -50,7 +50,7 @@ test('una base entra con fundido cruzado y reemplaza a la anterior', () => {
   live.advance(0.5);
   near(rot(live.pose(), 'arm_bone'), 0);
   assert.deepEqual(live.state().playing.map((s) => s.clip), ['idle']);
-  // Volver a pedir la base que ya suena no la reinicia.
+  // Requesting the base that is already playing again does not restart it.
   live.play('idle');
   assert.equal(live.state().playing.length, 1);
 });
@@ -62,11 +62,11 @@ test('un gesto pisa solo sus pistas encima de la base y sale solo al final', () 
   live.play('wave');
   live.advance(0.3);
   const p = live.pose();
-  near(rot(p, 'arm_bone'), -60); // el gesto pisa el brazo (happiness 1 suma la pose happy a la cabeza, no al brazo)
-  assert.equal(p.values.mouth.active, 'mouth_o'); // la boca sigue la base
+  near(rot(p, 'arm_bone'), -60); // the gesture overrides the arm (happiness 1 adds the happy pose to the head, not the arm)
+  assert.equal(p.values.mouth.active, 'mouth_o'); // the mouth follows the base
   near(p.params.happiness, 1);
   near(rot(p, 'head_bone'), 10);
-  live.advance(0.7); // termina el gesto: salió del todo
+  live.advance(0.7); // the gesture ends: fully out
   near(rot(live.pose(), 'arm_bone'), 20);
   assert.deepEqual(live.state().playing.map((s) => s.clip), ['talking']);
 });
@@ -76,9 +76,9 @@ test('el param de la app vuelve suave cuando sale el clip que lo anima', () => {
   live.play('wave');
   live.advance(0.5);
   near(live.pose().params.happiness, 1);
-  live.set('happiness', 0.4); // la app lo cambia mientras suena: gana el clip
+  live.set('happiness', 0.4); // the app changes it while it plays: the clip wins
   near(live.pose().params.happiness, 1);
-  live.advance(0.4); // t = 0.9: a mitad del fundido de salida (empezó en 0.8)
+  live.advance(0.4); // t = 0.9: halfway through the fade-out (started at 0.8)
   const h = live.pose().params.happiness;
   assert.ok(h > 0.4 && h < 1, `entre la app y el clip: ${h}`);
   live.advance(0.2);
@@ -107,13 +107,13 @@ test('capas auto: el parpadeo se repite solo y la respiración suma encima', () 
   ]);
   assert.deepEqual(validate(doc, schema).errors, []);
   const frames = runScript(doc, schema, [{ t: 0, play: 'idle' }, { t: 0, set: { happiness: 1 } }], [0.5, 1.1, 1.5]);
-  // En 0.5 s: sin parpadeo; la respiración (4·0.5 = 2 con ease-in-out en la mitad del tramo) suma a la pose happy (10).
+  // At 0.5 s: no blink; breathing (4·0.5 = 2 with ease-in-out at the middle of the span) adds to the happy pose (10).
   assert.equal(frames[0].pose.values.eye?.scaleY, undefined);
   near(rot(frames[0].pose, 'head_bone'), 10 + 2, 1e-3);
-  // En 1.1 s, parpadea (empezó en 1 s y dura 0.2 s); en 1.5 s ya no.
+  // At 1.1 s it blinks (started at 1 s and lasts 0.2 s); at 1.5 s no longer.
   near(frames[1].pose.values.eye.scaleY, 0.1);
   assert.equal(frames[2].pose.values.eye?.scaleY, undefined);
-  // La app no dispara los auto.
+  // The app does not trigger the auto ones.
   assert.throws(() => createLive(doc, schema).play('blink'), /auto clip/);
 });
 
@@ -135,7 +135,7 @@ test('validación: lo de Live es de Puppet, next apunta a un clip once y a uno q
   assert.throws(() => op(doc, { op: 'set', target: 'idle', props: { next: 'wave' } }), /only once clips end/);
   assert.throws(() => op(doc, { op: 'set', target: 'wave', props: { next: 'scene_1' } }), /next must be a Puppet clip/);
   assert.throws(() => op(doc, { op: 'set', target: 'wave', props: { repeat_min: 5, repeat_max: 2 } }), /greater than repeat_max/);
-  // Renombrar el clip de next lo sigue.
+  // Renaming the clip in next follows it.
   const renamed = op(op(doc, { op: 'set', target: 'wave', props: { next: 'idle' } }), { op: 'rename', target: 'idle', id: 'rest' });
   assert.equal(renamed.objects.find((o) => o.id === 'wave').next, 'rest');
 });
@@ -167,15 +167,15 @@ test('el manifiesto avisa del param que maneja un auto y lista sus params; rende
   assert.deepEqual(m.params.find((p) => p.id === 'blinking').drivenBy, ['blink']);
   assert.match(manifestText(m), /blinking .*\[driven by auto blink: don't set it\]/);
   assert.match(m.problems.join('\n'), /params without description: blinking/);
-  // live con times (antes, «time and times need animation») y la repetición del auto, que cae entre cuadros.
+  // live with times (before, "time and times need animation") and the auto repetition, which falls between frames.
   assert.equal(previewError({ live: [], times: [1] }), null);
   const view = planLiveView(doc, schema, { live: [{ t: 0, play: 'idle' }], times: [0.5, 2] });
   assert.match(view.text, /Clips auto repeat que sonaron .*blink 1–1\.1\d* s/);
   assert.doesNotMatch(planLiveView(doc, schema, { live: [{ t: 0, play: 'idle' }], auto: false, until: 2 }).text, /sonaron|blink \(auto/);
-  // until largo: 24 cuadros repartidos y lo dice; por defecto, hasta el final del último gesto.
+  // long until: 24 frames spread out and it says so; by default, until the end of the last gesture.
   assert.match(planLiveView(doc, schema, { live: [{ t: 0, play: 'idle' }], until: 9.2 }).text, /24 cuadros \(cada 0.4 s hasta 9.2 s; para ver más de cerca/);
   assert.match(planLiveView(doc, schema, { live: [{ t: 0, play: 'idle' }, { t: 1, play: 'wave' }] }).text, /cada 0.25 s hasta 2.25 s/);
-  // Un ángulo a más de 180° del montaje gira casi una vuelta en el fundido.
+  // An angle more than 180° from the setup turns almost a full turn in the fade.
   const rotation = op(doc, { op: 'set', target: 'wave', props: { tracks: { arm_bone: { rotation: still(300) } } } });
   assert.match(rotationWarnings(rotation, schema, rotation.objects.find((o) => o.id === 'wave')).join(), /arm_bone.rotation: 300 en t 0, 300 en t 1 queda a más de 180° del montaje \(0\).*usa -60/);
 });
@@ -205,7 +205,7 @@ test('auditoría: fundido entre bases iguales, always con loop once, fade largo,
     { op: 'create', type: 'animation', id: 'breath', props: { usage: 'puppet', duration: 1, auto: 'always', blend: 'additive', tracks: { head_bone: { rotation: [key(0, 0), key(0.5, 10), key(1, 0)] } } } },
     { op: 'create', type: 'animation', id: 'corto', props: { usage: 'puppet', duration: 0.3, fade: 0.2, tracks: { arm_bone: { rotation: still(-60, 0.3) } } } },
   ]);
-  // 1. Dos bases con el brazo en 30: el fundido cruzado no deja asomar el montaje (antes bajaba a 23).
+  // 1. Two bases with the arm at 30: the crossfade does not let the setup show through (before it dropped to 23).
   const live = createLive(doc, schema, { auto: false });
   live.play('a');
   live.advance(1);
@@ -214,25 +214,25 @@ test('auditoría: fundido entre bases iguales, always con loop once, fade largo,
     live.advance(0.1);
     near(rot(live.pose(), 'arm_bone'), 30);
   }
-  // 7. a → b → a dentro del fundido reutiliza la entrada de a (no hay dos a).
+  // 7. a → b → a within the fade reuses a's entry (there are not two a's).
   live.play('a');
   live.advance(0.1);
   live.play('b');
   live.play('a');
   assert.equal(live.state().playing.filter((s) => s.clip === 'a').length, 1);
   near(rot(live.pose(), 'arm_bone'), 30);
-  // 6. stop con un id que no existe o un auto: error que dice qué hay.
+  // 6. stop with an id that does not exist or an auto: error that says what there is.
   assert.throws(() => live.stop('idel'), /Clips you can stop: .*idle/);
   assert.throws(() => createLive(doc, schema).stop('breath'), /can't be stopped/);
-  // 2. auto always con el loop por defecto (once) sigue sonando en loop.
+  // 2. auto always with the default loop (once) keeps playing in a loop.
   const breathes = runScript(doc, schema, [], [0.25, 0.5, 1.25, 1.5]).map((c) => rot(c.pose, 'head_bone'));
   breathes.forEach((r, i) => near(r, [5, 10, 5, 10][i], 1e-6));
-  // 4. Un gesto con fade ≥ duración/2 llega igual al 100% (el fundido se acorta a la mitad).
+  // 4. A gesture with fade ≥ duration/2 still reaches 100% (the fade is shortened to half).
   const g = createLive(doc, schema, { auto: false });
   g.play('corto');
   g.advance(0.15);
   near(rot(g.pose(), 'arm_bone'), -60);
-  // 9. actualizar: un clip borrado sale; una base que pasa a once sale de la capa de bases.
+  // 9. update: a deleted clip leaves; a base that becomes once leaves the base layer.
   const v = createLive(doc, schema, { auto: false });
   v.play('a');
   v.play('wave');

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Servidor MCP de aia-studio: deja que la IA que el usuario ya usa (Claude Desktop, Claude Code, Cursor...)
-// maneje los documentos. Corre en local por stdio, sin API keys. Trabaja sobre los mismos archivos que el editor,
-// así que los cambios se ven en vivo en el navegador.
+// aia-studio MCP server: lets the AI the user already uses (Claude Desktop, Claude Code, Cursor...)
+// handle the documents. Runs locally over stdio, without API keys. Works on the same files as the editor,
+// so changes show live in the browser.
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -34,13 +34,13 @@ const server = new McpServer(
 );
 
 const treeOutline = (doc, options) => tree(doc, schema, options);
-// Después de un cambio, el árbol va sin las pistas de los clips (con muchos clips eran miles de líneas en cada
-// respuesta): get_document las da enteras o de los clips que se pidan.
+// After a change, the tree goes without the clips' tracks (with many clips it was thousands of lines in each
+// response): get_document gives them whole or for the requested clips.
 const shortTree = (doc) => `${treeOutline(doc, { tracks: false })}\n(Clips resumidos: sus pistas, con get_document y clips.)`;
 
 const text = (t) => ({ content: [{ type: 'text', text: typeof t === 'string' ? t : JSON.stringify(t, null, 2) }] });
 
-// Los errores vuelven como resultado y no como excepción, para que la IA los lea y corrija el lote.
+// Errors come back as a result and not as an exception, so the AI reads them and fixes the batch.
 const safe = (fn) => async (args) => {
   try {
     return await fn(args);
@@ -200,10 +200,10 @@ const region = z
   .object({ x: z.number(), y: z.number(), width: z.number().positive(), height: z.number().positive() })
   .describe('recorte del documento, en sus coordenadas (para ver un detalle de cerca)');
 
-/** PNG del documento (posado, animado, en vivo o recortado) como resultado de herramienta: el SVG y el texto salen del plan. */
+/** PNG of the document (posed, animated, live or cropped) as a tool result: the SVG and the text come from the plan. */
 async function preview(id, doc, options, header) {
   const { svg, width, text: summary } = planPreview(doc, schema, options);
-  // Las capas image se dibujan con los archivos de assets/; las que no lo tienen no se ven y se avisa.
+  // Image layers are drawn with the files from assets/; those that lack it are not shown and a warning is given.
   const images = await store.imagesOf(id, doc);
   const missing = usedAssets(doc).filter((src) => !images.has(src));
   const png = svgToPng(svg, options.width ?? width, images);
@@ -459,7 +459,7 @@ server.registerTool(
     const notes = [...warnings];
     if (plan.extendedFrom != null) notes.push(`duration pasó de ${plan.extendedFrom} a ${plan.duration} s para que entren los keyframes`);
     notes.push(...rotationWarnings(doc, schema, findObject(doc, animation)));
-    // La vista del clip ya lista qué poses mueve cada param animado (planVistaDeClip).
+    // The clip view already lists which poses each animated param moves (planClipView).
     return preview(id, doc, { width, animation, bones: show_bones }, notes.length ? `Avisos: ${notes.join('; ')}` : '');
   }),
 );

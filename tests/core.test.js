@@ -117,7 +117,7 @@ test('las propiedades desconocidas se conservan con un aviso', () => {
 test('la matriz del mundo compone la jerarquía', () => {
   const doc = op(robot(), { op: 'set', target: 'head', props: { rotation: 90 } }).doc;
   const [x, y] = apply(worldMatrix(doc, schema, 'eye_l'), 0, 0);
-  // body (300,400) → head (0,-100) girado 90° → eye_l (-30,-60) pasa a (60,-30)
+  // body (300,400) → head (0,-100) turned 90° → eye_l (-30,-60) becomes (60,-30)
   assert.ok(Math.abs(x - 360) < 1e-9 && Math.abs(y - 270) < 1e-9, `${x},${y}`);
 });
 
@@ -159,11 +159,11 @@ test('params y drivers: initial y equals tienen que ser opciones, y min no puede
   assert.throws(() => op(base, { op: 'create', type: 'driver', id: 'dd', props: { param: 'v', pose: 'pp', equals: 'c' } }), /param v has options "a", "b", but driver dd\.equals "c" uses a value that is not among them/);
   assert.throws(() => op(base, { op: 'create', type: 'param', id: 'n', props: { min: 2, max: 1 } }), /min \(2\) is greater than max \(1\)/);
   assert.throws(() => op(base, { op: 'create', type: 'param', id: 'n', props: { max: -1 } }), /min \(0\) is greater than max \(-1\)/);
-  // Quitar la opción que usa un driver también avisa.
+  // Removing the option a driver uses also warns.
   const withDriver = op(base, { op: 'create', type: 'driver', id: 'dd', props: { param: 'v', pose: 'pp', equals: 'b' } }).doc;
   const two = op(withDriver, { op: 'create', type: 'driver', id: 'dd2', props: { param: 'v', pose: 'pp', equals: 'b' } }).doc;
   assert.throws(() => op(two, { op: 'set', target: 'v', props: { options: ['a'] } }), /drivers dd\.equals "b", dd2\.equals "b" use values .*change those drivers’ equals in the same batch \(for example \{ "op": "set", "target": "dd", "props": \{ "equals": "a" \} \}\)/);
-  // Cambiando los equals en el mismo lote, pasa.
+  // Changing the equals in the same batch, it passes.
   assert.doesNotThrow(() => op(two, { op: 'set', target: 'v', props: { options: ['a'] } }, { op: 'set', target: 'dd', props: { equals: 'a' } }, { op: 'delete', target: 'dd2' }));
 });
 
@@ -183,7 +183,7 @@ test('move con keepPosition deja el objeto en el mismo lugar de la pantalla, y s
   const { doc: moved, inverses } = op(doc, { op: 'move', target: 'r', parent: 'g', keepPosition: true });
   assert.deepEqual(apply(worldMatrix(moved, schema, 'r'), 0, 0).map(Math.round), [10, 20]);
   assert.deepEqual(op(moved, ...inverses).doc, doc);
-  // Sin keepPosition conserva x/y (y se corre).
+  // Without keepPosition it keeps x/y (and shifts).
   assert.deepEqual(apply(worldMatrix(op(doc, { op: 'move', target: 'r', parent: 'g' }).doc, schema, 'r'), 0, 0).map(Math.round), [80, 60]);
   assert.throws(() => op(op(moved, { op: 'create', type: 'skeleton', id: 's' }, { op: 'create', type: 'bone', id: 'b', parent: 's' }).doc, { op: 'move', target: 'b', parent: 'g', keepPosition: true }), /reparent_bone/);
 });
@@ -214,6 +214,6 @@ test('opsDeTamano cambia el lienzo con el dibujo anclado al centro (raíz, poses
   assert.equal(get('torso').x, 5, 'lo anidado se mueve con su padre');
   assert.deepEqual(get('salto').values, { body: { y: 200, rotation: 5 }, torso: { x: 9 } });
   assert.deepEqual(get('paso').tracks.body.x.map((c) => c.value), [400, 420]);
-  // Mismo tamaño: solo width/height.
+  // Same size: only width/height.
   assert.equal(artboardOps(r, schema, 800, 500).length, 1);
 });

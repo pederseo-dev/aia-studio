@@ -10,7 +10,7 @@ const schema = loadSchema();
 const op = (doc, ...ops) => applyOperations(doc, ops, schema);
 const near = (a, b, eps = 0.02) => Math.abs(a - b) < eps;
 
-// Puntos de la curva muestreados: sirve para comparar dos trazados por su forma, no por su texto.
+// Sampled points of the curve: used to compare two paths by their shape, not by their text.
 function shape(vertices, closed) {
   const spans = closed ? vertices.length : vertices.length - 1;
   return Array.from({ length: spans }, (_, i) => sampleSpan(vertices, i, 8).map((m) => m.p)).flat();
@@ -27,7 +27,7 @@ test('las curvas se guardan como tangentes en polares y vuelven a la misma forma
   const d = 'M0 0 C 0 -40 60 -40 60 0 S 120 40 120 0';
   const [s] = parseD(d);
   assert.equal(s.closed, false);
-  // El vértice del medio tiene tangentes opuestas e iguales: mirrored, apuntando hacia abajo.
+  // The middle vertex has opposite, equal tangents: mirrored, pointing down.
   assert.deepEqual(s.vertices[1], { x: 60, y: 0, mode: 'mirrored', angle: 90, dist: 40 });
   const [other] = parseD(verticesAD(s.vertices, false));
   shape(s.vertices, false).forEach((p, i) => {
@@ -41,7 +41,7 @@ test('cuadráticas, T y arcos se convierten a cúbicas', () => {
   assert.equal(q.vertices.length, 3);
   const [circle] = parseD('M-50 0 A50 50 0 1 0 50 0 A50 50 0 1 0 -50 0 Z');
   assert.equal(circle.closed, true);
-  // Todos los puntos muestreados quedan a 50 del centro.
+  // All sampled points are 50 from the center.
   for (const [x, y] of shape(circle.vertices, true)) assert.ok(Math.abs(Math.hypot(x, y) - 50) < 0.2, `${x},${y}`);
   assert.deepEqual(parseD('M0 0L10 0M20 0L30 0').length, 2);
   assert.throws(() => parseD('M0 0 X10'), /comando desconocido/);
@@ -54,7 +54,7 @@ test('esquina redondeada', () => {
 
 test('transformar y dividir conservan la forma', () => {
   const [s] = parseD('M0 0 C0 -40 60 -40 60 0');
-  const moved = transformVertices(s.vertices, [0, 1, -1, 0, 10, 5]); // girar 90° y trasladar
+  const moved = transformVertices(s.vertices, [0, 1, -1, 0, 10, 5]); // rotate 90° and translate
   const original = shape(s.vertices, false);
   shape(moved, false).forEach(([x, y], i) => {
     const [ox, oy] = original[i];
@@ -96,7 +96,7 @@ test('estilos compartidos y degradados', () => {
   assert.match(svg, /data-id="nose"><ellipse rx="50" ry="50" fill="url\(#aia-skin_shade\)"/);
   assert.doesNotMatch(svg, /data-id="skin"/);
 
-  // Cambiar el estilo cambia todas las formas que lo usan.
+  // Changing the style changes all the shapes that use it.
   doc = op(doc, { op: 'set', target: 'skin', props: { fill: '#c08060' } }).doc;
   assert.match(svgDocument(doc, schema), /data-id="face"><ellipse rx="50" ry="50" fill="#c08060"/);
 

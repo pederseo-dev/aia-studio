@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Convierte los documentos de personajes/ al modelo de capa de huesos (ver src/core/migracion.js). Se puede correr
-// las veces que haga falta: un documento que ya no tiene huesos sueltos se deja como está.
+// Converts the documents in documents/ to the bone layer model (see src/core/migration.js). It can be run
+// as many times as needed: a document that no longer has loose bones is left as it is.
 //
-//   npm run migrar              → todos los documentos
-//   npm run migrar -- gato_rig  → solo los nombrados
+//   npm run migrate              → all documents
+//   npm run migrate -- gato_rig  → only the named ones
 //
-// Cada documento migrado queda con una entrada "migracion" en su historial. Deshacer no cruza esa entrada: las
-// inversas de antes hablan del marco viejo de los huesos y aplicarlas ahora movería cosas de lugar.
+// Each migrated document gets a "migration" entry in its history. Undo does not cross that entry: the
+// inverses from before refer to the old bone frame and applying them now would move things out of place.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -38,7 +38,7 @@ for (const id of ids) {
   try {
     n = (await fs.readFile(history, 'utf8')).split('\n').filter(Boolean).length + 1;
   } catch {
-    // sin historial
+    // no history
   }
   const note = `Moved to the Skeleton model: ${changes.join('; ')}`;
   await fs.appendFile(history, JSON.stringify({ n, date: new Date().toISOString(), origin: 'system', kind: 'migration', note, ops: [], inverses: [] }) + '\n');

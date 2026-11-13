@@ -1,5 +1,5 @@
-// Lógica de las herramientas del MCP, sin el transporte: funciones puras sobre un documento (más el almacén cuando
-// guardan), para poder probarlas sin levantar el servidor. Los textos que devuelven los lee la IA.
+// Logic of the MCP tools, without the transport: pure functions over a document (plus the store when they
+// save), so they can be tested without starting the server. The texts they return are read by the AI.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -14,8 +14,8 @@ import { svgDocument } from '../src/render/svg.js';
 import { previewError, trackLines, planClipView, planLiveView, clipSummary } from './animation.js';
 
 /**
- * Árbol legible del documento: una línea por objeto, indentado por jerarquía, del fondo al frente. `pistas`: true
- * lista las pistas de todos los clips, false ninguna, o los ids de los clips a listar.
+ * Readable tree of the document: one line per object, indented by hierarchy, from back to front. `tracks`: true
+ * lists the tracks of all clips, false none, or the ids of the clips to list.
  * @param {any} doc @param {any} schema @param {{ tracks?: boolean | string[] }} [options]
  */
 export function treeOutline(doc, schema, { tracks = true } = {}) {
@@ -26,7 +26,7 @@ export function treeOutline(doc, schema, { tracks = true } = {}) {
     for (const o of children(doc, parent)) {
       let detail = '';
       if (o.bone) detail = ` → hueso ${o.bone}`;
-      // Dibujo de un skeleton que no sigue a ningún hueso: en las poses queda quieto.
+      // Drawing of a skeleton that follows no bone: in poses it stays still.
       else if (findObject(doc, o.parent)?.type === 'skeleton' && o.type !== 'bone' && !boneOf(doc, o.id) && !o.vertices?.some((v) => v.bone)) detail = ' (sin hueso: queda quieto en las poses)';
       if (o.type === 'skeleton') detail += ` [${bonesOf(doc, o.id).length} huesos]`;
       if (o.type === 'image') detail += ` [${read(schema, o, 'src')}, ${r(read(schema, o, 'width'))}×${r(read(schema, o, 'height'))}]`;
@@ -42,15 +42,15 @@ export function treeOutline(doc, schema, { tracks = true } = {}) {
       }
       if (o.type === 'driver') detail = ` ${o.param ?? '?'} → ${o.pose ?? '?'}${o.equals != null ? ` cuando = "${o.equals}"` : ` (${read(schema, o, 'inMin')}…${read(schema, o, 'inMax')})`}`;
       if (o.type === 'bone') {
-        // Dónde queda en el documento: con ángulos relativos encadenados, esto ahorra cuentas.
+        // Where it ends up in the document: with chained relative angles, this saves calculations.
         const m = rest.get(o.id);
         const [ox, oy] = apply(m, 0, 0);
         const [px, py] = tipOf(schema, o, m);
         detail = ` de (${r(ox)}, ${r(oy)}) a (${r(px)}, ${r(py)}), ${r((Math.atan2(m[1], m[0]) * 180) / Math.PI)}° en pantalla`;
       }
       lines.push(`${'  '.repeat(level)}- ${o.id} (${o.type})${detail}`);
-      // Las pistas de un clip, con sus keyframes: para leerlo sin el JSON entero.
-      // `pistas`: true = todas; false = ninguna (solo el resumen); una lista = solo las de esos clips.
+      // The tracks of a clip, with their keyframes: to read it without the whole JSON.
+      // `tracks`: true = all; false = none (only the summary); a list = only those of these clips.
       const withTracks = tracks === true || (Array.isArray(tracks) && tracks.includes(o.id));
       if (o.type === 'animation' && withTracks) for (const l of trackLines(o)) lines.push(`${'  '.repeat(level + 2)}${l}`);
       walk(o.id, level + 1);
@@ -60,12 +60,12 @@ export function treeOutline(doc, schema, { tracks = true } = {}) {
   return lines.length ? lines.join('\n') : '(vacío)';
 }
 
-/** delete_document: el confirm tiene que repetir el id (borrar no se puede deshacer). */
+/** delete_document: confirm has to repeat the id (deleting cannot be undone). */
 export function checkDeleted(id, confirm) {
   if (confirm !== id) throw new Error(`To delete the document, confirm has to be "${id}" (the same id). Deleting can't be undone.`);
 }
 
-/** set_pose: lo que recortan los límites de los huesos (la pose guarda el valor pedido, pero se ve el recortado). */
+/** set_pose: what the bone limits clamp (the pose keeps the requested value, but the clamped one is shown). */
 export function poseClamps(doc, schema, values) {
   return Object.entries(values).flatMap(([h, c]) => {
     const bone = findObject(doc, h);
@@ -75,7 +75,7 @@ export function poseClamps(doc, schema, values) {
   });
 }
 
-/** bind_points: el lote y el reparto "hueso [índices]". */
+/** bind_points: the batch and the split "bone [indices]". */
 export function planBindPoints(doc, schema, path, bones) {
   if (findObject(doc, path)?.type !== 'path') throw new Error(`"${path}" no es un path`);
   const vertices = distributeBetweenBones(doc, schema, path, bones);
@@ -85,7 +85,7 @@ export function planBindPoints(doc, schema, path, bones) {
   return { ops: [{ op: 'set', target: path, props: { vertices } }], distribution };
 }
 
-/** bind_by_proximity: el lote (vacío si no hay nada que enlazar) y el reparto "hueso ← piezas". */
+/** bind_by_proximity: the batch (empty if there is nothing to bind) and the split "bone ← pieces". */
 export function planBindByProximity(doc, schema, skeleton) {
   const { ops, bindings } = planProximityBinding(doc, schema, skeleton);
   const byBone = {};
@@ -94,7 +94,7 @@ export function planBindByProximity(doc, schema, skeleton) {
   return { ops, bindings, distribution };
 }
 
-/** reparent_bone: el lote y el texto que explica qué pasa en las poses. */
+/** reparent_bone: the batch and the text explaining what happens in the poses. */
 export function planReparentBone(doc, schema, bone, parent, keepInPoses = false) {
   const { ops, moved } = reparentBone(doc, schema, bone, parent, { keepInPoses: keepInPoses });
   if (!ops.length) return { ops, moved, text: `${bone} ya cuelga de ${parent}; no hubo cambios.` };
@@ -109,12 +109,12 @@ export function planReparentBone(doc, schema, bone, parent, keepInPoses = false)
   return { ops, moved, text: `${bone} ahora cuelga de ${parent}; en el montaje quedó donde estaba.${poses}` };
 }
 
-// ---------- Lecturas: get_document, get_history y render_preview ----------
+// ---------- Reads: get_document, get_history and render_preview ----------
 
-// Más que esto no entra cómodo en la respuesta: get_document deja el JSON afuera si no se pidió.
+// More than this does not fit comfortably in the response: get_document leaves the JSON out if it was not requested.
 const RESPONSE_MAX = 60000;
 
-/** get_document: el árbol (con las pistas de `clips`, o de todos) y el JSON, salvo que no se pida o pese demasiado. */
+/** get_document: the tree (with the tracks of `clips`, or of all) and the JSON, unless not requested or too heavy. */
 /** @param {any} doc @param {any} schema @param {{ json?: boolean, clips?: string[] }} [options] */
 export function documentText(doc, schema, { json, clips } = {}) {
   const textTree = `Árbol (del fondo al frente):
@@ -132,7 +132,7 @@ JSON:
 ${complete}`;
 }
 
-/** Valor con el que quedó cada propiedad que un lote fijó con set (los largos, resumidos). */
+/** Value each property a batch set with set ended up with (long ones, summarized). */
 function finalValues(ops) {
   const values = {};
   for (const op of ops) {
@@ -145,7 +145,7 @@ function finalValues(ops) {
   return values;
 }
 
-/** get_history: los últimos `limit` lotes (de `origin`, si se pide), resumidos o con sus operaciones (`detail`). */
+/** get_history: the last `limit` batches (of `origin`, if given), summarized or with their operations (`detail`). */
 /** @param {any[]} entries @param {{ limit?: number, origin?: string, detail?: boolean }} [options] */
 export function historySummary(entries, { limit, origin, detail } = {}) {
   const chosen = entries.filter((e) => !origin || e.origin === origin).slice(-(limit ?? 20));
@@ -153,9 +153,9 @@ export function historySummary(entries, { limit, origin, detail } = {}) {
 }
 
 /**
- * render_preview (y la vista de set_pose, set_keys…): el SVG, el ancho por defecto del PNG y el texto que lo resume.
- * Un clip o un guion en vivo van a sus planes (mcp/animacion.js); lo demás es el documento en el montaje, en una pose
- * o con params.
+ * render_preview (and the view of set_pose, set_keys…): the SVG, the default PNG width and the text summarizing it.
+ * A clip or a live script go to their plans (mcp/animation.js); the rest is the document in the setup, in a pose
+ * or with params.
  * @param {any} doc @param {any} schema @param {Record<string, any>} [options]
  */
 export function planPreview(doc, schema, { pose, region, bones, params, animation, time, times, live, until, auto } = {}) {
@@ -177,7 +177,7 @@ export function planPreview(doc, schema, { pose, region, bones, params, animatio
   let view = 'en el montaje';
   if (pose) view = `en la pose "${pose}"`;
   else if (params) {
-    // Qué quedó activo: ayuda a ver si los drivers hacen lo que se esperaba.
+    // What ended up active: helps see whether the drivers do what was expected.
     const values = paramValues(doc, schema, params);
     const weights = doc.objects
       .filter((o) => o.type === 'driver' && o.pose && o.param in values)
@@ -192,8 +192,8 @@ export function planPreview(doc, schema, { pose, region, bones, params, animatio
 // ---------- add_image ----------
 
 /**
- * Bytes y nombre de un archivo de imagen para add_image: una ruta local (absoluta) o una URL http(s). Lanza si no se
- * puede leer o pasa del máximo; si es una imagen válida lo decide después el almacén (leerImagen).
+ * Bytes and name of an image file for add_image: a local (absolute) path or an http(s) URL. Throws if it cannot be
+ * read or exceeds the maximum; whether it is a valid image is decided later by the store (readImage).
  * @param {{ path?: string, url?: string }} origin
  * @returns {Promise<{ bytes: Uint8Array, name: string }>}
  */

@@ -9,7 +9,7 @@ import { svgDocument } from '../src/render/svg.js';
 const schema = loadSchema();
 const op = (doc, ...ops) => applyOperations(doc, ops, schema).doc;
 
-// Una cara: boca como switch (rest / o) y como path con la misma cantidad de puntos (para el morph), cabeza que gira.
+// A face: mouth as a switch (rest / o) and as a path with the same number of points (for the morph), head that turns.
 function face() {
   return op(
     createDocument({ name: 'Cara' }),
@@ -48,12 +48,12 @@ test('la mezcla suma números, interpola vértices y elige el switch', () => {
   assert.deepEqual(half.smile.vertices.map((v) => [v.x, v.y]), [[-20, -5], [0, 5], [20, -5]]);
   assert.equal(half.head_bone.rotation, 20);
   assert.equal(half.mouth.active, 'mouth_o');
-  // En el SVG: el switch muestra solo la boca "o", y la cabeza gira con su hueso.
+  // In the SVG: the switch shows only the "o" mouth, and the head turns with its bone.
   const svg = svgDocument(doc, schema, { params: { happiness: 0.5, head_turn: 1, viseme: 'o' } });
   assert.match(svg, /data-id="mouth_o"/);
   assert.doesNotMatch(svg, /data-id="mouth_rest"/);
   assert.match(svg, /data-id="head" transform="matrix\(/);
-  // Sin params, el montaje: la primera boca.
+  // Without params, the setup: the first mouth.
   assert.match(svgDocument(doc, schema), /data-id="mouth_rest"/);
 });
 
@@ -72,7 +72,7 @@ test('renombrar y borrar actualizan las poses, también los ids que son valores'
   assert.equal(findObject(doc, 'd_happy').param, undefined);
 });
 
-// Una cola: un path de 3 puntos enlazados por punto a b1, b1 y b2, y una pose que dobla b2 y cambia la forma.
+// A tail: a 3-point path bound per point to b1, b1 and b2, and a pose that bends b2 and changes the shape.
 function tail() {
   let doc = op(
     createDocument({}),
@@ -87,22 +87,22 @@ function tail() {
 
 test('una pose que cambia la forma conserva el enlace por punto del montaje', () => {
   const doc = tail();
-  // La pose no guarda bone en sus vértices.
+  // The pose does not store bone in its vertices.
   assert.ok(findObject(doc, 'bend').values.tail.vertices.every((v) => v.bone === undefined));
-  // El tercer punto sigue a b2, que gira 90° en (100, 100): (200, 100) → (100, 200).
+  // The third point follows b2, which turns 90° around (100, 100): (200, 100) → (100, 200).
   assert.match(svgDocument(doc, schema, { pose: 'bend' }), /data-id="tail"><path d="M0 100L100 110L100 200"/);
-  // También en la mezcla, a mitad de camino.
+  // Also in the blend, halfway.
   const withParam = op(doc, { op: 'create', type: 'param', id: 'p' }, { op: 'create', type: 'driver', id: 'd', props: { param: 'p', pose: 'bend' } });
   assert.match(svgDocument(withParam, schema, { params: { p: 1 } }), /data-id="tail"><path d="M0 100L100 110L100 200"/);
 });
 
 test('el bone que una pose vieja guardó en sus vértices se ignora', () => {
   const doc = tail();
-  // Simula un documento de antes: la pose guarda un bone viejo (o que ya no existe) en cada vértice.
+  // Simulates an older document: the pose stores an old bone (or one that no longer exists) in each vertex.
   const old = structuredClone(doc);
   findObject(old, 'bend').values.tail.vertices = findObject(old, 'bend').values.tail.vertices.map((v) => ({ ...v, bone: 'nope' }));
   assert.match(svgDocument(old, schema, { pose: 'bend' }), /data-id="tail"><path d="M0 100L100 110L100 200"/);
-  // Al guardarla de nuevo, se limpia.
+  // When it is saved again, it is cleaned up.
   const clean = op(old, { op: 'set', target: 'bend', props: { values: findObject(old, 'bend').values } });
   assert.ok(findObject(clean, 'bend').values.tail.vertices.every((v) => v.bone === undefined));
 });
@@ -122,12 +122,13 @@ test('la mezcla parte del valor que se ve, con el estilo', () => {
 test('escribir en una pose: el mismo lote para el editor y para set_pose', async () => {
   const { mergePose, opsToSetPose } = await import('../src/core/blend.js');
   const previous = { a: { x: 1, y: 2 }, b: { rotation: 5 } };
-  // Lo que manda el editor: un objeto y sus campos; undefined saca la propiedad y, si no queda nada, el objeto.
+  // What the editor sends: an object and its fields; undefined removes the property and, if nothing is left, the
+  // object.
   assert.deepEqual(mergePose(previous, { a: { x: 3 } }), { a: { x: 3, y: 2 }, b: { rotation: 5 } });
   assert.deepEqual(mergePose(previous, { a: { y: undefined } }), { a: { x: 1 }, b: { rotation: 5 } });
   assert.deepEqual(mergePose(previous, { b: { rotation: undefined } }), { a: { x: 1, y: 2 } });
   assert.deepEqual(mergePose(previous, { c: { opacity: undefined } }), previous);
-  // No toca lo que recibe.
+  // Does not touch what it receives.
   assert.deepEqual(previous, { a: { x: 1, y: 2 }, b: { rotation: 5 } });
   const doc = op(createDocument({}), ...['a', 'b', 'r'].map((id) => ({ op: 'create', type: 'rect', id })), { op: 'create', type: 'pose', id: 'p', props: { values: previous } });
   assert.deepEqual(opsToSetPose(doc, 'p', { r: { x: 4 } }), [{ op: 'set', target: 'p', props: { values: { ...previous, r: { x: 4 } } } }]);
