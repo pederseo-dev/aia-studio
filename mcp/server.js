@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // aia-studio MCP server: lets the AI the user already uses (Claude Desktop, Claude Code, Cursor...)
 // handle the documents. Runs locally over stdio, without API keys. Works on the same files as the editor,
-// so changes show live in the browser.
+// so changes show live in the editor (the desktop app or `npm run dev`).
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { findObject } from '../src/core/document.js';
 import { opsToSetPose } from '../src/core/blend.js';
@@ -20,12 +21,14 @@ import { manifest, manifestText } from '../src/core/manifest.js';
 import { usedAssets, assetMime } from '../src/core/images.js';
 import { imageBytes, addImage, checkDeleted, treeOutline as tree,planBindByProximity, planBindPoints, planReparentBone, planPreview, poseClamps, historySummary, documentText } from './tools.js';
 
+// The same version as the editor: in the desktop app both come from the same package.
+const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const schema = loadSchema();
 const store = createStore({ schema });
 const ORIGIN = 'ai';
 
 const server = new McpServer(
-  { name: 'aia-studio', version: '0.1.0' },
+  { name: 'aia-studio', version: VERSION },
   {
     instructions:
       'aia-studio is a 2D vector animation editor (characters, objects, icons, scenes). Before creating or modifying a document, read get_guide. ' +
@@ -574,7 +577,7 @@ server.registerTool(
 );
 
 // The editor shows "Claude connected" while this process runs (see server/mcpStatus.js).
-const running = markRunning(DOCUMENTS_FOLDER, { version: '0.1.0' });
+const running = markRunning(DOCUMENTS_FOLDER, { version: VERSION });
 server.server.oninitialized = () => running.setClient(server.server.getClientVersion());
 
 await server.connect(new StdioServerTransport());
