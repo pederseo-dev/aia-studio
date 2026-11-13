@@ -17,6 +17,8 @@ import { mountParameters } from './parameters.js';
 import { changeMode, mountClips, mountModes, mountTimeline } from './timeline.js';
 import { mountBanner, mountPoses } from './poses.js';
 import { resetParams } from './live.js';
+import { onServer } from './serverEvents.js';
+import { mountConnectAi, showConnectAi } from './connectAi.js';
 import {
   open, addTab, api, notify, deletedHere, loadDocuments, closeTab, undo, execute, deleteDocument,
   sendPending, schema, state, setState, hasPending, freeId, keepPosition, parentForNew,
@@ -174,6 +176,7 @@ const ACTIONS = {
     }
   },
   shortcuts: () => $('#shortcuts-dialog').showModal(),
+  ai: () => showConnectAi(),
   settings: () => showSettings(),
 };
 
@@ -627,12 +630,6 @@ window.addEventListener('pagehide', sendPending);
 
 // ---------- Changes from outside (the AI through MCP, or another process) ----------
 
-// The server streams what changed on disk (server/events.js) over Server-Sent Events, in `npm run dev` and in the
-// desktop app alike. EventSource reconnects by itself if the server restarts.
-const serverEvents = new EventSource('/api/events');
-/** @param {string} event @param {(data: any) => void} fn */
-const onServer = (event, fn) => serverEvents.addEventListener(event, (e) => fn(JSON.parse(e.data)));
-
 onServer('document', async ({ id }) => {
   // A new document (for example, created by the AI) opens in a tab without taking you away from the current one.
   if (!state.documents.some((d) => d.id === id)) {
@@ -663,6 +660,8 @@ onServer('deleted', async ({ id }) => {
 onServer('history', ({ id }) => id === state.id && refreshHistory());
 
 // ---------- Startup ----------
+
+mountConnectAi();
 
 setState({ tool: 'select', id: null });
 await loadDocuments();

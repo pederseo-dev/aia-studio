@@ -568,3 +568,24 @@ dialog.manifest form { display: flex; justify-content: flex-end; }
 #right-panel #clips > .header { border-top: none; }
 #right-panel .section-puppet .header h2 { color: var(--text); }
 #right-panel .section-puppet { border-bottom: none; }
+
+/* Connect your AI (connectAi.js): header chip and dialog */
+#ai-status { align-self: center; margin-bottom: 6px; border: none; background: none; color: var(--faint); font-size: 12px; white-space: nowrap; padding: 2px 6px; }
+#ai-status:hover { color: var(--text); background: var(--panel-2); }
+#ai-status.on { color: var(--live); }
+dialog.connect-ai { width: min(620px, 92vw); max-height: 88vh; overflow-y: auto; }
+dialog.connect-ai p { margin: 6px 0; line-height: 1.45; }
+dialog.connect-ai .ai-now { color: var(--soft); }
+dialog.connect-ai .ai-now.on { color: var(--live); }
+dialog.connect-ai .ai-client { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
+dialog.connect-ai .ai-client h3 { margin: 0 0 4px; font-size: 13px; }
+dialog.connect-ai .ai-client.unavailable { color: var(--faint); }
+dialog.connect-ai .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+dialog.connect-ai button.main { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+dialog.connect-ai a { color: var(--accent); }
+dialog.connect-ai a.button { display: inline-block; padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel-2); color: var(--text); text-decoration: none; }
+dialog.connect-ai a.button:hover { border-color: var(--accent); }
+dialog.connect-ai .ai-steps { margin: 6px 0; padding-left: 20px; line-height: 1.45; }
+dialog.connect-ai .ai-command { display: flex; gap: 8px; align-items: flex-start; }
+dialog.connect-ai .ai-command code { flex: 1; font: 11px/1.4 ui-monospace, monospace; background: var(--background); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; word-break: break-all; user-select: all; }
+dialog.connect-ai .help { word-break: break-all; }
