@@ -37,6 +37,21 @@ web technology.
 - **Three modes.** **Design** (drawing and rig), **Animate** (scene timelines for export) and **Puppet** (poses,
   params and short clips that an app or its AI triggers live).
 
+## What you can do today
+
+- **Draw:** paths with the pen and point editing, rectangles, ellipses, groups, shared styles, linear and radial
+  gradients, image layers (PNG, JPG, WebP, SVG) and SVG import.
+- **Rig:** skeletons with bones (add, manipulate, reparent), drawing bound by layer or by point, and paths that bend
+  along a chain of bones.
+- **Expressions:** poses, params with drivers that blend them, and switch layers for variants such as mouths.
+- **Animate:** scenes with a timeline, keyframes, named easing curves and loops.
+- **Puppet live:** clips that play as a base or as gestures with fades, automatic layers such as blinking and
+  breathing, and a manifest that tells an app's AI which controls the character has.
+- **Work alongside the AI:** both edit the same files live, with per-side undo and a shared history; layers can be
+  locked so neither touches them by accident.
+
+Not yet: exporting the character for use inside other apps (a JS runtime, video and other formats) is the next step.
+
 ## Getting started
 
 ```bash
@@ -72,6 +87,5 @@ The AI starts with the `get_guide` tool, which explains the format and every too
 
 ## Documentation
 
-- [docs/plan.md](docs/plan.md): build plan, phase by phase, and what is pending.
 - [docs/decision-animacion.md](docs/decision-animacion.md): the Design, Animate and Puppet modes and the clip model.
-- [docs/sintesis.md](docs/sintesis.md): what aia-studio takes from Moho and Rive.
+- [docs/sintesis.md](docs/sintesis.md): what aia-studio takes from Moho and Rive (research in `docs/investigacion/`).
