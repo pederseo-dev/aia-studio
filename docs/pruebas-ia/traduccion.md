@@ -79,5 +79,7 @@ rotation was more than 180° from the setup, which caught a wrong angle in `idle
 1. `"Untitled"` as the `meta.name` default (commit 891aeaf).
 2. `set_keys` rejects a malformed relative value with `"-=-140" is not a relative value: write "+=n" or "-=n" with a
    positive number n (for example "+=140" or "-=140")`, with a test (commit 70de2bb).
+3. `localTime` wraps with `t % d` and adds `d` only for a negative `t`, so a frame at a keyframe time shows that
+   keyframe in `loop` and `pingpong` clips, with a test.
 
-**Pending:** the loop-time rounding bug (3), a per-track / per-object history summary (4), and the smaller points in 5.
+**Pending:** a per-track / per-object history summary (4), and the smaller points in 5.

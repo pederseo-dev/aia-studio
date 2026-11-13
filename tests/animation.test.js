@@ -49,6 +49,12 @@ test('local time by loop: once, loop and pingpong', () => {
   assert.equal(localTime(schema, clip('pingpong'), 3), 1);
   assert.equal(localTime(schema, clip('pingpong'), 2.5), 1.5);
   assert.equal(localTime(schema, clip('pingpong'), 4.5), 0.5);
+  // Exactly at a keyframe time inside the first cycle: no rounding (0.2 in a 1.2 s loop stays 0.2, not 0.19999…).
+  const short = { type: 'animation', duration: 1.2, loop: 'loop' };
+  assert.equal(localTime(schema, short, 0.2), 0.2);
+  assert.equal(trackValue([{ t: 0, value: 'rest' }, { t: 0.2, value: 'a' }, { t: 1.2, value: 'rest' }], localTime(schema, short, 0.2), 'discreto'), 'a');
+  assert.equal(localTime(schema, { ...short, loop: 'pingpong' }, 0.2), 0.2);
+  assert.equal(localTime(schema, short, -0.2), 1);
 });
 
 test('value of a track: before the first, between keyframes, after the last and step', () => {

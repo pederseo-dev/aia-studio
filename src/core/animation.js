@@ -22,12 +22,18 @@ export function localTime(schema, clip, t) {
   const d = read(schema, clip, 'duration');
   const mode = read(schema, clip, 'loop');
   if (!(d > 0) || !Number.isFinite(t)) return 0;
+  // `t % d` alone, and `+ d` only for a negative t: `((t % d) + d) % d` loses precision (0.2 in 1.2 gives
+  // 0.19999…) and a frame exactly at a keyframe would show the previous one.
+  const wrap = (/** @type {number} */ x, /** @type {number} */ m) => {
+    const r = x % m;
+    return r < 0 ? r + m : r;
+  };
   if (mode === 'loop') {
-    const r = ((t % d) + d) % d;
+    const r = wrap(t, d);
     return r === 0 && t > 0 ? d : r;
   }
   if (mode === 'pingpong') {
-    const cycle = ((t % (2 * d)) + 2 * d) % (2 * d);
+    const cycle = wrap(t, 2 * d);
     return cycle <= d ? cycle : 2 * d - cycle;
   }
   return Math.max(0, Math.min(d, t));
