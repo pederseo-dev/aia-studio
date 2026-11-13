@@ -11,7 +11,7 @@ const STRUCTURE = new Set(['id', 'type', 'parent']);
 
 /** Why a new id is not valid (null if it is). */
 export function idError(id) {
-  if (!ID.test(id ?? '')) return `id inválido "${id}": usa minúsculas, números y _, empezando con letra`;
+  if (!ID.test(id ?? '')) return `invalid id "${id}": use lowercase letters, digits and _, starting with a letter`;
   if (RESERVED_IDS.has(id)) return `"${id}" is a reserved id (target "meta" means the document's properties); choose another one`;
   return null;
 }
@@ -70,14 +70,14 @@ export function bonesOf(doc, skeletonId) {
 export function bindingError(doc, objId, boneId, owner) {
   const bone = findObject(doc, boneId);
   const all = doc.objects.filter((h) => h.type === 'bone').map((h) => h.id);
-  if (!bone) return `${owner}: no existe el hueso "${boneId}".${suggest(boneId, all)}`;
-  if (bone.type !== 'bone') return `${owner}: "${boneId}" es un ${bone.type}, no un hueso`;
+  if (!bone) return `${owner}: bone "${boneId}" does not exist.${suggest(boneId, all)}`;
+  if (bone.type !== 'bone') return `${owner}: "${boneId}" is a ${bone.type}, not a bone`;
   const own = skeletonOf(doc, objId);
   const fromBone = skeletonOf(doc, boneId);
   if (own === fromBone) return null;
-  if (!own) return `${owner}: "${boneId}" es un hueso del skeleton "${fromBone}" y ${objId} no está dentro de ningún skeleton. Un objeto solo se enlaza a huesos de su skeleton: mételo dentro de "${fromBone}" (move) o quita el enlace.`;
+  if (!own) return `${owner}: "${boneId}" is a bone of skeleton "${fromBone}" and ${objId} is not inside any skeleton. An object can only be bound to bones of its own skeleton: put it inside "${fromBone}" (move) or remove the binding.`;
   const ownBones = bonesOf(doc, own).map((h) => h.id);
-  return `${owner}: "${boneId}" es un hueso del skeleton "${fromBone}", pero ${objId} está en el skeleton "${own}" y solo puede enlazarse a sus huesos: ${ownBones.join(', ') || 'todavía no tiene'}.${suggest(boneId, ownBones)}`;
+  return `${owner}: "${boneId}" is a bone of skeleton "${fromBone}", but ${objId} is in skeleton "${own}" and can only be bound to its bones: ${ownBones.join(', ') || 'it has none yet'}.${suggest(boneId, ownBones)}`;
 }
 
 /** Properties that are not structural (id, type, parent). */
@@ -93,9 +93,9 @@ export function savedProperties(obj) {
 export function validate(doc, schema) {
   const errors = [];
   const warnings = [];
-  if (doc?.format !== FORMAT) errors.push(`format debe ser "${FORMAT}"`);
-  if (!doc?.meta || typeof doc.meta !== 'object') errors.push('falta meta');
-  if (!Array.isArray(doc?.objects)) errors.push('falta la lista objects');
+  if (doc?.format !== FORMAT) errors.push(`format must be "${FORMAT}"`);
+  if (!doc?.meta || typeof doc.meta !== 'object') errors.push('meta is missing');
+  if (!Array.isArray(doc?.objects)) errors.push('the objects list is missing');
   if (errors.length) return { errors, warnings };
 
   checkProperties('meta', doc.meta, Object.keys(doc.meta), schema.meta, errors, warnings);
@@ -106,29 +106,29 @@ export function validate(doc, schema) {
       errors.push(idError(o?.id));
       continue;
     }
-    if (ids.has(o.id)) errors.push(`id repetido "${o.id}"`);
+    if (ids.has(o.id)) errors.push(`repeated id "${o.id}"`);
     ids.add(o.id);
   }
 
   for (const o of doc.objects) {
     const kind = schema.types.get(o.type);
     if (!kind) {
-      errors.push(`${o.id}: tipo desconocido "${o.type}".${suggest(o.type, schema.types.keys())} Tipos: ${[...schema.types.keys()].join(', ')}`);
+      errors.push(`${o.id}: unknown type "${o.type}".${suggest(o.type, schema.types.keys())} Types: ${[...schema.types.keys()].join(', ')}`);
       continue;
     }
-    if (kind.resource && o.parent != null) errors.push(`${o.id}: es un recurso (${o.type}) y va en la raíz (parent: null)`);
+    if (kind.resource && o.parent != null) errors.push(`${o.id}: it is an asset (${o.type}) and goes at the root (parent: null)`);
     else if (o.parent == null && kind.requiresParent) {
       const skeletons = doc.objects.filter((x) => x.type === 'skeleton').map((x) => x.id);
-      const track = skeletons.length ? ` Esqueletos del documento: ${skeletons.join(', ')}.` : ' Crea primero un skeleton (la capa de huesos, que también contiene el dibujo que mueve) y pon el hueso adentro.';
-      errors.push(`${o.id}: un ${o.type} no puede estar en la raíz: va dentro de ${kind.parentTypes.join(' o ')}.${track} (Los documentos de antes de los skeleton se convierten con npm run migrar.)`);
+      const track = skeletons.length ? ` Skeletons in the document: ${skeletons.join(', ')}.` : ' First create a skeleton (the bone layer, which also contains the drawing it moves) and put the bone inside it.';
+      errors.push(`${o.id}: a ${o.type} cannot be at the root: it goes inside ${kind.parentTypes.join(' or ')}.${track} (Documents from before skeletons are converted with npm run migrate.)`);
     } else if (o.parent != null) {
       const parent = findObject(doc, o.parent);
-      if (!parent) errors.push(`${o.id}: el padre "${o.parent}" no existe.${suggest(o.parent, ids)}`);
-      else if (!schema.types.get(parent.type)?.container) errors.push(`${o.id}: su padre "${o.parent}" es un ${parent.type} y no puede tener hijos (usa un group)`);
-      else if (kind.parentTypes && !kind.parentTypes.includes(parent.type)) errors.push(`${o.id}: un ${o.type} solo puede estar ${kind.requiresParent ? '' : 'en la raíz o '}dentro de ${kind.parentTypes.join(' o ')} (su padre "${o.parent}" es un ${parent.type})`);
+      if (!parent) errors.push(`${o.id}: parent "${o.parent}" does not exist.${suggest(o.parent, ids)}`);
+      else if (!schema.types.get(parent.type)?.container) errors.push(`${o.id}: its parent "${o.parent}" is a ${parent.type} and cannot have children (use a group)`);
+      else if (kind.parentTypes && !kind.parentTypes.includes(parent.type)) errors.push(`${o.id}: a ${o.type} can only be ${kind.requiresParent ? '' : 'at the root or '}inside ${kind.parentTypes.join(' or ')} (its parent "${o.parent}" is a ${parent.type})`);
       else if (schema.types.get(parent.type).childTypes && !schema.types.get(parent.type).childTypes.includes(o.type)) {
-        const track = parent.type === 'bone' ? `; el dibujo va dentro del skeleton (${skeletonOf(doc, parent.id) ?? 'el de ese hueso'}), no dentro del hueso: ponlo ahí y enlázalo con la propiedad bone` : '';
-        errors.push(`${o.id}: un ${parent.type} solo puede tener hijos ${schema.types.get(parent.type).childTypes.join(' o ')} y "${o.id}" es un ${o.type}${track}`);
+        const track = parent.type === 'bone' ? `; the drawing goes inside the skeleton (${skeletonOf(doc, parent.id) ?? 'the one of that bone'}), not inside the bone: put it there and bind it with the bone property` : '';
+        errors.push(`${o.id}: a ${parent.type} can only have ${schema.types.get(parent.type).childTypes.join(' or ')} children and "${o.id}" is a ${o.type}${track}`);
       }
     }
     checkProperties(o.id, o, savedProperties(o), kind, errors, warnings);
@@ -152,14 +152,14 @@ export function validate(doc, schema) {
       for (const [id, fields] of Object.entries(o[prop])) {
         const target = findObject(doc, id);
         if (!target) {
-          errors.push(`${o.id}.${prop}: no existe el objeto "${id}".${suggest(id, ids)}`);
+          errors.push(`${o.id}.${prop}: object "${id}" does not exist.${suggest(id, ids)}`);
           continue;
         }
         const props = schema.types.get(target.type)?.properties ?? {};
         const animatable = Object.keys(props).filter((k) => props[k].animatable);
         for (const [k, v] of Object.entries(fields ?? {})) {
           if (!props[k]?.animatable) {
-            errors.push(`${o.id}.${prop}.${id}.${k}: ${target.type} no tiene "${k}" animable. Animables: ${animatable.join(', ')}.${suggest(k, animatable)}`);
+            errors.push(`${o.id}.${prop}.${id}.${k}: ${target.type} has no animatable "${k}". Animatable: ${animatable.join(', ')}.${suggest(k, animatable)}`);
             continue;
           }
           const error = validateValue(props[k], v);
@@ -207,7 +207,7 @@ export function validate(doc, schema) {
     const seen = new Set([o.id]);
     for (let p = findObject(doc, o.parent); p; p = findObject(doc, p.parent)) {
       if (seen.has(p.id)) {
-        errors.push(`ciclo de padres: ${[...seen].join(' → ')} → ${p.id}`);
+        errors.push(`parent cycle: ${[...seen].join(' → ')} → ${p.id}`);
         break;
       }
       seen.add(p.id);
@@ -247,8 +247,8 @@ function referenceErrors(doc, o, prop, p, value, owner, { pose: poseId = null, c
     return error ? [error] : [];
   }
   const referenced = findObject(doc, value);
-  if (!referenced) return [`${owner}.${prop}: el objeto "${value}" no existe.${suggest(value, doc.objects.map((x) => x.id))}`];
-  if (p.refTypes && !p.refTypes.includes(referenced.type)) return [`${owner}.${prop}: "${value}" es un ${referenced.type}; se esperaba ${p.refTypes.join(' o ')}`];
+  if (!referenced) return [`${owner}.${prop}: object "${value}" does not exist.${suggest(value, doc.objects.map((x) => x.id))}`];
+  if (p.refTypes && !p.refTypes.includes(referenced.type)) return [`${owner}.${prop}: "${value}" is a ${referenced.type}; expected ${p.refTypes.join(' or ')}`];
   if (p.refScope === 'children' && referenced.parent !== o.id) {
     const children = doc.objects.filter((x) => x.parent === o.id).map((x) => x.id);
     // The most common case: taking out of the switch a variant that a pose picks. The message says how to proceed.
@@ -309,7 +309,7 @@ function checkProperties(owner, obj, props, kind, errors, warnings) {
   for (const prop of props) {
     const p = kind.properties[prop];
     if (!p) {
-      warnings.push(`${owner}: propiedad desconocida "${prop}" en ${kind.name} (se conserva).${suggest(prop, Object.keys(kind.properties))}`);
+      warnings.push(`${owner}: unknown property "${prop}" in ${kind.name} (kept).${suggest(prop, Object.keys(kind.properties))}`);
       continue;
     }
     const error = validateValue(p, obj[prop]);

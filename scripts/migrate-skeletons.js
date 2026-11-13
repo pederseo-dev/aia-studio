@@ -28,7 +28,7 @@ for (const id of ids) {
   }
   const { doc: migrated, changes } = migrateToSkeletons(doc, schema);
   if (!changes.length) {
-    console.log(`${id}: nada que migrar`);
+    console.log(`${id}: nothing to migrate`);
     continue;
   }
   await fs.writeFile(file + '.tmp', JSON.stringify(migrated, null, 2) + '\n');

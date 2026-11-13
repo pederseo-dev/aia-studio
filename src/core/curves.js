@@ -25,13 +25,13 @@ export const CURVE_NAMES = [...Object.keys(NAMED_CURVES), 'step'];
 
 /** What each curve does, for the AI guide (one line per family). */
 export const CURVE_DESCRIPTIONS = [
-  ['linear', 'velocidad pareja (por defecto)'],
-  ['step', 'se mantiene y cambia de golpe en el keyframe siguiente'],
-  ['ease-in, ease-out, ease-in-out', 'suaves: arranca despacio, frena al llegar o las dos cosas'],
-  ['ease-in-quad, ease-out-quad, ease-in-out-quad', 'un poco más marcadas que las suaves'],
-  ['ease-in-cubic, ease-out-cubic, ease-in-out-cubic', 'marcadas: un arranque o un frenado que se nota'],
-  ['ease-in-expo, ease-out-expo, ease-in-out-expo', 'muy fuertes: casi quieto y después de golpe (ease-in-expo = «vuelve de golpe» al final), o un golpe que frena en seco (ease-out-expo)'],
-  ['ease-in-back, ease-out-back, ease-in-out-back', 'se pasan: ease-in-back toma impulso hacia atrás antes de salir; ease-out-back se pasa del valor y vuelve (un rebote corto)'],
+  ['linear', 'even speed (the default)'],
+  ['step', 'holds, then jumps at the next keyframe'],
+  ['ease-in, ease-out, ease-in-out', 'gentle: starts slowly, slows down on arrival, or both'],
+  ['ease-in-quad, ease-out-quad, ease-in-out-quad', 'a bit stronger than the gentle ones'],
+  ['ease-in-cubic, ease-out-cubic, ease-in-out-cubic', 'strong: a noticeable start or stop'],
+  ['ease-in-expo, ease-out-expo, ease-in-out-expo', 'very strong: almost still, then all at once (ease-in-expo = "snaps back" at the end), or a burst that stops dead (ease-out-expo)'],
+  ['ease-in-back, ease-out-back, ease-in-out-back', 'overshoot: ease-in-back winds up backwards before leaving; ease-out-back goes past the value and comes back (a short bounce)'],
 ];
 
 /**

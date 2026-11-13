@@ -130,14 +130,14 @@ export function parseD(d) {
   const number = () => {
     skip();
     const m = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/.exec(text.slice(i));
-    if (!m) throw new Error(`d inválido: se esperaba un número en la posición ${i}`);
+    if (!m) throw new Error(`invalid d: expected a number at position ${i}`);
     i += m[0].length;
     return Number(m[0]);
   };
   const flag = () => {
     skip();
     const c = text[i++];
-    if (c !== '0' && c !== '1') throw new Error(`d inválido: bandera de arco "${c}" en la posición ${i - 1}`);
+    if (c !== '0' && c !== '1') throw new Error(`invalid d: arc flag "${c}" at position ${i - 1} (must be 0 or 1)`);
     return c === '1';
   };
   const subpaths = [];
@@ -173,7 +173,7 @@ export function parseD(d) {
     let command = text[i];
     if (/[a-zA-Z]/.test(command)) i++;
     else if (lastCommand && lastCommand.toUpperCase() !== 'Z') command = lastCommand === 'M' ? 'L' : lastCommand === 'm' ? 'l' : lastCommand;
-    else throw new Error(`d inválido: comando esperado en la posición ${i}`);
+    else throw new Error(`invalid d: expected a command at position ${i}`);
     const rel = command === command.toLowerCase();
     const C = command.toUpperCase();
     const abs = (x, y) => (rel ? [pos[0] + x, pos[1] + y] : [x, y]);
@@ -250,7 +250,7 @@ export function parseD(d) {
         break;
       }
       default:
-        throw new Error(`d inválido: comando desconocido "${command}"`);
+        throw new Error(`invalid d: unknown command "${command}"`);
     }
     lastControl = control;
     // If numbers follow without a letter, this command repeats (a repeated M is L).
@@ -388,18 +388,18 @@ export function splitSpan(vertices, i, t) {
 
 /** Errors of a vertex (empty list if it is fine). */
 export function vertexErrors(v) {
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return ['debe ser un objeto { x, y, ... }'];
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return ['must be an object { x, y, ... }'];
   const mode = v.mode ?? 'straight';
-  if (!MODES.includes(mode)) return [`mode debe ser ${MODES.join(', ')}`];
+  if (!MODES.includes(mode)) return [`mode must be ${MODES.join(', ')}`];
   const errors = [];
   const fields = VERTEX_FIELDS[mode];
   // `bone` (per-point binding) is valid in any mode; whether the bone exists is checked by the document.
-  for (const k of Object.keys(v)) if (k !== 'bone' && !fields.includes(k)) errors.push(`campo "${k}" no va en un vértice ${mode} (campos: ${fields.join(', ')}, y bone)`);
-  if (v.bone !== undefined && (typeof v.bone !== 'string' || !v.bone)) errors.push('bone debe ser el id de un hueso');
+  for (const k of Object.keys(v)) if (k !== 'bone' && !fields.includes(k)) errors.push(`field "${k}" does not belong in a ${mode} vertex (fields: ${fields.join(', ')}, and bone)`);
+  if (v.bone !== undefined && (typeof v.bone !== 'string' || !v.bone)) errors.push('bone must be the id of a bone');
   for (const k of fields) {
     if (k === 'mode' || (k === 'radius' && v.radius === undefined)) continue;
-    if (typeof v[k] !== 'number' || !Number.isFinite(v[k])) errors.push(`falta ${k} (número)`);
-    else if (/Dist$|^dist$|^radius$/.test(k) && v[k] < 0) errors.push(`${k} no puede ser negativo`);
+    if (typeof v[k] !== 'number' || !Number.isFinite(v[k])) errors.push(`${k} is missing (number)`);
+    else if (/Dist$|^dist$|^radius$/.test(k) && v[k] < 0) errors.push(`${k} cannot be negative`);
   }
   return errors;
 }

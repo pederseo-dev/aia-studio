@@ -27,14 +27,14 @@ const STRUCTURE = new Set(['id', 'type', 'parent']);
  * Returns the new document, the inverse operations (for undo) and the new warnings.
  */
 export function applyOperations(doc, ops, schema) {
-  if (!Array.isArray(ops) || !ops.length) throw new Error('Se necesita una lista de operaciones no vacía');
+  if (!Array.isArray(ops) || !ops.length) throw new Error('A non-empty list of operations is needed');
   const next = structuredClone(doc);
   const inverses = [];
   ops.forEach((op, i) => {
     try {
       inverses.unshift(...applyOne(next, op, schema));
     } catch (e) {
-      throw new Error(`Operación ${i + 1} (${op?.op}): ${e.message}`);
+      throw new Error(`Operation ${i + 1} (${op?.op}): ${e.message}`);
     }
   });
   const { errors, warnings } = validate(next, schema);
@@ -57,17 +57,17 @@ export function compact(ops) {
   return result;
 }
 
-/** Short summary of a batch for display: "head.x, head.rotation, crear eye_l". */
+/** Short summary of a batch for display: "head.x, head.rotation, create eye_l". */
 export function summarizeOperations(ops) {
   const parts = [];
   for (const op of ops) {
     if (op.op === 'set') parts.push(...Object.keys(op.props).map((p) => `${op.target}.${p}`));
-    else if (op.op === 'unset') parts.push(...op.props.map((p) => `${op.target}.${p} (por defecto)`));
-    else if (op.op === 'create') parts.push(`crear ${op.id}`);
-    else if (op.op === 'rename') parts.push(`renombrar ${op.target} → ${op.id}`);
-    else if (op.op === 'duplicate') parts.push(`duplicar ${op.target}`);
-    else if (op.op === 'delete') parts.push(`borrar ${op.target}`);
-    else if (op.op === 'move') parts.push(`mover ${op.target}`);
+    else if (op.op === 'unset') parts.push(...op.props.map((p) => `${op.target}.${p} (default)`));
+    else if (op.op === 'create') parts.push(`create ${op.id}`);
+    else if (op.op === 'rename') parts.push(`rename ${op.target} → ${op.id}`);
+    else if (op.op === 'duplicate') parts.push(`duplicate ${op.target}`);
+    else if (op.op === 'delete') parts.push(`delete ${op.target}`);
+    else if (op.op === 'move') parts.push(`move ${op.target}`);
     else parts.push(op.op);
   }
   return [...new Set(parts)];
@@ -75,14 +75,14 @@ export function summarizeOperations(ops) {
 
 function target(doc, id) {
   const obj = findObject(doc, id);
-  if (!obj) throw new Error(`no existe el objeto "${id}".${suggest(id, doc.objects.map((o) => o.id))}`);
+  if (!obj) throw new Error(`object "${id}" does not exist.${suggest(id, doc.objects.map((o) => o.id))}`);
   return obj;
 }
 
 function container(doc, id, schema) {
   if (id == null) return null;
   const parent = target(doc, id);
-  if (!schema.types.get(parent.type)?.container) throw new Error(`"${id}" es un ${parent.type} y no puede tener hijos (usa un group)`);
+  if (!schema.types.get(parent.type)?.container) throw new Error(`"${id}" is a ${parent.type} and cannot have children (use a group)`);
   return id;
 }
 
@@ -111,9 +111,9 @@ function insert(doc, obj, parent, index) {
 /** Sugar for the AI: a path accepts `d` (SVG path data with a single subpath) and is saved as vertices. */
 function expandD(kind, props) {
   if (props?.d === undefined) return props;
-  if (!kind?.properties.vertices) throw new Error(`"d" solo sirve en tipos con vértices (path), no en ${kind?.name ?? 'meta'}`);
+  if (!kind?.properties.vertices) throw new Error(`"d" only works on types with vertices (path), not on ${kind?.name ?? 'meta'}`);
   const subpaths = parseD(props.d);
-  if (subpaths.length !== 1) throw new Error(`d tiene ${subpaths.length} subtrazados; crea un path por cada uno`);
+  if (subpaths.length !== 1) throw new Error(`d has ${subpaths.length} subpaths; create one path for each`);
   const { d, ...rest } = props;
   return { closed: subpaths[0].closed, ...rest, vertices: subpaths[0].vertices };
 }
@@ -218,15 +218,15 @@ function expandTracks(doc, schema, kind, props) {
 /** Sugar for the AI: a bone accepts `from` and `to` ([x, y] in the document) instead of x, y, rotation and length. */
 function expandBone(doc, schema, kind, parent, props, current) {
   if (props?.from === undefined && props?.to === undefined) return props;
-  if (kind !== 'bone') throw new Error(`"from"/"to" solo sirven en huesos (bone), no en ${kind}`);
+  if (kind !== 'bone') throw new Error(`"from"/"to" only work on bones (bone), not on ${kind}`);
   return expandFromTo(doc, schema, parent, props, current);
 }
 
 function checkProps(props) {
-  if (!props || typeof props !== 'object' || Array.isArray(props)) throw new Error('props debe ser un objeto { propiedad: valor }');
+  if (!props || typeof props !== 'object' || Array.isArray(props)) throw new Error('props must be an object { property: value }');
   for (const [k, v] of Object.entries(props)) {
-    if (STRUCTURE.has(k)) throw new Error(`"${k}" no se cambia con props (usa ${k === 'parent' ? 'move' : k === 'id' ? 'rename' : 'delete y create'})`);
-    if (v === undefined) throw new Error(`falta el valor de "${k}"`);
+    if (STRUCTURE.has(k)) throw new Error(`"${k}" cannot be changed with props (use ${k === 'parent' ? 'move' : k === 'id' ? 'rename' : 'delete and create'})`);
+    if (v === undefined) throw new Error(`the value of "${k}" is missing`);
   }
 }
 
@@ -234,13 +234,13 @@ function applyOne(doc, op, schema) {
   switch (op?.op) {
     case 'create': {
       const kind = schema.types.get(op.type);
-      if (!kind) throw new Error(`tipo desconocido "${op.type}".${suggest(op.type, schema.types.keys())} Tipos: ${[...schema.types.keys()].join(', ')}`);
+      if (!kind) throw new Error(`unknown type "${op.type}".${suggest(op.type, schema.types.keys())} Types: ${[...schema.types.keys()].join(', ')}`);
       if (idError(op.id)) throw new Error(idError(op.id));
       const repeated = findObject(doc, op.id);
       if (repeated) {
         // Ids are unique across the whole document: drawing, bones and assets share the namespace.
-        const track = op.type === 'bone' && repeated.type !== 'bone' ? ` Para huesos conviene el sufijo _bone: "${op.id}_bone".` : '';
-        throw new Error(`ya existe un objeto "${op.id}" (${repeated.type}).${track}`);
+        const track = op.type === 'bone' && repeated.type !== 'bone' ? ` For bones, use the _bone suffix: "${op.id}_bone".` : '';
+        throw new Error(`an object "${op.id}" already exists (${repeated.type}).${track}`);
       }
       const parent = container(doc, op.parent, schema);
       if (op.props !== undefined) checkProps(op.props);
@@ -267,11 +267,11 @@ function applyOne(doc, op, schema) {
     }
 
     case 'unset': {
-      if (!Array.isArray(op.props)) throw new Error('props debe ser una lista de nombres de propiedad');
+      if (!Array.isArray(op.props)) throw new Error('props must be a list of property names');
       const obj = op.target === 'meta' ? doc.meta : target(doc, op.target);
       const previous = {};
       for (const k of op.props) {
-        if (STRUCTURE.has(k)) throw new Error(`"${k}" no se puede quitar`);
+        if (STRUCTURE.has(k)) throw new Error(`"${k}" cannot be removed`);
         if (k in obj) {
           previous[k] = obj[k];
           delete obj[k];
@@ -321,7 +321,7 @@ function applyOne(doc, op, schema) {
       const previousParent = obj.parent ?? null;
       const previousIndex = children(doc, previousParent).indexOf(obj);
       const parent = 'parent' in op ? container(doc, op.parent, schema) : previousParent;
-      if (parent != null && subtree(doc, obj.id).includes(parent)) throw new Error(`"${obj.id}" no puede quedar dentro de sí mismo o de un descendiente`);
+      if (parent != null && subtree(doc, obj.id).includes(parent)) throw new Error(`"${obj.id}" cannot end up inside itself or one of its descendants`);
       let position = null;
       if (op.keepPosition && parent !== previousParent) {
         if (obj.type === 'bone') throw new Error('keepPosition does not apply to bones: use reparent_bone, which keeps the bone in place');
@@ -356,7 +356,7 @@ function applyOne(doc, op, schema) {
     case 'rename': {
       const obj = target(doc, op.target);
       if (idError(op.id)) throw new Error(idError(op.id));
-      if (findObject(doc, op.id)) throw new Error(`ya existe un objeto "${op.id}"`);
+      if (findObject(doc, op.id)) throw new Error(`an object "${op.id}" already exists`);
       const previous = obj.id;
       obj.id = op.id;
       for (const o of doc.objects) {
@@ -375,12 +375,12 @@ function applyOne(doc, op, schema) {
     case 'duplicate': {
       const original = target(doc, op.target);
       const suffix = op.suffix ?? 'copy';
-      if (!/^[a-z0-9_]+$/.test(suffix)) throw new Error(`suffix inválido "${suffix}": minúsculas, números y _`);
+      if (!/^[a-z0-9_]+$/.test(suffix)) throw new Error(`invalid suffix "${suffix}": use lowercase letters, digits and _`);
       const ids = subtree(doc, original.id);
       const map = new Map(ids.map((id) => [id, id === original.id && op.id ? op.id : `${id}_${suffix}`]));
       for (const created of map.values()) {
         if (idError(created)) throw new Error(idError(created));
-        if (findObject(doc, created)) throw new Error(`ya existe un objeto "${created}"; elige otro id o suffix`);
+        if (findObject(doc, created)) throw new Error(`an object "${created}" already exists; choose another id or suffix`);
       }
       const originalParent = original.parent ?? null;
       const parent = 'parent' in op ? container(doc, op.parent, schema) : originalParent;
@@ -411,6 +411,6 @@ function applyOne(doc, op, schema) {
     }
 
     default:
-      throw new Error(`operación desconocida "${op?.op}". Usa create, set, unset, delete, move, rename o duplicate`);
+      throw new Error(`unknown operation "${op?.op}". Use create, set, unset, delete, move, rename or duplicate`);
   }
 }

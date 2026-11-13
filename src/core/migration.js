@@ -80,7 +80,7 @@ export function migrateToSkeletons(original, schema) {
   doc.objects.splice(last + 1, 0, ...sorted);
 
   const { errors } = validate(doc, schema);
-  if (errors.length) throw new Error(`la migración dejó el documento inválido:\n${errors.join('\n')}`);
+  if (errors.length) throw new Error(`the migration left the document invalid:\n${errors.join('\n')}`);
   return { doc, changes };
 }
 

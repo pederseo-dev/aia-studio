@@ -10,7 +10,7 @@ export const FORMAT = 'aia/0.1';
  * - Time in seconds. The document fps only serve to show frames and for snapping.
  */
 export const CONVENTIONS = {
-  axisY: 'abajo',
-  angles: 'grados-horario',
-  time: 'segundos',
+  axisY: 'down',
+  angles: 'degrees-clockwise',
+  time: 'seconds',
 };

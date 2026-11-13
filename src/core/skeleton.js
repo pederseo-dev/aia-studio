@@ -152,14 +152,14 @@ const nearest = (segments, p) =>
 export function distributeBetweenBones(doc, schema, pathId, ids = null) {
   const path = findObject(doc, pathId);
   const skeleton = skeletonOf(doc, pathId);
-  if (!skeleton) throw new Error(`"${pathId}" no está dentro de un skeleton: el enlace por punto usa los huesos del skeleton que lo contiene`);
+  if (!skeleton) throw new Error(`"${pathId}" is not inside a skeleton: per-point binding uses the bones of the skeleton that contains it`);
   const own = bonesOf(doc, skeleton);
   if (ids) {
     const foreign = ids.filter((id) => !own.some((h) => h.id === id));
-    if (foreign.length) throw new Error(`${foreign.join(', ')} no ${foreign.length > 1 ? 'son huesos' : 'es un hueso'} del skeleton "${skeleton}". Sus huesos: ${own.map((h) => h.id).join(', ') || 'ninguno'}`);
+    if (foreign.length) throw new Error(`${foreign.join(', ')} ${foreign.length > 1 ? 'are not bones' : 'is not a bone'} of skeleton "${skeleton}". Its bones: ${own.map((h) => h.id).join(', ') || 'none'}`);
   }
   const bones = ids ? own.filter((h) => ids.includes(h.id)) : own;
-  if (!bones.length) throw new Error(`el skeleton "${skeleton}" no tiene huesos`);
+  if (!bones.length) throw new Error(`skeleton "${skeleton}" has no bones`);
   const { rest } = evaluateSkeleton(doc, schema);
   const segments = bones.map((h) => segment(schema, h, rest));
   const world = worldMatrix(doc, schema, pathId);
@@ -216,9 +216,9 @@ function insideOf(doc, id, ancestor) {
  */
 export function bindingsByProximity(doc, schema, skeletonId) {
   const skeleton = findObject(doc, skeletonId);
-  if (skeleton?.type !== 'skeleton') throw new Error(`"${skeletonId}" no es un skeleton`);
+  if (skeleton?.type !== 'skeleton') throw new Error(`"${skeletonId}" is not a skeleton`);
   const bones = bonesOf(doc, skeletonId);
-  if (!bones.length) throw new Error(`el skeleton "${skeletonId}" no tiene huesos: créalos antes de enlazar`);
+  if (!bones.length) throw new Error(`skeleton "${skeletonId}" has no bones: create them before binding`);
   const { rest } = evaluateSkeleton(doc, schema);
   const segments = bones.map((h) => segment(schema, h, rest));
   const byPoint = (o) => o.vertices?.some((v) => v.bone);
@@ -291,14 +291,14 @@ function valuesFromWorld(world, frame, independent) {
  */
 export function opsToReparent(doc, schema, boneId, parentId) {
   const bone = findObject(doc, boneId);
-  if (bone?.type !== 'bone') throw new Error(`"${boneId}" no es un hueso`);
+  if (bone?.type !== 'bone') throw new Error(`"${boneId}" is not a bone`);
   const parent = findObject(doc, parentId);
-  if (parent?.type !== 'bone' && parent?.type !== 'skeleton') throw new Error(`"${parentId}" no es un hueso ni un skeleton`);
+  if (parent?.type !== 'bone' && parent?.type !== 'skeleton') throw new Error(`"${parentId}" is neither a bone nor a skeleton`);
   const skeleton = skeletonOf(doc, boneId);
   const target = parent.type === 'skeleton' ? parent.id : skeletonOf(doc, parent.id);
-  if (target !== skeleton) throw new Error(`"${parentId}" es de otro skeleton (${target}); un hueso solo cambia de padre dentro de "${skeleton}"`);
-  if (parent.type === 'bone' && insideOf(doc, parentId, boneId)) throw new Error(`"${parentId}" cuelga de "${boneId}": un hueso no puede ser hijo de su descendiente`);
-  if (parentId === boneId) throw new Error('un hueso no puede ser su propio padre');
+  if (target !== skeleton) throw new Error(`"${parentId}" belongs to another skeleton (${target}); a bone can only change parent within "${skeleton}"`);
+  if (parent.type === 'bone' && insideOf(doc, parentId, boneId)) throw new Error(`"${parentId}" hangs from "${boneId}": a bone cannot be a child of its own descendant`);
+  if (parentId === boneId) throw new Error('a bone cannot be its own parent');
   if ((bone.parent ?? null) === parentId) return [];
 
   const { rest } = evaluateSkeleton(doc, schema);
@@ -311,7 +311,7 @@ export function opsToReparent(doc, schema, boneId, parentId) {
   const setup = boneValues(schema, bone, null);
   const convert = (values) => {
     const created = valuesFromWorld(worldFromValues(values, oldFrame, oldIndep), newFrame, newIndep);
-    if (!created) throw new Error(`no se puede colgar "${boneId}" de "${parentId}" sin deformarlo (su marco tiene escala desigual con giro)`);
+    if (!created) throw new Error(`cannot hang "${boneId}" from "${parentId}" without deforming it (its frame has non-uniform scale with rotation)`);
     return created;
   };
   const created = convert(setup);
@@ -343,13 +343,13 @@ export function expandFromTo(doc, schema, parentId, props, current = {}) {
   /** @returns {import('./types.js').Point} */
   const point = (name) => {
     const p = props[name];
-    if (!Array.isArray(p) || p.length !== 2 || !p.every((n) => typeof n === 'number' && Number.isFinite(n))) throw new Error(`${name} debe ser [x, y] en coordenadas del documento`);
+    if (!Array.isArray(p) || p.length !== 2 || !p.every((n) => typeof n === 'number' && Number.isFinite(n))) throw new Error(`${name} must be [x, y] in document coordinates`);
     return [p[0], p[1]];
   };
   const { from, to, ...rest } = props;
   const values = { ...current, ...rest };
   const parentObj = parentId && findObject(doc, parentId);
-  if (parentObj && parentObj.type !== 'bone' && parentObj.type !== 'skeleton') throw new Error(`"${parentId}" es un ${parentObj.type}: un hueso va dentro de un skeleton o de otro bone`);
+  if (parentObj && parentObj.type !== 'bone' && parentObj.type !== 'skeleton') throw new Error(`"${parentId}" is a ${parentObj.type}: a bone goes inside a skeleton or another bone`);
   const parent = childFrame(doc, schema, parentId);
   const root = parentObj?.type !== 'bone';
   const r1 = (v) => Math.round(v * 10) / 10 || 0;

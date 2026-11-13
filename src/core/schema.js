@@ -18,12 +18,12 @@ export function createSchema(defs) {
   const resolve = (name, chain = []) => {
     if (resolved.has(name)) return resolved.get(name);
     const def = byName.get(name);
-    if (!def) throw new Error(`Esquema: el tipo "${chain.at(-1)}" extiende un tipo inexistente "${name}"`);
-    if (chain.includes(name)) throw new Error(`Esquema: herencia circular en ${[...chain, name].join(' → ')}`);
+    if (!def) throw new Error(`Schema: type "${chain.at(-1)}" extends a nonexistent type "${name}"`);
+    if (chain.includes(name)) throw new Error(`Schema: circular inheritance in ${[...chain, name].join(' → ')}`);
     const base = def.extends ? resolve(def.extends, [...chain, name]) : null;
     for (const [prop, p] of Object.entries(def.properties ?? {})) {
-      if (!PROPERTY_TYPES.has(p.type)) throw new Error(`Esquema: ${name}.${prop} tiene un tipo desconocido "${p.type}"`);
-      if (p.type === 'enum' && !Array.isArray(p.values)) throw new Error(`Esquema: ${name}.${prop} es enum y necesita values`);
+      if (!PROPERTY_TYPES.has(p.type)) throw new Error(`Schema: ${name}.${prop} has an unknown type "${p.type}"`);
+      if (p.type === 'enum' && !Array.isArray(p.values)) throw new Error(`Schema: ${name}.${prop} is enum and needs values`);
     }
     const kind = {
       name: name,
@@ -49,56 +49,56 @@ export function createSchema(defs) {
 
   for (const d of defs) resolve(d.name);
   const meta = resolved.get('meta');
-  if (!meta) throw new Error('Esquema: falta schema/meta.json');
+  if (!meta) throw new Error('Schema: schema/meta.json is missing');
   const types = new Map([...resolved].filter(([n, t]) => n !== 'meta' && !t.abstract));
   return { meta, types };
 }
 
 /** Returns an error message if the value is not valid for the property, or null if it is fine. */
 export function validateValue(p, value) {
-  if (value === null) return p.nullable ? null : 'no puede ser null';
+  if (value === null) return p.nullable ? null : 'cannot be null';
   switch (p.type) {
     case 'number':
-      if (typeof value !== 'number' || !Number.isFinite(value)) return `debe ser un número (recibido ${JSON.stringify(value)})`;
-      if (p.integer && !Number.isInteger(value)) return 'debe ser un entero';
-      if (p.min != null && value < p.min) return `debe ser ≥ ${p.min}`;
-      if (p.max != null && value > p.max) return `debe ser ≤ ${p.max}`;
+      if (typeof value !== 'number' || !Number.isFinite(value)) return `must be a number (received ${JSON.stringify(value)})`;
+      if (p.integer && !Number.isInteger(value)) return 'must be an integer';
+      if (p.min != null && value < p.min) return `must be ≥ ${p.min}`;
+      if (p.max != null && value > p.max) return `must be ≤ ${p.max}`;
       return null;
     case 'string':
-      return typeof value === 'string' ? null : 'debe ser texto';
+      return typeof value === 'string' ? null : 'must be text';
     case 'boolean':
-      return typeof value === 'boolean' ? null : 'debe ser true o false';
+      return typeof value === 'boolean' ? null : 'must be true or false';
     case 'color':
-      return typeof value === 'string' && COLOR.test(value) ? null : `debe ser un color "#rrggbb" (recibido ${JSON.stringify(value)})`;
+      return typeof value === 'string' && COLOR.test(value) ? null : `must be a color "#rrggbb" (received ${JSON.stringify(value)})`;
     case 'enum':
-      return p.values.includes(value) ? null : `debe ser uno de: ${p.values.join(', ')}`;
+      return p.values.includes(value) ? null : `must be one of: ${p.values.join(', ')}`;
     case 'ref':
-      return typeof value === 'string' ? null : 'debe ser el id de un objeto';
+      return typeof value === 'string' ? null : 'must be the id of an object';
     case 'asset':
       return typeof value === 'string' && ASSET_FILE.test(value) ? null : `must be the file name of an asset of the document, like "sun.png" (lowercase; .png, .jpg, .webp or .svg; received ${JSON.stringify(value)})`;
     case 'vertices': {
-      if (!Array.isArray(value)) return 'debe ser una lista de vértices';
+      if (!Array.isArray(value)) return 'must be a list of vertices';
       const errors = value.flatMap((v, i) => vertexErrors(v).map((e) => `[${i}] ${e}`));
-      return errors.length ? errors.slice(0, 5).join('; ') + (errors.length > 5 ? ` (y ${errors.length - 5} más)` : '') : null;
+      return errors.length ? errors.slice(0, 5).join('; ') + (errors.length > 5 ? ` (and ${errors.length - 5} more)` : '') : null;
     }
     case 'stops': {
-      if (!Array.isArray(value) || !value.length) return 'debe ser una lista de paradas [{ offset, color }]';
+      if (!Array.isArray(value) || !value.length) return 'must be a list of stops [{ offset, color }]';
       for (const [i, s] of value.entries()) {
-        if (typeof s?.offset !== 'number' || s.offset < 0 || s.offset > 1) return `[${i}].offset debe ser un número de 0 a 1`;
-        if (typeof s.color !== 'string' || !COLOR.test(s.color)) return `[${i}].color debe ser "#rrggbb"`;
-        if (s.opacity !== undefined && (typeof s.opacity !== 'number' || s.opacity < 0 || s.opacity > 1)) return `[${i}].opacity debe ser de 0 a 1`;
-        if (i && s.offset < value[i - 1].offset) return 'las paradas deben ir en orden de offset';
+        if (typeof s?.offset !== 'number' || s.offset < 0 || s.offset > 1) return `[${i}].offset must be a number from 0 to 1`;
+        if (typeof s.color !== 'string' || !COLOR.test(s.color)) return `[${i}].color must be "#rrggbb"`;
+        if (s.opacity !== undefined && (typeof s.opacity !== 'number' || s.opacity < 0 || s.opacity > 1)) return `[${i}].opacity must be from 0 to 1`;
+        if (i && s.offset < value[i - 1].offset) return 'stops must be in order of offset';
       }
       return null;
     }
     case 'strings':
-      return Array.isArray(value) && value.every((v) => typeof v === 'string' && v) ? null : 'debe ser una lista de textos ["a", "b"]';
+      return Array.isArray(value) && value.every((v) => typeof v === 'string' && v) ? null : 'must be a list of texts ["a", "b"]';
     case 'pose': {
       // Only the shape: which objects and properties are valid is checked by the document, which knows the types.
-      if (!value || typeof value !== 'object' || Array.isArray(value)) return 'debe ser un objeto { id_de_objeto: { propiedad: valor } }';
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return 'must be an object { object_id: { property: value } }';
       for (const [id, fields] of Object.entries(value)) {
-        if (!POSE_ID.test(id)) return `"${id}" no es un id válido`;
-        if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return `${id} debe ser un objeto { propiedad: valor }`;
+        if (!POSE_ID.test(id)) return `"${id}" is not a valid id`;
+        if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return `${id} must be an object { property: value }`;
       }
       return null;
     }
@@ -125,7 +125,7 @@ export function validateValue(p, value) {
       return null;
     }
   }
-  return 'tipo de propiedad desconocido';
+  return 'unknown property type';
 }
 
 /** Effective value of a property: the saved one or, if absent, the schema's default value. */
@@ -149,7 +149,7 @@ export function suggest(value, options) {
     const d = prefix ? 1 : distance(a, b);
     if (d < bestDistance) [best, bestDistance] = [option, d];
   }
-  return best ? ` ¿Quisiste decir "${best}"?` : '';
+  return best ? ` Did you mean "${best}"?` : '';
 }
 
 function distance(a, b) {
