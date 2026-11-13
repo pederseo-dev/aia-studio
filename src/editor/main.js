@@ -1,5 +1,6 @@
 // Editor entry point: mounts the panels and wires up the bar, the keyboard and the live notices.
 
+import { askText } from './ask.js';
 import { findObject, skeletonOf, children, subtree, locked } from '../core/document.js';
 import { applyOperations } from '../core/operations.js';
 import { read, readMeta } from '../core/schema.js';
@@ -531,7 +532,7 @@ subscribe((c) => {
 /** Creates an empty document or, with `copyFrom`, a copy of the given document. */
 async function newDocument(copyFrom) {
   const current = copyFrom && state.documents.find((d) => d.id === copyFrom);
-  const name = prompt(copyFrom ? 'Name of the copy:' : 'New file name:', current ? `${current.name} (copy)` : '')?.trim();
+  const name = (await askText(copyFrom ? 'Name of the copy:' : 'New file name:', current ? `${current.name} (copy)` : ''))?.trim();
   if (!name) return;
   const base = name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   const root = /^[a-z]/.test(base) ? base : `doc_${base || 'new'}`;

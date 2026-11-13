@@ -3,6 +3,7 @@
 // switches to the Parameters view: the canvas shows the blend of poses the drivers give. The controls' values
 // belong to the editor (they are not saved); what is saved are the params, the drivers and the poses.
 
+import { askText } from './ask.js';
 import { isScene } from '../core/animation.js';
 import { findObject } from '../core/document.js';
 import { read } from '../core/schema.js';
@@ -46,9 +47,9 @@ export function mountParameters(root, newButton, deleteButton) {
     for (const f of root.querySelectorAll('.param[data-param]')) weights(doc, f, values[f.dataset.param]);
   }
 
-  newButton.addEventListener('click', () => {
+  newButton.addEventListener('click', async () => {
     if (!state.doc) return;
-    const base = prompt('Parameter name (e.g. happiness, head_turn, mouth):', '')?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    const base = (await askText('Parameter name (e.g. happiness, head_turn, mouth):', ''))?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
     if (!base) return;
     const id = /^[a-z]/.test(base) ? base : `param_${base}`;
     if (findObject(state.doc, id)) return notify(`"${id}" already exists`, true);

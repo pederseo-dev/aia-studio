@@ -589,3 +589,10 @@ dialog.connect-ai .ai-steps { margin: 6px 0; padding-left: 20px; line-height: 1.
 dialog.connect-ai .ai-command { display: flex; gap: 8px; align-items: flex-start; }
 dialog.connect-ai .ai-command code { flex: 1; font: 11px/1.4 ui-monospace, monospace; background: var(--background); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; word-break: break-all; user-select: all; }
 dialog.connect-ai .help { word-break: break-all; }
+
+/* Asking for a name (ask.js): the editor's own dialog, since Electron has no window.prompt() */
+dialog.ask form { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+dialog.ask label { display: flex; flex-direction: column; gap: 6px; }
+dialog.ask input { width: 100%; box-sizing: border-box; }
+dialog.ask .buttons { display: flex; justify-content: flex-end; gap: 8px; }
+dialog.ask button.main { border-color: var(--accent); }

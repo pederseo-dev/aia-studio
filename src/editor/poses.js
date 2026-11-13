@@ -2,6 +2,7 @@
 // edited. Poses are still snapshots of the puppet that the params blend; before they were picked in a «View» dropdown
 // at the top, which looked like a view mode. See docs/decision-animacion.md §10.
 
+import { askText } from './ask.js';
 import { findObject } from '../core/document.js';
 import { notify, execute, state, setState, subscribe } from './state.js';
 import { toggleLive } from './live.js';
@@ -33,9 +34,9 @@ export function mountPoses(root, list, newButton, deleteButton) {
   subscribe((c) => {
     if ('doc' in c || 'selection' in c || 'pose' in c || 'live' in c) deleteButton.disabled = !chosen() || state.live;
   });
-  newButton.addEventListener('click', () => {
+  newButton.addEventListener('click', async () => {
     if (!state.doc) return;
-    const base = prompt('Pose name (e.g. happy, eyes_closed, mouth_o):', '')?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    const base = (await askText('Pose name (e.g. happy, eyes_closed, mouth_o):', ''))?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
     if (!base) return;
     const id = /^[a-z]/.test(base) ? base : `pose_${base}`;
     if (findObject(state.doc, id)) return notify(`"${id}" already exists`, true);

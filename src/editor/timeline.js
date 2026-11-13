@@ -4,6 +4,7 @@
 // An open clip is edited like a pose (state.pose = clip id): what is changed on the canvas or in the inspector
 // becomes a keyframe at the playhead time (autokey, see poseOps in editing.js).
 
+import { askText } from './ask.js';
 import { ICONS } from './icons.js';
 import { clipWarnings, scaleTime, isScene, moveKey, putKey, removeKey, roundTime, localTime, keyTimes, valueToSave, setupValues } from '../core/animation.js';
 import { CURVE_NAMES, applyCurve, curveError, sameTime } from '../core/curves.js';
@@ -27,9 +28,9 @@ const fromId = (text, prefix) => {
 };
 
 /** Creates a new clip (asks for the name) and opens it. */
-function newClip(usage) {
+async function newClip(usage) {
   if (!state.doc) return;
-  const id = fromId(prompt(usage === 'puppet' ? 'Clip name (e.g. wave, blink, idle):' : 'Scene name (e.g. intro, scene_1):', ''), 'clip');
+  const id = fromId(await askText(usage === 'puppet' ? 'Clip name (e.g. wave, blink, idle):' : 'Scene name (e.g. intro, scene_1):', ''), 'clip');
   if (!id) return;
   if (findObject(state.doc, id)) return notify(`"${id}" already exists`, true);
   execute([{ op: 'create', type: 'animation', id, props: { usage, duration: usage === 'puppet' ? 1 : 5 } }], `create ${usage === 'puppet' ? 'clip' : 'scene'} ${id}`);
@@ -478,14 +479,14 @@ export function mountTimeline(root) {
       for (const v of CURVE_NAMES) curve.append(new Option(v, v, false, v === current));
       if (current === 'custom') curve.append(new Option(`cubic-bezier(${first.join(', ')})`, 'custom', false, true));
       curve.append(new Option('cubic-bezier…', 'edit'));
-      curve.addEventListener('change', () => {
+      curve.addEventListener('change', async () => {
         /** @type {any} */
         let ease = curve.value;
         if (ease === 'custom' || ease === 'mixed') return;
         if (ease === 'edit') {
           // As in CSS: x1, y1, x2, y2 (x between 0 and 1; y can overshoot for a bounce).
           const previewDoc = Array.isArray(first) ? first.join(', ') : '0.3, 1.6, 0.6, 1';
-          const text = prompt('cubic-bezier x1, y1, x2, y2 (as in CSS; y outside 0…1 overshoots):', previewDoc);
+          const text = await askText('cubic-bezier x1, y1, x2, y2 (as in CSS; y outside 0…1 overshoots):', previewDoc);
           if (text == null) return draw();
           ease = text.split(/[\s,]+/).filter(Boolean).map(Number);
           const error = curveError(ease);
