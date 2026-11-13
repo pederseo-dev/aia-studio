@@ -1,52 +1,52 @@
-# Decisión: animación (fase 5), puppet (fases 5–6) y exportación (fase 7)
+# Decision: animation (phase 5), puppet (phases 5–6) and export (phase 7)
 
-> Estado: **acordado con el usuario** (2026-11-05). Reemplaza lo que [plan.md](plan.md) decía de las fases 5 a 7 y
-> completa la §6 de [sintesis.md](sintesis.md).
+> Status: **agreed with the user** (2026-11-05). Replaces what [plan.md](plan.md) said about phases 5 to 7 and
+> completes §6 of [sintesis.md](sintesis.md).
 
-## 1. Tres modos de trabajo
+## 1. Three working modes
 
-El editor se divide en tres modos, por **para qué** es lo que se hace:
+The editor is split into three modes, by **what** the work is **for**:
 
 | | **Design** | **Animate** | **Puppet** |
 |---|---|---|---|
-| Para qué | Dibujar y riggear (montaje, frame 0) | Contar algo de principio a fin: animación tradicional de personajes, objetos o entornos | Dejar el personaje listo para que otro lo maneje en vivo: la IA de una app, un juego, código |
-| Timeline | No hay | **Una timeline larga** (la escena) | **Muchas timelines cortas**: una por clip |
-| Panel derecho | Inspector | Inspector | **Biblioteca de clips como botones** (triggers) + inspector |
-| Exporta a | — | Video, Lottie, SVG/CSS (horneado) | `.aia` + runtime (vivo) |
+| What for | Drawing and rigging (setup, frame 0) | Telling something from start to finish: traditional animation of characters, objects or environments | Getting the character ready for someone else to drive live: an app's AI, a game, code |
+| Timeline | None | **One long timeline** (the scene) | **Many short timelines**: one per clip |
+| Right panel | Inspector | Inspector | **Clip library as buttons** (triggers) + inspector |
+| Exports to | — | Video, Lottie, SVG/CSS (baked) | `.aia` + runtime (live) |
 
-- **Design ya no tiene poses.** Las poses, los params y los drivers son los controles del muñeco: pasan a **Puppet**.
-  Design queda para dibujo y rig puros (lo que era «View: Setup»).
-- **Puppet** tiene los controles: expresiones (params → poses), clips (gestos, loops, reacciones) y, en la fase 6, el
-  comportamiento (state machine). Cada clip es un **botón** del panel derecho:
-  - clic → la timeline de abajo pasa a ese clip (como «entrar» a una acción en Moho; el marco cambia de color);
-  - con **▶ Live** encendido, el botón *dispara* el clip y los params se mueven con sliders: se ve como lo verá la IA
-    de la app, con fundidos entre clips.
-- Referencias: Rive (Design / Animate y la lista de animaciones que mezcla la state machine), Moho (acciones que se
-  editan aparte y se insertan por referencia), Adobe Character Animator (*puppets* con un panel de *triggers*).
+- **Design no longer has poses.** Poses, params and drivers are the puppet's controls: they move to **Puppet**.
+  Design is left for pure drawing and rig (what used to be «View: Setup»).
+- **Puppet** has the controls: expressions (params → poses), clips (gestures, loops, reactions) and, in phase 6, the
+  behavior (state machine). Each clip is a **button** in the right panel:
+  - click → the timeline below switches to that clip (like «entering» an action in Moho; the frame changes color);
+  - with **▶ Live** on, the button *triggers* the clip and params move with sliders: it looks as the app's AI
+    will see it, with fades between clips.
+- References: Rive (Design / Animate and the list of animations the state machine blends), Moho (actions that are
+  edited separately and inserted by reference), Adobe Character Animator (*puppets* with a *triggers* panel).
 
-## 2. Un solo motor de animación
+## 2. A single animation engine
 
-Animate y Puppet usan **el mismo tipo de clip, las mismas pistas y la misma timeline**. Lo único que cambia es el
-uso (`usage`): en Animate, una timeline larga; en Puppet, muchos clips con su ficha para la IA. Así:
+Animate and Puppet use **the same clip type, the same tracks and the same timeline**. The only thing that changes is the
+use (`usage`): in Animate, one long timeline; in Puppet, many clips with their card for the AI. That way:
 
-- **Un clip de Puppet se puede insertar en Animate** (por referencia, como las acciones de Moho): «wave» se anima una
-  vez y se usa en muchas escenas. Retocar el clip actualiza todas. *(Primero va la timeline simple; la inserción
-  por referencia viene después dentro de la fase 5.)*
-- Video, Lottie y el runtime salen del **mismo evaluador**: `(documento, clip, t, params) → valores`. En vivo, el
-  runtime lo llama en cada cuadro; para hornear, se muestrea a los fps del documento. Regla: **lo que el modelo
-  expresa es lo que el runtime evalúa**; lo que un destino no soporta se hornea al exportar a ese destino.
+- **A Puppet clip can be inserted in Animate** (by reference, like Moho actions): «wave» is animated
+  once and used in many scenes. Touching up the clip updates them all. *(The simple timeline comes first; insertion
+  by reference comes later within phase 5.)*
+- Video, Lottie and the runtime come out of the **same evaluator**: `(document, clip, t, params) → values`. Live, the
+  runtime calls it every frame; for baking, it is sampled at the document's fps. Rule: **what the model
+  expresses is what the runtime evaluates**; what a target does not support is baked when exporting to that target.
 
-## 3. Modelo de datos
+## 3. Data model
 
-Un recurso nuevo, `animation` (el clip):
+A new asset, `animation` (the clip):
 
 ```jsonc
 {
   "id": "wave", "type": "animation",
-  "usage": "puppet",            // "animate" (timeline de la escena) o "puppet" (clip del muñeco)
-  "duration": 1.2,              // segundos
-  "loop": "once",               // "once", "loop" o "pingpong" (de Rive)
-  "description": "Waves with the right hand", // para la IA de la app (manifiesto) y el botón
+  "usage": "puppet",            // "animate" (the scene's timeline) or "puppet" (the puppet's clip)
+  "duration": 1.2,              // seconds
+  "loop": "once",               // "once", "loop" or "pingpong" (from Rive)
+  "description": "Waves with the right hand", // for the app's AI (manifest) and the button
   "tracks": {
     "arm_r_bone": { "rotation": [ { "t": 0, "value": 0 }, { "t": 0.3, "value": -60, "ease": "ease-out" } ] },
     "mouth":      { "active":   [ { "t": 0, "value": "mouth_open" } ] },
@@ -55,221 +55,221 @@ Un recurso nuevo, `animation` (el clip):
 }
 ```
 
-- **Pistas por objeto y propiedad**, con la misma forma que `values` de una pose (`{ id: { propiedad: … } }`): la IA
-  ya la conoce. Cualquier propiedad animable sirve: huesos, vértices (morph con igual cantidad de puntos), colores,
-  opacidad, el hijo de un switch.
-- **Un param también es una pista** (`{ id_de_param: { value: […] } }`): un clip puede llevar `happiness` de 0 a 1 y
-  así reutiliza las expresiones (como animar el control de un smart bone de Moho) en vez de repetir keyframes.
-- **Keyframe** = `{ t, value, ease }`. Tiempo en segundos, entre 0 y `duration`. Valores absolutos, como en el
-  montaje y las poses.
-- **La curva va en el keyframe** y vale para el tramo que sale de él (Moho y Rive): `linear` (por defecto), `step`
-  (mantiene hasta el siguiente: el *hold* de Moho), `ease-in`, `ease-out`, `ease-in-out` o `[x1, y1, x2, y2]`
-  (`cubic-bezier` como en CSS). Se eligió `cubic-bezier` porque pasa sin pérdida a CSS, Lottie y Rive. Elastic,
-  bounce, noisy y el «a dos» de Moho quedan para más adelante; al exportar a un destino que no los tenga, se hornean.
-- Lo que no se interpola (el `active` de un switch, booleanos, textos) cambia de golpe en cada keyframe. Los números
-  se interpolan con la curva; los colores, por canal; los vértices, como el morph de las poses (si la cantidad no
-  coincide, cambian de golpe).
-- Antes del primer keyframe vale el primero; después del último, el último (Rive). Una propiedad sin pista vale lo
-  del montaje.
+- **Tracks per object and property**, with the same shape as a pose's `values` (`{ id: { property: … } }`): the AI
+  already knows it. Any animatable property works: bones, vertices (morph with the same number of points), colors,
+  opacity, a switch's child.
+- **A param is also a track** (`{ param_id: { value: […] } }`): a clip can take `happiness` from 0 to 1 and
+  thus reuse the expressions (like animating the control of a Moho smart bone) instead of repeating keyframes.
+- **Keyframe** = `{ t, value, ease }`. Time in seconds, between 0 and `duration`. Absolute values, as in the
+  setup and the poses.
+- **The curve goes in the keyframe** and applies to the segment that leaves it (Moho and Rive): `linear` (default), `step`
+  (holds until the next one: Moho's *hold*), `ease-in`, `ease-out`, `ease-in-out` or `[x1, y1, x2, y2]`
+  (`cubic-bezier` as in CSS). `cubic-bezier` was chosen because it carries over losslessly to CSS, Lottie and Rive. Elastic,
+  bounce, noisy and Moho's «on twos» are left for later; when exporting to a target that lacks them, they are baked.
+- What is not interpolated (a switch's `active`, booleans, texts) changes abruptly at each keyframe. Numbers
+  are interpolated with the curve; colors, per channel; vertices, like the poses' morph (if the count does not
+  match, they change abruptly).
+- Before the first keyframe the first one applies; after the last, the last one (Rive). A property without a track takes
+  the setup's value.
 
-## 4. Orden de evaluación
+## 4. Evaluation order
 
 ```
-montaje → clip en t (valores absolutos) → params (los del clip pisan a los de afuera) → drivers suman sus poses encima
+setup → clip at t (absolute values) → params (the clip's override those from outside) → drivers add their poses on top
 ```
 
-1. El clip fija los valores de sus pistas en el tiempo `t` (con `loop`: `once` se queda en el final, `loop` vuelve
-   a empezar, `pingpong` va y vuelve).
-2. Las pistas de params dan el valor de esos params; los demás params vienen de afuera (la app, los sliders) o de su
-   valor inicial.
-3. Los drivers suman sus poses **encima de lo animado**: un saludo animado más la cara feliz que da un param. En los
-   números, la diferencia de cada pose se sigue midiendo contra el montaje (como en la mezcla de la fase 4) y se suma
-   a lo animado; colores y vértices se interpolan desde lo animado hacia la pose.
-4. **Lo que no se suma lo decide la pista del clip** *(cambio del 2026-11-05, por la auditoría de la fase 5)*: si el
-   clip tiene pista en un color, unos vértices, el hijo de un switch o un booleano, los drivers no lo cambian. Los
-   drivers siguen decidiendo donde el clip no tiene pista. Motivo: un param enum siempre tiene una opción activa (y
-   un param numérico puede arrancar distinto de 0), así que su driver pesaba 1 en todo clip y tapaba el keyframe de
-   `mouth.active`. Cuando un param elige la variante (visemas), lo natural es animar el param, no `active`.
-   Los números se siguen sumando: `avisosDeClip` (en `set_keys`, `render_preview` y la timeline) avisa cuando un
-   driver activo le suma su pose a una pista del clip, y el autokey del editor guarda el valor sin ese aporte.
+1. The clip sets the values of its tracks at time `t` (with `loop`: `once` stays at the end, `loop` starts
+   over, `pingpong` goes back and forth).
+2. Param tracks give the value of those params; the other params come from outside (the app, the sliders) or from their
+   initial value.
+3. Drivers add their poses **on top of what is animated**: an animated wave plus the happy face a param gives. For
+   numbers, each pose's difference is still measured against the setup (as in the phase 4 blend) and added
+   to what is animated; colors and vertices are interpolated from what is animated toward the pose.
+4. **What is not added is decided by the clip's track** *(change of 2026-11-05, from the phase 5 audit)*: if the
+   clip has a track on a color, some vertices, a switch's child or a boolean, the drivers do not change it. The
+   drivers still decide where the clip has no track. Reason: an enum param always has an active option (and
+   a numeric param can start other than 0), so its driver weighed 1 in every clip and hid the keyframe of
+   `mouth.active`. When a param picks the variant (visemes), the natural thing is to animate the param, not `active`.
+   Numbers are still added: `clipWarnings` (in `set_keys`, `render_preview` and the timeline) warns when an
+   active driver adds its pose to a clip track, and the editor's autokey stores the value without that contribution.
 
-5. **Una escena de Animate se evalúa sin drivers** *(2026-11-06, sigue a «los params son solo de Puppet», §8)*:
-   montaje + keyframes, nada más (Design + lo animado). Todo lo de arriba sobre params y drivers vale para los clips
-   de Puppet. Motivo: con params solo de Puppet, en una escena los drivers sumaban con los params en su valor inicial,
-   sin control ni aviso (un param con `default` 1 giraba una caja que en Design se ve derecha). En una escena, una
-   expresión se copia como keyframes («◆ Pose…» o `set_keys` con `pose`) y una variante se elige keyando el `active`
-   del switch. Vale igual en el editor, en `render_preview` (con una escena, rechaza `params`), en `avisosDeClip`
-   (una escena no tiene avisos) y en la exportación, porque todos usan `poseDeClip`.
+5. **An Animate scene is evaluated without drivers** *(2026-11-06, follows «params are Puppet-only», §8)*:
+   setup + keyframes, nothing else (Design + what is animated). Everything above about params and drivers applies to Puppet
+   clips. Reason: with params Puppet-only, in a scene the drivers added with the params at their initial value,
+   with no control or warning (a param with `default` 1 rotated a box that looks straight in Design). In a scene, an
+   expression is copied as keyframes («◆ Pose…» or `set_keys` with `pose`) and a variant is chosen by keying the switch's
+   `active`. The same holds in the editor, in `render_preview` (with a scene, it rejects `params`), in `clipWarnings`
+   (a scene has no warnings) and in export, because they all use `clipPose`.
 
-El resultado es una pose más, que se dibuja con el mismo render de siempre (`src/render/svg.js`).
+The result is one more pose, drawn with the same render as always (`src/render/svg.js`).
 
-## 5. Exportación (fase 7)
+## 5. Export (phase 7)
 
-| Destino | Qué sale | Qué se pierde |
+| Target | What comes out | What is lost |
 |---|---|---|
-| **`.aia` + runtime JS** (prioridad) | El documento sin historial ni datos del editor, con un manifiesto para la IA de la app: params con descripción y rango, clips de Puppet con su ficha y estados. El runtime es `src/core` + `src/render`. | Nada: todo sigue vivo. Solo corre donde llegue el runtime (web, Electron). |
-| **Video** (mp4/webm/gif, PNG por cuadro) | Un clip de Animate (o de Puppet con params fijos) muestreado a los fps del documento, con resvg y ffmpeg. | La interacción. |
-| **Lottie / SVG-CSS** | Las pistas simples (transformaciones con curvas `cubic-bezier`) pasan directo; huesos, enlace por punto y poses mezcladas se hornean cuadro a cuadro. | Params y state machine (dotLottie tiene state machines, pero sin nuestra mezcla de poses). |
+| **`.aia` + JS runtime** (priority) | The document without history or editor data, with a manifest for the app's AI: params with description and range, Puppet clips with their card and states. The runtime is `src/core` + `src/render`. | Nothing: everything stays live. It only runs where the runtime reaches (web, Electron). |
+| **Video** (mp4/webm/gif, PNG per frame) | An Animate clip (or a Puppet one with fixed params) sampled at the document's fps, with resvg and ffmpeg. | Interaction. |
+| **Lottie / SVG-CSS** | Simple tracks (transforms with `cubic-bezier` curves) carry over directly; bones, per-point binding and blended poses are baked frame by frame. | Params and state machine (dotLottie has state machines, but without our pose blending). |
 
-## 6. La IA
+## 6. The AI
 
-- **Edición (MCP):** `set_keys` crea o actualiza un clip pensando en **momentos**: «en t = 0.3, el brazo así y la
-  boca así» (`values` como en `set_pose`), o «en t = 0.3, la pose `happy`» (copia sus valores como keyframes, como en
-  Moho). `delete_keys` quita keyframes por tiempo o por propiedad. `render_preview` acepta `animation` + `time`, y
-  `times` para una **tira de cuadros** en una sola imagen, para ver el movimiento sin pedir diez imágenes. El árbol de
-  `get_document` resume cada clip (uso, duración, loop, qué anima y en qué tiempos).
-- **Después de la segunda prueba (2026-11-06):** `scale_time` reescala el tiempo de un clip o de un tramo en un solo
-  paso de deshacer (el editor lo hace con «Scale keys» al cambiar Length); `pose` acepta `only`/`except` para copiar
-  una parte; un número de `values` puede ser **relativo al montaje** (`"+=14"`), que se resuelve al guardar: la pista
-  sigue guardando valores absolutos, así que el formato no cambia. Las curvas fuertes con nombre (`-quad`, `-cubic`,
-  `-expo`, `-back`) son cubic-bezier fijas, así que pasan sin pérdida a CSS, Lottie y Rive. `set_keys` y
-  `render_preview` listan qué poses mueve cada param animado (un driver del usuario puede mover más de lo esperado).
-- **Uso en vivo (fase 7):** el manifiesto convierte los clips de Puppet en herramientas para el LLM de la app
-  (`play("wave")`, `set_param("happiness", 0.8)`), con la descripción de cada clip.
+- **Editing (MCP):** `set_keys` creates or updates a clip thinking in **moments**: «at t = 0.3, the arm like this and the
+  mouth like this» (`values` as in `set_pose`), or «at t = 0.3, the `happy` pose» (copies its values as keyframes, as in
+  Moho). `delete_keys` removes keyframes by time or by property. `render_preview` accepts `animation` + `time`, and
+  `times` for a **strip of frames** in a single image, to see the motion without asking for ten images. The tree from
+  `get_document` summarizes each clip (usage, duration, loop, what it animates and at which times).
+- **After the second test (2026-11-06):** `scale_time` rescales the time of a clip or a range in a single
+  undo step (the editor does it with «Scale keys» when changing Length); `pose` accepts `only`/`except` to copy
+  a part; a number in `values` can be **relative to the setup** (`"+=14"`), which is resolved when saving: the track
+  still stores absolute values, so the format does not change. The strong named curves (`-quad`, `-cubic`,
+  `-expo`, `-back`) are fixed cubic-beziers, so they carry over losslessly to CSS, Lottie and Rive. `set_keys` and
+  `render_preview` list which poses each animated param moves (a user's driver can move more than expected).
+- **Live use (phase 7):** the manifest turns Puppet clips into tools for the app's LLM
+  (`play("wave")`, `set_param("happiness", 0.8)`), with each clip's description.
 
-## 7. Ideas anotadas para después
+## 7. Ideas noted for later
 
-- **Grabar una actuación (Puppet → Animate):** con Live encendido, ● Rec graba los botones y los sliders como pistas
-  en una timeline de Animate (como las *takes* de Character Animator). Sirve para hacer un video sin animar cuadro a
-  cuadro, y para que la IA «actúe» un guion y deje algo que se puede retocar.
-- **Clips por región del cuerpo (máscaras):** que un clip declare qué toca (brazos, cara, boca) para sumar «wave» +
-  «talk» + «happy» sin que se pisen (capas de la state machine de Rive, avatar masks de Unity). Va con la fase 6.
-- **Clips aditivos** (respiración, balanceo) que se suman a cualquier otro.
-- **Atajo de teclado por botón** en Puppet.
-- **Escenas con varios personajes** en Animate: cada uno, una instancia de otro documento con su Puppet (los
-  *nested artboards* de Rive, las capas referenciadas de Moho). No cerrarle la puerta al diseño.
-- **Lo procedural como dato del personaje:** qué clip es el parpadeo y qué params son la mirada y la boca, para que el
-  runtime los active con una línea (el *cuándo* sigue siendo de la app).
-- Curvas `elastic`, `bounce`, `noisy` y animación «a dos» (`interval` de Moho / `quantize` de Rive).
+- **Record a performance (Puppet → Animate):** with Live on, ● Rec records the buttons and sliders as tracks
+  in an Animate timeline (like Character Animator's *takes*). Useful to make a video without animating frame by
+  frame, and for the AI to «act out» a script and leave something that can be touched up.
+- **Clips by body region (masks):** a clip declares what it touches (arms, face, mouth) to add «wave» +
+  «talk» + «happy» without them overriding each other (Rive state machine layers, Unity avatar masks). Goes with phase 6.
+- **Additive clips** (breathing, swaying) that add on top of any other.
+- **Keyboard shortcut per button** in Puppet.
+- **Scenes with several characters** in Animate: each one, an instance of another document with its Puppet (Rive's
+  *nested artboards*, Moho's referenced layers). Do not close the door on the design.
+- **The procedural as character data:** which clip is the blink and which params are the gaze and the mouth, so the
+  runtime turns them on with one line (the *when* still belongs to the app).
+- `elastic`, `bounce`, `noisy` curves and animation «on twos» (Moho's `interval` / Rive's `quantize`).
 
-## 8. Cómo se ve la timeline (2026-11-06)
+## 8. What the timeline looks like (2026-11-06)
 
-Se debatió entre Rive (la jerarquía de todo lo animado, solo las propiedades con keys) y Moho (los canales de lo
-seleccionado, con o sin keys). Para no saturar la interfaz, **se empieza como Moho**:
+We debated between Rive (the hierarchy of everything animated, only properties with keys) and Moho (the channels of the
+selection, with or without keys). To avoid cluttering the interface, **we start like Moho**:
 
-- Arriba, una fila **«All keys»** con todos los keyframes del clip en gris, para ver el ritmo (clic = llevar el
-  playhead ahí).
-- Abajo, **los canales del objeto o hueso seleccionado, siempre todos** sus animables, también los que no tienen
-  keyframes (apagados, con ◇ para keyar ese canal en el playhead). Sin selección, se listan los objetos animados para
-  ir a ellos.
-- Canales como en Moho: **Position** (x e y juntas) y **Scale** (scaleX y scaleY juntas) son una sola fila; elegir,
-  mover, cambiar la curva o borrar un keyframe actúa sobre las dos. En los datos siguen siendo pistas separadas (lo
-  que ve la IA no cambia).
-- Todos los keyframes son **◆**, como en Moho; el **color dice la curva** del tramo que sale de él: verde linear,
-  violeta ease, ámbar step, celeste cubic-bezier, blanco si las propiedades del canal tienen curvas distintas.
-- **Varios a la vez, como en Rive** (pedido del usuario el mismo día): cada cosa seleccionada (en Layers con Ctrl +
-  clic o Shift + clic, o con Ctrl + clic sobre los huesos del lienzo, también en Manipulate, poses y clips) es un
-  **grupo plegable** en la timeline. La fila del grupo resume sus keyframes; ▸/▾ la abre y muestra sus canales como
-  arriba. Para no saturar, solo el principal (el último elegido) arranca abierto; lo que el usuario abre o cierra se
-  recuerda mientras dura la sesión. «◆ Key» keya todos los seleccionados en un solo paso de deshacer.
-- **Los params son solo de Puppet** (2026-11-06, decisión del usuario): el panel Parameters está solo en Puppet y
-  una escena de Animate no anima params (la validación lo rechaza, también por el MCP). Una escena keya los valores
-  mismos o copia una pose con «◆ Pose…» / `set_keys` con `pose`. Además, **una escena se ve sin drivers** (§4,
-  punto 5). Un documento viejo con una escena que anima params se migra al abrirlo: el clip pasa a Puppet (no se
-  pierde ningún keyframe) y el historial lo anota (`migrarEscenasConParams` en `src/core/migracion.js`).
-- **El panel de abajo es solo la timeline** (2026-11-06): Parameters pasó al panel derecho, solo en Puppet. Arriba de la timeline, pestañas como las de los documentos: en Animate una por escena (+ crea una,
-  × la borra con confirmación), en Puppet el clip abierto (× lo cierra). La barra tiene la reproducción al medio:
-  « (keyframe anterior), ▶ y » (keyframe siguiente); a la izquierda el reloj, la duración y el loop; a la derecha
-  los botones de keyar y la curva.
-- Sigue abierta la otra mitad de Rive: ver todo lo animado sin seleccionarlo (hoy, sin selección, la timeline lista
-  los objetos animados para elegirlos).
+- At the top, an **«All keys»** row with all the clip's keyframes in gray, to see the rhythm (click = move the
+  playhead there).
+- Below, **the channels of the selected object or bone, always all** of its animatables, including those without
+  keyframes (dimmed, with ◇ to key that channel at the playhead). With no selection, the animated objects are listed to
+  go to them.
+- Channels as in Moho: **Position** (x and y together) and **Scale** (scaleX and scaleY together) are a single row; picking,
+  moving, changing the curve or deleting a keyframe acts on both. In the data they are still separate tracks (what
+  the AI sees does not change).
+- All keyframes are **◆**, as in Moho; the **color tells the curve** of the segment leaving it: green linear,
+  violet ease, amber step, light blue cubic-bezier, white if the channel's properties have different curves.
+- **Several at once, as in Rive** (user request the same day): each selected thing (in Layers with Ctrl +
+  click or Shift + click, or with Ctrl + click on the canvas bones, also in Manipulate, poses and clips) is a
+  **collapsible group** in the timeline. The group's row summarizes its keyframes; ▸/▾ opens it and shows its channels as
+  above. To avoid clutter, only the main one (the last picked) starts open; what the user opens or closes is
+  remembered for the session. «◆ Key» keys all the selected ones in a single undo step.
+- **Params are Puppet-only** (2026-11-06, user decision): the Parameters panel is only in Puppet and
+  an Animate scene does not animate params (validation rejects it, also through the MCP). A scene keys the values
+  themselves or copies a pose with «◆ Pose…» / `set_keys` with `pose`. Also, **a scene is shown without drivers** (§4,
+  point 5). An old document with a scene that animates params is migrated when opened: the clip moves to Puppet (no
+  keyframe is lost) and the history notes it (`migrateScenesWithParams` in `src/core/migration.js`).
+- **The bottom panel is only the timeline** (2026-11-06): Parameters moved to the right panel, only in Puppet. Above the timeline, tabs like the document tabs: in Animate one per scene (+ creates one,
+  × deletes it with confirmation), in Puppet the open clip (× closes it). The bar has playback in the middle:
+  « (previous keyframe), ▶ and » (next keyframe); on the left the clock, the duration and the loop; on the right
+  the keying buttons and the curve.
+- The other half of Rive remains open: seeing everything animated without selecting it (today, with no selection, the timeline lists
+  the animated objects to pick them).
 
-## 9. Puppet en vivo (fase 6, 2026-11-11)
+## 9. Live Puppet (phase 6, 2026-11-11)
 
-Se debatió hacer una state machine como la de Rive (estados, transiciones con condiciones sobre params, exit time,
-blend 1D). **Decisión del usuario: queda en pausa.** En una app con un LLM, el LLM ya decide el estado («estoy
-hablando» → `play("talking")`) y lo que pasa cuadro a cuadro (boca con el audio, parpadeo, respiración) no necesita
-estados. La state machine sirve más a juegos o apps sin IA; se retoma si aparece ese caso. Lo de abajo equivale a una
-state machine de Rive con transiciones desde *Any State*, así que no cierra la puerta ni pierde nada al exportar.
+We debated building a state machine like Rive's (states, transitions with conditions on params, exit time,
+1D blend). **User decision: it is on hold.** In an app with an LLM, the LLM already decides the state («I am
+talking» → `play("talking")`) and what happens frame by frame (mouth with the audio, blinking, breathing) needs no
+states. The state machine is more useful for games or apps without AI; it is picked up again if that case appears. What follows is equivalent to a
+Rive state machine with transitions from *Any State*, so it does not close the door or lose anything on export.
 
-### El runtime (`src/core/vivo.js`)
+### The runtime (`src/core/live.js`)
 
-Es «el muñeco en marcha» y el mismo que exporta la fase 7. No depende del DOM y avanza con `avanzar(dt)` (pruebas y
-guiones con tiempos fijos). La app le habla con tres verbos:
+It is «the puppet running» and the same one that phase 7 exports. It does not depend on the DOM and advances with `advance(dt)` (tests and
+scripts with fixed times). The app talks to it with three verbs:
 
 - **`play(clip)`**:
-  - un clip en `loop` o `pingpong` pasa a ser **la base** (reposo, escuchando, hablando) y reemplaza a la anterior
-    con un fundido cruzado;
-  - un clip `once` es un **gesto**: entra con un fundido **encima** de la base, pisa solo las pistas que tiene (el
-    saludo mueve el brazo y deja la boca de «talking») y sale solo con otro fundido al final. Volver a dispararlo lo
-    reinicia. Varios gestos se apilan en el orden en que se dispararon.
-- **`set(param, valor)`**: el valor de la app (los que falten, su valor inicial).
-- **`stop(clip)`** (o `stop()` todo): el clip sale con su fundido.
+  - a clip in `loop` or `pingpong` becomes **the base** (rest, listening, talking) and replaces the previous one
+    with a crossfade;
+  - a `once` clip is a **gesture**: it enters with a fade **on top of** the base, overrides only the tracks it has (the
+    wave moves the arm and leaves the mouth from «talking») and leaves by itself with another fade at the end. Triggering it again
+    restarts it. Several gestures stack in the order they were triggered.
+- **`set(param, value)`**: the app's value (those missing, their initial value).
+- **`stop(clip)`** (or `stop()` for everything): the clip leaves with its fade.
 
-Datos nuevos del clip (`animation`, solo en Puppet):
+New clip data (`animation`, only in Puppet):
 
-| Propiedad | Qué hace |
+| Property | What it does |
 |---|---|
-| `fade` | Segundos del fundido al entrar y al salir (por defecto 0.2; 0 = de golpe, para el parpadeo). La curva del fundido es suave (ease-in-out). |
-| `next` | Clip que se dispara cuando este `once` empieza a salir: `start_talking` → `talking`, `surprised` → `idle`. |
-| `blend` | `override` (por defecto) pisa lo que hay debajo con su peso; `additive` **suma** la diferencia con el montaje (respiración: `scaleY` 1.02 suma 0.02 a lo que haya). Lo que no es número no se suma. |
-| `auto` | Capas procedurales, dato del personaje: `off` (por defecto, lo dispara la app), `repeat` (el runtime lo dispara solo cada `repeat_min`…`repeat_max` segundos al azar: el parpadeo) o `always` (suena siempre en loop: la respiración, normalmente aditiva). La app no los dispara. |
+| `fade` | Seconds of the fade in and out (default 0.2; 0 = abrupt, for blinking). The fade curve is smooth (ease-in-out). |
+| `next` | Clip triggered when this `once` starts leaving: `start_talking` → `talking`, `surprised` → `idle`. |
+| `blend` | `override` (default) overrides what is below with its weight; `additive` **adds** the difference from the setup (breathing: `scaleY` 1.02 adds 0.02 to whatever is there). What is not a number is not added. |
+| `auto` | Procedural layers, character data: `off` (default, the app triggers it), `repeat` (the runtime triggers it by itself every `repeat_min`…`repeat_max` seconds at random: blinking) or `always` (always plays in loop: breathing, usually additive). The app does not trigger them. |
 
-### Cómo se mezcla (cada cuadro)
+### How it blends (each frame)
 
 ```
-montaje → bases (fundido cruzado) → gestos en orden → capas auto → aditivos suman → drivers con los params mezclados
+setup → bases (crossfade) → gestures in order → auto layers → additives add → drivers with the blended params
 ```
 
-- Cada capa pisa lo de abajo **con su peso**: números en línea, colores por canal, vértices como el morph, lo
-  discreto (el hijo de un switch, booleanos) cambia cuando el peso pasa de 0.5.
-- **Params de la app contra un clip que los anima:** se mezclan igual, con el peso del clip. Mientras suena a peso 1
-  gana el clip; al salir, el param vuelve **suave** al valor de la app (si la app lo cambió mientras tanto, aparece
-  el nuevo). Los drivers se calculan **una vez**, con los params ya mezclados: no se mezclan poses dos veces.
-- Las capas `auto` van encima de los gestos: el parpadeo se ve también durante un saludo.
+- Each layer overrides what is below **with its weight**: numbers linearly, colors per channel, vertices like the morph, the
+  discrete (a switch's child, booleans) changes when the weight passes 0.5.
+- **App params against a clip that animates them:** they blend the same way, with the clip's weight. While it plays at weight 1
+  the clip wins; when it leaves, the param returns **smoothly** to the app's value (if the app changed it meanwhile, the
+  new one appears). Drivers are computed **once**, with the params already blended: poses are not blended twice.
+- `auto` layers go on top of gestures: blinking is seen during a wave too.
 
-### En el editor: «▶ Live» (Puppet)
+### In the editor: «▶ Live» (Puppet)
 
-Un interruptor arriba de la biblioteca de clips. Con Live encendido el documento no se edita: los botones de los
-clips **disparan** (los `auto` se muestran pero suenan solos), los sliders de Parameters son los valores de la app
-(no se guardan ni van al historial), la timeline muestra qué suena con su peso («■ Stop all» = `stop()`) y el canvas
-es lo que verá la app. Al apagarlo se vuelve a lo que estaba abierto, con los valores de Parameters de antes. «Live
-no se edita» vale para la persona: los cambios de la IA por MCP y deshacer sí cambian el documento, y el muñeco sigue
-con el nuevo. «AI view» (también fuera de Live) muestra el manifiesto, como `get_manifest`.
+A toggle above the clip library. With Live on, the document is not edited: the clip buttons
+**trigger** (the `auto` ones are shown but play by themselves), the Parameters sliders are the app's values
+(not saved and not added to the history), the timeline shows what is playing with its weight («■ Stop all» = `stop()`) and the canvas
+is what the app will see. Turning it off goes back to what was open, with the previous Parameters values. «Live
+is not edited» applies to the person: the AI's changes through MCP and undo do change the document, and the puppet continues
+with the new one. «AI view» (also outside Live) shows the manifest, like `get_manifest`.
 
-**Ajustes de la auditoría (2026-11-11):** las bases se promedian entre sí durante el fundido cruzado y esa mezcla pisa
-el montaje con el peso total (antes, dos bases iguales dejaban asomar el montaje a mitad del fundido); el fundido de un
-clip `once` no pasa de la mitad de su duración; un `auto: "always"` suena en loop aunque el clip diga `once`; volver a
-pedir una base que está saliendo la retoma; `stop` de un id que no existe o de un auto da error; `next` en un clip
-`auto` es un error de validación.
+**Audit adjustments (2026-11-11):** bases are averaged among themselves during the crossfade and that blend overrides
+the setup with the total weight (before, two equal bases let the setup show through halfway through the fade); the fade of a
+`once` clip does not exceed half of its duration; an `auto: "always"` plays in loop even if the clip says `once`; asking again
+for a base that is leaving resumes it; `stop` of an id that does not exist or of an auto gives an error; `next` in an `auto`
+clip is a validation error.
 
-### Para la IA
+### For the AI
 
-- **Edición (MCP):** `set_keys` acepta `fade`, `next`, `blend`, `auto`, `repeat_min` y `repeat_max` (o `apply_ops`).
-  `render_preview` con **`live`** (un guion: `[{ t, play | stop | set }]`) y `times` devuelve la tira de cuadros de
-  lo que vería la app, con el estado de cada cuadro (qué suena y con qué peso). El azar del parpadeo usa una semilla
-  fija, así que el mismo guion da la misma tira.
-- **Manifiesto** (`get_manifest`, `manifiesto()` en `src/core/manifiesto.js`): lo que lee la IA de la app. Los params
-  (tipo, rango u opciones, valor inicial, descripción y **qué poses mueve cada uno**), los clips que se pueden
-  disparar (base o gesto, descripción, duración, `next`, qué params anima) y las capas automáticas (solo informativas).
-  El param gana `description` para esto. La fase 7 lo convierte en herramientas para el LLM (`play`, `set`, `stop`).
+- **Editing (MCP):** `set_keys` accepts `fade`, `next`, `blend`, `auto`, `repeat_min` and `repeat_max` (or `apply_ops`).
+  `render_preview` with **`live`** (a script: `[{ t, play | stop | set }]`) and `times` returns the strip of frames of
+  what the app would see, with the state of each frame (what is playing and at what weight). The blinking randomness uses a fixed
+  seed, so the same script gives the same strip.
+- **Manifest** (`get_manifest`, `manifest()` in `src/core/manifest.js`): what the app's AI reads. The params
+  (type, range or options, initial value, description and **which poses each one moves**), the clips that can be
+  triggered (base or gesture, description, duration, `next`, which params it animates) and the automatic layers (informational only).
+  The param gains `description` for this. Phase 7 turns it into tools for the LLM (`play`, `set`, `stop`).
 
-### Queda para después
+### Left for later
 
-State machine (en pausa), máscaras por región explícitas (hoy un clip ya pisa solo sus pistas), grabar una actuación
-(● Rec), atajos de teclado por botón y el lip-sync desde el audio (fase 7: es un param que la app mueve).
+State machine (on hold), explicit region masks (today a clip already overrides only its tracks), recording a performance
+(● Rec), keyboard shortcuts per button and lip-sync from audio (phase 7: it is a param the app moves).
 
-## 10. La UI de Puppet: tres piezas en un solo panel (2026-11-12)
+## 10. The Puppet UI: three pieces in a single panel (2026-11-12)
 
-El usuario confundía el desplegable «View» de arriba (Setup / Parameters (blend) / Pose: …) con un atajo de los
-clips: las tres piezas de Puppet estaban en tres lugares y con metáforas distintas, y no se veía que **los params
-mezclan poses**. Se acordó (como las listas de animaciones e inputs de Rive y las acciones de Moho como recursos):
+The user confused the «View» dropdown at the top (Setup / Parameters (blend) / Pose: …) with a shortcut for the
+clips: the three Puppet pieces were in three places and with different metaphors, and it was not visible that **params
+blend poses**. It was agreed (like Rive's animation and input lists and Moho's actions as assets):
 
-- **Un panel derecho con las tres piezas, apiladas y plegables:** Clips (lo que hace el muñeco; arriba, porque es lo que
-  más se usa y lo que se dispara en Live), Parameters (perillas que mezclan poses) y **Poses** (fotos fijas). Las poses
-  son una lista como la de clips: clic abre la pose para editarla (amarillo) y cada fila dice qué param la mueve
-  (← happiness). Se descartaron las pestañas: ocupan menos, pero esconden la relación.
-- **Sin el desplegable «View».** Un **cartel arriba del lienzo** dice qué se edita o se ve, en el color del marco, con
-  el botón para salir: «Editing pose happy · Done», «Editing clip wave at 0.5 s · Close clip», «Previewing
-  parameters · Reset» o «● Live · ■ Stop Live» (como el aviso de Moho al editar una acción).
-- Lo que se pliega se recuerda por sección. El MCP no cambia: es solo la interfaz.
-- **El inspector también se pliega**, en todos los modos (flecha del título «Inspector»; se recuerda). Se probó poner
-  Clips, Parameters y Poses en una columna propia al lado del inspector y el usuario prefirió volver atrás: con el
-  inspector plegable, cada uno decide cuánto lugar le da a cada cosa.
-- **Orden y aspecto** (también pedido del usuario): Clips → Poses → Parameters → Inspector; cada cabecera de Puppet con + y 🗑
-  como Layers y un fondo más oscuro para que se vea dónde empieza cada sección (el inspector no: es el mismo en todos los
-  modos). Cada param en tres líneas: nombre y
-  valor; el deslizador a todo el ancho; las poses que mezcla con su peso y un + para conectar otra.
-- **Una barra chica arriba de Clips:** «Reset · ▶ Live · AI view», lo que se hace con todo el muñeco y no con una lista
-  (en la cabecera de Clips rompían la estética). Reset vuelve los params al valor inicial (con Live, los de la app) y
-  sale del cartel de la vista de params.
+- **One right panel with the three pieces, stacked and collapsible:** Clips (what the puppet does; on top, because it is what
+  is used most and what is triggered in Live), Parameters (knobs that blend poses) and **Poses** (still shots). Poses
+  are a list like the clips one: click opens the pose for editing (yellow) and each row says which param moves it
+  (← happiness). Tabs were ruled out: they take less space, but hide the relation.
+- **No «View» dropdown.** A **banner above the canvas** says what is being edited or viewed, in the frame's color, with
+  the button to exit: «Editing pose happy · Done», «Editing clip wave at 0.5 s · Close clip», «Previewing
+  parameters · Reset» or «● Live · ■ Stop Live» (like Moho's notice when editing an action).
+- What is collapsed is remembered per section. The MCP does not change: it is only the interface.
+- **The inspector also collapses**, in every mode (arrow in the «Inspector» title; remembered). We tried putting
+  Clips, Parameters and Poses in their own column next to the inspector and the user preferred to go back: with a
+  collapsible inspector, each person decides how much space to give each thing.
+- **Order and look** (also a user request): Clips → Poses → Parameters → Inspector; each Puppet header with + and 🗑
+  like Layers and a darker background so it is clear where each section starts (not the inspector: it is the same in every
+  mode). Each param on three lines: name and
+  value; the full-width slider; the poses it blends with their weight and a + to connect another.
+- **A small bar above Clips:** «Reset · ▶ Live · AI view», what is done with the whole puppet and not with a list
+  (in the Clips header they broke the look). Reset returns the params to their initial value (with Live, the app's) and
+  exits the params-view banner.

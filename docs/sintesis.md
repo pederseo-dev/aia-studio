@@ -1,47 +1,47 @@
-# Síntesis: qué tomamos de Moho y de Rive
+# Synthesis: what we take from Moho and from Rive
 
-> Estado: **propuesta inicial** (2026-10-29). Las decisiones marcadas como *propuesta* hay que
-> confirmarlas antes de escribir código. Los detalles y las fuentes están en
-> [investigacion/moho-lua.md](investigacion/moho-lua.md) y
+> Status: **initial proposal** (2026-10-29). Decisions marked as *proposal* must be
+> confirmed before writing code. Details and sources are in
+> [investigacion/moho-lua.md](investigacion/moho-lua.md) and
 > [investigacion/rive-runtime.md](investigacion/rive-runtime.md).
 
-## 1. Lo que aprendimos en una frase
+## 1. What we learned in one sentence
 
-- **Moho** es un buen modelo **para el animador**: huesos con binding sencillo, smart bones
-  (un control que reproduce una acción), switch layers y canales tipados en los que cada
-  keyframe lleva su propia interpolación. Tiene dos puntos débiles: los IDs enteros dependen
-  del orden y parte del significado depende de los nombres.
-- **Rive** es un buen modelo **para el runtime**: tipos definidos en *defs* declarativos que
-  sirven de fuente única de verdad, actualización incremental con dirty flags y orden de
-  dependencias, state machine por capas y data binding con view models tipados. Es binario
-  y usa claves numéricas, así que es opaco para una IA.
+- **Moho** is a good model **for the animator**: bones with simple binding, smart bones
+  (a control that plays an action), switch layers and typed channels in which each
+  keyframe carries its own interpolation. It has two weak points: integer IDs depend
+  on order, and part of the meaning depends on names.
+- **Rive** is a good model **for the runtime**: types defined in declarative *defs* that
+  serve as a single source of truth, incremental update with dirty flags and dependency
+  order, a layered state machine, and data binding with typed view models. It is binary
+  and uses numeric keys, so it is opaque to an AI.
 
-Ninguno de los dos fue pensado para que un LLM lo edite. Ese es nuestro hueco.
+Neither was designed for an LLM to edit. That is our gap.
 
-## 2. Decisiones de base (propuesta)
+## 2. Base decisions (proposal)
 
-### 2.1 Un esquema declarativo como fuente única de verdad *(de Rive)*
+### 2.1 A declarative schema as single source of truth *(from Rive)*
 
-Cada tipo (`bone`, `shape`, `slot`, `param`...) se describe una sola vez en un archivo de
-esquema, con sus propiedades, tipos, valor inicial, si es animable y una descripción. De ese
-esquema salen:
+Each type (`bone`, `shape`, `slot`, `param`...) is described only once in a schema
+file, with its properties, types, initial value, whether it is animatable and a description. From that
+schema come:
 
-- la validación del JSON,
-- la documentación que se le pasa a la IA (qué puede tocar y con qué rangos),
-- los paneles de propiedades del editor,
-- los get/set del runtime.
+- the JSON validation,
+- the documentation given to the AI (what it can touch and with what ranges),
+- the editor's property panels,
+- the runtime's get/set.
 
-Así se añade un tipo una vez y aparece en los cuatro sitios.
+So a type is added once and shows up in all four places.
 
-### 2.2 El documento es JSON legible con IDs de texto estables *(lo contrario de ambos)*
+### 2.2 The document is readable JSON with stable text IDs *(the opposite of both)*
 
-- IDs de texto que no cambian (`"head"`, `"mouth_smile"`), nunca índices.
-- Jerarquía con `parent: "<id>"` en una lista plana. Es fácil de editar con parches y no
-  depende de la posición.
-- Las rutas de propiedad son legibles: `bones.head.rotation`.
-- El estado del editor (selección, vista, paneles) va **fuera** del documento.
+- Text IDs that do not change (`"head"`, `"mouth_smile"`), never indices.
+- Hierarchy with `parent: "<id>"` in a flat list. It is easy to edit with patches and does not
+  depend on position.
+- Property paths are readable: `bones.head.rotation`.
+- Editor state (selection, view, panels) goes **outside** the document.
 
-### 2.3 Separar `rig` y `animación` *(de Moho: frame 0 = pose de montaje)*
+### 2.3 Separate `rig` and `animation` *(from Moho: frame 0 = setup pose)*
 
 ```jsonc
 {
@@ -59,44 +59,44 @@ Así se añade un tipo una vez y aparece en los cuatro sitios.
 }
 ```
 
-### 2.4 Parámetros y drivers explícitos en vez de smart bones mágicos *(Moho + Rive)*
+### 2.4 Explicit parameters and drivers instead of magic smart bones *(Moho + Rive)*
 
-En Moho, un smart bone se reconoce porque su acción tiene el mismo nombre. Nosotros lo
-hacemos explícito: un **param** (`happiness`, `head_turn`, `mouth_open`) tiene un rango, y
-los **drivers** dicen qué acción reproduce y en qué tramo. Los params son la interfaz
-principal de la IA, igual que los view models de Rive. Sustituyen a los inputs de la state
-machine, que Rive ya marcó como deprecados.
+In Moho, a smart bone is recognized because its action has the same name. We
+make it explicit: a **param** (`happiness`, `head_turn`, `mouth_open`) has a range, and
+the **drivers** say which action it plays and over which range. Params are the AI's main
+interface, like Rive's view models. They replace the state machine inputs,
+which Rive has already marked as deprecated.
 
-### 2.5 Canales tipados con interpolación por keyframe *(de Moho)*
+### 2.5 Typed channels with per-keyframe interpolation *(from Moho)*
 
-Tipos de canal: `number`, `vec2`, `color`, `bool` y `string` (este último para slots).
-Cada keyframe lleva su `interp`. Empezamos con `linear`, `step`, `ease-in-out` y `bezier`, y
-dejamos `elastic` y `bounce` para más adelante.
+Channel types: `number`, `vec2`, `color`, `bool` and `string` (the last one for slots).
+Each keyframe carries its `interp`. We start with `linear`, `step`, `ease-in-out` and `bezier`, and
+leave `elastic` and `bounce` for later.
 
 ### 2.6 Switch / slot *(Moho switch layer ≈ Rive Solo)*
 
-Un grupo con un único hijo visible, elegido por un canal `string`. Sirve para bocas,
-visemas, manos y ojos. Lo copiamos tal cual.
+A group with a single visible child, chosen by a `string` channel. Used for mouths,
+visemes, hands and eyes. We copy it as is.
 
-### 2.7 Binding: empezar simple
+### 2.7 Binding: start simple
 
-- **v1**: *layer binding*. Cada parte SVG se pega a un hueso con `<g transform>` y no se
-  deforma. Es estilo recortable, funciona perfecto en SVG y alcanza para muchísimo.
-- **v2**: pesos por vértice (como máximo 4 huesos, como el skin de Rive). El atributo `d` se
-  recalcula en JS.
-- **Más adelante**: mallas de imagen en una capa canvas.
+- **v1**: *layer binding*. Each SVG part is attached to a bone with `<g transform>` and does not
+  deform. It is a cutout style, works perfectly in SVG and goes a very long way.
+- **v2**: per-vertex weights (at most 4 bones, like Rive's skin). The `d` attribute is
+  recomputed in JS.
+- **Later**: image meshes in a canvas layer.
 
-### 2.8 Runtime: el modelo manda y el SVG es una proyección *(de Rive)*
+### 2.8 Runtime: the model rules and the SVG is a projection *(from Rive)*
 
-- Los setters solo marcan como sucio; un `update()` por frame recalcula en orden de
-  dependencias.
-- El DOM SVG solo se toca en lo que cambió.
-- Un **Renderer abstracto** (SVG primero) deja abierta la puerta a canvas o WebGL si hace
-  falta rendimiento.
+- Setters only mark as dirty; one `update()` per frame recomputes in dependency
+  order.
+- The SVG DOM is touched only where something changed.
+- An **abstract Renderer** (SVG first) leaves the door open to canvas or WebGL if
+  performance requires it.
 
-### 2.9 Una sola API de operaciones para la IA y el editor *(de MohoMCP, pero nativa)*
+### 2.9 A single operations API for the AI and the editor *(from MohoMCP, but native)*
 
-Toda modificación es una **operación** serializable:
+Every modification is a serializable **operation**:
 
 ```js
 { "op": "set",    "path": "rig.params.happiness.default", "value": 0.8 }
@@ -104,71 +104,71 @@ Toda modificación es una **operación** serializable:
 { "op": "key",    "anim": "wave", "path": "bones.arm_l.rotation", "t": 0.5, "value": 40 }
 ```
 
-- El editor visual emite las mismas operaciones que la IA.
-- Las operaciones se aplican **en lotes atómicos**, con undo/redo y validación contra el
-  esquema antes de aplicarse.
-- Cada lote guarda quién lo hizo (`ai` o `user`). Así la IA ve qué corrigió el usuario y no
-  lo pisa.
+- The visual editor emits the same operations as the AI.
+- Operations are applied **in atomic batches**, with undo/redo and validation against the
+  schema before being applied.
+- Each batch stores who made it (`ai` or `user`). That way the AI sees what the user fixed and does not
+  overwrite it.
 
-## 3. Qué evitamos
+## 3. What we avoid
 
-| Problema en Moho / Rive | Qué hacemos nosotros |
+| Problem in Moho / Rive | What we do |
 | --- | --- |
-| IDs enteros que dependen de la posición | IDs de texto estables |
-| Significado escondido en convenciones de nombres | Relaciones explícitas (`drivers`, `bone`) |
-| Estado de la UI mezclado con los datos | Documento limpio, estado del editor aparte |
-| Formato binario o sin esquema publicado | JSON con esquema versionado (`format: "aia/0.1"`) |
-| Scripts con efectos laterales en cada redibujado | Solo operaciones declarativas en la v1 |
-| Ciclos de dependencias sin validar | Detección de ciclos al aplicar operaciones |
+| Integer IDs that depend on position | Stable text IDs |
+| Meaning hidden in naming conventions | Explicit relations (`drivers`, `bone`) |
+| UI state mixed with the data | Clean document, editor state kept apart |
+| Binary format or no published schema | JSON with a versioned schema (`format: "aia/0.1"`) |
+| Scripts with side effects on every redraw | Only declarative operations in v1 |
+| Unvalidated dependency cycles | Cycle detection when applying operations |
 
-## 4. Orden de construcción sugerido
+## 4. Suggested build order
 
-1. **Esquema + validador**: los tipos `bone`, `part`, `slot`, `param` y `driver`.
-2. **Runtime SVG mínimo**: cargar un documento, resolver huesos y dibujar las partes.
-3. **Motor de operaciones**: `set`, `add`, `remove` y `key`, con lotes, undo y origen.
-4. **Personaje de prueba**: unos 10 huesos, 4 params y slots de boca y ojos.
-5. **Animación + state machine mínima**: `idle`, `talking` y `reacting`.
-6. **Editor**: árbol, panel de propiedades generado del esquema y manipulación directa en el
-   lienzo.
-7. **Puente IA**: el esquema se exporta como descripción de herramientas para el LLM.
+1. **Schema + validator**: the `bone`, `part`, `slot`, `param` and `driver` types.
+2. **Minimal SVG runtime**: load a document, resolve bones and draw the parts.
+3. **Operations engine**: `set`, `add`, `remove` and `key`, with batches, undo and origin.
+4. **Test character**: about 10 bones, 4 params and mouth and eye slots.
+5. **Animation + minimal state machine**: `idle`, `talking` and `reacting`.
+6. **Editor**: tree, property panel generated from the schema and direct manipulation on the
+   canvas.
+7. **AI bridge**: the schema is exported as a tool description for the LLM.
 
-## 5. Decisiones confirmadas (2026-11-02)
+## 5. Confirmed decisions (2026-11-02)
 
-- **Empezamos construyendo y ajustamos con prueba y error**, por fases ([plan.md](plan.md)). Un primer prototipo
-  probó la idea y quedó guardado en la etiqueta de git `prototipo-0`; la base se rehace limpia.
-- **Convenciones**: coordenadas como en SVG (Y hacia abajo), ángulos en grados con positivos en sentido horario y
-  tiempo en **segundos** (los fps solo sirven para mostrar frames y para el snapping).
-- **MCP desde el comienzo.** La IA del usuario (la que ya paga: Claude Desktop, Claude Code, Cursor...) maneja los
-  personajes por un servidor MCP local, sin API keys. MCP y editor escriben los mismos archivos usando el mismo motor
-  de operaciones, y cada lote queda en el historial con su origen.
-- **Editor web estático con Vite** como servidor de desarrollo, JS puro sin framework. Vite aporta la API local para
-  guardar y el aviso en vivo cuando un personaje cambia en disco.
-- **Controles finos a mano para todo**: lo que puede tocar la IA, el usuario también lo puede retocar en el editor.
-- **El personaje define cómo se mueve; la app decide cuándo.** Params, drivers y (más adelante) la state machine son
-  datos del personaje. Comportamientos como el parpadeo automático o el lip-sync son código de la app que usa el
-  personaje.
-- **Lo que dejó el prototipo**: drivers numéricos aditivos con interpolación por tramos y drivers de slot con
-  umbrales funcionaron bien para una cara simple. Son un caso particular de `param → acción` (sección 2.4), que es lo
-  que se construye en la fase 4.
+- **We start by building and adjust by trial and error**, in phases ([plan.md](plan.md)). A first prototype
+  tested the idea and was kept in the git tag `prototipo-0`; the base is rebuilt clean.
+- **Conventions**: coordinates as in SVG (Y down), angles in degrees with positive clockwise, and
+  time in **seconds** (fps only serve to show frames and for snapping).
+- **MCP from the start.** The user's AI (the one they already pay for: Claude Desktop, Claude Code, Cursor...) handles the
+  characters through a local MCP server, without API keys. MCP and editor write the same files using the same operations
+  engine, and each batch stays in the history with its origin.
+- **Static web editor with Vite** as the development server, plain JS with no framework. Vite provides the local API to
+  save and the live notice when a character changes on disk.
+- **Fine manual controls for everything**: whatever the AI can touch, the user can also touch up in the editor.
+- **The character defines how it moves; the app decides when.** Params, drivers and (later) the state machine are
+  character data. Behaviors such as automatic blinking or lip-sync are code of the app that uses the
+  character.
+- **What the prototype left us**: additive numeric drivers with piecewise interpolation and slot drivers with
+  thresholds worked well for a simple face. They are a special case of `param → action` (section 2.4), which is what
+  is built in phase 4.
 
-## 6. Formato de exportación (por definir)
+## 6. Export format (to be defined)
 
-El documento de edición (`personajes/*.json`) está pensado para crear y editar. Para **usar** el personaje en una
-app con IA conviene un formato aparte. Propuesta inicial, a validar con el primer caso real:
+The editing document (`documents/<id>/document.json`) is designed for creating and editing. To **use** the character in an
+AI app, a separate format is better. Initial proposal, to be validated with the first real case:
 
-- **Un solo archivo autocontenido** (`*.aia.json`) con el montaje, los drivers y las animaciones, sin historial ni
-  datos del editor, y opcionalmente minificado.
-- **Un manifiesto para la IA en tiempo de ejecución**: los params con su descripción y rango, expresiones con nombre
-  (`feliz`, `pensando` = combinaciones de params) y estados. A partir de él, el runtime genera la descripción de
-  herramientas para el LLM de la app (por ejemplo, `set_expression`, `look_at`), sin que la app tenga que escribirla.
-- **El runtime liviano** (`src/runtime/` + `src/core/`) como paquete JS sin dependencias.
-- Pendiente: cómo entra el audio (lip-sync por volumen o por visemas) y si conviene exportar también a Lottie o video.
+- **A single self-contained file** (`*.aia.json`) with the setup, the drivers and the animations, without history or
+  editor data, and optionally minified.
+- **A manifest for the AI at runtime**: the params with their description and range, named expressions
+  (`feliz`, `pensando` = combinations of params) and states. From it, the runtime generates the tool
+  description for the app's LLM (for example, `set_expression`, `look_at`), without the app having to write it.
+- **The lightweight runtime** (`src/runtime/` + `src/core/`) as a JS package with no dependencies.
+- Pending: how audio comes in (lip-sync by volume or by visemes) and whether to also export to Lottie or video.
 
-## 7. Preguntas abiertas
+## 7. Open questions
 
-- ¿Deformación por pesos (v2) en el corto plazo o el estilo recortable alcanza al principio?
-- ¿Personajes generados por la IA desde piezas de una biblioteca, o dibujados por el usuario
-  y animados por la IA?
-- ¿Hace falta importar `.moho` o `.riv` existentes? Por ahora no; es caro y no es la base.
-- Hay que descomprimir un `.moho` real para verificar el esquema de keyframes, que no está
-  documentado públicamente.
+- Weight deformation (v2) in the short term, or is the cutout style enough at first?
+- Characters generated by the AI from pieces of a library, or drawn by the user
+  and animated by the AI?
+- Do we need to import existing `.moho` or `.riv` files? Not for now; it is expensive and not the base.
+- A real `.moho` must be unzipped to verify the keyframe schema, which is not
+  publicly documented.

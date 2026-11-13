@@ -2,85 +2,85 @@
 
 # aia-studio
 
-Editor y runtime de animación 2D vectorial (personajes, objetos, íconos, escenas), construido con HTML, CSS, JS y SVG.
-Toma ideas de **Moho** (huesos, smart bones, switch layers) y de **Rive** (state machines,
-runtime declarativo) y está pensado desde el comienzo para que **una IA manipule los
-documentos** y **el usuario pueda corregir a mano** cuando haga falta.
+A 2D vector animation editor and runtime (characters, objects, icons, scenes), built with HTML, CSS, JS and SVG.
+It takes ideas from **Moho** (bones, smart bones, switch layers) and from **Rive** (state machines, declarative
+runtime), and is designed from the start so that **an AI can manipulate the documents** and **the user can fix
+things by hand** when needed.
 
-## Principios
+## Principles
 
-1. **El documento es texto.** Todo documento es JSON legible y con nombres
-   significativos (`head`, `mouth`, `happiness`), no un binario opaco.
-2. **Una sola API para la IA y para el editor.** Cada acción del editor visual (mover un
-   hueso, cambiar una boca, crear un keyframe) es una operación de la misma API que usa la IA.
-   Lo que hace una, lo puede deshacer o corregir la otra.
-3. **Parámetros de alto nivel.** La IA trabaja con controles semánticos
-   (`happiness: 0.8`, `head_turn: -0.3`) que mueven muchas cosas a la vez, al estilo de los
-   smart bones de Moho, en lugar de mover vértices sueltos.
-4. **Construir la base de a poco.** Primero el formato y el runtime; después el editor
-   encima, siempre sobre la misma base.
+1. **The document is text.** Every document is readable JSON with meaningful names
+   (`head`, `mouth`, `happiness`), not an opaque binary.
+2. **One API for the AI and the editor.** Every action in the visual editor (moving a
+   bone, changing a mouth, creating a keyframe) is an operation of the same API the AI uses.
+   What one does, the other can undo or fix.
+3. **High-level parameters.** The AI works with semantic controls
+   (`happiness: 0.8`, `head_turn: -0.3`) that move many things at once, in the style of Moho's
+   smart bones, instead of moving individual vertices.
+4. **Build the base little by little.** First the format and the runtime; then the editor
+   on top, always on the same base.
 
-## Cómo usarlo
+## How to use it
 
 ```bash
 npm install
-npm run dev     # editor en http://localhost:5173
-npm test        # pruebas del núcleo
-npm run mcp     # servidor MCP por stdio (normalmente lo arranca el cliente de IA)
+npm run dev     # editor at http://localhost:5173
+npm test        # core tests
+npm run mcp     # MCP server over stdio (usually started by the AI client)
 ```
 
-> Estado: **fase 6** del [plan](docs/plan.md) (Puppet en vivo: ▶ Live, clips de base y gestos con fundidos, capas
-> automáticas como el parpadeo y la respiración, y el manifiesto para la IA de la app), sobre la animación de la
-> fase 5 (modos Design, Animate y Puppet, clips con keyframes y timeline), las expresiones de la fase 4 (poses, params,
-> drivers y switch), los huesos de la fase 3 y el dibujo de la fase 2. El prototipo que probó la idea quedó en la etiqueta de git `prototipo-0`.
+> Status: **phase 6** of the [plan](docs/plan.md) (live Puppet: ▶ Live, base clips and gestures with fades, automatic
+> layers such as blinking and breathing, and the manifest for the app's AI), on top of the animation from
+> phase 5 (Design, Animate and Puppet modes, clips with keyframes and timeline), the expressions from phase 4 (poses, params,
+> drivers and switch), the bones from phase 3 and the drawing from phase 2. The prototype that tested the idea is kept in the git tag `prototipo-0`.
 
 ### Editor
 
-Arriba: el menú **☰** (nuevo, abrir, copia, importar SVG, cerrar, eliminar, atajos), las **pestañas** de los
-documentos abiertos (la × cierra la pestaña, el archivo queda en disco) y la barra con dos **grupos de
-herramientas**: Transformar (Mover, Rotar, Escalar) y Crear (Pluma, Rectángulo, Elipse). La flecha ▾ de cada grupo
-muestra las demás herramientas.
+At the top: the **☰** menu (new, open, copy, import SVG, close, delete, shortcuts), the **tabs** of the
+open documents (the × closes the tab, the file stays on disk) and the bar with two **tool
+groups**: Transform (Move, Rotate, Scale) and Create (Pen, Rectangle, Ellipse). The ▾ arrow of each group
+shows the other tools.
 
-| Acción | Cómo |
+| Action | How |
 | --- | --- |
-| Modos | Arriba a la derecha: **Design** (dibujo y rig: el montaje), **Animate** (una timeline de escena, para exportar) y **Puppet** (los controles del muñeco: poses, params, drivers y clips cortos que la app o su IA disparan). Ver [docs/decision-animacion.md](docs/decision-animacion.md). |
-| Seleccionar y mover | Herramienta `V`; arrastrar en el lienzo (Shift = un solo eje) o flechas (Shift = 10 px). |
-| Seleccionar varios | Ctrl o Shift + clic; arrastrar en un lugar vacío hace un recuadro; en Layers, Ctrl + clic suma y Shift + clic toma el tramo. `Ctrl+A` = todo, `Ctrl+G` = agrupar. Rotan y escalan desde el centro del conjunto; el inspector cambia lo que tienen en común. |
-| Rotar y escalar | `T` y `S`: arrastrar en cualquier parte del lienzo gira o escala la selección desde su pivote. |
-| Crear formas | `R` rectángulo, `E` elipse: arrastrar en el lienzo (Shift = cuadrado o círculo). |
-| Pluma | `P`: clic = vértice recto, clic y arrastrar = curvo, clic en el primero = cerrar, Enter o Esc = terminar abierto. |
-| Editar puntos | Doble clic en un path o Enter: arrastrar anclas y tangentes (Alt = separar), doble clic en un ancla = recto/curvo, clic en el contorno = agregar, Supr = borrar. Enter o Esc para salir. |
-| Rotar, escalar, pivote | Manijas de la selección: círculo de arriba = rotar (Shift = de a 15°), esquinas = escalar desde el pivote (Shift = proporcional), punto del pivote = moverlo sin mover el dibujo (grupos, paths, rectángulos y elipses). |
-| Estilos y degradados | Los botones de estilo y de degradado en Assets («New shared style», «New linear gradient»); las formas los usan con `style` y `fillGradient` en el inspector. Lo que viene del estilo se ve en naranja. |
-| Importar SVG | ☰ → «Import SVG…»: las formas llegan como paths editables dentro de un grupo. |
-| Skeleton (capa de huesos) | Como la *bone layer* de Moho: contiene el dibujo y sus huesos. En Layers, ▾ junto al botón de grupo → «Skeleton» (o `K`): mete la selección en un skeleton nuevo. Como en Moho, en Layers solo se ven las capas: los huesos se ven y se eligen en el lienzo. El dibujo de adentro queda quieto hasta enlazarlo. |
-| Huesos | Cinco herramientas en el menú de huesos, como en Moho. **Add Bone** (`B`): arrastrar en vacío crea un hueso en el skeleton seleccionado o en el de la selección (hijo del hueso elegido; si no hay skeleton, se crea uno); desde la punta del hueso elegido encadena otro; un clic en un hueso lo elige. **Manipulate Bones** (`M`): arrastrar un hueso lo gira, el círculo del origen lo mueve y el de la punta cambia dirección y largo. **Reparent Bone**: el clic solo elige (Shift + clic suma; clic en vacío suelta); se eligen los hijos y al final el padre, y la barra de opciones hace el cambio con «Parent to …» o «Clear parent» (raíz), sin moverlos en el montaje; si en alguna pose cambian de lugar (porque la pose mueve al padre viejo o al nuevo), lo avisa y ofrece «Keep poses» para compensarlas; dibuja la jerarquía. Cada hueso tiene un color; al elegir uno se resaltan su padre y sus hijos, y la barra de opciones los nombra para ir a ellos. En una pose, cualquier herramienta posa. |
-| Enlazar al esqueleto | Solo se enlaza a huesos del mismo skeleton. **Bind Layer** (`L`): clic en un hueso y después en el dibujo (o su fila en Layers) para que lo siga entero; otro clic lo suelta, Alt elige su grupo. **Bind Points**: clic en un hueso y después en puntos de los paths de su skeleton, o un recuadro alrededor; los puntos toman el color del hueso (Alt suelta). También: `Ctrl+B` con dibujo y hueso seleccionados, `bone` en el inspector, y «Bind all by proximity» con el skeleton seleccionado. Enlazar no mueve nada: el dibujo sigue al hueso en las poses. |
-| Barra de opciones | Arriba del lienzo: qué se puede hacer con la herramienta y lo seleccionado, con botones para las acciones (por ejemplo, con un hueso: enlazar, ver lo enlazado, hueso hijo, probar en una pose). |
-| Doblar con varios huesos | Editando los puntos de un path: «Distribute among bones» (o el hueso de cada punto) en la barra de opciones. En las poses, el path se dobla siguiendo la cadena. |
-| Expresiones (Puppet) | Una pose puede cambiar cualquier cosa animable: en la pose, el inspector muestra arriba lo de la pose y Enter edita los puntos de la boca (morph). A la derecha, en Parameters, + crea un control y el + de su fila lo conecta a una pose; cada param muestra su nombre y valor, el deslizador a todo el ancho y las poses que mezcla con su peso. Mover el control muestra la mezcla. Un switch muestra un solo hijo (`active`). |
-| Poses (Puppet) | A la derecha, entre Clips y Parameters, la lista de poses (fotos fijas que los params mezclan): cada una dice qué param la mueve (← happiness); clic la abre para editarla. Clips, Poses y Parameters tienen + y 🗑 en la cabecera, como Layers (🗑 borra lo seleccionado o lo abierto; un param se va con sus drivers). En una pose, arrastrar un hueso o el dibujo enlazado lo gira sin tocar el montaje. Arriba del lienzo, un cartel dice qué se edita (pose, clip, la vista de params o Live), en el color del marco, con su botón para salir (Done, Close clip, ■ Stop Live). Arriba de Clips, una barra chica con lo que se hace con todo el muñeco: Reset (params al inicio), ▶ Live y AI view. Clips, Parameters, Poses y el Inspector (este en todos los modos) se pliegan con la flecha del título, y se recuerda. |
-| Clips (Puppet) | A la derecha, la biblioteca de clips: + crea uno, clic en un clip lo abre en la timeline y ▶ lo reproduce. Abajo, el clip abierto es una pestaña (× lo cierra, + crea otro) y al lado va su descripción (para la IA de la app). En el inspector del clip, el grupo Live: `fade`, `next`, `blend` y `auto` (con la espera de `repeat`). |
-| ▶ Live (Puppet) | El muñeco como lo verá la app: un clip en loop es la base (fundido cruzado), uno `once` es un gesto encima que sale solo, y los `auto` (parpadeo, respiración) suenan solos. Los botones de clips los disparan (■ saca uno), Parameters son los valores de la app (no se guardan), la timeline muestra qué suena con su peso y «■ Stop all» saca todo. El documento no se edita a mano. «AI view» muestra el manifiesto que recibe la IA de la app, con sus problemas. Ver [docs/decision-animacion.md §9](docs/decision-animacion.md). |
-| Escenas (Animate) | Abajo, una pestaña por escena, como las de los documentos: clic la abre, + crea otra y × la borra (pide confirmar; se puede deshacer). Una escena se ve sin params ni drivers (montaje + keyframes, como se exporta): una expresión se copia con «◆ Pose…» y una variante se elige keyando el switch. |
-| Timeline (Animate y Puppet) | Con un clip o escena abierto, todo lo que cambias (girar un hueso, el inspector, los puntos y, en Puppet, los sliders de Parameters) queda como keyframe en el playhead (autokey; en Puppet, lo que suman los drivers no se guarda dos veces). La timeline muestra «All keys» (todos los keyframes del clip) y un grupo plegable por cada cosa seleccionada (Ctrl + clic en Layers o sobre los huesos del lienzo suma más; ▸/▾ abre o cierra; abierto va solo el principal): la fila del grupo resume sus keyframes y, abierto, muestra sus canales como en Moho, también los vacíos: ◇ keya un canal en el playhead; Position (x, y) y Scale van en una fila. Clic o arrastre en la regla mueve el playhead; al medio, « y » saltan al keyframe anterior o siguiente y ▶ reproduce según `loop`. «◆ Key» keya todo lo seleccionado, «◆ Pose…» una pose entera (o, en «Only the selection», solo lo seleccionado) y «◆ Setup» vuelve al montaje. Con «Scale keys», cambiar Length estira o comprime todos los keyframes en proporción. Un ◆ se elige con clic, se arrastra en el tiempo (con imán a los cuadros; no se suelta encima de otro), cambia de curva (`linear`, `ease-*` con las fuertes `-quad`, `-cubic`, `-expo` y `-back`, `step` o `cubic-bezier…`; el color del ◆ la muestra y al lado se dibuja su forma) y se borra con Supr; × en un canal lo borra entero. Arrastrar un ◆ gris de «All keys» (o de la fila de un objeto) mueve ese momento entero: todos sus keyframes del clip (o del objeto). ⚠ avisa si un driver suma encima de una pista, y en Puppet el canal de un param dice qué poses mueve (→ happy, …). |
-| Switch | En Layers, ▾ junto al botón de grupo → «Switch» (o `Shift+G`): mete la selección en un switch (cada objeto es una variante y se ve una a la vez; las ocultas aparecen en cursiva). El botón de variante de su fila en Layers (o la barra de opciones) elige cuál se ve, en el montaje o, en una pose, dentro de la pose. Al seleccionar una variante oculta, el lienzo la muestra mientras está seleccionada para poder editarla. Para que la elija un param, se arma a mano: un param (lista), una pose por variante que fija cuál se ve y un driver por opción. |
-| Grupos | `G` crea un grupo; arrastrar filas en Layers para reordenar (al cambiar de padre, el objeto queda en el mismo lugar) o meter dentro de un grupo; ▾/▸ pliega. |
-| Duplicar | `Ctrl+D` duplica la selección con sus hijos; ☰ → «Make a copy…» copia el documento. |
-| Pestañas | `+` crea un documento nuevo, × o `Alt+W` cierra la pestaña, ☰ → «Open…» abre otro. Lo que crea la IA se abre en una pestaña nueva. |
-| Renombrar | Doble clic en Layers o el campo de id del inspector. |
-| Ajustar valores | Escribir en el inspector o arrastrar sobre el nombre de la propiedad (Shift = fino, Alt = grueso). `↺` vuelve al valor por defecto. |
-| Vista | Rueda = desplazar, Ctrl + rueda = zoom, Espacio + arrastrar o botón del medio = mover, `F` = ajustar, `1` = 100%; el botón de zoom tiene más opciones. |
-| Deshacer | `Ctrl+Z` / `Ctrl+Shift+Z`. Solo deshace tus cambios; los de la IA los deshace la IA. Si la IA cambió después lo mismo, no deshace y el aviso dice qué propiedades y en qué lote (y al revés). |
+| Modes | Top right: **Design** (drawing and rig: the setup), **Animate** (one scene timeline, for export) and **Puppet** (the puppet's controls: poses, params, drivers and short clips that the app or its AI triggers). See [docs/decision-animacion.md](docs/decision-animacion.md). |
+| Select and move | Tool `V`; drag on the canvas (Shift = one axis only) or arrow keys (Shift = 10 px). |
+| Select several | Ctrl or Shift + click; dragging on an empty spot makes a marquee; in Layers, Ctrl + click adds and Shift + click takes the range. `Ctrl+A` = all, `Ctrl+G` = group. They rotate and scale from the center of the set; the inspector changes what they have in common. |
+| Rotate and scale | `T` and `S`: dragging anywhere on the canvas rotates or scales the selection from its pivot. |
+| Create shapes | `R` rectangle, `E` ellipse: drag on the canvas (Shift = square or circle). |
+| Pen | `P`: click = sharp vertex, click and drag = curved, click on the first = close, Enter or Esc = finish open. |
+| Edit points | Double click on a path or Enter: drag anchors and tangents (Alt = break), double click on an anchor = sharp/curved, click on the outline = add, Delete = remove. Enter or Esc to exit. |
+| Rotate, scale, pivot | Selection handles: top circle = rotate (Shift = in 15° steps), corners = scale from the pivot (Shift = proportional), pivot point = move it without moving the drawing (groups, paths, rectangles and ellipses). |
+| Styles and gradients | The style and gradient buttons in Assets («New shared style», «New linear gradient»); shapes use them with `style` and `fillGradient` in the inspector. What comes from the style shows in orange. |
+| Import SVG | ☰ → «Import SVG…»: the shapes arrive as editable paths inside a group. |
+| Skeleton (bone layer) | Like Moho's *bone layer*: it contains the drawing and its bones. In Layers, ▾ next to the group button → «Skeleton» (or `K`): puts the selection into a new skeleton. As in Moho, Layers shows only the layers: bones are seen and picked on the canvas. The drawing inside stays still until it is bound. |
+| Bones | Five tools in the bones menu, as in Moho. **Add Bone** (`B`): dragging on empty space creates a bone in the selected skeleton or in the selection's skeleton (child of the chosen bone; if there is no skeleton, one is created); from the tip of the chosen bone it chains another; a click on a bone picks it. **Manipulate Bones** (`M`): dragging a bone rotates it, the origin circle moves it and the tip circle changes direction and length. **Reparent Bone**: a click only picks (Shift + click adds; click on empty space releases); pick the children and finally the parent, and the options bar makes the change with «Parent to …» or «Clear parent» (root), without moving them in the setup; if they move in any pose (because the pose moves the old or the new parent), it warns and offers «Keep poses» to compensate them; it draws the hierarchy. Each bone has a color; picking one highlights its parent and children, and the options bar names them so you can jump to them. In a pose, any tool poses. |
+| Bind to the skeleton | You only bind to bones of the same skeleton. **Bind Layer** (`L`): click on a bone and then on the drawing (or its row in Layers) so it follows it whole; another click releases it, Alt picks its group. **Bind Points**: click on a bone and then on points of the paths of its skeleton, or a marquee around them; the points take the bone's color (Alt releases). Also: `Ctrl+B` with drawing and bone selected, `bone` in the inspector, and «Bind all by proximity» with the skeleton selected. Binding moves nothing: the drawing follows the bone in the poses. |
+| Options bar | Above the canvas: what can be done with the tool and the selection, with buttons for the actions (for example, with a bone: bind, show what is bound, child bone, try in a pose). |
+| Bend with several bones | While editing the points of a path: «Distribute among bones» (or each point's bone) in the options bar. In poses, the path bends following the chain. |
+| Expressions (Puppet) | A pose can change anything animatable: in the pose, the inspector shows the pose's values at the top and Enter edits the mouth's points (morph). On the right, in Parameters, + creates a control and the + in its row connects it to a pose; each param shows its name and value, the full-width slider and the poses it blends with their weight. Moving the control shows the blend. A switch shows a single child (`active`). |
+| Poses (Puppet) | On the right, between Clips and Parameters, the list of poses (still shots that params blend): each one says which param moves it (← happiness); click opens it for editing. Clips, Poses and Parameters have + and 🗑 in the header, like Layers (🗑 deletes what is selected or open; a param goes with its drivers). In a pose, dragging a bone or the bound drawing rotates it without touching the setup. Above the canvas, a banner says what is being edited (pose, clip, the params view or Live), in the frame's color, with its button to exit (Done, Close clip, ■ Stop Live). Above Clips, a small bar with what is done with the whole puppet: Reset (params to their initial value), ▶ Live and AI view. Clips, Parameters, Poses and the Inspector (this one in every mode) collapse with the arrow in the title, and this is remembered. |
+| Clips (Puppet) | On the right, the clip library: + creates one, click on a clip opens it in the timeline and ▶ plays it. At the bottom, the open clip is a tab (× closes it, + creates another) and next to it goes its description (for the app's AI). In the clip's inspector, the Live group: `fade`, `next`, `blend` and `auto` (with the `repeat` wait). |
+| ▶ Live (Puppet) | The puppet as the app will see it: a looping clip is the base (crossfade), a `once` clip is a gesture on top that leaves by itself, and the `auto` ones (blinking, breathing) play by themselves. The clip buttons trigger them (■ removes one), Parameters are the app's values (not saved), the timeline shows what is playing with its weight and «■ Stop all» removes everything. The document is not edited by hand. «AI view» shows the manifest the app's AI receives, with its problems. See [docs/decision-animacion.md §9](docs/decision-animacion.md). |
+| Scenes (Animate) | At the bottom, one tab per scene, like the document tabs: click opens it, + creates another and × deletes it (asks for confirmation; can be undone). A scene is shown without params or drivers (setup + keyframes, as it is exported): an expression is copied with «◆ Pose…» and a variant is chosen by keying the switch. |
+| Timeline (Animate and Puppet) | With a clip or scene open, everything you change (rotating a bone, the inspector, the points and, in Puppet, the Parameters sliders) becomes a keyframe at the playhead (autokey; in Puppet, what the drivers add is not stored twice). The timeline shows «All keys» (all the clip's keyframes) and a collapsible group for each selected thing (Ctrl + click in Layers or on the canvas bones adds more; ▸/▾ opens or closes; only the main one starts open): the group's row summarizes its keyframes and, when open, shows its channels as in Moho, empty ones too: ◇ keys a channel at the playhead; Position (x, y) and Scale go in one row. Click or drag on the ruler moves the playhead; in the middle, « and » jump to the previous or next keyframe and ▶ plays according to `loop`. «◆ Key» keys everything selected, «◆ Pose…» a whole pose (or, with «Only the selection», only what is selected) and «◆ Setup» goes back to the setup. With «Scale keys», changing Length stretches or compresses all keyframes proportionally. A ◆ is picked with a click, dragged in time (snapping to frames; it is not dropped on top of another), changes curve (`linear`, `ease-*` with the strong `-quad`, `-cubic`, `-expo` and `-back`, `step` or `cubic-bezier…`; the ◆'s color shows it and its shape is drawn next to it) and is deleted with Delete; × on a channel deletes it whole. Dragging a gray ◆ in «All keys» (or in an object's row) moves that whole moment: all its keyframes in the clip (or the object). ⚠ warns if a driver adds on top of a track, and in Puppet a param's channel says which poses it moves (→ happy, …). |
+| Switch | In Layers, ▾ next to the group button → «Switch» (or `Shift+G`): puts the selection into a switch (each object is a variant and one is shown at a time; hidden ones appear in italics). The variant button in its Layers row (or the options bar) picks which one shows, in the setup or, in a pose, inside the pose. When a hidden variant is selected, the canvas shows it while it is selected so it can be edited. For a param to pick it, you build it by hand: a param (list), one pose per variant that sets which one shows, and one driver per option. |
+| Groups | `G` creates a group; drag rows in Layers to reorder (when the parent changes, the object stays in the same place) or to put inside a group; ▾/▸ collapses. |
+| Duplicate | `Ctrl+D` duplicates the selection with its children; ☰ → «Make a copy…» copies the document. |
+| Tabs | `+` creates a new document, × or `Alt+W` closes the tab, ☰ → «Open…» opens another. What the AI creates opens in a new tab. |
+| Rename | Double click in Layers or the inspector's id field. |
+| Adjust values | Type in the inspector or drag over the property name (Shift = fine, Alt = coarse). `↺` goes back to the default value. |
+| View | Wheel = scroll, Ctrl + wheel = zoom, Space + drag or middle button = pan, `F` = fit, `1` = 100%; the zoom button has more options. |
+| Undo | `Ctrl+Z` / `Ctrl+Shift+Z`. It only undoes your changes; the AI's changes are undone by the AI. If the AI later changed the same thing, it does not undo and the warning says which properties and in which batch (and vice versa). |
 
-### Conectar tu IA (MCP, sin API key)
+### Connect your AI (MCP, no API key)
 
-La IA que ya usas maneja los documentos a través de un servidor MCP local (`mcp/server.js`). Trabaja sobre los
-mismos archivos que el editor, así que lo que hace la IA aparece en vivo en el navegador y lo que retocas a mano
-queda en el historial para que la IA lo respete.
+The AI you already use handles the documents through a local MCP server (`mcp/server.js`). It works on the
+same files as the editor, so what the AI does shows up live in the browser and what you touch up by hand
+stays in the history for the AI to respect.
 
-- **Claude Code**: ya está configurado en [.mcp.json](.mcp.json); al abrir la carpeta te pide aprobarlo.
-- **Claude Desktop**: agrega esto en *Settings → Developer → Edit Config* (`claude_desktop_config.json`) y reinicia:
+- **Claude Code**: already configured in [.mcp.json](.mcp.json); when you open the folder it asks you to approve it.
+- **Claude Desktop**: add this in *Settings → Developer → Edit Config* (`claude_desktop_config.json`) and restart:
 
   ```json
   {
@@ -93,46 +93,46 @@ queda en el historial para que la IA lo respete.
   }
   ```
 
-- **Otros clientes MCP** (Cursor, etc.): el mismo comando, `node <ruta>/mcp/server.js`, por stdio.
+- **Other MCP clients** (Cursor, etc.): the same command, `node <path>/mcp/server.js`, over stdio.
 
-Herramientas: `get_guide` (la guía del formato, generada desde el esquema), `list_documents`, `get_document` (con
-`json: false` y `clips` para leer un documento grande por partes),
-`create_document`, `delete_document` (borra un documento con su historial; pide repetir el id en `confirm`),
-`apply_ops`, `undo`, `redo`, `get_history`, `set_pose` (crea o ajusta una pose con nombre; `remove` saca propiedades
-sueltas), `bind_points` (reparte los puntos de un path entre los huesos de su skeleton), `reparent_bone` (cambia el
-padre de un hueso sin moverlo en el montaje; con `keep_in_poses`, tampoco en las poses), `bind_by_proximity` (enlaza
-al hueso más cercano todo el dibujo de un skeleton que todavía no sigue a ninguno) y
-`set_keys` (crea o ajusta un clip por momentos; en Puppet, también `fade`, `next`, `blend` y `auto` para Live: `values` (también relativos al montaje, `"+=14"`), `pose` (entera o una parte, con `only`/`except`), `params` (solo en clips de Puppet), `setup` para volver al montaje, `ease` con curvas fuertes con nombre),
-`delete_keys` (quita keyframes por tiempo o pista), `move_keys` (mueve los keyframes de un momento a otro), `scale_time` (estira o comprime el tiempo del clip o de un tramo, en un paso de deshacer) y
-`render_preview` (devuelve un PNG para que la IA vea lo que hizo; con `pose`, `params`, `region` o `bones`, y con
-`animation` + `time` un cuadro de un clip, o `times` una tira de cuadros; con `live`, un guion `play`/`stop`/`set` como
-lo correría la app, con `until` y `auto: false`) y `get_manifest` (lo que verá la IA de la app: params, clips, lo que
-pisa cada uno y los problemas).
+Tools: `get_guide` (the format guide, generated from the schema), `list_documents`, `get_document` (with
+`json: false` and `clips` to read a large document in parts),
+`create_document`, `delete_document` (deletes a document with its history; asks to repeat the id in `confirm`),
+`apply_ops`, `undo`, `redo`, `get_history`, `set_pose` (creates or adjusts a named pose; `remove` takes out individual
+properties), `bind_points` (distributes a path's points among the bones of its skeleton), `reparent_bone` (changes a
+bone's parent without moving it in the setup; with `keep_in_poses`, not in the poses either), `bind_by_proximity` (binds
+to the nearest bone all the drawing of a skeleton that does not follow any bone yet) and
+`set_keys` (creates or adjusts a clip by moments; in Puppet, also `fade`, `next`, `blend` and `auto` for Live: `values` (also relative to the setup, `"+=14"`), `pose` (whole or a part, with `only`/`except`), `params` (only in Puppet clips), `setup` to go back to the setup, `ease` with strong named curves),
+`delete_keys` (removes keyframes by time or track), `move_keys` (moves the keyframes from one moment to another), `scale_time` (stretches or compresses the time of the clip or of a range, in one undo step) and
+`render_preview` (returns a PNG so the AI can see what it did; with `pose`, `params`, `region` or `bones`, and with
+`animation` + `time` a frame of a clip, or `times` a strip of frames; with `live`, a `play`/`stop`/`set` script as
+the app would run it, with `until` and `auto: false`) and `get_manifest` (what the app's AI will see: params, clips, what
+each one overrides and the problems).
 
-## Estructura
+## Structure
 
-| Carpeta | Qué hay |
+| Folder | Contents |
 | --- | --- |
-| `schema/` | Definición de cada tipo (fuente única de verdad: validación, inspector y guía para la IA). |
-| `src/core/` | Documento, validación, operaciones y evaluación. Sin DOM; corre en el navegador y en Node. |
-| `src/render/` | Renderer SVG. |
-| `src/editor/` | El editor web. |
-| `servidor/` | Lectura y escritura en disco, y la API local que usa el editor (plugin de Vite). |
-| `mcp/` | Servidor MCP para la IA. |
-| `scripts/` | `migrar-esqueletos.js` (`npm run migrar`): lleva documentos viejos, con huesos en la raíz, al modelo de skeleton. |
-| `personajes/` | Los documentos (la carpeta conserva el nombre de cuando la app era solo de personajes). |
-| `tests/` | Pruebas del núcleo (`node --test`). |
-| `docs/pruebas-ia/` | Tareas y resultados de las pruebas con IA de cada fase. |
-| `referencias/` | Código de terceros para estudiar (ignorado por git). |
+| `schema/` | Definition of each type (single source of truth: validation, inspector and guide for the AI). |
+| `src/core/` | Document, validation, operations and evaluation. No DOM; runs in the browser and in Node. |
+| `src/render/` | SVG renderer. |
+| `src/editor/` | The web editor. |
+| `server/` | Reading and writing to disk, and the local API the editor uses (Vite plugin). |
+| `mcp/` | MCP server for the AI. |
+| `scripts/` | `migrate-skeletons.js` (`npm run migrate`): brings old documents, with bones at the root, to the skeleton model. |
+| `documents/` | The documents (`documents/<id>/document.json` and `history.jsonl`). |
+| `tests/` | Core tests (`node --test`). |
+| `docs/pruebas-ia/` | Tasks and results of the AI tests for each phase. |
+| `referencias/` | Third-party code to study (ignored by git). |
 
-## Documentación
+## Documentation
 
-- [docs/investigacion/moho-lua.md](docs/investigacion/moho-lua.md): cómo está construido
-  Moho por detrás, a partir de su API Lua y su formato de archivo.
-- [docs/investigacion/rive-runtime.md](docs/investigacion/rive-runtime.md): cómo está
-  construido Rive a partir de su runtime de código abierto.
-- [docs/sintesis.md](docs/sintesis.md): qué tomamos de cada uno y las decisiones de base
-  para aia-studio.
-- [docs/plan.md](docs/plan.md): plan de construcción por fases, con pruebas en el editor y con IA.
-- [docs/decision-animacion.md](docs/decision-animacion.md): los modos Design, Animate y Puppet, el modelo de clips
-  y los destinos de exportación (fases 5 a 7).
+- [docs/investigacion/moho-lua.md](docs/investigacion/moho-lua.md): how Moho is built
+  under the hood, from its Lua API and its file format.
+- [docs/investigacion/rive-runtime.md](docs/investigacion/rive-runtime.md): how
+  Rive is built, from its open-source runtime.
+- [docs/sintesis.md](docs/sintesis.md): what we take from each one and the base decisions
+  for aia-studio.
+- [docs/plan.md](docs/plan.md): phase-by-phase build plan, with tests in the editor and with AI.
+- [docs/decision-animacion.md](docs/decision-animacion.md): the Design, Animate and Puppet modes, the clip model
+  and the export targets (phases 5 to 7).
