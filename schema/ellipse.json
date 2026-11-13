@@ -1,12 +1,12 @@
 {
   "name": "ellipse",
   "extends": "shape",
-  "description": "Elipse con su pivote en x/y; por defecto centrada (originX/originY mueven el pivote dentro de la forma). Con width = height es un círculo.",
+  "description": "Ellipse with its pivot at x/y; centered by default (originX/originY move the pivot within the shape). With width = height it is a circle.",
   "help": "Ellipse with its pivot at x/y; centered by default (originX/originY move the pivot).",
   "properties": {
-    "width": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Forma", "help": "Width (horizontal diameter) in px.", "description": "Ancho (diámetro horizontal) en px." },
-    "height": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Forma", "help": "Height (vertical diameter) in px.", "description": "Alto (diámetro vertical) en px." },
-    "originX": { "type": "number", "default": 0.5, "step": 0.01, "group": "Forma", "help": "Where the pivot sits inside the shape, as a fraction of the width: 0 = left edge, 0.5 = center, 1 = right edge.", "description": "Dónde cae el pivote (x/y) dentro de la forma, en fracción del ancho: 0 = borde izquierdo, 0.5 = centro, 1 = borde derecho." },
-    "originY": { "type": "number", "default": 0.5, "step": 0.01, "group": "Forma", "help": "Where the pivot sits inside the shape, as a fraction of the height: 0 = top edge, 0.5 = center, 1 = bottom edge.", "description": "Dónde cae el pivote dentro de la forma, en fracción del alto: 0 = borde de arriba, 0.5 = centro, 1 = borde de abajo." }
+    "width": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Shape", "help": "Width (horizontal diameter) in px.", "description": "Width (horizontal diameter) in px." },
+    "height": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Shape", "help": "Height (vertical diameter) in px.", "description": "Height (vertical diameter) in px." },
+    "originX": { "type": "number", "default": 0.5, "step": 0.01, "group": "Shape", "help": "Where the pivot sits inside the shape, as a fraction of the width: 0 = left edge, 0.5 = center, 1 = right edge.", "description": "Where the pivot (x/y) sits within the shape, as a fraction of the width: 0 = left edge, 0.5 = center, 1 = right edge." },
+    "originY": { "type": "number", "default": 0.5, "step": 0.01, "group": "Shape", "help": "Where the pivot sits inside the shape, as a fraction of the height: 0 = top edge, 0.5 = center, 1 = bottom edge.", "description": "Where the pivot sits within the shape, as a fraction of the height: 0 = top edge, 0.5 = center, 1 = bottom edge." }
   }
 }

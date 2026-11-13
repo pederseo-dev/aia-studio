@@ -1,13 +1,13 @@
 {
   "name": "rect",
   "extends": "shape",
-  "description": "Rectángulo con su pivote en x/y; por defecto centrado (originX/originY mueven el pivote dentro de la forma).",
+  "description": "Rectangle with its pivot at x/y; centered by default (originX/originY move the pivot within the shape).",
   "help": "Rectangle with its pivot at x/y; centered by default (originX/originY move the pivot).",
   "properties": {
-    "width": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Forma", "help": "Width in px.", "description": "Ancho en px." },
-    "height": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Forma", "help": "Height in px.", "description": "Alto en px." },
-    "cornerRadius": { "type": "number", "default": 0, "min": 0, "animatable": true, "group": "Forma", "help": "Corner radius in px.", "description": "Radio de las esquinas en px." },
-    "originX": { "type": "number", "default": 0.5, "step": 0.01, "group": "Forma", "help": "Where the pivot sits inside the shape, as a fraction of the width: 0 = left edge, 0.5 = center, 1 = right edge.", "description": "Dónde cae el pivote (x/y) dentro de la forma, en fracción del ancho: 0 = borde izquierdo, 0.5 = centro, 1 = borde derecho." },
-    "originY": { "type": "number", "default": 0.5, "step": 0.01, "group": "Forma", "help": "Where the pivot sits inside the shape, as a fraction of the height: 0 = top edge, 0.5 = center, 1 = bottom edge.", "description": "Dónde cae el pivote dentro de la forma, en fracción del alto: 0 = borde de arriba, 0.5 = centro, 1 = borde de abajo." }
+    "width": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Shape", "help": "Width in px.", "description": "Width in px." },
+    "height": { "type": "number", "default": 100, "min": 0, "animatable": true, "group": "Shape", "help": "Height in px.", "description": "Height in px." },
+    "cornerRadius": { "type": "number", "default": 0, "min": 0, "animatable": true, "group": "Shape", "help": "Corner radius in px.", "description": "Corner radius in px." },
+    "originX": { "type": "number", "default": 0.5, "step": 0.01, "group": "Shape", "help": "Where the pivot sits inside the shape, as a fraction of the width: 0 = left edge, 0.5 = center, 1 = right edge.", "description": "Where the pivot (x/y) sits within the shape, as a fraction of the width: 0 = left edge, 0.5 = center, 1 = right edge." },
+    "originY": { "type": "number", "default": 0.5, "step": 0.01, "group": "Shape", "help": "Where the pivot sits inside the shape, as a fraction of the height: 0 = top edge, 0.5 = center, 1 = bottom edge.", "description": "Where the pivot sits within the shape, as a fraction of the height: 0 = top edge, 0.5 = center, 1 = bottom edge." }
   }
 }

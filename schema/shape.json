@@ -2,13 +2,13 @@
   "name": "shape",
   "abstract": true,
   "extends": "transformable",
-  "description": "Forma con relleno y contorno.",
+  "description": "Shape with fill and stroke.",
   "help": "Shape with fill and stroke.",
   "properties": {
-    "style": { "type": "ref", "refTypes": ["style"], "default": null, "nullable": true, "group": "Apariencia", "help": "Shared style. Appearance properties the shape does not set itself come from it.", "description": "Estilo compartido. Las propiedades de apariencia que la forma no tenga propias se toman de él." },
-    "fill": { "type": "color", "default": "#c8c2d4", "nullable": true, "animatable": true, "group": "Apariencia", "help": "Fill color. Empty = no fill.", "description": "Color de relleno. null = sin relleno." },
-    "fillGradient": { "type": "ref", "refTypes": ["linear_gradient", "radial_gradient"], "default": null, "nullable": true, "group": "Apariencia", "help": "Fill gradient (a linear or radial gradient). When set, it replaces fill.", "description": "Degradado de relleno (id de un linear_gradient o radial_gradient). Si está, reemplaza a fill." },
-    "stroke": { "type": "color", "default": null, "nullable": true, "animatable": true, "group": "Apariencia", "help": "Stroke color. Empty = no stroke.", "description": "Color del contorno. null = sin contorno." },
-    "strokeWidth": { "type": "number", "default": 2, "min": 0, "animatable": true, "group": "Apariencia", "help": "Stroke width in px.", "description": "Grosor del contorno en px." }
+    "style": { "type": "ref", "refTypes": ["style"], "default": null, "nullable": true, "group": "Appearance", "help": "Shared style. Appearance properties the shape does not set itself come from it.", "description": "Shared style. Appearance properties the shape does not set itself are taken from it." },
+    "fill": { "type": "color", "default": "#c8c2d4", "nullable": true, "animatable": true, "group": "Appearance", "help": "Fill color. Empty = no fill.", "description": "Fill color. null = no fill." },
+    "fillGradient": { "type": "ref", "refTypes": ["linear_gradient", "radial_gradient"], "default": null, "nullable": true, "group": "Appearance", "help": "Fill gradient (a linear or radial gradient). When set, it replaces fill.", "description": "Fill gradient (id of a linear_gradient or radial_gradient). When set, it replaces fill." },
+    "stroke": { "type": "color", "default": null, "nullable": true, "animatable": true, "group": "Appearance", "help": "Stroke color. Empty = no stroke.", "description": "Stroke color. null = no stroke." },
+    "strokeWidth": { "type": "number", "default": 2, "min": 0, "animatable": true, "group": "Appearance", "help": "Stroke width in px.", "description": "Stroke width in px." }
   }
 }

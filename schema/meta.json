@@ -1,12 +1,12 @@
 {
   "name": "meta",
-  "description": "Datos generales del documento.",
+  "description": "General document data.",
   "help": "General data of the document.",
   "properties": {
-    "name": { "type": "string", "default": "Sin nombre", "group": "General", "help": "Display name of the file.", "description": "Nombre visible del documento." },
-    "width": { "type": "number", "default": 800, "min": 1, "group": "Lienzo", "help": "Canvas width in px.", "description": "Ancho del lienzo en px." },
-    "height": { "type": "number", "default": 800, "min": 1, "group": "Lienzo", "help": "Canvas height in px.", "description": "Alto del lienzo en px." },
-    "background": { "type": "color", "default": "#f4f1ea", "nullable": true, "group": "Lienzo", "help": "Background color. Empty = transparent.", "description": "Color de fondo. null = transparente." },
-    "fps": { "type": "number", "default": 24, "min": 1, "max": 120, "integer": true, "group": "Tiempo", "help": "Frames per second, only for showing frames and snapping; time is stored in seconds.", "description": "Frames por segundo. Solo sirven para mostrar frames y para el snapping; el tiempo se guarda en segundos." }
+    "name": { "type": "string", "default": "Sin nombre", "group": "General", "help": "Display name of the file.", "description": "Display name of the document." },
+    "width": { "type": "number", "default": 800, "min": 1, "group": "Canvas", "help": "Canvas width in px.", "description": "Canvas width in px." },
+    "height": { "type": "number", "default": 800, "min": 1, "group": "Canvas", "help": "Canvas height in px.", "description": "Canvas height in px." },
+    "background": { "type": "color", "default": "#f4f1ea", "nullable": true, "group": "Canvas", "help": "Background color. Empty = transparent.", "description": "Background color. null = transparent." },
+    "fps": { "type": "number", "default": 24, "min": 1, "max": 120, "integer": true, "group": "Time", "help": "Frames per second, only for showing frames and snapping; time is stored in seconds.", "description": "Frames per second. Only used to display frames and for snapping; time is stored in seconds." }
   }
 }

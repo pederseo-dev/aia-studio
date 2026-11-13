@@ -1,10 +1,10 @@
 {
   "name": "path",
   "extends": "shape",
-  "description": "Forma libre hecha de vértices con curvas. Los vértices están en las coordenadas del propio path: x/y del path es su pivote. Al crear o cambiar un path también se puede pasar \"d\" con un trazado SVG (un solo subtrazado) y se convierte a vértices.",
+  "description": "Freeform shape made of vertices with curves. The vertices are in the path's own coordinates: the path's x/y is its pivot. When creating or changing a path you can also pass \"d\" with an SVG path (a single subpath) and it is converted to vertices.",
   "help": "Free shape made of curved vertices, in the coordinates of the path itself (its x/y is the pivot).",
   "properties": {
-    "vertices": { "type": "vertices", "default": [], "animatable": true, "group": "Forma", "help": "List of vertices. Edit them with the Points tool.", "description": "Lista de vértices. Ver la sección «Vértices» de la guía." },
-    "closed": { "type": "boolean", "default": true, "animatable": false, "group": "Forma", "help": "Joins the last vertex to the first one.", "description": "Si es true, el último vértice se une con el primero." }
+    "vertices": { "type": "vertices", "default": [], "animatable": true, "group": "Shape", "help": "List of vertices. Edit them with the Points tool.", "description": "List of vertices. See the «Vertices» section of the guide." },
+    "closed": { "type": "boolean", "default": true, "animatable": false, "group": "Shape", "help": "Joins the last vertex to the first one.", "description": "If true, the last vertex is joined to the first one." }
   }
 }

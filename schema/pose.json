@@ -1,9 +1,9 @@
 {
   "name": "pose",
   "resource": true,
-  "description": "Pose o acción con nombre (\"feliz\", \"mirando_arriba\", \"visema_o\"): valores que reemplazan a los del montaje mientras la pose está activa o la mezcla un driver. No cambia el montaje. Puede fijar cualquier propiedad animable de cualquier objeto: rotación de huesos, vértices de una boca (con la misma cantidad de puntos se interpolan), colores, opacidad, el hijo activo de un switch...",
+  "description": "Named pose or action (\"happy\", \"look_up\", \"viseme_o\"): values that replace those of the setup while the pose is active or a driver blends it in. It does not change the setup. It can set any animatable property of any object: bone rotation, vertices of a mouth (with the same number of points they are interpolated), colors, opacity, the active child of a switch...",
   "help": "Named pose or action: values that replace the setup ones for some objects, without changing the setup.",
   "properties": {
-    "values": { "type": "pose", "default": {}, "group": "Pose", "help": "Values the pose sets, per object and property (absolute, like in the setup). Only animatable properties.", "description": "{ id_de_objeto: { propiedad: valor } }. Valores absolutos, como en el montaje. Solo propiedades animables (en los huesos: x, y, rotation, scaleX, scaleY)." }
+    "values": { "type": "pose", "default": {}, "group": "Pose", "help": "Values the pose sets, per object and property (absolute, like in the setup). Only animatable properties.", "description": "{ object_id: { property: value } }. Absolute values, as in the setup. Only animatable properties (for bones: x, y, rotation, scaleX, scaleY)." }
   }
 }

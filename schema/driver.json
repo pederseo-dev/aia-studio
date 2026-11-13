@@ -1,15 +1,15 @@
 {
   "name": "driver",
   "resource": true,
-  "description": "Conecta un param con una pose (como un smart bone de Moho, pero explícito): el valor del param, dentro del tramo inMin…inMax, se convierte en el peso de la pose, de outMin a outMax (0 = no se nota, 1 = la pose completa). Varias poses activas se suman sobre el montaje. Con un param enum, equals dice con qué opción la pose va al 100%.",
+  "description": "Connects a param to a pose (like a Moho smart bone, but explicit): the param's value, within the span inMin…inMax, becomes the pose's weight, from outMin to outMax (0 = not noticeable, 1 = the full pose). Several active poses add up on top of the setup. With an enum param, equals says which option puts the pose at 100%.",
   "help": "Connects a parameter to a pose, like a Moho smart bone: the parameter value becomes the weight of the pose.",
   "properties": {
-    "param": { "type": "ref", "refTypes": ["param"], "default": null, "nullable": true, "group": "Driver", "help": "Parameter that moves it.", "description": "Param que lo mueve." },
-    "pose": { "type": "ref", "refTypes": ["pose"], "default": null, "nullable": true, "group": "Driver", "help": "Pose that gets blended in.", "description": "Pose que se mezcla." },
-    "inMin": { "type": "number", "default": 0, "step": 0.01, "group": "Tramo", "help": "Parameter value where the weight is outMin. Can be greater than inMax (for the negative side of a turn).", "description": "Valor del param donde el peso es outMin. Puede ser mayor que inMax (para el lado negativo de un giro: inMin 0, inMax -1)." },
-    "inMax": { "type": "number", "default": 1, "step": 0.01, "group": "Tramo", "help": "Parameter value where the weight is outMax.", "description": "Valor del param donde el peso es outMax." },
-    "outMin": { "type": "number", "default": 0, "min": 0, "max": 1, "step": 0.01, "group": "Tramo", "help": "Weight at the start of the range.", "description": "Peso al principio del tramo." },
-    "outMax": { "type": "number", "default": 1, "min": 0, "max": 1, "step": 0.01, "group": "Tramo", "help": "Weight at the end of the range.", "description": "Peso al final del tramo." },
-    "equals": { "type": "string", "default": null, "nullable": true, "group": "Tramo", "help": "Enum parameters only: the option that shows the full pose (any other option gives weight 0).", "description": "Solo con un param enum: la opción con la que la pose va completa (con las demás, peso 0)." }
+    "param": { "type": "ref", "refTypes": ["param"], "default": null, "nullable": true, "group": "Driver", "help": "Parameter that moves it.", "description": "Param that moves it." },
+    "pose": { "type": "ref", "refTypes": ["pose"], "default": null, "nullable": true, "group": "Driver", "help": "Pose that gets blended in.", "description": "Pose that gets blended in." },
+    "inMin": { "type": "number", "default": 0, "step": 0.01, "group": "Range", "help": "Parameter value where the weight is outMin. Can be greater than inMax (for the negative side of a turn).", "description": "Param value where the weight is outMin. Can be greater than inMax (for the negative side of a turn: inMin 0, inMax -1)." },
+    "inMax": { "type": "number", "default": 1, "step": 0.01, "group": "Range", "help": "Parameter value where the weight is outMax.", "description": "Param value where the weight is outMax." },
+    "outMin": { "type": "number", "default": 0, "min": 0, "max": 1, "step": 0.01, "group": "Range", "help": "Weight at the start of the range.", "description": "Weight at the start of the span." },
+    "outMax": { "type": "number", "default": 1, "min": 0, "max": 1, "step": 0.01, "group": "Range", "help": "Weight at the end of the range.", "description": "Weight at the end of the span." },
+    "equals": { "type": "string", "default": null, "nullable": true, "group": "Range", "help": "Enum parameters only: the option that shows the full pose (any other option gives weight 0).", "description": "Enum params only: the option with which the pose is applied in full (with the other options, weight 0)." }
   }
 }
