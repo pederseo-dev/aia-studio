@@ -6,59 +6,59 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ErrorDeValidacion, crearDocumento, validar } from '../src/core/document.js';
-import { migrarEscenasConParams } from '../src/core/migration.js';
-import { aplicarOperaciones } from '../src/core/operations.js';
-import { ARCHIVO_DE_ASSET } from '../src/core/schema.js';
-import { FORMATOS_DE_IMAGEN, assetsUsados, leerImagen, mimeDeAsset, nombreDeAsset, nombreLibre } from '../src/core/images.js';
+import { ValidationError, createDocument, validate } from '../src/core/document.js';
+import { migrateScenesWithParams } from '../src/core/migration.js';
+import { applyOperations } from '../src/core/operations.js';
+import { ASSET_FILE } from '../src/core/schema.js';
+import { IMAGE_FORMATS, usedAssets, readImage, assetMime, assetName, freeName } from '../src/core/images.js';
 
-export const CARPETA_PERSONAJES = fileURLToPath(new URL('../personajes/', import.meta.url));
-const ID_DOCUMENTO = /^[a-z][a-z0-9_-]*$/;
+export const DOCUMENTS_FOLDER = fileURLToPath(new URL('../personajes/', import.meta.url));
+const DOCUMENT_ID = /^[a-z][a-z0-9_-]*$/;
 
 // Operaciones que cambian la estructura de un objeto (no una propiedad suelta): tocan "todo" el objeto.
-const ESTRUCTURALES = new Set(['create', 'delete', 'move', 'rename', 'duplicate', '_restore', '_place']);
+const STRUCTURAL = new Set(['create', 'delete', 'move', 'rename', 'duplicate', '_restore', '_place']);
 
-const esObjeto = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
+const isObject = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
 // Propiedades que se deshacen por (objeto, propiedad) y no enteras: los `values` de una pose y las `tracks` de un
 // clip. Así una pose o un clip que editaron los dos orígenes en objetos o pistas distintas no bloquea el deshacer.
-const POR_CLAVE = { values: 'pose', tracks: 'animation' };
+const BY_KEY = { values: 'pose', tracks: 'animation' };
 // En una pose o una pista, "d" es azúcar para los vértices: tocar uno es tocar los otros.
-const claveDe = (campo, objeto, prop) => `${campo}.${objeto}.${prop === 'd' ? 'vertices' : prop}`;
+const keyOf = (field, object, prop) => `${field}.${object}.${prop === 'd' ? 'vertices' : prop}`;
 
 /**
  * Cambios de un lote en los `values` de las poses y las `tracks` de los clips, por (objeto, propiedad). Devuelve
  * Map destino → { campo, antes, despues, claves } (antes = lo que restauran sus inversas; despues = lo que fijaron
  * sus operaciones).
  */
-function cambiosPorClave(entrada) {
-  const ultimo = (ops) => {
+function changesByKey(entry) {
+  const last = (ops) => {
     const m = new Map();
     for (const op of ops ?? []) {
-      for (const campo of Object.keys(POR_CLAVE)) {
-        if (op.op === 'set' && esObjeto(op.props?.[campo])) m.set(op.target, { campo, valor: op.props[campo] });
+      for (const field of Object.keys(BY_KEY)) {
+        if (op.op === 'set' && isObject(op.props?.[field])) m.set(op.target, { field, value: op.props[field] });
         // Una pose o un clip que no tenía el campo: su inversa es un unset, que equivale a vacío.
-        else if (op.op === 'unset' && op.props?.includes(campo)) m.set(op.target, { campo, valor: {} });
+        else if (op.op === 'unset' && op.props?.includes(field)) m.set(op.target, { field, value: {} });
       }
     }
     return m;
   };
-  const despues = ultimo(entrada.ops);
-  const antes = ultimo(entrada.inversas);
-  const cambios = new Map();
-  for (const destino of new Set([...despues.keys(), ...antes.keys()])) {
-    const campo = (despues.get(destino) ?? antes.get(destino)).campo;
-    const [a, d] = [antes.get(destino)?.valor, despues.get(destino)?.valor];
-    const claves = new Set();
-    for (const objeto of new Set([...Object.keys(a ?? {}), ...Object.keys(d ?? {})])) {
-      const [ca, cd] = [a?.[objeto] ?? {}, d?.[objeto] ?? {}];
+  const after = last(entry.ops);
+  const before = last(entry.inversas);
+  const changes = new Map();
+  for (const target of new Set([...after.keys(), ...before.keys()])) {
+    const field = (after.get(target) ?? before.get(target)).field;
+    const [a, d] = [before.get(target)?.value, after.get(target)?.value];
+    const keys = new Set();
+    for (const object of new Set([...Object.keys(a ?? {}), ...Object.keys(d ?? {})])) {
+      const [ca, cd] = [a?.[object] ?? {}, d?.[object] ?? {}];
       for (const prop of new Set([...Object.keys(ca), ...Object.keys(cd)])) {
         // Sin las dos versiones (por ejemplo, una pose que no tenía values) cuenta todo lo que se ve.
-        if (!a || !d || JSON.stringify(ca[prop]) !== JSON.stringify(cd[prop])) claves.add(claveDe(campo, objeto, prop));
+        if (!a || !d || JSON.stringify(ca[prop]) !== JSON.stringify(cd[prop])) keys.add(keyOf(field, object, prop));
       }
     }
-    cambios.set(destino, { campo, antes: a, despues: d, claves });
+    changes.set(target, { field, before: a, after: d, keys });
   }
-  return cambios;
+  return changes;
 }
 
 /**
@@ -66,90 +66,90 @@ function cambiosPorClave(entrada) {
  * ahora: deshacer un cambio en un objeto de la pose (o en una pista del clip) no se lleva lo que el otro origen
  * cambió después en otro objeto o pista.
  */
-function inversasPorClave(doc, entrada) {
-  const cambios = cambiosPorClave(entrada);
-  if (!cambios.size) return entrada.inversas;
-  return entrada.inversas.flatMap((op) => {
-    const cambio = cambios.get(op.target);
-    if (!cambio) return op;
-    const { campo } = cambio;
-    const delCampo = (op.op === 'set' && esObjeto(op.props?.[campo])) || (op.op === 'unset' && op.props?.includes(campo));
-    const actual = delCampo && doc.objects.find((o) => o.id === op.target);
-    if (!cambio.antes || !cambio.despues || actual?.type !== POR_CLAVE[campo]) return op;
-    const valor = structuredClone(actual[campo] ?? {});
-    for (const clave of cambio.claves) {
-      const [, objeto, prop] = clave.split('.');
-      const viejo = cambio.antes[objeto]?.[prop];
-      if (viejo === undefined) {
-        if (valor[objeto]) delete valor[objeto][prop];
-        if (valor[objeto] && !Object.keys(valor[objeto]).length) delete valor[objeto];
-      } else (valor[objeto] ??= {})[prop] = structuredClone(viejo);
+function inversesByKey(doc, entry) {
+  const changes = changesByKey(entry);
+  if (!changes.size) return entry.inversas;
+  return entry.inversas.flatMap((op) => {
+    const change = changes.get(op.target);
+    if (!change) return op;
+    const { field } = change;
+    const fromField = (op.op === 'set' && isObject(op.props?.[field])) || (op.op === 'unset' && op.props?.includes(field));
+    const current = fromField && doc.objects.find((o) => o.id === op.target);
+    if (!change.before || !change.after || current?.type !== BY_KEY[field]) return op;
+    const value = structuredClone(current[field] ?? {});
+    for (const key of change.keys) {
+      const [, object, prop] = key.split('.');
+      const old = change.before[object]?.[prop];
+      if (old === undefined) {
+        if (value[object]) delete value[object][prop];
+        if (value[object] && !Object.keys(value[object]).length) delete value[object];
+      } else (value[object] ??= {})[prop] = structuredClone(old);
     }
-    if (op.op === 'set') return [{ ...op, props: { ...op.props, [campo]: valor } }];
-    const resto = op.props.filter((k) => k !== campo);
-    return [{ op: 'set', target: op.target, props: { [campo]: valor } }, ...(resto.length ? [{ ...op, props: resto }] : [])];
+    if (op.op === 'set') return [{ ...op, props: { ...op.props, [field]: value } }];
+    const rest = op.props.filter((k) => k !== field);
+    return [{ op: 'set', target: op.target, props: { [field]: value } }, ...(rest.length ? [{ ...op, props: rest }] : [])];
   });
 }
 
 /** (id, propiedad) que toca un lote, con sus inversas: Map id → Set de propiedades ("*" = el objeto entero). */
-function tocados(entrada) {
-  const mapa = new Map();
-  const sumar = (id, prop) => id != null && (mapa.get(id) ?? mapa.set(id, new Set()).get(id)).add(prop);
-  const porClave = cambiosPorClave(entrada);
-  for (const [destino, { claves }] of porClave) claves.forEach((k) => sumar(destino, k));
-  const yaContado = (id, k) => porClave.get(id)?.campo === k;
-  for (const op of [...(entrada.ops ?? []), ...(entrada.inversas ?? [])]) {
-    if (op.op === 'set') Object.keys(op.props ?? {}).forEach((k) => !yaContado(op.target, k) && sumar(op.target, k));
-    else if (op.op === 'unset') (op.props ?? []).forEach((k) => !yaContado(op.target, k) && sumar(op.target, k));
-    else if (ESTRUCTURALES.has(op.op)) {
-      sumar(op.target ?? op.id, '*');
-      if (op.op === 'rename' || op.op === 'create') sumar(op.id, '*');
+function touched(entry) {
+  const map = new Map();
+  const add = (id, prop) => id != null && (map.get(id) ?? map.set(id, new Set()).get(id)).add(prop);
+  const byKey = changesByKey(entry);
+  for (const [target, { keys }] of byKey) keys.forEach((k) => add(target, k));
+  const alreadyCounted = (id, k) => byKey.get(id)?.field === k;
+  for (const op of [...(entry.ops ?? []), ...(entry.inversas ?? [])]) {
+    if (op.op === 'set') Object.keys(op.props ?? {}).forEach((k) => !alreadyCounted(op.target, k) && add(op.target, k));
+    else if (op.op === 'unset') (op.props ?? []).forEach((k) => !alreadyCounted(op.target, k) && add(op.target, k));
+    else if (STRUCTURAL.has(op.op)) {
+      add(op.target ?? op.id, '*');
+      if (op.op === 'rename' || op.op === 'create') add(op.id, '*');
       // Meter algo en un contenedor también lo toca: deshacer la creación del contenedor se llevaría ese hijo.
-      if (op.parent != null) sumar(op.parent, 'children');
-      for (const { obj } of op.entries ?? []) sumar(obj?.id, '*');
+      if (op.parent != null) add(op.parent, 'children');
+      for (const { obj } of op.entries ?? []) add(obj?.id, '*');
     }
   }
-  return mapa;
+  return map;
 }
 
 /** ¿Dos propiedades se pisan? Iguales, o una contiene a la otra ("values" contiene a "values.mouth.x"). */
-const sePisan = (p, q) => p === q || p.startsWith(`${q}.`) || q.startsWith(`${p}.`);
+const overlap = (p, q) => p === q || p.startsWith(`${q}.`) || q.startsWith(`${p}.`);
 
 /** Nombres "id.prop" (o "id", si alguno cambió el objeto entero) que dos lotes tocan en común. */
-function comunes(a, b) {
-  const salida = new Set();
+function common(a, b) {
+  const output = new Set();
   for (const [id, propsA] of a) {
     const propsB = b.get(id);
     if (!propsB) continue;
-    if (propsB.has('*')) salida.add(id);
-    else for (const p of propsB) if (propsA.has('*') || [...propsA].some((q) => sePisan(p, q))) salida.add(`${id}.${p}`);
+    if (propsB.has('*')) output.add(id);
+    else for (const p of propsB) if (propsA.has('*') || [...propsA].some((q) => overlap(p, q))) output.add(`${id}.${p}`);
   }
-  return salida;
+  return output;
 }
 
-export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
+export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
   // Las escrituras de este proceso van en fila para no pisarse entre sí.
   /** @type {Promise<any>} */
-  let fila = Promise.resolve();
+  let row = Promise.resolve();
   /** @template T @param {() => Promise<T>} fn @returns {Promise<T>} */
-  const enFila = (fn) => (fila = fila.then(fn, fn));
+  const enqueue = (fn) => (row = row.then(fn, fn));
 
-  const ruta = (id, archivo) => {
-    if (!ID_DOCUMENTO.test(id ?? '')) throw new Error(`id de documento inválido "${id}": minúsculas, números, _ y -`);
-    return path.join(carpeta, id, archivo);
+  const filePath = (id, file) => {
+    if (!DOCUMENT_ID.test(id ?? '')) throw new Error(`id de documento inválido "${id}": minúsculas, números, _ y -`);
+    return path.join(folder, id, file);
   };
 
   // Archivos de las capas image: personajes/<id>/assets/<src>. No entran en el historial (deshacer quita la capa, no
   // el archivo).
-  const rutaAsset = (id, src) => {
-    if (!ARCHIVO_DE_ASSET.test(src ?? '')) throw new Error(`Invalid asset name "${src}"`);
-    return ruta(id, path.join('assets', src));
+  const assetPath = (id, src) => {
+    if (!ASSET_FILE.test(src ?? '')) throw new Error(`Invalid asset name "${src}"`);
+    return filePath(id, path.join('assets', src));
   };
-  const existe = (archivo) => fs.access(archivo).then(() => true, () => false);
+  const exists = (file) => fs.access(file).then(() => true, () => false);
 
-  async function listarAssets(id) {
+  async function listAssets(id) {
     try {
-      return (await fs.readdir(path.dirname(rutaAsset(id, 'x.png')))).filter((a) => ARCHIVO_DE_ASSET.test(a)).sort();
+      return (await fs.readdir(path.dirname(assetPath(id, 'x.png')))).filter((a) => ASSET_FILE.test(a)).sort();
     } catch (e) {
       if (e.code === 'ENOENT') return [];
       throw e;
@@ -157,69 +157,69 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
   }
 
   /** Avisos de capas image del lote cuyo archivo no está en assets/. */
-  async function avisosDeAssets(id, doc, ops) {
-    const tocados = new Set(ops.filter((o) => o.op === 'create' || o.op === 'set').map((o) => o.op === 'create' ? o.id : o.target));
-    const faltan = [];
-    for (const o of doc.objects) if (o.type === 'image' && tocados.has(o.id) && !(await existe(rutaAsset(id, o.src ?? 'missing.png')))) faltan.push(`${o.id} (${o.src ?? 'missing.png'})`);
-    return faltan.length ? [`Image file not found in the document's assets: ${faltan.join(', ')}. Add the file with add_image (or the editor's Image option); until then the layer draws nothing.`] : [];
+  async function assetWarnings(id, doc, ops) {
+    const touched = new Set(ops.filter((o) => o.op === 'create' || o.op === 'set').map((o) => o.op === 'create' ? o.id : o.target));
+    const missing = [];
+    for (const o of doc.objects) if (o.type === 'image' && touched.has(o.id) && !(await exists(assetPath(id, o.src ?? 'missing.png')))) missing.push(`${o.id} (${o.src ?? 'missing.png'})`);
+    return missing.length ? [`Image file not found in the document's assets: ${missing.join(', ')}. Add the file with add_image (or the editor's Image option); until then the layer draws nothing.`] : [];
   }
 
-  async function leer(id) {
+  async function read(id) {
     let doc;
     try {
-      doc = JSON.parse(await fs.readFile(ruta(id, 'documento.json'), 'utf8'));
+      doc = JSON.parse(await fs.readFile(filePath(id, 'documento.json'), 'utf8'));
     } catch (e) {
       if (e.code === 'ENOENT') throw new Error(`No existe el documento "${id}"`);
       throw e;
     }
-    return migrarAlLeer(id, doc);
+    return migrateOnRead(id, doc);
   }
 
   // Migraciones del formato que se hacen solas al leer (ver src/core/migracion.js): se guardan una vez, con una
   // entrada «migracion» en el historial. Una promesa por documento, para que dos lecturas a la vez no migren dos veces.
-  const migrando = new Map();
-  async function migrarAlLeer(id, doc) {
-    const { doc: migrado, cambios } = migrarEscenasConParams(doc, esquema);
-    if (!cambios.length) return doc;
-    if (!migrando.has(id)) {
-      migrando.set(id, (async () => {
-        await escribir(id, migrado);
-        await registrar(id, { origen: 'system', tipo: 'migracion', nota: cambios.join(' '), ops: [], inversas: [] });
-      })().finally(() => migrando.delete(id)));
+  const migrating = new Map();
+  async function migrateOnRead(id, doc) {
+    const { doc: migrated, changes } = migrateScenesWithParams(doc, schema);
+    if (!changes.length) return doc;
+    if (!migrating.has(id)) {
+      migrating.set(id, (async () => {
+        await write(id, migrated);
+        await record(id, { origen: 'system', tipo: 'migracion', nota: changes.join(' '), ops: [], inversas: [] });
+      })().finally(() => migrating.delete(id)));
     }
-    await migrando.get(id);
-    return migrado;
+    await migrating.get(id);
+    return migrated;
   }
 
-  async function escribir(id, doc) {
+  async function write(id, doc) {
     // Temporal + rename: nadie lee nunca un archivo a medio escribir.
-    const destino = ruta(id, 'documento.json');
-    await fs.writeFile(destino + '.tmp', JSON.stringify(doc, null, 2) + '\n');
-    await fs.rename(destino + '.tmp', destino);
+    const target = filePath(id, 'documento.json');
+    await fs.writeFile(target + '.tmp', JSON.stringify(doc, null, 2) + '\n');
+    await fs.rename(target + '.tmp', target);
   }
 
-  async function historial(id) {
+  async function history(id) {
     try {
-      const texto = await fs.readFile(ruta(id, 'historial.jsonl'), 'utf8');
-      return texto.split('\n').filter(Boolean).map((l) => JSON.parse(l));
+      const text = await fs.readFile(filePath(id, 'historial.jsonl'), 'utf8');
+      return text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
     } catch (e) {
       if (e.code === 'ENOENT') return [];
       throw e;
     }
   }
 
-  async function registrar(id, entrada) {
-    const n = (await historial(id)).length + 1;
-    const completa = { n, fecha: new Date().toISOString(), ...entrada };
-    await fs.appendFile(ruta(id, 'historial.jsonl'), JSON.stringify(completa) + '\n');
-    return completa;
+  async function record(id, entry) {
+    const n = (await history(id)).length + 1;
+    const complete = { n, fecha: new Date().toISOString(), ...entry };
+    await fs.appendFile(filePath(id, 'historial.jsonl'), JSON.stringify(complete) + '\n');
+    return complete;
   }
 
   // Pilas de deshacer/rehacer de un origen, reconstruidas desde el historial.
-  function pilas(entradas, origen) {
+  function stacks(entries, origen) {
     const deshacer = [];
     const rehacer = [];
-    for (const e of entradas) {
+    for (const e of entries) {
       // Una migración del formato (de cualquier origen) corta las pilas: las inversas de antes ya no encajan.
       if (e.tipo === 'migracion') {
         deshacer.length = 0;
@@ -246,111 +246,111 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
    * deshacerla o rehacerla los pisaría. Un cambio que su origen ya deshizo (o un deshacer que ya rehizo) se cancela y
    * no cuenta. Devuelve [{ quien, n, nota, props: ["r.x", ...] }].
    */
-  function choquesConOtros(entradas, entrada) {
-    const propias = tocados(entrada);
-    const enPie = new Map(); // origen → Map(n → entrada)
-    for (const e of entradas.slice(entrada.n)) {
+  function conflictsWithOthers(entries, entry) {
+    const own = touched(entry);
+    const standing = new Map(); // origen → Map(n → entrada)
+    for (const e of entries.slice(entry.n)) {
       if (e.tipo === 'migracion') return []; // la migración ya cortó las pilas
-      if (e.origen === entrada.origen || !['cambio', 'deshacer', 'rehacer'].includes(e.tipo)) continue;
-      const delOrigen = enPie.get(e.origen) ?? enPie.set(e.origen, new Map()).get(e.origen);
+      if (e.origen === entry.origen || !['cambio', 'deshacer', 'rehacer'].includes(e.tipo)) continue;
+      const fromOrigin = standing.get(e.origen) ?? standing.set(e.origen, new Map()).get(e.origen);
       // Deshacer un lote (o rehacer un deshacer) que también es posterior: se anulan entre sí.
-      if (e.tipo !== 'cambio' && delOrigen.has(e.ref)) delOrigen.delete(e.ref);
-      else delOrigen.set(e.n, e);
+      if (e.tipo !== 'cambio' && fromOrigin.has(e.ref)) fromOrigin.delete(e.ref);
+      else fromOrigin.set(e.n, e);
     }
-    const choques = [];
-    for (const delOrigen of enPie.values()) {
-      for (const e of delOrigen.values()) {
-        const props = [...comunes(propias, tocados(e))];
-        if (props.length) choques.push({ quien: e.origen, n: e.n, nota: e.nota ?? '', props });
+    const conflicts = [];
+    for (const fromOrigin of standing.values()) {
+      for (const e of fromOrigin.values()) {
+        const props = [...common(own, touched(e))];
+        if (props.length) conflicts.push({ who: e.origen, n: e.n, nota: e.nota ?? '', props });
       }
     }
-    return choques;
+    return conflicts;
   }
 
-  async function revertir(id, origen, tipo) {
-    const entradas = await historial(id);
-    const pila = pilas(entradas, origen)[tipo === 'deshacer' ? 'deshacer' : 'rehacer'];
-    if (!pila.length) throw new Error(tipo === 'deshacer' ? 'Nothing of yours to undo' : 'Nothing to redo');
-    const entrada = entradas[pila.at(-1) - 1];
-    const choques = choquesConOtros(entradas, entrada);
-    if (choques.length) {
-      const verbo = tipo === 'deshacer' ? 'undo' : 'redo';
-      const detalle = choques.map(({ quien, n, nota, props }) => `${props.join(', ')} (changed by ${quien === 'user' ? 'the user' : quien === 'ai' ? 'the AI' : quien} in #${n} "${nota}")`).join('; ');
-      throw new Error(`Can't ${verbo} #${entrada.n} "${entrada.nota ?? ''}": it would overwrite later changes from another origin: ${detalle}. Change those properties by hand instead, or ask whoever made them.`);
+  async function revert(id, origen, tipo) {
+    const entries = await history(id);
+    const stack = stacks(entries, origen)[tipo === 'deshacer' ? 'deshacer' : 'rehacer'];
+    if (!stack.length) throw new Error(tipo === 'deshacer' ? 'Nothing of yours to undo' : 'Nothing to redo');
+    const entry = entries[stack.at(-1) - 1];
+    const conflicts = conflictsWithOthers(entries, entry);
+    if (conflicts.length) {
+      const verb = tipo === 'deshacer' ? 'undo' : 'redo';
+      const detail = conflicts.map(({ who, n, nota, props }) => `${props.join(', ')} (changed by ${who === 'user' ? 'the user' : who === 'ai' ? 'the AI' : who} in #${n} "${nota}")`).join('; ');
+      throw new Error(`Can't ${verb} #${entry.n} "${entry.nota ?? ''}": it would overwrite later changes from another origin: ${detail}. Change those properties by hand instead, or ask whoever made them.`);
     }
-    let resultado;
-    const actual = await leer(id);
-    const inversas = inversasPorClave(actual, entrada);
+    let result;
+    const current = await read(id);
+    const inversas = inversesByKey(current, entry);
     try {
-      resultado = aplicarOperaciones(actual, inversas, esquema);
+      result = applyOperations(current, inversas, schema);
     } catch (e) {
       throw new Error(`Can't ${tipo === 'deshacer' ? 'undo' : 'redo'}: the document changed afterwards and it no longer fits.\n${e.message}`);
     }
-    await escribir(id, resultado.doc);
+    await write(id, result.doc);
     // La nota la ve el usuario en el historial: en inglés (los prefijos viejos en español también se limpian).
-    const nota = entrada.nota?.replace(/^(deshacer|rehacer|undo|redo): /, '') ?? '';
-    await registrar(id, { origen, tipo, ref: entrada.n, nota: `${tipo === 'deshacer' ? 'undo' : 'redo'}: ${nota}`, ops: inversas, inversas: resultado.inversas });
-    return { doc: resultado.doc, entrada: { n: entrada.n, nota, ops: entrada.ops.length, lote: entrada.ops } };
+    const nota = entry.nota?.replace(/^(deshacer|rehacer|undo|redo): /, '') ?? '';
+    await record(id, { origen, tipo, ref: entry.n, nota: `${tipo === 'deshacer' ? 'undo' : 'redo'}: ${nota}`, ops: inversas, inversas: result.inversas });
+    return { doc: result.doc, entrada: { n: entry.n, nota, ops: entry.ops.length, lote: entry.ops } };
   }
 
   return {
-    leer,
+    read,
 
-    async listar() {
-      await fs.mkdir(carpeta, { recursive: true });
-      const carpetas = await fs.readdir(carpeta, { withFileTypes: true });
-      const ids = carpetas.filter((c) => c.isDirectory() && ID_DOCUMENTO.test(c.name)).map((c) => c.name).sort();
-      const lista = [];
+    async list() {
+      await fs.mkdir(folder, { recursive: true });
+      const folders = await fs.readdir(folder, { withFileTypes: true });
+      const ids = folders.filter((c) => c.isDirectory() && DOCUMENT_ID.test(c.name)).map((c) => c.name).sort();
+      const list = [];
       for (const id of ids) {
         try {
-          lista.push({ id, name: (await leer(id)).meta.name ?? id });
+          list.push({ id, name: (await read(id)).meta.name ?? id });
         } catch {
           // carpeta sin documento: se ignora
         }
       }
-      return lista;
+      return list;
     },
 
     /** Crea un documento vacío o, con `copiarDe`, una copia de otro (sin su historial). */
-    /** @param {string} id @param {Record<string, any>} meta @param {{ origen: string, nota?: string, copiarDe?: string }} opciones */
-    crear: (id, meta, { origen, nota, copiarDe }) =>
-      enFila(async () => {
+    /** @param {string} id @param {Record<string, any>} meta @param {{ origen: string, nota?: string, copyFrom?: string }} options */
+    crear: (id, meta, { origen, nota, copyFrom }) =>
+      enqueue(async () => {
         try {
-          await fs.access(ruta(id, 'documento.json'));
+          await fs.access(filePath(id, 'documento.json'));
           throw new Error(`Ya existe el documento "${id}"`);
         } catch (e) {
           if (e.code !== 'ENOENT') throw e;
         }
-        let doc = crearDocumento(meta);
-        if (copiarDe) {
-          const base = await leer(copiarDe);
+        let doc = createDocument(meta);
+        if (copyFrom) {
+          const base = await read(copyFrom);
           doc = { ...base, meta: { ...base.meta, ...meta } };
-          nota ??= `copy of ${copiarDe}`;
+          nota ??= `copy of ${copyFrom}`;
         }
-        const { errores } = validar(doc, esquema);
-        if (errores.length) throw new ErrorDeValidacion(errores);
-        await fs.mkdir(path.dirname(ruta(id, 'documento.json')), { recursive: true });
+        const { errors } = validate(doc, schema);
+        if (errors.length) throw new ValidationError(errors);
+        await fs.mkdir(path.dirname(filePath(id, 'documento.json')), { recursive: true });
         // La copia lleva también los archivos de sus imágenes.
-        if (copiarDe && (await listarAssets(copiarDe)).length) await fs.cp(path.dirname(rutaAsset(copiarDe, 'x.png')), path.dirname(rutaAsset(id, 'x.png')), { recursive: true });
-        await escribir(id, doc);
-        await registrar(id, { origen, tipo: 'crear', nota: nota ?? 'document created', ops: [], inversas: [] });
+        if (copyFrom && (await listAssets(copyFrom)).length) await fs.cp(path.dirname(assetPath(copyFrom, 'x.png')), path.dirname(assetPath(id, 'x.png')), { recursive: true });
+        await write(id, doc);
+        await record(id, { origen, tipo: 'crear', nota: nota ?? 'document created', ops: [], inversas: [] });
         return doc;
       }),
 
     /** Aplica un lote sobre la versión en disco. Devuelve el documento y los avisos. */
-    operar: (id, ops, { origen, nota }) =>
-      enFila(async () => {
-        const { doc, inversas, avisos } = aplicarOperaciones(await leer(id), ops, esquema);
-        await escribir(id, doc);
-        await registrar(id, { origen, tipo: 'cambio', nota: nota || `${ops.length} ${ops.length === 1 ? 'change' : 'changes'}`, ops, inversas });
-        return { doc, avisos: [...avisos, ...(await avisosDeAssets(id, doc, ops))] };
+    applyOps: (id, ops, { origen, nota }) =>
+      enqueue(async () => {
+        const { doc, inversas, warnings } = applyOperations(await read(id), ops, schema);
+        await write(id, doc);
+        await record(id, { origen, tipo: 'cambio', nota: nota || `${ops.length} ${ops.length === 1 ? 'change' : 'changes'}`, ops, inversas });
+        return { doc, warnings: [...warnings, ...(await assetWarnings(id, doc, ops))] };
       }),
 
     /** Borra el documento y su historial. No se puede deshacer. */
     eliminar: (id) =>
-      enFila(async () => {
-        await leer(id);
-        await fs.rm(path.dirname(ruta(id, 'documento.json')), { recursive: true });
+      enqueue(async () => {
+        await read(id);
+        await fs.rm(path.dirname(filePath(id, 'documento.json')), { recursive: true });
       }),
 
     /**
@@ -359,56 +359,56 @@ export function crearAlmacen({ esquema, carpeta = CARPETA_PERSONAJES }) {
      * agrega _2, _3...
      * @param {string} id @param {string} original @param {Uint8Array} bytes
      */
-    guardarAsset: (id, original, bytes) =>
-      enFila(async () => {
-        await leer(id);
-        const { formato, ancho, alto } = leerImagen(bytes);
-        const igual = async (src) => Buffer.from(bytes).equals(await fs.readFile(rutaAsset(id, src)));
-        for (const src of await listarAssets(id)) if (mimeDeAsset(src) === FORMATOS_DE_IMAGEN[formato].mime && (await igual(src))) return { src, ancho, alto, formato, reusado: true };
-        const ocupados = new Set(await listarAssets(id));
-        const src = nombreLibre(nombreDeAsset(original, formato), (n) => ocupados.has(n));
-        await fs.mkdir(path.dirname(rutaAsset(id, src)), { recursive: true });
-        await fs.writeFile(rutaAsset(id, src), bytes);
-        return { src, ancho, alto, formato, reusado: false };
+    saveAsset: (id, original, bytes) =>
+      enqueue(async () => {
+        await read(id);
+        const { format, naturalWidth, naturalHeight } = readImage(bytes);
+        const equal = async (src) => Buffer.from(bytes).equals(await fs.readFile(assetPath(id, src)));
+        for (const src of await listAssets(id)) if (assetMime(src) === IMAGE_FORMATS[format].mime && (await equal(src))) return { src, naturalWidth, naturalHeight, format, reused: true };
+        const taken = new Set(await listAssets(id));
+        const src = freeName(assetName(original, format), (n) => taken.has(n));
+        await fs.mkdir(path.dirname(assetPath(id, src)), { recursive: true });
+        await fs.writeFile(assetPath(id, src), bytes);
+        return { src, naturalWidth, naturalHeight, format, reused: false };
       }),
 
     /** Bytes y tipo MIME de un asset. */
-    async leerAsset(id, src) {
+    async readAsset(id, src) {
       try {
-        return { bytes: await fs.readFile(rutaAsset(id, src)), mime: mimeDeAsset(src) };
+        return { bytes: await fs.readFile(assetPath(id, src)), mime: assetMime(src) };
       } catch (e) {
         if (e.code === 'ENOENT') throw new Error(`The document "${id}" has no asset "${src}"`);
         throw e;
       }
     },
 
-    listarAssets,
+    listAssets,
 
     /** Los archivos de las imágenes que usa el documento (src → bytes), para dibujarlo fuera del navegador. */
-    async imagenesDe(id, doc) {
-      const mapa = new Map();
-      for (const src of assetsUsados(doc)) {
-        if (!ARCHIVO_DE_ASSET.test(src)) continue;
+    async imagesOf(id, doc) {
+      const map = new Map();
+      for (const src of usedAssets(doc)) {
+        if (!ASSET_FILE.test(src)) continue;
         try {
-          mapa.set(src, await fs.readFile(rutaAsset(id, src)));
+          map.set(src, await fs.readFile(assetPath(id, src)));
         } catch (e) {
           if (e.code !== 'ENOENT') throw e;
         }
       }
-      return mapa;
+      return map;
     },
 
-    deshacer: (id, origen) => enFila(() => revertir(id, origen, 'deshacer')),
-    rehacer: (id, origen) => enFila(() => revertir(id, origen, 'rehacer')),
+    deshacer: (id, origen) => enqueue(() => revert(id, origen, 'deshacer')),
+    rehacer: (id, origen) => enqueue(() => revert(id, origen, 'rehacer')),
 
     /** Últimas entradas, de la más vieja a la más nueva, más qué puede deshacer/rehacer cada origen. */
-    async historial(id, limite = 50) {
-      const entradas = await historial(id);
-      const disponible = (origen) => {
-        const p = pilas(entradas, origen);
+    async history(id, limit = 50) {
+      const entries = await history(id);
+      const available = (origen) => {
+        const p = stacks(entries, origen);
         return { deshacer: p.deshacer.length > 0, rehacer: p.rehacer.length > 0 };
       };
-      return { entradas: entradas.slice(-limite), ai: disponible('ai'), user: disponible('user') };
+      return { entries: entries.slice(-limit), ai: available('ai'), user: available('user') };
     },
   };
 }

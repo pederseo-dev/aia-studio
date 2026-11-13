@@ -1,12 +1,12 @@
 // Tipos compartidos del núcleo, para la verificación con `npm run tipos` (tsc sobre JS con JSDoc). No generan código.
 
 /** Matriz afín [a, b, c, d, e, f], la misma que usa SVG en matrix(...). */
-export type Matriz = number[];
+export type Matrix = number[];
 /** Punto [x, y]. */
-export type Punto = [number, number];
+export type Point = [number, number];
 
 /** Un objeto del documento: `type`, `id`, `parent` y sus propiedades (las define el esquema). */
-export interface Objeto {
+export interface Object {
   id: string;
   type: string;
   parent?: string | null;
@@ -14,22 +14,22 @@ export interface Objeto {
 }
 
 /** El documento: `format`, `meta` y la lista plana de objetos. */
-export interface Documento {
+export interface Document {
   format: number;
   meta: Record<string, any>;
-  objects: Objeto[];
+  objects: Object[];
   [prop: string]: any;
 }
 
 /** Una operación de un lote: create, set, unset, delete, move, rename, duplicate (y las internas `_...`). */
-export interface Operacion {
+export interface Operation {
   op: string;
   target?: string;
-  [campo: string]: any;
+  [field: string]: any;
 }
 
 /** Opciones de lo que se dibuja (render/svg.js y las vistas previas del MCP). */
-export interface OpcionesDeVista {
+export interface ViewOptions {
   /** Pose que se ve encima del montaje (un objeto pose o sus valores ya resueltos). */
   pose?: any;
   params?: Record<string, number>;
@@ -37,10 +37,10 @@ export interface OpcionesDeVista {
   time?: number;
   times?: number[];
   poses?: any[];
-  mostrar?: any;
+  show?: any;
   /** src de una capa image → href con que se dibuja (el editor: la URL del servidor). */
   assets?: (src: string) => string;
   region?: { x: number; y: number; width: number; height: number };
-  huesos?: boolean;
-  columnas?: number;
+  bones?: boolean;
+  columns?: number;
 }

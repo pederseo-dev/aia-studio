@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FORMATO, CONVENCIONES } from '../src/core/format.js';
+import { FORMAT, CONVENTIONS } from '../src/core/format.js';
 
 test('el núcleo carga y declara su formato', () => {
-  assert.match(FORMATO, /^aia\/\d+\.\d+$/);
-  assert.equal(CONVENCIONES.tiempo, 'segundos');
+  assert.match(FORMAT, /^aia\/\d+\.\d+$/);
+  assert.equal(CONVENTIONS.time, 'segundos');
 });

@@ -1,18 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cargarEsquema } from '../server/schema.js';
-import { buscar, crearDocumento } from '../src/core/document.js';
-import { mezclarPoses, pesoDeDriver, valoresDeParams } from '../src/core/blend.js';
-import { aplicarOperaciones } from '../src/core/operations.js';
-import { svgDocumento } from '../src/render/svg.js';
+import { loadSchema } from '../server/schema.js';
+import { findObject, createDocument } from '../src/core/document.js';
+import { blendPoses, driverWeight, paramValues } from '../src/core/blend.js';
+import { applyOperations } from '../src/core/operations.js';
+import { svgDocument } from '../src/render/svg.js';
 
-const esquema = cargarEsquema();
-const op = (doc, ...ops) => aplicarOperaciones(doc, ops, esquema).doc;
+const schema = loadSchema();
+const op = (doc, ...ops) => applyOperations(doc, ops, schema).doc;
 
 // Una cara: boca como switch (rest / o) y como path con la misma cantidad de puntos (para el morph), cabeza que gira.
-function cara() {
+function face() {
   return op(
-    crearDocumento({ name: 'Cara' }),
+    createDocument({ name: 'Cara' }),
     { op: 'create', type: 'skeleton', id: 'rig' },
     { op: 'create', type: 'bone', id: 'head_bone', parent: 'rig', props: { from: [100, 200], to: [100, 100] } },
     { op: 'create', type: 'group', id: 'head', parent: 'rig', props: { x: 100, y: 200, bone: 'head_bone' } },
@@ -33,113 +33,113 @@ function cara() {
 }
 
 test('valores iniciales de los params y peso de los drivers', () => {
-  const doc = cara();
-  assert.deepEqual(valoresDeParams(doc, esquema), { happiness: 0, head_turn: 0, viseme: 'rest' });
-  assert.deepEqual(valoresDeParams(doc, esquema, { head_turn: 5, viseme: 'x' }).head_turn, 1);
-  assert.equal(pesoDeDriver(doc, esquema, buscar(doc, 'd_happy'), 0.25), 0.25);
-  assert.equal(pesoDeDriver(doc, esquema, buscar(doc, 'd_turn'), -1), 0);
-  assert.equal(pesoDeDriver(doc, esquema, buscar(doc, 'd_o'), 'o'), 1);
+  const doc = face();
+  assert.deepEqual(paramValues(doc, schema), { happiness: 0, head_turn: 0, viseme: 'rest' });
+  assert.deepEqual(paramValues(doc, schema, { head_turn: 5, viseme: 'x' }).head_turn, 1);
+  assert.equal(driverWeight(doc, schema, findObject(doc, 'd_happy'), 0.25), 0.25);
+  assert.equal(driverWeight(doc, schema, findObject(doc, 'd_turn'), -1), 0);
+  assert.equal(driverWeight(doc, schema, findObject(doc, 'd_o'), 'o'), 1);
 });
 
 test('la mezcla suma números, interpola vértices y elige el switch', () => {
-  const doc = cara();
-  const mitad = mezclarPoses(doc, esquema, { happiness: 0.5, head_turn: 1, viseme: 'o' }).values;
-  assert.equal(mitad.head.opacity, 0.75);
-  assert.deepEqual(mitad.smile.vertices.map((v) => [v.x, v.y]), [[-20, -5], [0, 5], [20, -5]]);
-  assert.equal(mitad.head_bone.rotation, 20);
-  assert.equal(mitad.mouth.active, 'mouth_o');
+  const doc = face();
+  const half = blendPoses(doc, schema, { happiness: 0.5, head_turn: 1, viseme: 'o' }).values;
+  assert.equal(half.head.opacity, 0.75);
+  assert.deepEqual(half.smile.vertices.map((v) => [v.x, v.y]), [[-20, -5], [0, 5], [20, -5]]);
+  assert.equal(half.head_bone.rotation, 20);
+  assert.equal(half.mouth.active, 'mouth_o');
   // En el SVG: el switch muestra solo la boca "o", y la cabeza gira con su hueso.
-  const svg = svgDocumento(doc, esquema, { params: { happiness: 0.5, head_turn: 1, viseme: 'o' } });
+  const svg = svgDocument(doc, schema, { params: { happiness: 0.5, head_turn: 1, viseme: 'o' } });
   assert.match(svg, /data-id="mouth_o"/);
   assert.doesNotMatch(svg, /data-id="mouth_rest"/);
   assert.match(svg, /data-id="head" transform="matrix\(/);
   // Sin params, el montaje: la primera boca.
-  assert.match(svgDocumento(doc, esquema), /data-id="mouth_rest"/);
+  assert.match(svgDocument(doc, schema), /data-id="mouth_rest"/);
 });
 
 test('una pose solo acepta propiedades animables que existan', () => {
-  assert.throws(() => op(cara(), { op: 'set', target: 'happy', props: { values: { smile: { width: 3 } } } }), /no tiene "width" animable/);
-  assert.throws(() => op(cara(), { op: 'set', target: 'happy', props: { values: { mouth: { active: 'smile' } } } }), /is not a child of mouth/);
-  assert.throws(() => op(cara(), { op: 'set', target: 'mouth', props: { active: 'nada' } }), /no existe/);
+  assert.throws(() => op(face(), { op: 'set', target: 'happy', props: { values: { smile: { width: 3 } } } }), /no tiene "width" animable/);
+  assert.throws(() => op(face(), { op: 'set', target: 'happy', props: { values: { mouth: { active: 'smile' } } } }), /is not a child of mouth/);
+  assert.throws(() => op(face(), { op: 'set', target: 'mouth', props: { active: 'nada' } }), /no existe/);
 });
 
 test('renombrar y borrar actualizan las poses, también los ids que son valores', () => {
-  let doc = op(cara(), { op: 'rename', target: 'mouth_o', id: 'mouth_open' });
-  assert.deepEqual(buscar(doc, 'viseme_o').values, { mouth: { active: 'mouth_open' } });
+  let doc = op(face(), { op: 'rename', target: 'mouth_o', id: 'mouth_open' });
+  assert.deepEqual(findObject(doc, 'viseme_o').values, { mouth: { active: 'mouth_open' } });
   doc = op(doc, { op: 'delete', target: 'mouth_open' });
-  assert.deepEqual(buscar(doc, 'viseme_o').values, {});
+  assert.deepEqual(findObject(doc, 'viseme_o').values, {});
   doc = op(doc, { op: 'delete', target: 'happiness' });
-  assert.equal(buscar(doc, 'd_happy').param, undefined);
+  assert.equal(findObject(doc, 'd_happy').param, undefined);
 });
 
 // Una cola: un path de 3 puntos enlazados por punto a b1, b1 y b2, y una pose que dobla b2 y cambia la forma.
-function cola() {
+function tail() {
   let doc = op(
-    crearDocumento({}),
+    createDocument({}),
     { op: 'create', type: 'skeleton', id: 'rig' },
     { op: 'create', type: 'bone', id: 'b1', parent: 'rig', props: { x: 0, y: 100, length: 100 } },
     { op: 'create', type: 'bone', id: 'b2', parent: 'b1', props: { x: 100, length: 100 } },
     { op: 'create', type: 'path', id: 'tail', parent: 'rig', props: { d: 'M0 100 L100 100 L200 100', closed: false } },
   );
-  const vertices = buscar(doc, 'tail').vertices.map((v, i) => ({ ...v, bone: i < 2 ? 'b1' : 'b2' }));
+  const vertices = findObject(doc, 'tail').vertices.map((v, i) => ({ ...v, bone: i < 2 ? 'b1' : 'b2' }));
   return op(doc, { op: 'set', target: 'tail', props: { vertices } }, { op: 'create', type: 'pose', id: 'bend', props: { values: { b2: { rotation: 90 }, tail: { d: 'M0 100 L100 110 L200 100' } } } });
 }
 
 test('una pose que cambia la forma conserva el enlace por punto del montaje', () => {
-  const doc = cola();
+  const doc = tail();
   // La pose no guarda bone en sus vértices.
-  assert.ok(buscar(doc, 'bend').values.tail.vertices.every((v) => v.bone === undefined));
+  assert.ok(findObject(doc, 'bend').values.tail.vertices.every((v) => v.bone === undefined));
   // El tercer punto sigue a b2, que gira 90° en (100, 100): (200, 100) → (100, 200).
-  assert.match(svgDocumento(doc, esquema, { pose: 'bend' }), /data-id="tail"><path d="M0 100L100 110L100 200"/);
+  assert.match(svgDocument(doc, schema, { pose: 'bend' }), /data-id="tail"><path d="M0 100L100 110L100 200"/);
   // También en la mezcla, a mitad de camino.
-  const conParam = op(doc, { op: 'create', type: 'param', id: 'p' }, { op: 'create', type: 'driver', id: 'd', props: { param: 'p', pose: 'bend' } });
-  assert.match(svgDocumento(conParam, esquema, { params: { p: 1 } }), /data-id="tail"><path d="M0 100L100 110L100 200"/);
+  const withParam = op(doc, { op: 'create', type: 'param', id: 'p' }, { op: 'create', type: 'driver', id: 'd', props: { param: 'p', pose: 'bend' } });
+  assert.match(svgDocument(withParam, schema, { params: { p: 1 } }), /data-id="tail"><path d="M0 100L100 110L100 200"/);
 });
 
 test('el bone que una pose vieja guardó en sus vértices se ignora', () => {
-  const doc = cola();
+  const doc = tail();
   // Simula un documento de antes: la pose guarda un bone viejo (o que ya no existe) en cada vértice.
-  const viejo = structuredClone(doc);
-  buscar(viejo, 'bend').values.tail.vertices = buscar(viejo, 'bend').values.tail.vertices.map((v) => ({ ...v, bone: 'nope' }));
-  assert.match(svgDocumento(viejo, esquema, { pose: 'bend' }), /data-id="tail"><path d="M0 100L100 110L100 200"/);
+  const old = structuredClone(doc);
+  findObject(old, 'bend').values.tail.vertices = findObject(old, 'bend').values.tail.vertices.map((v) => ({ ...v, bone: 'nope' }));
+  assert.match(svgDocument(old, schema, { pose: 'bend' }), /data-id="tail"><path d="M0 100L100 110L100 200"/);
   // Al guardarla de nuevo, se limpia.
-  const limpio = op(viejo, { op: 'set', target: 'bend', props: { values: buscar(viejo, 'bend').values } });
-  assert.ok(buscar(limpio, 'bend').values.tail.vertices.every((v) => v.bone === undefined));
+  const clean = op(old, { op: 'set', target: 'bend', props: { values: findObject(old, 'bend').values } });
+  assert.ok(findObject(clean, 'bend').values.tail.vertices.every((v) => v.bone === undefined));
 });
 
 test('la mezcla parte del valor que se ve, con el estilo', () => {
   const doc = op(
-    crearDocumento({}),
+    createDocument({}),
     { op: 'create', type: 'style', id: 'skin', props: { fill: '#ff0000', strokeWidth: 10, stroke: '#000000' } },
     { op: 'create', type: 'rect', id: 'face', props: { style: 'skin', width: 10, height: 10 } },
     { op: 'create', type: 'pose', id: 'pale', props: { values: { face: { fill: '#ff0000', strokeWidth: 10 } } } },
     { op: 'create', type: 'param', id: 'p' },
     { op: 'create', type: 'driver', id: 'd', props: { param: 'p', pose: 'pale' } },
   );
-  assert.deepEqual(mezclarPoses(doc, esquema, { p: 0.5 }).values, { face: { fill: '#ff0000', strokeWidth: 10 } });
+  assert.deepEqual(blendPoses(doc, schema, { p: 0.5 }).values, { face: { fill: '#ff0000', strokeWidth: 10 } });
 });
 
 test('escribir en una pose: el mismo lote para el editor y para set_pose', async () => {
-  const { fusionarPose, opsParaFijarPose } = await import('../src/core/blend.js');
-  const previos = { a: { x: 1, y: 2 }, b: { rotation: 5 } };
+  const { mergePose, opsToSetPose } = await import('../src/core/blend.js');
+  const previous = { a: { x: 1, y: 2 }, b: { rotation: 5 } };
   // Lo que manda el editor: un objeto y sus campos; undefined saca la propiedad y, si no queda nada, el objeto.
-  assert.deepEqual(fusionarPose(previos, { a: { x: 3 } }), { a: { x: 3, y: 2 }, b: { rotation: 5 } });
-  assert.deepEqual(fusionarPose(previos, { a: { y: undefined } }), { a: { x: 1 }, b: { rotation: 5 } });
-  assert.deepEqual(fusionarPose(previos, { b: { rotation: undefined } }), { a: { x: 1, y: 2 } });
-  assert.deepEqual(fusionarPose(previos, { c: { opacity: undefined } }), previos);
+  assert.deepEqual(mergePose(previous, { a: { x: 3 } }), { a: { x: 3, y: 2 }, b: { rotation: 5 } });
+  assert.deepEqual(mergePose(previous, { a: { y: undefined } }), { a: { x: 1 }, b: { rotation: 5 } });
+  assert.deepEqual(mergePose(previous, { b: { rotation: undefined } }), { a: { x: 1, y: 2 } });
+  assert.deepEqual(mergePose(previous, { c: { opacity: undefined } }), previous);
   // No toca lo que recibe.
-  assert.deepEqual(previos, { a: { x: 1, y: 2 }, b: { rotation: 5 } });
-  const doc = op(crearDocumento({}), ...['a', 'b', 'r'].map((id) => ({ op: 'create', type: 'rect', id })), { op: 'create', type: 'pose', id: 'p', props: { values: previos } });
-  assert.deepEqual(opsParaFijarPose(doc, 'p', { r: { x: 4 } }), [{ op: 'set', target: 'p', props: { values: { ...previos, r: { x: 4 } } } }]);
+  assert.deepEqual(previous, { a: { x: 1, y: 2 }, b: { rotation: 5 } });
+  const doc = op(createDocument({}), ...['a', 'b', 'r'].map((id) => ({ op: 'create', type: 'rect', id })), { op: 'create', type: 'pose', id: 'p', props: { values: previous } });
+  assert.deepEqual(opsToSetPose(doc, 'p', { r: { x: 4 } }), [{ op: 'set', target: 'p', props: { values: { ...previous, r: { x: 4 } } } }]);
 });
 
 test('autokey: opsParaClavesEnClip pone y quita keyframes en el tiempo pedido', async () => {
-  const { opsParaClavesEnClip } = await import('../src/core/animation.js');
-  let doc = op(crearDocumento({}), { op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'animation', id: 'c', props: { duration: 2 } });
-  doc = op(doc, ...opsParaClavesEnClip(doc, esquema, 'c', 'r', { x: 10, opacity: 0.5 }, 1));
-  assert.deepEqual(buscar(doc, 'c').tracks.r.x.map((k) => [k.t, k.value]), [[1, 10]]);
-  assert.deepEqual(buscar(doc, 'c').tracks.r.opacity.map((k) => [k.t, k.value]), [[1, 0.5]]);
-  doc = op(doc, ...opsParaClavesEnClip(doc, esquema, 'c', 'r', { x: undefined }, 1));
-  assert.equal(buscar(doc, 'c').tracks.r.x, undefined);
-  assert.ok(buscar(doc, 'c').tracks.r.opacity);
+  const { opsForKeysInClip } = await import('../src/core/animation.js');
+  let doc = op(createDocument({}), { op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'animation', id: 'c', props: { duration: 2 } });
+  doc = op(doc, ...opsForKeysInClip(doc, schema, 'c', 'r', { x: 10, opacity: 0.5 }, 1));
+  assert.deepEqual(findObject(doc, 'c').tracks.r.x.map((k) => [k.t, k.value]), [[1, 10]]);
+  assert.deepEqual(findObject(doc, 'c').tracks.r.opacity.map((k) => [k.t, k.value]), [[1, 0.5]]);
+  doc = op(doc, ...opsForKeysInClip(doc, schema, 'c', 'r', { x: undefined }, 1));
+  assert.equal(findObject(doc, 'c').tracks.r.x, undefined);
+  assert.ok(findObject(doc, 'c').tracks.r.opacity);
 });

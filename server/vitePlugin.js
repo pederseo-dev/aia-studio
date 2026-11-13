@@ -3,36 +3,36 @@
 
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { CARPETA_PERSONAJES, crearAlmacen } from './store.js';
-import { cargarEsquema } from './schema.js';
-import { MAXIMO_DE_IMAGEN } from '../src/core/images.js';
+import { DOCUMENTS_FOLDER, createStore } from './store.js';
+import { loadSchema } from './schema.js';
+import { IMAGE_MAX } from '../src/core/images.js';
 
-const ORIGEN = 'user';
+const ORIGIN = 'user';
 
-function responder(res, estado, datos) {
-  res.statusCode = estado;
+function respond(res, state, data) {
+  res.statusCode = state;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.end(JSON.stringify(datos));
+  res.end(JSON.stringify(data));
 }
 
-async function leerBytes(req) {
-  const trozos = [];
+async function readBytes(req) {
+  const pieces = [];
   let total = 0;
-  for await (const trozo of req) {
-    total += trozo.length;
-    if (total > MAXIMO_DE_IMAGEN) throw new Error(`The image is too big (at most ${MAXIMO_DE_IMAGEN / 1048576} MB)`);
-    trozos.push(trozo);
+  for await (const piece of req) {
+    total += piece.length;
+    if (total > IMAGE_MAX) throw new Error(`The image is too big (at most ${IMAGE_MAX / 1048576} MB)`);
+    pieces.push(piece);
   }
-  return new Uint8Array(Buffer.concat(trozos));
+  return new Uint8Array(Buffer.concat(pieces));
 }
 
-async function leerCuerpo(req) {
-  let texto = '';
-  for await (const trozo of req) texto += trozo;
-  return JSON.parse(texto || '{}');
+async function readBody(req) {
+  let text = '';
+  for await (const piece of req) text += piece;
+  return JSON.parse(text || '{}');
 }
 
-function servirAsset(res, { bytes, mime }) {
+function serveAsset(res, { bytes, mime }) {
   res.statusCode = 200;
   res.setHeader('Content-Type', mime);
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -42,62 +42,62 @@ function servirAsset(res, { bytes, mime }) {
   res.end(bytes);
 }
 
-export function aiaDocumentos() {
+export function aiaDocuments() {
   return {
     name: 'aia-documentos',
     configureServer(server) {
-      const almacen = crearAlmacen({ esquema: cargarEsquema() });
+      const store = createStore({ schema: loadSchema() });
 
       server.middlewares.use('/api/documentos', async (req, res) => {
         try {
-          const [id, accion, ...resto] = req.url.split('?')[0].split('/').filter(Boolean).map(decodeURIComponent);
-          const metodo = req.method;
+          const [id, action, ...rest] = req.url.split('?')[0].split('/').filter(Boolean).map(decodeURIComponent);
+          const method = req.method;
           // Imágenes: GET /api/documentos/<id>/assets/<archivo> lo sirve; POST /api/documentos/<id>/assets?name=<original>
           // con los bytes en el cuerpo lo guarda y devuelve { src, ancho, alto, formato, reusado }.
-          if (accion === 'assets' && metodo === 'GET' && resto.length === 1) return servirAsset(res, await almacen.leerAsset(id, resto[0]));
-          if (accion === 'assets' && metodo === 'POST' && !resto.length) {
+          if (action === 'assets' && method === 'GET' && rest.length === 1) return serveAsset(res, await store.readAsset(id, rest[0]));
+          if (action === 'assets' && method === 'POST' && !rest.length) {
             const original = new URL(req.url, 'http://x').searchParams.get('name') ?? 'image';
-            return responder(res, 200, await almacen.guardarAsset(id, original, await leerBytes(req)));
+            return respond(res, 200, await store.saveAsset(id, original, await readBytes(req)));
           }
-          if (resto.length) return responder(res, 404, { error: 'Ruta desconocida' });
+          if (rest.length) return respond(res, 404, { error: 'Ruta desconocida' });
 
-          if (!id && metodo === 'GET') return responder(res, 200, await almacen.listar());
-          if (!id && metodo === 'POST') {
-            const { id: nuevo, meta, copiarDe } = await leerCuerpo(req);
-            return responder(res, 200, await almacen.crear(nuevo, meta ?? {}, { origen: ORIGEN, copiarDe }));
+          if (!id && method === 'GET') return respond(res, 200, await store.list());
+          if (!id && method === 'POST') {
+            const { id: created, meta, copyFrom } = await readBody(req);
+            return respond(res, 200, await store.crear(created, meta ?? {}, { origen: ORIGIN, copyFrom }));
           }
-          if (id && !accion && metodo === 'GET') return responder(res, 200, await almacen.leer(id));
-          if (id && !accion && metodo === 'DELETE') return responder(res, 200, await almacen.eliminar(id) ?? { ok: true });
-          if (accion === 'historial' && metodo === 'GET') return responder(res, 200, await almacen.historial(id));
-          if (accion === 'ops' && metodo === 'POST') {
-            const { ops, nota } = await leerCuerpo(req);
-            return responder(res, 200, await almacen.operar(id, ops, { origen: ORIGEN, nota }));
+          if (id && !action && method === 'GET') return respond(res, 200, await store.read(id));
+          if (id && !action && method === 'DELETE') return respond(res, 200, await store.eliminar(id) ?? { ok: true });
+          if (action === 'historial' && method === 'GET') return respond(res, 200, await store.history(id));
+          if (action === 'ops' && method === 'POST') {
+            const { ops, nota } = await readBody(req);
+            return respond(res, 200, await store.applyOps(id, ops, { origen: ORIGIN, nota }));
           }
-          if (accion === 'deshacer' && metodo === 'POST') return responder(res, 200, await almacen.deshacer(id, ORIGEN));
-          if (accion === 'rehacer' && metodo === 'POST') return responder(res, 200, await almacen.rehacer(id, ORIGEN));
-          responder(res, 404, { error: 'Ruta desconocida' });
+          if (action === 'deshacer' && method === 'POST') return respond(res, 200, await store.deshacer(id, ORIGIN));
+          if (action === 'rehacer' && method === 'POST') return respond(res, 200, await store.rehacer(id, ORIGIN));
+          respond(res, 404, { error: 'Ruta desconocida' });
         } catch (e) {
-          responder(res, 400, { error: e.message });
+          respond(res, 400, { error: e.message });
         }
       });
 
-      server.watcher.add(CARPETA_PERSONAJES);
+      server.watcher.add(DOCUMENTS_FOLDER);
       // El historial se escribe después del documento, así que también se avisa por separado.
-      const EVENTOS = { 'documento.json': 'aia:documento', 'historial.jsonl': 'aia:historial' };
-      const avisar = (archivo) => {
-        const evento = EVENTOS[path.basename(archivo)];
-        if (evento) server.ws.send({ type: 'custom', event: evento, data: { id: path.basename(path.dirname(archivo)) } });
+      const EVENTS = { 'documento.json': 'aia:documento', 'historial.jsonl': 'aia:historial' };
+      const notify = (file) => {
+        const event = EVENTS[path.basename(file)];
+        if (event) server.ws.send({ type: 'custom', event: event, data: { id: path.basename(path.dirname(file)) } });
       };
-      server.watcher.on('change', avisar);
-      server.watcher.on('add', avisar);
+      server.watcher.on('change', notify);
+      server.watcher.on('add', notify);
       // Un documento borrado (por ejemplo, con delete_document desde el MCP): el editor cierra su pestaña. Escribir
       // usa un temporal y rename, así que un unlink de documento.json se confirma un momento después.
-      const raiz = path.resolve(CARPETA_PERSONAJES);
-      const borrado = (id) => server.ws.send({ type: 'custom', event: 'aia:borrado', data: { id } });
-      server.watcher.on('unlinkDir', (carpeta) => path.dirname(path.resolve(carpeta)) === raiz && borrado(path.basename(carpeta)));
-      server.watcher.on('unlink', (archivo) => {
-        if (path.basename(archivo) !== 'documento.json' || path.dirname(path.dirname(path.resolve(archivo))) !== raiz) return;
-        setTimeout(() => !existsSync(archivo) && borrado(path.basename(path.dirname(archivo))), 200);
+      const root = path.resolve(DOCUMENTS_FOLDER);
+      const deleted = (id) => server.ws.send({ type: 'custom', event: 'aia:borrado', data: { id } });
+      server.watcher.on('unlinkDir', (folder) => path.dirname(path.resolve(folder)) === root && deleted(path.basename(folder)));
+      server.watcher.on('unlink', (file) => {
+        if (path.basename(file) !== 'documento.json' || path.dirname(path.dirname(path.resolve(file))) !== root) return;
+        setTimeout(() => !existsSync(file) && deleted(path.basename(path.dirname(file))), 200);
       });
     },
   };

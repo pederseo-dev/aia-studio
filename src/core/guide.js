@@ -1,10 +1,10 @@
 // Guía del formato para la IA, generada desde el esquema: si se agrega un tipo o una propiedad, la guía se actualiza
 // sola.
 
-import { DESCRIPCION_DE_CURVAS } from './curves.js';
-import { FORMATO } from './format.js';
+import { CURVE_DESCRIPTIONS } from './curves.js';
+import { FORMAT } from './format.js';
 
-function rango(p) {
+function range(p) {
   if (p.type === 'enum') return p.values.join(' \\| ');
   if (p.type === 'ref' && p.refTypes) return `id de ${p.refTypes.join(' o ')}`;
   if (p.type === 'asset') return 'archivo de assets/';
@@ -12,23 +12,23 @@ function rango(p) {
   return `${p.min ?? '−∞'} … ${p.max ?? '∞'}`;
 }
 
-function tabla(propiedades) {
-  const filas = Object.entries(propiedades).map(([nombre, p]) => {
+function table(properties) {
+  const rows = Object.entries(properties).map(([name, p]) => {
     const tipo = p.type + (p.nullable ? ' o null' : '') + (p.integer ? ' (entero)' : '');
-    return `| \`${nombre}\` | ${tipo} | \`${JSON.stringify(p.default)}\` | ${rango(p)} | ${p.description ?? ''} |`;
+    return `| \`${name}\` | ${tipo} | \`${JSON.stringify(p.default)}\` | ${range(p)} | ${p.description ?? ''} |`;
   });
-  return ['| Propiedad | Tipo | Por defecto | Rango | Descripción |', '| --- | --- | --- | --- | --- |', ...filas].join('\n');
+  return ['| Propiedad | Tipo | Por defecto | Rango | Descripción |', '| --- | --- | --- | --- | --- |', ...rows].join('\n');
 }
 
-export function guiaParaIA(esquema) {
-  const tipos = [...esquema.tipos.values()]
+export function guideForAI(schema) {
+  const types = [...schema.types.values()]
     .map((t) => {
-      const hijosPermitidos = (t.childTypes ? ` (solo puede tener hijos ${t.childTypes.join(', ')})` : t.container ? ' (puede tener hijos)' : '') + (t.requiresParent ? ` (va dentro de ${t.parentTypes.join(' o ')}, nunca en la raíz)` : '');
-      return `### \`${t.name}\`${hijosPermitidos}${t.resource ? ' (recurso)' : ''}\n\n${t.description}\n\n${tabla(t.properties)}`;
+      const allowedChildren = (t.childTypes ? ` (solo puede tener hijos ${t.childTypes.join(', ')})` : t.container ? ' (puede tener hijos)' : '') + (t.requiresParent ? ` (va dentro de ${t.parentTypes.join(' o ')}, nunca en la raíz)` : '');
+      return `### \`${t.name}\`${allowedChildren}${t.resource ? ' (recurso)' : ''}\n\n${t.description}\n\n${table(t.properties)}`;
     })
     .join('\n\n');
 
-  return `# Guía de aia-studio (formato ${FORMATO})
+  return `# Guía de aia-studio (formato ${FORMAT})
 
 aia-studio es un editor de animación 2D vectorial: personajes, objetos, íconos, escenas o lo que haga falta animar. Un documento es JSON; tú lo modificas con lotes de operaciones
 (\`apply_ops\`) y el usuario lo ve en vivo en el editor, donde también puede retocar a mano.
@@ -46,7 +46,7 @@ aia-studio es un editor de animación 2D vectorial: personajes, objetos, íconos
 
 \`\`\`json
 {
-  "format": "${FORMATO}",
+  "format": "${FORMAT}",
   "meta": { "name": "Robot", "width": 600, "height": 600 },
   "objects": [
     { "id": "head", "type": "group", "parent": null, "x": 300, "y": 220 },
@@ -309,7 +309,7 @@ cortos que se disparan, uno por botón). Los dos últimos usan el mismo recurso,
   \`undo\` va por pista. Un momento con solo \`t\` y \`ease\` cambia la curva de los keyframes que ya hay en ese tiempo.
   Para alargar un clip basta con \`duration\`.
 - \`ease\` va en el keyframe y vale para el tramo que **sale** de él. Curvas con nombre:
-${DESCRIPCION_DE_CURVAS.map(([nombre, que]) => `  - \`${nombre}\`: ${que}.`).join('\n')}
+${CURVE_DESCRIPTIONS.map(([name, que]) => `  - \`${name}\`: ${que}.`).join('\n')}
   O \`[x1, y1, x2, y2]\` (cubic-bezier de CSS) si ninguna sirve. Prefiere una con nombre antes que adivinar números: para
   «vuelve de golpe al final del tramo», \`ease-in-expo\`; para «llega y rebota un poco», \`ease-out-back\`. El \`active\` de
   un switch, los booleanos y los textos cambian de golpe.
@@ -396,9 +396,9 @@ problema para la app.
 
 ### \`meta\` (propiedades del documento, se cambian con \`target: "meta"\`)
 
-${tabla(esquema.meta.properties)}
+${table(schema.meta.properties)}
 
-${tipos}
+${types}
 
 ## Cómo trabajar bien
 

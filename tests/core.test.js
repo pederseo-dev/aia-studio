@@ -1,18 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cargarEsquema } from '../server/schema.js';
-import { crearDocumento, validar } from '../src/core/document.js';
-import { aplicarOperaciones, compactar, resumirOperaciones } from '../src/core/operations.js';
-import { aplicar, matrizMundo } from '../src/core/geometry.js';
-import { guiaParaIA } from '../src/core/guide.js';
-import { DIBUJAR, svgDocumento } from '../src/render/svg.js';
+import { loadSchema } from '../server/schema.js';
+import { createDocument, validate } from '../src/core/document.js';
+import { applyOperations, compact, summarizeOperations } from '../src/core/operations.js';
+import { apply, worldMatrix } from '../src/core/geometry.js';
+import { guideForAI } from '../src/core/guide.js';
+import { DRAW, svgDocument } from '../src/render/svg.js';
 
-const esquema = cargarEsquema();
-const op = (doc, ...ops) => aplicarOperaciones(doc, ops, esquema);
+const schema = loadSchema();
+const op = (doc, ...ops) => applyOperations(doc, ops, schema);
 
 function robot() {
   return op(
-    crearDocumento({ name: 'Robot' }),
+    createDocument({ name: 'Robot' }),
     { op: 'create', type: 'group', id: 'body', props: { x: 300, y: 400 } },
     { op: 'create', type: 'rect', id: 'torso', parent: 'body', props: { width: 160, height: 200 } },
     { op: 'create', type: 'group', id: 'head', parent: 'body', props: { y: -100 } },
@@ -22,25 +22,25 @@ function robot() {
 }
 
 test('el esquema resuelve la herencia y solo expone tipos concretos', () => {
-  assert.deepEqual([...esquema.tipos.keys()].sort(), ['animation', 'bone', 'driver', 'ellipse', 'group', 'image', 'linear_gradient', 'param', 'path', 'pose', 'radial_gradient', 'rect', 'skeleton', 'style', 'switch']);
-  assert.equal(esquema.tipos.get('style').resource, true);
-  assert.equal(esquema.tipos.get('path').resource, false);
-  const rect = esquema.tipos.get('rect');
+  assert.deepEqual([...schema.types.keys()].sort(), ['animation', 'bone', 'driver', 'ellipse', 'group', 'image', 'linear_gradient', 'param', 'path', 'pose', 'radial_gradient', 'rect', 'skeleton', 'style', 'switch']);
+  assert.equal(schema.types.get('style').resource, true);
+  assert.equal(schema.types.get('path').resource, false);
+  const rect = schema.types.get('rect');
   assert.ok(rect.properties.x && rect.properties.fill && rect.properties.width);
-  assert.equal(esquema.tipos.get('group').container, true);
+  assert.equal(schema.types.get('group').container, true);
   assert.equal(rect.container, false);
 });
 
 test('cada tipo concreto que no es recurso tiene cómo dibujarse', () => {
-  for (const [nombre, tipo] of esquema.tipos) if (!tipo.resource) assert.ok(nombre in DIBUJAR, `falta DIBUJAR.${nombre}`);
+  for (const [name, tipo] of schema.types) if (!tipo.resource) assert.ok(name in DRAW, `falta DIBUJAR.${name}`);
 });
 
 test('crear arma la jerarquía y el orden de dibujo', () => {
   const doc = robot();
-  assert.deepEqual(validar(doc, esquema).errores, []);
+  assert.deepEqual(validate(doc, schema).errors, []);
   assert.deepEqual(doc.objects.map((o) => o.id), ['body', 'torso', 'head', 'eye_l', 'eye_r']);
-  const fondo = op(doc, { op: 'create', type: 'rect', id: 'antenna', parent: 'head', index: 0 }).doc;
-  assert.deepEqual(fondo.objects.filter((o) => o.parent === 'head').map((o) => o.id), ['antenna', 'eye_l', 'eye_r']);
+  const background = op(doc, { op: 'create', type: 'rect', id: 'antenna', parent: 'head', index: 0 }).doc;
+  assert.deepEqual(background.objects.filter((o) => o.parent === 'head').map((o) => o.id), ['antenna', 'eye_l', 'eye_r']);
 });
 
 test('cada operación se deshace exactamente con sus inversas', () => {
@@ -56,25 +56,25 @@ test('cada operación se deshace exactamente con sus inversas', () => {
     [{ op: 'move', target: 'body', parent: null, index: 0 }, { op: 'delete', target: 'body' }],
   ];
   for (const ops of lotes) {
-    const { doc: cambiado, inversas } = op(doc, ...ops);
-    assert.notDeepEqual(cambiado, doc, JSON.stringify(ops));
-    assert.deepEqual(op(cambiado, ...inversas).doc, doc, JSON.stringify(ops));
+    const { doc: changed, inversas } = op(doc, ...ops);
+    assert.notDeepEqual(changed, doc, JSON.stringify(ops));
+    assert.deepEqual(op(changed, ...inversas).doc, doc, JSON.stringify(ops));
   }
 });
 
 test('duplicate copia el subárbol con ids nuevos y se deshace', () => {
   const doc = robot();
-  const { doc: copia, inversas } = op(doc, { op: 'duplicate', target: 'head', id: 'head_b', suffix: 'b', props: { x: 50 } });
-  const ids = copia.objects.map((o) => o.id);
+  const { doc: copy, inversas } = op(doc, { op: 'duplicate', target: 'head', id: 'head_b', suffix: 'b', props: { x: 50 } });
+  const ids = copy.objects.map((o) => o.id);
   assert.deepEqual(ids.slice(0, 5), ['body', 'torso', 'head', 'eye_l', 'eye_r']);
-  assert.deepEqual(copia.objects.filter((o) => o.parent === 'body').map((o) => o.id), ['torso', 'head', 'head_b']);
-  assert.deepEqual(copia.objects.filter((o) => o.parent === 'head_b').map((o) => o.id), ['eye_l_b', 'eye_r_b']);
-  assert.equal(copia.objects.find((o) => o.id === 'head_b').x, 50);
-  assert.deepEqual(op(copia, ...inversas).doc, doc);
-  assert.throws(() => op(copia, { op: 'duplicate', target: 'head', suffix: 'b' }), /ya existe un objeto "head_b"/);
-  assert.throws(() => op(copia, { op: 'duplicate', target: 'head', id: 'head_c', suffix: 'b' }), /ya existe un objeto "eye_l_b"/);
-  const raiz = op(doc, { op: 'duplicate', target: 'eye_l', parent: null, index: 0 }).doc;
-  assert.equal(raiz.objects.filter((o) => (o.parent ?? null) === null)[0].id, 'eye_l_copy');
+  assert.deepEqual(copy.objects.filter((o) => o.parent === 'body').map((o) => o.id), ['torso', 'head', 'head_b']);
+  assert.deepEqual(copy.objects.filter((o) => o.parent === 'head_b').map((o) => o.id), ['eye_l_b', 'eye_r_b']);
+  assert.equal(copy.objects.find((o) => o.id === 'head_b').x, 50);
+  assert.deepEqual(op(copy, ...inversas).doc, doc);
+  assert.throws(() => op(copy, { op: 'duplicate', target: 'head', suffix: 'b' }), /ya existe un objeto "head_b"/);
+  assert.throws(() => op(copy, { op: 'duplicate', target: 'head', id: 'head_c', suffix: 'b' }), /ya existe un objeto "eye_l_b"/);
+  const root = op(doc, { op: 'duplicate', target: 'eye_l', parent: null, index: 0 }).doc;
+  assert.equal(root.objects.filter((o) => (o.parent ?? null) === null)[0].id, 'eye_l_copy');
 });
 
 test('compactar junta los set seguidos y el resumen es legible', () => {
@@ -83,8 +83,8 @@ test('compactar junta los set seguidos y el resumen es legible', () => {
     { op: 'set', target: 'head', props: { x: 2, y: 5 } },
     { op: 'set', target: 'torso', props: { x: 3 } },
   ];
-  assert.deepEqual(compactar(ops), [{ op: 'set', target: 'head', props: { x: 2, y: 5 } }, ops[2]]);
-  assert.deepEqual(resumirOperaciones([...ops, { op: 'create', type: 'rect', id: 'a' }]), ['head.x', 'head.y', 'torso.x', 'crear a']);
+  assert.deepEqual(compact(ops), [{ op: 'set', target: 'head', props: { x: 2, y: 5 } }, ops[2]]);
+  assert.deepEqual(summarizeOperations([...ops, { op: 'create', type: 'rect', id: 'a' }]), ['head.x', 'head.y', 'torso.x', 'crear a']);
 });
 
 test('rename actualiza a los hijos', () => {
@@ -109,67 +109,67 @@ test('los errores son claros y el lote no se aplica a medias', () => {
 });
 
 test('las propiedades desconocidas se conservan con un aviso', () => {
-  const { doc, avisos } = op(robot(), { op: 'set', target: 'torso', props: { widht: 5 } });
+  const { doc, warnings } = op(robot(), { op: 'set', target: 'torso', props: { widht: 5 } });
   assert.equal(doc.objects.find((o) => o.id === 'torso').widht, 5);
-  assert.match(avisos[0], /desconocida "widht".*¿Quisiste decir "width"\?/);
+  assert.match(warnings[0], /desconocida "widht".*¿Quisiste decir "width"\?/);
 });
 
 test('la matriz del mundo compone la jerarquía', () => {
   const doc = op(robot(), { op: 'set', target: 'head', props: { rotation: 90 } }).doc;
-  const [x, y] = aplicar(matrizMundo(doc, esquema, 'eye_l'), 0, 0);
+  const [x, y] = apply(worldMatrix(doc, schema, 'eye_l'), 0, 0);
   // body (300,400) → head (0,-100) girado 90° → eye_l (-30,-60) pasa a (60,-30)
   assert.ok(Math.abs(x - 360) < 1e-9 && Math.abs(y - 270) < 1e-9, `${x},${y}`);
 });
 
 test('el SVG respeta jerarquía, valores por defecto y orden', () => {
-  const svg = svgDocumento(robot(), esquema);
+  const svg = svgDocument(robot(), schema);
   assert.match(svg, /^<svg[^>]+viewBox="0 0 800 800"/);
   assert.match(svg, /<g data-id="head" transform="translate\(0 -100\)"><g data-id="eye_l"/);
   assert.match(svg, /<rect x="-80" y="-100" width="160" height="200" fill="#c8c2d4"\/>/);
 });
 
 test('la guía para la IA sale del esquema', () => {
-  const guia = guiaParaIA(esquema);
-  for (const tipo of esquema.tipos.keys()) assert.ok(guia.includes(`### \`${tipo}\``));
-  assert.ok(guia.includes('`cornerRadius`'));
+  const guide = guideForAI(schema);
+  for (const tipo of schema.types.keys()) assert.ok(guide.includes(`### \`${tipo}\``));
+  assert.ok(guide.includes('`cornerRadius`'));
 });
 
 test('originX/originY corren el pivote dentro de rectángulos y elipses', () => {
   const { doc } = op(
-    crearDocumento({ name: 'Origen' }),
+    createDocument({ name: 'Origen' }),
     { op: 'create', type: 'rect', id: 'r', props: { width: 40, height: 20, originY: 1 } },
     { op: 'create', type: 'ellipse', id: 'e', props: { width: 40, height: 20, originX: 0 } },
   );
-  const svg = svgDocumento(doc, esquema);
+  const svg = svgDocument(doc, schema);
   assert.match(svg, /<rect x="-20" y="-20" width="40" height="20"/);
   assert.match(svg, /<ellipse cx="20" rx="20" ry="10"/);
 });
 
 test('meta es un id reservado: no se crea, no se renombra a meta ni se duplica con ese id', () => {
-  const doc = op(crearDocumento({}), { op: 'create', type: 'rect', id: 'r' }).doc;
+  const doc = op(createDocument({}), { op: 'create', type: 'rect', id: 'r' }).doc;
   assert.throws(() => op(doc, { op: 'create', type: 'rect', id: 'meta' }), /reserved id/);
   assert.throws(() => op(doc, { op: 'rename', target: 'r', id: 'meta' }), /reserved id/);
   assert.throws(() => op(doc, { op: 'duplicate', target: 'r', id: 'meta' }), /reserved id/);
-  assert.match(validar({ ...doc, objects: [{ id: 'meta', type: 'rect' }] }, esquema).errores.join(), /reserved id/);
+  assert.match(validate({ ...doc, objects: [{ id: 'meta', type: 'rect' }] }, schema).errors.join(), /reserved id/);
 });
 
 test('params y drivers: initial y equals tienen que ser opciones, y min no puede pasar a max', () => {
-  const base = op(crearDocumento({}), { op: 'create', type: 'param', id: 'v', props: { kind: 'enum', options: ['a', 'b'] } }, { op: 'create', type: 'pose', id: 'pp' }).doc;
+  const base = op(createDocument({}), { op: 'create', type: 'param', id: 'v', props: { kind: 'enum', options: ['a', 'b'] } }, { op: 'create', type: 'pose', id: 'pp' }).doc;
   assert.throws(() => op(base, { op: 'set', target: 'v', props: { initial: 'zz' } }), /v\.initial "zz" is not one of its options: "a", "b"/);
   assert.throws(() => op(base, { op: 'create', type: 'driver', id: 'dd', props: { param: 'v', pose: 'pp', equals: 'c' } }), /param v has options "a", "b", but driver dd\.equals "c" uses a value that is not among them/);
   assert.throws(() => op(base, { op: 'create', type: 'param', id: 'n', props: { min: 2, max: 1 } }), /min \(2\) is greater than max \(1\)/);
   assert.throws(() => op(base, { op: 'create', type: 'param', id: 'n', props: { max: -1 } }), /min \(0\) is greater than max \(-1\)/);
   // Quitar la opción que usa un driver también avisa.
-  const conDriver = op(base, { op: 'create', type: 'driver', id: 'dd', props: { param: 'v', pose: 'pp', equals: 'b' } }).doc;
-  const dos = op(conDriver, { op: 'create', type: 'driver', id: 'dd2', props: { param: 'v', pose: 'pp', equals: 'b' } }).doc;
-  assert.throws(() => op(dos, { op: 'set', target: 'v', props: { options: ['a'] } }), /drivers dd\.equals "b", dd2\.equals "b" use values .*change those drivers’ equals in the same batch \(for example \{ "op": "set", "target": "dd", "props": \{ "equals": "a" \} \}\)/);
+  const withDriver = op(base, { op: 'create', type: 'driver', id: 'dd', props: { param: 'v', pose: 'pp', equals: 'b' } }).doc;
+  const two = op(withDriver, { op: 'create', type: 'driver', id: 'dd2', props: { param: 'v', pose: 'pp', equals: 'b' } }).doc;
+  assert.throws(() => op(two, { op: 'set', target: 'v', props: { options: ['a'] } }), /drivers dd\.equals "b", dd2\.equals "b" use values .*change those drivers’ equals in the same batch \(for example \{ "op": "set", "target": "dd", "props": \{ "equals": "a" \} \}\)/);
   // Cambiando los equals en el mismo lote, pasa.
-  assert.doesNotThrow(() => op(dos, { op: 'set', target: 'v', props: { options: ['a'] } }, { op: 'set', target: 'dd', props: { equals: 'a' } }, { op: 'delete', target: 'dd2' }));
+  assert.doesNotThrow(() => op(two, { op: 'set', target: 'v', props: { options: ['a'] } }, { op: 'set', target: 'dd', props: { equals: 'a' } }, { op: 'delete', target: 'dd2' }));
 });
 
 test('sacar de un switch una variante que usa una pose dice las dos salidas', () => {
   const doc = op(
-    crearDocumento({}),
+    createDocument({}),
     { op: 'create', type: 'switch', id: 'mouth' },
     { op: 'create', type: 'rect', id: 'm_a', parent: 'mouth' },
     { op: 'create', type: 'rect', id: 'm_o', parent: 'mouth' },
@@ -179,41 +179,41 @@ test('sacar de un switch una variante que usa una pose dice las dos salidas', ()
 });
 
 test('move con keepPosition deja el objeto en el mismo lugar de la pantalla, y se deshace', () => {
-  const doc = op(crearDocumento({}), { op: 'create', type: 'group', id: 'g', props: { x: 100, y: 50, rotation: 90 } }, { op: 'create', type: 'rect', id: 'r', props: { x: 10, y: 20 } }).doc;
-  const { doc: movido, inversas } = op(doc, { op: 'move', target: 'r', parent: 'g', keepPosition: true });
-  assert.deepEqual(aplicar(matrizMundo(movido, esquema, 'r'), 0, 0).map(Math.round), [10, 20]);
-  assert.deepEqual(op(movido, ...inversas).doc, doc);
+  const doc = op(createDocument({}), { op: 'create', type: 'group', id: 'g', props: { x: 100, y: 50, rotation: 90 } }, { op: 'create', type: 'rect', id: 'r', props: { x: 10, y: 20 } }).doc;
+  const { doc: moved, inversas } = op(doc, { op: 'move', target: 'r', parent: 'g', keepPosition: true });
+  assert.deepEqual(apply(worldMatrix(moved, schema, 'r'), 0, 0).map(Math.round), [10, 20]);
+  assert.deepEqual(op(moved, ...inversas).doc, doc);
   // Sin keepPosition conserva x/y (y se corre).
-  assert.deepEqual(aplicar(matrizMundo(op(doc, { op: 'move', target: 'r', parent: 'g' }).doc, esquema, 'r'), 0, 0).map(Math.round), [80, 60]);
-  assert.throws(() => op(op(movido, { op: 'create', type: 'skeleton', id: 's' }, { op: 'create', type: 'bone', id: 'b', parent: 's' }).doc, { op: 'move', target: 'b', parent: 'g', keepPosition: true }), /reparent_bone/);
+  assert.deepEqual(apply(worldMatrix(op(doc, { op: 'move', target: 'r', parent: 'g' }).doc, schema, 'r'), 0, 0).map(Math.round), [80, 60]);
+  assert.throws(() => op(op(moved, { op: 'create', type: 'skeleton', id: 's' }, { op: 'create', type: 'bone', id: 'b', parent: 's' }).doc, { op: 'move', target: 'b', parent: 'g', keepPosition: true }), /reparent_bone/);
 });
 
 test('cada tipo y propiedad tiene una ayuda en inglés para el editor', () => {
-  const sinAyuda = [];
-  for (const t of [esquema.meta, ...esquema.tipos.values()]) {
-    if (!t.help) sinAyuda.push(t.name);
-    for (const [k, p] of Object.entries(t.properties)) if (!p.help) sinAyuda.push(`${t.name}.${k}`);
+  const withoutHelp = [];
+  for (const t of [schema.meta, ...schema.types.values()]) {
+    if (!t.help) withoutHelp.push(t.name);
+    for (const [k, p] of Object.entries(t.properties)) if (!p.help) withoutHelp.push(`${t.name}.${k}`);
   }
-  assert.deepEqual(sinAyuda, []);
+  assert.deepEqual(withoutHelp, []);
 });
 
 test('opsDeTamano cambia el lienzo con el dibujo anclado al centro (raíz, poses y clips)', async () => {
-  const { opsDeTamano } = await import('../src/core/artboard.js');
+  const { artboardOps } = await import('../src/core/artboard.js');
   const doc = op(
-    crearDocumento({ width: 600, height: 400 }),
+    createDocument({ width: 600, height: 400 }),
     { op: 'create', type: 'group', id: 'body', props: { x: 300, y: 200 } },
     { op: 'create', type: 'rect', id: 'torso', parent: 'body', props: { x: 5, width: 10, height: 10 } },
     { op: 'create', type: 'style', id: 'piel' },
     { op: 'create', type: 'pose', id: 'salto', props: { values: { body: { y: 150, rotation: 5 }, torso: { x: 9 } } } },
     { op: 'create', type: 'animation', id: 'paso', props: { duration: 1, tracks: { body: { x: [{ t: 0, value: 300 }, { t: 1, value: 320 }] } } } },
   ).doc;
-  const r = aplicarOperaciones(doc, opsDeTamano(doc, esquema, 800, 500), esquema).doc;
-  const de = (id) => r.objects.find((o) => o.id === id);
+  const r = applyOperations(doc, artboardOps(doc, schema, 800, 500), schema).doc;
+  const get = (id) => r.objects.find((o) => o.id === id);
   assert.deepEqual([r.meta.width, r.meta.height], [800, 500]);
-  assert.deepEqual([de('body').x, de('body').y], [400, 250]);
-  assert.equal(de('torso').x, 5, 'lo anidado se mueve con su padre');
-  assert.deepEqual(de('salto').values, { body: { y: 200, rotation: 5 }, torso: { x: 9 } });
-  assert.deepEqual(de('paso').tracks.body.x.map((c) => c.value), [400, 420]);
+  assert.deepEqual([get('body').x, get('body').y], [400, 250]);
+  assert.equal(get('torso').x, 5, 'lo anidado se mueve con su padre');
+  assert.deepEqual(get('salto').values, { body: { y: 200, rotation: 5 }, torso: { x: 9 } });
+  assert.deepEqual(get('paso').tracks.body.x.map((c) => c.value), [400, 420]);
   // Mismo tamaño: solo width/height.
-  assert.equal(opsDeTamano(r, esquema, 800, 500).length, 1);
+  assert.equal(artboardOps(r, schema, 800, 500).length, 1);
 });

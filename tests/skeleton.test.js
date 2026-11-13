@@ -1,23 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cargarEsquema } from '../server/schema.js';
-import { buscar, crearDocumento, esqueletoDe, validar } from '../src/core/document.js';
-import { deltaDe, enlacesPorCercania, evaluarEnPose, evaluarEsqueleto, opsParaReparentar, reparentarVarios, puntaDe, repartirEntreHuesos, soltarEnlacesAjenos } from '../src/core/skeleton.js';
-import { aplicar, multiplicar } from '../src/core/geometry.js';
-import { migrarAEsqueletos } from '../src/core/migration.js';
-import { aplicarOperaciones } from '../src/core/operations.js';
-import { svgDocumento } from '../src/render/svg.js';
+import { loadSchema } from '../server/schema.js';
+import { findObject, createDocument, skeletonOf, validate } from '../src/core/document.js';
+import { deltaOf, bindingsByProximity, evaluateInPose, evaluateSkeleton, opsToReparent, reparentSeveral, tipOf, distributeBetweenBones, releaseForeignBindings } from '../src/core/skeleton.js';
+import { apply, multiply } from '../src/core/geometry.js';
+import { migrateToSkeletons } from '../src/core/migration.js';
+import { applyOperations } from '../src/core/operations.js';
+import { svgDocument } from '../src/render/svg.js';
 
-const esquema = cargarEsquema();
-const op = (doc, ...ops) => aplicarOperaciones(doc, ops, esquema).doc;
-const cerca = (p, q, eps = 0.01) => Math.abs(p[0] - q[0]) < eps && Math.abs(p[1] - q[1]) < eps;
-const matrizDe = (svg, id) => svg.match(new RegExp(`data-id="${id}" transform="matrix\\(([^)]+)\\)"`))[1].split(' ').map(Number);
+const schema = loadSchema();
+const op = (doc, ...ops) => applyOperations(doc, ops, schema).doc;
+const near = (p, q, eps = 0.01) => Math.abs(p[0] - q[0]) < eps && Math.abs(p[1] - q[1]) < eps;
+const matrixOf = (svg, id) => svg.match(new RegExp(`data-id="${id}" transform="matrix\\(([^)]+)\\)"`))[1].split(' ').map(Number);
 
 // Un brazo: un skeleton sin transformación con el hombro en (100, 100) apuntando a la derecha, el antebrazo
 // encadenado en la punta y la mano enlazada al antebrazo.
-function brazo() {
+function arm() {
   return op(
-    crearDocumento({ name: 'Brazo' }),
+    createDocument({ name: 'Brazo' }),
     { op: 'create', type: 'skeleton', id: 'rig' },
     { op: 'create', type: 'bone', id: 'upper', parent: 'rig', props: { x: 100, y: 100, length: 50 } },
     { op: 'create', type: 'bone', id: 'lower', parent: 'upper', props: { x: 50, length: 40 } },
@@ -27,53 +27,53 @@ function brazo() {
 }
 
 test('los huesos encadenan sus matrices y la pose no toca el montaje', () => {
-  const doc = brazo();
-  const montaje = evaluarEsqueleto(doc, esquema);
-  assert.ok(cerca(puntaDe(esquema, buscar(doc, 'lower'), montaje.reposo.get('lower')), [190, 100]));
-  const pose = evaluarEsqueleto(doc, esquema, buscar(doc, 'up'));
+  const doc = arm();
+  const setup = evaluateSkeleton(doc, schema);
+  assert.ok(near(tipOf(schema, findObject(doc, 'lower'), setup.rest.get('lower')), [190, 100]));
+  const pose = evaluateSkeleton(doc, schema, findObject(doc, 'up'));
   // Girar el hombro -90° (hacia arriba) lleva la punta del antebrazo a (100, 10).
-  assert.ok(cerca(puntaDe(esquema, buscar(doc, 'lower'), pose.posado.get('lower')), [100, 10]));
-  assert.ok(cerca(puntaDe(esquema, buscar(doc, 'lower'), pose.reposo.get('lower')), [190, 100]));
-  assert.equal(buscar(doc, 'upper').rotation, undefined);
+  assert.ok(near(tipOf(schema, findObject(doc, 'lower'), pose.posed.get('lower')), [100, 10]));
+  assert.ok(near(tipOf(schema, findObject(doc, 'lower'), pose.rest.get('lower')), [190, 100]));
+  assert.equal(findObject(doc, 'upper').rotation, undefined);
 });
 
 test('lo enlazado sigue al hueso solo en la pose, y en el SVG queda donde corresponde', () => {
-  const doc = brazo();
-  const pose = evaluarEsqueleto(doc, esquema, buscar(doc, 'up'));
-  assert.ok(cerca(aplicar(deltaDe(doc, pose, 'hand'), 190, 100), [100, 10]));
-  assert.ok(cerca(aplicar(deltaDe(doc, evaluarEsqueleto(doc, esquema), 'hand'), 190, 100), [190, 100]));
-  assert.match(svgDocumento(doc, esquema), /data-id="hand" transform="translate\(190 100\)"/);
-  const [, , , , e, f] = matrizDe(svgDocumento(doc, esquema, { pose: 'up' }), 'hand');
-  assert.ok(cerca([e, f], [100, 10]));
+  const doc = arm();
+  const pose = evaluateSkeleton(doc, schema, findObject(doc, 'up'));
+  assert.ok(near(apply(deltaOf(doc, pose, 'hand'), 190, 100), [100, 10]));
+  assert.ok(near(apply(deltaOf(doc, evaluateSkeleton(doc, schema), 'hand'), 190, 100), [190, 100]));
+  assert.match(svgDocument(doc, schema), /data-id="hand" transform="translate\(190 100\)"/);
+  const [, , , , e, f] = matrixOf(svgDocument(doc, schema, { pose: 'up' }), 'hand');
+  assert.ok(near([e, f], [100, 10]));
   // Los huesos son hijos del skeleton pero no se dibujan.
-  assert.doesNotMatch(svgDocumento(doc, esquema), /data-id="upper"/);
+  assert.doesNotMatch(svgDocument(doc, schema), /data-id="upper"/);
 });
 
 test('ángulo independiente y límites', () => {
-  let doc = op(brazo(), { op: 'set', target: 'lower', props: { independentAngle: true } });
-  const pose = evaluarEsqueleto(doc, esquema, buscar(doc, 'up'));
+  let doc = op(arm(), { op: 'set', target: 'lower', props: { independentAngle: true } });
+  const pose = evaluateSkeleton(doc, schema, findObject(doc, 'up'));
   // El antebrazo se mueve con el hombro pero sigue apuntando a la derecha.
-  assert.ok(cerca(puntaDe(esquema, buscar(doc, 'lower'), pose.posado.get('lower')), [140, 50]));
+  assert.ok(near(tipOf(schema, findObject(doc, 'lower'), pose.posed.get('lower')), [140, 50]));
   doc = op(doc, { op: 'set', target: 'upper', props: { minAngle: -45 } });
-  const limitada = evaluarEsqueleto(doc, esquema, buscar(doc, 'up'));
-  const [a, b] = limitada.posado.get('upper');
+  const limited = evaluateSkeleton(doc, schema, findObject(doc, 'up'));
+  const [a, b] = limited.posed.get('upper');
   assert.ok(Math.abs((Math.atan2(b, a) * 180) / Math.PI + 45) < 0.01);
 });
 
 test('pertenencia: los huesos van dentro de un skeleton, y solo tienen huesos como hijos', () => {
-  assert.throws(() => op(crearDocumento(), { op: 'create', type: 'bone', id: 'b' }), /no puede estar en la raíz: va dentro de skeleton o bone\. Crea primero un skeleton/);
-  assert.throws(() => op(brazo(), { op: 'create', type: 'bone', id: 'b' }), /Esqueletos del documento: rig/);
-  assert.throws(() => op(brazo(), { op: 'create', type: 'group', id: 'g' }, { op: 'create', type: 'bone', id: 'b', parent: 'g' }), /solo puede estar dentro de skeleton o bone \(su padre "g" es un group\)/);
-  assert.throws(() => op(brazo(), { op: 'create', type: 'rect', id: 'x', parent: 'upper' }), /el dibujo va dentro del skeleton \(rig\)/);
-  assert.throws(() => op(brazo(), { op: 'move', target: 'upper', parent: null }), /no puede estar en la raíz/);
-  assert.equal(esqueletoDe(brazo(), 'lower'), 'rig');
-  assert.equal(esqueletoDe(brazo(), 'rig'), null);
-  assert.throws(() => op(brazo(), { op: 'set', target: 'up', props: { values: { uper: { rotation: 1 } } } }), /¿Quisiste decir "upper"\?/);
-  assert.throws(() => op(brazo(), { op: 'set', target: 'up', props: { values: { upper: { angle: 1 } } } }), /no tiene "angle" animable/);
+  assert.throws(() => op(createDocument(), { op: 'create', type: 'bone', id: 'b' }), /no puede estar en la raíz: va dentro de skeleton o bone\. Crea primero un skeleton/);
+  assert.throws(() => op(arm(), { op: 'create', type: 'bone', id: 'b' }), /Esqueletos del documento: rig/);
+  assert.throws(() => op(arm(), { op: 'create', type: 'group', id: 'g' }, { op: 'create', type: 'bone', id: 'b', parent: 'g' }), /solo puede estar dentro de skeleton o bone \(su padre "g" es un group\)/);
+  assert.throws(() => op(arm(), { op: 'create', type: 'rect', id: 'x', parent: 'upper' }), /el dibujo va dentro del skeleton \(rig\)/);
+  assert.throws(() => op(arm(), { op: 'move', target: 'upper', parent: null }), /no puede estar en la raíz/);
+  assert.equal(skeletonOf(arm(), 'lower'), 'rig');
+  assert.equal(skeletonOf(arm(), 'rig'), null);
+  assert.throws(() => op(arm(), { op: 'set', target: 'up', props: { values: { uper: { rotation: 1 } } } }), /¿Quisiste decir "upper"\?/);
+  assert.throws(() => op(arm(), { op: 'set', target: 'up', props: { values: { upper: { angle: 1 } } } }), /no tiene "angle" animable/);
 });
 
 test('enlace limitado a su skeleton, por capa y por punto, con mensajes que orientan', () => {
-  const doc = op(brazo(), { op: 'create', type: 'skeleton', id: 'otro' }, { op: 'create', type: 'bone', id: 'tail_bone', parent: 'otro' }, { op: 'create', type: 'ellipse', id: 'suelta' });
+  const doc = op(arm(), { op: 'create', type: 'skeleton', id: 'otro' }, { op: 'create', type: 'bone', id: 'tail_bone', parent: 'otro' }, { op: 'create', type: 'ellipse', id: 'suelta' });
   // Fuera de todo skeleton.
   assert.throws(() => op(doc, { op: 'set', target: 'suelta', props: { bone: 'upper' } }), /suelta\.bone: "upper" es un hueso del skeleton "rig" y suelta no está dentro de ningún skeleton.*mételo dentro de "rig"/);
   // En otro skeleton: lista los huesos que sí sirven, con sugerencia.
@@ -84,16 +84,16 @@ test('enlace limitado a su skeleton, por capa y por punto, con mensajes que orie
   // Por punto, igual.
   assert.throws(() => op(doc, { op: 'create', type: 'path', id: 'p', parent: 'otro', props: { vertices: [{ x: 0, y: 0, bone: 'upper' }, { x: 1, y: 1 }] } }), /p\.vertices\[0\]\.bone: "upper" es un hueso del skeleton "rig", pero p está en el skeleton "otro"/);
   // Sacar un dibujo del skeleton deja un enlace ajeno: el editor lo suelta con soltarEnlacesAjenos.
-  const fuera = structuredClone(doc);
-  buscar(fuera, 'hand').parent = null;
-  assert.ok(validar(fuera, esquema).errores.some((e) => /hand\.bone/.test(e)));
-  assert.deepEqual(soltarEnlacesAjenos(fuera, esquema), [{ op: 'unset', target: 'hand', props: ['bone'] }]);
+  const outside = structuredClone(doc);
+  findObject(outside, 'hand').parent = null;
+  assert.ok(validate(outside, schema).errors.some((e) => /hand\.bone/.test(e)));
+  assert.deepEqual(releaseForeignBindings(outside, schema), [{ op: 'unset', target: 'hand', props: ['bone'] }]);
 });
 
 test('un skeleton transformado lleva sus huesos: from/to en el documento y poses en su marco', () => {
   // El skeleton está en (300, 200) y girado 90°: su eje x apunta hacia abajo en pantalla.
   let doc = op(
-    crearDocumento(),
+    createDocument(),
     { op: 'create', type: 'skeleton', id: 'rig', props: { x: 300, y: 200, rotation: 90 } },
     { op: 'create', type: 'bone', id: 'b', parent: 'rig', props: { from: [300, 200], to: [300, 260] } },
     { op: 'create', type: 'bone', id: 'c', parent: 'b', props: { from: [300, 260], to: [340, 260] } },
@@ -101,66 +101,66 @@ test('un skeleton transformado lleva sus huesos: from/to en el documento y poses
     { op: 'create', type: 'pose', id: 'p', props: { values: { b: { rotation: 90 } } } },
   );
   // Relativo al skeleton: b nace en su origen y apunta por su eje x (0°); c gira -90° respecto de b.
-  assert.deepEqual([buscar(doc, 'b').x, buscar(doc, 'b').y, buscar(doc, 'b').rotation, buscar(doc, 'b').length], [0, 0, 0, 60]);
-  assert.deepEqual([buscar(doc, 'c').x, buscar(doc, 'c').rotation, buscar(doc, 'c').length], [60, -90, 40]);
-  const ev = evaluarEsqueleto(doc, esquema, buscar(doc, 'p'));
-  assert.ok(cerca(puntaDe(esquema, buscar(doc, 'c'), ev.reposo.get('c')), [340, 260]));
+  assert.deepEqual([findObject(doc, 'b').x, findObject(doc, 'b').y, findObject(doc, 'b').rotation, findObject(doc, 'b').length], [0, 0, 0, 60]);
+  assert.deepEqual([findObject(doc, 'c').x, findObject(doc, 'c').rotation, findObject(doc, 'c').length], [60, -90, 40]);
+  const ev = evaluateSkeleton(doc, schema, findObject(doc, 'p'));
+  assert.ok(near(tipOf(schema, findObject(doc, 'c'), ev.rest.get('c')), [340, 260]));
   // La pose gira b 90° más (en pantalla apunta a la izquierda) y c, a -90° de b, cuelga: su punta queda en (240, 240).
-  assert.ok(cerca(puntaDe(esquema, buscar(doc, 'c'), ev.posado.get('c')), [240, 240]));
+  assert.ok(near(tipOf(schema, findObject(doc, 'c'), ev.posed.get('c')), [240, 240]));
   // r está en la punta de c en el montaje: (x 60, y -40) del skeleton = (340, 260) en pantalla, y la sigue.
-  const [, , , , e, f] = matrizDe(svgDocumento(doc, esquema, { pose: 'p' }), 'r');
-  assert.ok(cerca(aplicar([0, 1, -1, 0, 300, 200], e, f), [240, 240]));
+  const [, , , , e, f] = matrixOf(svgDocument(doc, schema, { pose: 'p' }), 'r');
+  assert.ok(near(apply([0, 1, -1, 0, 300, 200], e, f), [240, 240]));
   // Mover el skeleton mueve el esqueleto y el dibujo juntos, sin tocar los huesos.
   doc = op(doc, { op: 'set', target: 'rig', props: { x: 400 } });
-  assert.ok(cerca(puntaDe(esquema, buscar(doc, 'c'), evaluarEsqueleto(doc, esquema).reposo.get('c')), [440, 260]));
-  assert.deepEqual([buscar(doc, 'b').x, buscar(doc, 'b').rotation], [0, 0]);
+  assert.ok(near(tipOf(schema, findObject(doc, 'c'), evaluateSkeleton(doc, schema).rest.get('c')), [440, 260]));
+  assert.deepEqual([findObject(doc, 'b').x, findObject(doc, 'b').rotation], [0, 0]);
 });
 
 test('un skeleton anidado sigue al hueso del de afuera', () => {
   const doc = op(
-    brazo(),
+    arm(),
     { op: 'create', type: 'skeleton', id: 'mano', parent: 'rig', props: { bone: 'lower' } },
     { op: 'create', type: 'bone', id: 'finger', parent: 'mano', props: { from: [190, 100], to: [200, 100] } },
     { op: 'create', type: 'rect', id: 'nail', parent: 'mano', props: { x: 200, y: 100, bone: 'finger' } },
   );
-  const ev = evaluarEsqueleto(doc, esquema, buscar(doc, 'up'));
+  const ev = evaluateSkeleton(doc, schema, findObject(doc, 'up'));
   // El hombro gira -90°: el dedo, en la punta del antebrazo, sube con él a (100, 10) → (100, 0).
-  assert.ok(cerca(puntaDe(esquema, buscar(doc, 'finger'), ev.posado.get('finger')), [100, 0]));
+  assert.ok(near(tipOf(schema, findObject(doc, 'finger'), ev.posed.get('finger')), [100, 0]));
   // En el SVG, la uña (dentro de mano) termina en la punta del dedo.
-  const svg = svgDocumento(doc, esquema, { pose: 'up' });
-  assert.ok(cerca(aplicar(multiplicar(matrizDe(svg, 'mano'), matrizDe(svg, 'nail')), 0, 0), [100, 0]));
+  const svg = svgDocument(doc, schema, { pose: 'up' });
+  assert.ok(near(apply(multiply(matrixOf(svg, 'mano'), matrixOf(svg, 'nail')), 0, 0), [100, 0]));
   assert.throws(() => op(doc, { op: 'set', target: 'nail', props: { bone: 'lower' } }), /nail está en el skeleton "mano"/);
 });
 
 test('renombrar y borrar un hueso actualiza enlaces y poses, y deshacer los recupera', () => {
-  let doc = op(brazo(), { op: 'rename', target: 'upper', id: 'arm' });
-  assert.deepEqual(buscar(doc, 'up').values, { arm: { rotation: -90 } });
-  const { doc: sin, inversas } = aplicarOperaciones(doc, [{ op: 'delete', target: 'arm' }], esquema);
-  assert.equal(buscar(sin, 'hand').bone, undefined);
-  assert.deepEqual(buscar(sin, 'up').values, {});
-  doc = aplicarOperaciones(sin, inversas, esquema).doc;
-  assert.equal(buscar(doc, 'hand').bone, 'lower');
-  assert.deepEqual(buscar(doc, 'up').values, { arm: { rotation: -90 } });
+  let doc = op(arm(), { op: 'rename', target: 'upper', id: 'arm' });
+  assert.deepEqual(findObject(doc, 'up').values, { arm: { rotation: -90 } });
+  const { doc: sin, inversas } = applyOperations(doc, [{ op: 'delete', target: 'arm' }], schema);
+  assert.equal(findObject(sin, 'hand').bone, undefined);
+  assert.deepEqual(findObject(sin, 'up').values, {});
+  doc = applyOperations(sin, inversas, schema).doc;
+  assert.equal(findObject(doc, 'hand').bone, 'lower');
+  assert.deepEqual(findObject(doc, 'up').values, { arm: { rotation: -90 } });
 });
 
 test('duplicar un skeleton copia sus huesos y los enlaces apuntan a las copias', () => {
-  let doc = op(brazo(), { op: 'create', type: 'path', id: 'tira', parent: 'rig', props: { closed: false, vertices: [{ x: 100, y: 100, bone: 'upper' }, { x: 190, y: 100, bone: 'lower' }] } });
+  let doc = op(arm(), { op: 'create', type: 'path', id: 'tira', parent: 'rig', props: { closed: false, vertices: [{ x: 100, y: 100, bone: 'upper' }, { x: 190, y: 100, bone: 'lower' }] } });
   doc = op(doc, { op: 'duplicate', target: 'rig', suffix: 'b' });
-  assert.equal(buscar(doc, 'hand_b').bone, 'lower_b');
-  assert.deepEqual(buscar(doc, 'tira_b').vertices.map((v) => v.bone), ['upper_b', 'lower_b']);
-  assert.equal(esqueletoDe(doc, 'lower_b'), 'rig_b');
+  assert.equal(findObject(doc, 'hand_b').bone, 'lower_b');
+  assert.deepEqual(findObject(doc, 'tira_b').vertices.map((v) => v.bone), ['upper_b', 'lower_b']);
+  assert.equal(skeletonOf(doc, 'lower_b'), 'rig_b');
 });
 
 test('la vista previa puede dibujar el esqueleto encima, posado', () => {
-  const doc = brazo();
-  assert.doesNotMatch(svgDocumento(doc, esquema), /data-huesos/);
-  const svg = svgDocumento(doc, esquema, { huesos: true, pose: 'up' });
+  const doc = arm();
+  assert.doesNotMatch(svgDocument(doc, schema), /data-huesos/);
+  const svg = svgDocument(doc, schema, { bones: true, pose: 'up' });
   assert.match(svg, /<g data-huesos="">/);
   assert.match(svg, />lower<\/text>/);
 });
 
 test('enlace por punto: un path se dobla con varios huesos y sigue siendo uno solo', () => {
-  let doc = brazo();
+  let doc = arm();
   // Una tira de (100,100) a (190,100): los dos primeros puntos siguen al hombro, la punta al antebrazo.
   doc = op(doc, {
     op: 'create',
@@ -170,45 +170,45 @@ test('enlace por punto: un path se dobla con varios huesos y sigue siendo uno so
     props: { closed: false, vertices: [{ x: 100, y: 100, bone: 'upper' }, { x: 150, y: 100, bone: 'upper' }, { x: 190, y: 100, bone: 'lower' }] },
   });
   doc = op(doc, { op: 'set', target: 'up', props: { values: { upper: { rotation: -90 }, lower: { rotation: 90 } } } });
-  const d = svgDocumento(doc, esquema, { pose: 'up' }).match(/data-id="tira"><path d="([^"]+)"/)[1];
+  const d = svgDocument(doc, schema, { pose: 'up' }).match(/data-id="tira"><path d="([^"]+)"/)[1];
   // El hombro apunta hacia arriba y el antebrazo vuelve a la derecha: el codo queda en (100, 50), la punta en (140, 50).
   assert.equal(d, 'M100 100L100 50L140 50');
   // Renombrar y borrar el hueso actualizan los vértices.
   doc = op(doc, { op: 'rename', target: 'lower', id: 'fore' });
-  assert.equal(buscar(doc, 'tira').vertices[2].bone, 'fore');
+  assert.equal(findObject(doc, 'tira').vertices[2].bone, 'fore');
   doc = op(doc, { op: 'delete', target: 'fore' });
-  assert.deepEqual(buscar(doc, 'tira').vertices[2], { x: 190, y: 100 });
+  assert.deepEqual(findObject(doc, 'tira').vertices[2], { x: 190, y: 100 });
   assert.throws(() => op(doc, { op: 'set', target: 'tira', props: { vertices: [{ x: 0, y: 0, bone: 'nada' }, { x: 1, y: 1 }] } }), /no existe el hueso "nada"/);
 });
 
 test('from/to crean huesos con coordenadas del documento, también encadenados', () => {
   let doc = op(
-    crearDocumento({ name: 'Desde hasta' }),
+    createDocument({ name: 'Desde hasta' }),
     { op: 'create', type: 'skeleton', id: 'rig' },
     { op: 'create', type: 'bone', id: 'spine_bone', parent: 'rig', props: { from: [300, 400], to: [300, 300] } },
     { op: 'create', type: 'bone', id: 'arm_bone', parent: 'spine_bone', props: { from: [320, 320], to: [380, 320] } },
   );
-  assert.deepEqual(buscar(doc, 'spine_bone'), { id: 'spine_bone', type: 'bone', parent: 'rig', x: 300, y: 400, rotation: -90, length: 100 });
-  const arm = buscar(doc, 'arm_bone');
+  assert.deepEqual(findObject(doc, 'spine_bone'), { id: 'spine_bone', type: 'bone', parent: 'rig', x: 300, y: 400, rotation: -90, length: 100 });
+  const arm = findObject(doc, 'arm_bone');
   assert.deepEqual([arm.x, arm.y, arm.rotation, arm.length], [80, 20, 90, 60]);
   // Con solo `to` se conserva el origen.
   doc = op(doc, { op: 'set', target: 'arm_bone', props: { to: [320, 260] } });
-  assert.deepEqual([buscar(doc, 'arm_bone').x, buscar(doc, 'arm_bone').rotation, buscar(doc, 'arm_bone').length], [80, 0, 60]);
+  assert.deepEqual([findObject(doc, 'arm_bone').x, findObject(doc, 'arm_bone').rotation, findObject(doc, 'arm_bone').length], [80, 0, 60]);
   assert.throws(() => op(doc, { op: 'create', type: 'rect', id: 'r', props: { from: [0, 0] } }), /solo sirven en huesos/);
 });
 
 test('repartir los puntos de un path entre los huesos más cercanos de su skeleton', () => {
-  const doc = op(brazo(), { op: 'create', type: 'path', id: 'tira', parent: 'rig', props: { closed: false, vertices: [{ x: 100, y: 100 }, { x: 140, y: 100 }, { x: 180, y: 100 }] } });
-  assert.deepEqual(repartirEntreHuesos(doc, esquema, 'tira').map((v) => v.bone), ['upper', 'upper', 'lower']);
-  const conOtro = op(doc, { op: 'create', type: 'skeleton', id: 'otro' }, { op: 'create', type: 'bone', id: 'x_bone', parent: 'otro' });
-  assert.throws(() => repartirEntreHuesos(conOtro, esquema, 'tira', ['upper', 'x_bone']), /x_bone no es un hueso del skeleton "rig"/);
-  const suelto = op(doc, { op: 'move', target: 'tira', parent: null });
-  assert.throws(() => repartirEntreHuesos(suelto, esquema, 'tira'), /no está dentro de un skeleton/);
+  const doc = op(arm(), { op: 'create', type: 'path', id: 'tira', parent: 'rig', props: { closed: false, vertices: [{ x: 100, y: 100 }, { x: 140, y: 100 }, { x: 180, y: 100 }] } });
+  assert.deepEqual(distributeBetweenBones(doc, schema, 'tira').map((v) => v.bone), ['upper', 'upper', 'lower']);
+  const withOther = op(doc, { op: 'create', type: 'skeleton', id: 'otro' }, { op: 'create', type: 'bone', id: 'x_bone', parent: 'otro' });
+  assert.throws(() => distributeBetweenBones(withOther, schema, 'tira', ['upper', 'x_bone']), /x_bone no es un hueso del skeleton "rig"/);
+  const loose = op(doc, { op: 'move', target: 'tira', parent: null });
+  assert.throws(() => distributeBetweenBones(loose, schema, 'tira'), /no está dentro de un skeleton/);
 });
 
 test('bind all by proximity: cada pieza sin enlace va al hueso más cercano, sin tocar lo ya enlazado', () => {
   const doc = op(
-    brazo(),
+    arm(),
     // Un grupo sin nada enlazado va entero; su centro (180, 110) cae sobre el antebrazo.
     { op: 'create', type: 'group', id: 'glove', parent: 'rig', props: { x: 180, y: 110 } },
     { op: 'create', type: 'rect', id: 'palm', parent: 'glove', props: { width: 20, height: 20 } },
@@ -221,21 +221,21 @@ test('bind all by proximity: cada pieza sin enlace va al hueso más cercano, sin
     // Lo de afuera del skeleton no cuenta.
     { op: 'create', type: 'rect', id: 'fondo', props: { x: 100, y: 100 } },
   );
-  assert.deepEqual(enlacesPorCercania(doc, esquema, 'rig'), [
+  assert.deepEqual(bindingsByProximity(doc, schema, 'rig'), [
     { id: 'glove', bone: 'lower' },
     { id: 'cuff', bone: 'upper' },
   ]);
-  assert.throws(() => enlacesPorCercania(op(crearDocumento(), { op: 'create', type: 'skeleton', id: 's' }), esquema, 's'), /no tiene huesos/);
-  assert.throws(() => enlacesPorCercania(doc, esquema, 'hand'), /no es un skeleton/);
+  assert.throws(() => bindingsByProximity(op(createDocument(), { op: 'create', type: 'skeleton', id: 's' }), schema, 's'), /no tiene huesos/);
+  assert.throws(() => bindingsByProximity(doc, schema, 'hand'), /no es un skeleton/);
 });
 
 // Un documento de antes del modelo de capa de huesos: huesos en la raíz y el grupo `cat` enlazado a uno de ellos.
-function documentoViejo({ conGiro = false } = {}) {
+function oldDocument({ withRotation = false } = {}) {
   return {
-    format: crearDocumento().format,
+    format: createDocument().format,
     meta: { name: 'Viejo' },
     objects: [
-      { id: 'cat', type: 'group', parent: null, x: 300, y: 400, ...(conGiro ? { rotation: 30, scaleX: 2, scaleY: 2 } : {}), bone: 'body_bone' },
+      { id: 'cat', type: 'group', parent: null, x: 300, y: 400, ...(withRotation ? { rotation: 30, scaleX: 2, scaleY: 2 } : {}), bone: 'body_bone' },
       { id: 'torso', type: 'rect', parent: 'cat', width: 80, height: 120 },
       { id: 'head', type: 'group', parent: 'cat', y: -100, bone: 'head_bone' },
       { id: 'face', type: 'ellipse', parent: 'head' },
@@ -249,36 +249,36 @@ function documentoViejo({ conGiro = false } = {}) {
 }
 
 test('migración: el grupo raíz pasa a ser el skeleton y nada se mueve, ni en el montaje ni en las poses', () => {
-  for (const conGiro of [false, true]) {
-    const viejo = documentoViejo({ conGiro });
-    assert.ok(validar(viejo, esquema).errores.some((e) => /body_bone: un bone no puede estar en la raíz/.test(e)));
-    const { doc, cambios } = migrarAEsqueletos(viejo, esquema);
-    assert.deepEqual(validar(doc, esquema).errores, []);
-    assert.match(cambios[0], /Group cat is now a Skeleton/);
-    assert.equal(buscar(doc, 'cat').type, 'skeleton');
-    assert.equal(buscar(doc, 'cat').bone, undefined);
-    assert.equal(buscar(doc, 'body_bone').parent, 'cat');
+  for (const withRotation of [false, true]) {
+    const old = oldDocument({ withRotation });
+    assert.ok(validate(old, schema).errors.some((e) => /body_bone: un bone no puede estar en la raíz/.test(e)));
+    const { doc, changes } = migrateToSkeletons(old, schema);
+    assert.deepEqual(validate(doc, schema).errors, []);
+    assert.match(changes[0], /Group cat is now a Skeleton/);
+    assert.equal(findObject(doc, 'cat').type, 'skeleton');
+    assert.equal(findObject(doc, 'cat').bone, undefined);
+    assert.equal(findObject(doc, 'body_bone').parent, 'cat');
     // Lo que heredaba body_bone a través de cat ahora lo tiene propio; lo que tenía el suyo, lo conserva.
-    assert.deepEqual(['torso', 'head', 'tail'].map((id) => buscar(doc, id).bone), ['body_bone', 'head_bone', 'body_bone']);
+    assert.deepEqual(['torso', 'head', 'tail'].map((id) => findObject(doc, id).bone), ['body_bone', 'head_bone', 'body_bone']);
     // Los huesos quedan donde estaban en pantalla, en el montaje y en la pose.
     for (const pose of [null, 'nod']) {
-      const antes = evaluarEsqueleto(viejo, esquema, pose && buscar(viejo, pose));
-      const despues = evaluarEsqueleto(doc, esquema, pose && buscar(doc, pose));
-      for (const id of ['body_bone', 'head_bone', 'tail_bone']) assert.ok(antes.posado.get(id).every((v, i) => Math.abs(v - despues.posado.get(id)[i]) < 1e-4), `${id} en ${pose}`);
+      const before = evaluateSkeleton(old, schema, pose && findObject(old, pose));
+      const after = evaluateSkeleton(doc, schema, pose && findObject(doc, pose));
+      for (const id of ['body_bone', 'head_bone', 'tail_bone']) assert.ok(before.posed.get(id).every((v, i) => Math.abs(v - after.posed.get(id)[i]) < 1e-4), `${id} en ${pose}`);
     }
-    assert.equal(svgDocumento(doc, esquema).length > 0, true);
+    assert.equal(svgDocument(doc, schema).length > 0, true);
     // Volver a migrar no cambia nada.
-    assert.deepEqual(migrarAEsqueletos(doc, esquema).cambios, []);
+    assert.deepEqual(migrateToSkeletons(doc, schema).changes, []);
   }
   // Sin giro, el hueso raíz solo se corre al marco de cat.
-  const { doc } = migrarAEsqueletos(documentoViejo(), esquema);
-  assert.deepEqual([buscar(doc, 'body_bone').x, buscar(doc, 'body_bone').y, buscar(doc, 'body_bone').rotation], [0, 60, -90]);
-  assert.deepEqual(buscar(doc, 'nod').values.body_bone, { rotation: -80, x: 10, y: 60 });
+  const { doc } = migrateToSkeletons(oldDocument(), schema);
+  assert.deepEqual([findObject(doc, 'body_bone').x, findObject(doc, 'body_bone').y, findObject(doc, 'body_bone').rotation], [0, 60, -90]);
+  assert.deepEqual(findObject(doc, 'nod').values.body_bone, { rotation: -80, x: 10, y: 60 });
 });
 
 test('migración: dibujo enlazado suelto en la raíz va a un skeleton nuevo sin cambiar el orden de dibujo', () => {
-  const viejo = {
-    format: crearDocumento().format,
+  const old = {
+    format: createDocument().format,
     meta: {},
     objects: [
       { id: 'fondo', type: 'rect', parent: null },
@@ -291,63 +291,63 @@ test('migración: dibujo enlazado suelto en la raíz va a un skeleton nuevo sin 
       { id: 'b3', type: 'bone', parent: null },
     ],
   };
-  const { doc, cambios } = migrarAEsqueletos(viejo, esquema);
-  assert.deepEqual(validar(doc, esquema).errores, []);
-  assert.match(cambios[0], /New Skeleton skeleton with the bones and a, medio, c/);
+  const { doc, changes } = migrateToSkeletons(old, schema);
+  assert.deepEqual(validate(doc, schema).errors, []);
+  assert.match(changes[0], /New Skeleton skeleton with the bones and a, medio, c/);
   assert.deepEqual(doc.objects.filter((o) => o.parent == null).map((o) => o.id), ['fondo', 'skeleton', 'frente']);
   assert.deepEqual(doc.objects.filter((o) => o.parent === 'skeleton').map((o) => o.id), ['a', 'medio', 'c', 'b1', 'b3']);
-  assert.equal(buscar(doc, 'b1').x, 10);
-  assert.equal(svgDocumento(doc, esquema), svgDocumento(viejo, esquema).replace('<g data-id="a">', '<g data-id="skeleton"><g data-id="a">').replace('<g data-id="frente">', '</g><g data-id="frente">'));
+  assert.equal(findObject(doc, 'b1').x, 10);
+  assert.equal(svgDocument(doc, schema), svgDocument(old, schema).replace('<g data-id="a">', '<g data-id="skeleton"><g data-id="a">').replace('<g data-id="frente">', '</g><g data-id="frente">'));
 });
 
 test('reparentar un hueso no lo mueve en el montaje ni en las poses que lo fijan, y respeta su skeleton', () => {
   let doc = op(
-    brazo(),
+    arm(),
     { op: 'create', type: 'bone', id: 'finger', parent: 'lower', props: { from: [190, 100], to: [190, 130] } },
     { op: 'set', target: 'up', props: { values: { upper: { rotation: -90 }, finger: { rotation: 45 } } } },
   );
-  const antes = evaluarEsqueleto(doc, esquema);
-  const igual = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-3);
+  const before = evaluateSkeleton(doc, schema);
+  const equal = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-3);
   // Pasa a colgar del hombro: en pantalla queda donde estaba.
-  doc = op(doc, ...opsParaReparentar(doc, esquema, 'finger', 'upper'));
-  assert.equal(buscar(doc, 'finger').parent, 'upper');
-  assert.ok(igual(evaluarEsqueleto(doc, esquema).reposo.get('finger'), antes.reposo.get('finger')));
+  doc = op(doc, ...opsToReparent(doc, schema, 'finger', 'upper'));
+  assert.equal(findObject(doc, 'finger').parent, 'upper');
+  assert.ok(equal(evaluateSkeleton(doc, schema).rest.get('finger'), before.rest.get('finger')));
   // Su rotación en la pose se llevó al marco nuevo (mismo giro respecto del montaje).
-  assert.equal(buscar(doc, 'up').values.finger.rotation, 45);
+  assert.equal(findObject(doc, 'up').values.finger.rotation, 45);
   // Como raíz del skeleton.
-  doc = op(doc, ...opsParaReparentar(doc, esquema, 'finger', 'rig'));
-  assert.equal(buscar(doc, 'finger').parent, 'rig');
-  assert.ok(igual(evaluarEsqueleto(doc, esquema).reposo.get('finger'), antes.reposo.get('finger')));
-  assert.deepEqual([buscar(doc, 'finger').x, buscar(doc, 'finger').y, buscar(doc, 'finger').rotation], [190, 100, 90]);
-  assert.equal(buscar(doc, 'up').values.finger.rotation, 45);
+  doc = op(doc, ...opsToReparent(doc, schema, 'finger', 'rig'));
+  assert.equal(findObject(doc, 'finger').parent, 'rig');
+  assert.ok(equal(evaluateSkeleton(doc, schema).rest.get('finger'), before.rest.get('finger')));
+  assert.deepEqual([findObject(doc, 'finger').x, findObject(doc, 'finger').y, findObject(doc, 'finger').rotation], [190, 100, 90]);
+  assert.equal(findObject(doc, 'up').values.finger.rotation, 45);
   // Con un padre girado, la rotación del montaje y la de la pose se compensan igual.
-  const girado = op(doc, { op: 'create', type: 'bone', id: 'tilt', parent: 'rig', props: { x: 0, y: 0, rotation: 30 } });
-  const listo = op(girado, ...opsParaReparentar(girado, esquema, 'finger', 'tilt'));
-  assert.ok(igual(evaluarEsqueleto(listo, esquema).reposo.get('finger'), antes.reposo.get('finger')));
-  assert.deepEqual([buscar(listo, 'finger').rotation, buscar(listo, 'up').values.finger.rotation], [60, 15]);
+  const rotated = op(doc, { op: 'create', type: 'bone', id: 'tilt', parent: 'rig', props: { x: 0, y: 0, rotation: 30 } });
+  const ready = op(rotated, ...opsToReparent(rotated, schema, 'finger', 'tilt'));
+  assert.ok(equal(evaluateSkeleton(ready, schema).rest.get('finger'), before.rest.get('finger')));
+  assert.deepEqual([findObject(ready, 'finger').rotation, findObject(ready, 'up').values.finger.rotation], [60, 15]);
   // Errores claros: un descendiente, otro skeleton, algo que no es hueso.
-  assert.throws(() => opsParaReparentar(doc, esquema, 'upper', 'lower'), /cuelga de "upper"/);
-  const otro = op(doc, { op: 'create', type: 'skeleton', id: 'otro' }, { op: 'create', type: 'bone', id: 'x_bone', parent: 'otro' });
-  assert.throws(() => opsParaReparentar(otro, esquema, 'finger', 'x_bone'), /es de otro skeleton \(otro\)/);
-  assert.throws(() => opsParaReparentar(doc, esquema, 'hand', 'upper'), /no es un hueso/);
-  assert.deepEqual(opsParaReparentar(doc, esquema, 'finger', 'rig'), []);
+  assert.throws(() => opsToReparent(doc, schema, 'upper', 'lower'), /cuelga de "upper"/);
+  const other = op(doc, { op: 'create', type: 'skeleton', id: 'otro' }, { op: 'create', type: 'bone', id: 'x_bone', parent: 'otro' });
+  assert.throws(() => opsToReparent(other, schema, 'finger', 'x_bone'), /es de otro skeleton \(otro\)/);
+  assert.throws(() => opsToReparent(doc, schema, 'hand', 'upper'), /no es un hueso/);
+  assert.deepEqual(opsToReparent(doc, schema, 'finger', 'rig'), []);
 });
 
 test('los huesos dibujados encima siguen al skeleton cuando una pose lo mueve', () => {
   const doc = op(
-    crearDocumento({}),
+    createDocument({}),
     { op: 'create', type: 'skeleton', id: 'rig' },
     { op: 'create', type: 'bone', id: 'b', parent: 'rig', props: { x: 10, y: 10, length: 50 } },
     { op: 'create', type: 'pose', id: 'mv', props: { values: { rig: { x: 200 } } } },
   );
-  const svg = svgDocumento(doc, esquema, { pose: 'mv', huesos: true });
+  const svg = svgDocument(doc, schema, { pose: 'mv', bones: true });
   assert.match(svg, /data-id="rig" transform="translate\(200 0\)"/);
   assert.match(svg, /<circle cx="210" cy="10"/);
 });
 
 test('reparentar varios huesos seguidos conservando las poses (Reparent Bone con varios elegidos)', () => {
   const doc = op(
-    crearDocumento({}),
+    createDocument({}),
     { op: 'create', type: 'skeleton', id: 'rig' },
     { op: 'create', type: 'bone', id: 'a', parent: 'rig', props: { from: [0, 0], to: [100, 0] } },
     { op: 'create', type: 'bone', id: 'b', parent: 'a', props: { from: [100, 0], to: [200, 0] } },
@@ -355,43 +355,43 @@ test('reparentar varios huesos seguidos conservando las poses (Reparent Bone con
     { op: 'create', type: 'bone', id: 'z', parent: 'rig', props: { from: [0, 200], to: [100, 200] } },
     { op: 'create', type: 'pose', id: 'up', props: { values: { a: { rotation: -90 } } } },
   );
-  const mundo = (d, id) => evaluarEnPose(d, esquema, buscar(d, 'up')).posado.get(id).map((v) => Math.round(v * 100) / 100);
-  const pasos = [['b', 'z'], ['c', 'z']];
+  const world = (d, id) => evaluateInPose(d, schema, findObject(d, 'up')).posed.get(id).map((v) => Math.round(v * 100) / 100);
+  const steps = [['b', 'z'], ['c', 'z']];
   // Sin conservar: los dos se mueven en "up" (dejan de seguir a "a"), y se avisa una sola vez.
-  const aviso = reparentarVarios(doc, esquema, pasos);
-  assert.deepEqual(aviso.movidas, ['up']);
-  const movido = op(doc, ...aviso.ops);
-  assert.notDeepEqual(mundo(movido, 'b'), mundo(doc, 'b'));
+  const notice = reparentSeveral(doc, schema, steps);
+  assert.deepEqual(notice.moved, ['up']);
+  const moved = op(doc, ...notice.ops);
+  assert.notDeepEqual(world(moved, 'b'), world(doc, 'b'));
   // Conservando: los dos quedan donde estaban en la pose, y cuelgan de z.
-  const quieto = reparentarVarios(doc, esquema, pasos, { conservarEnPoses: true });
-  assert.deepEqual(quieto.movidas, []);
-  const despues = op(doc, ...quieto.ops);
-  assert.deepEqual([buscar(despues, 'b').parent, buscar(despues, 'c').parent], ['z', 'z']);
-  for (const id of ['b', 'c']) assert.deepEqual(mundo(despues, id), mundo(doc, id));
+  const still = reparentSeveral(doc, schema, steps, { keepInPoses: true });
+  assert.deepEqual(still.moved, []);
+  const after = op(doc, ...still.ops);
+  assert.deepEqual([findObject(after, 'b').parent, findObject(after, 'c').parent], ['z', 'z']);
+  for (const id of ['b', 'c']) assert.deepEqual(world(after, id), world(doc, id));
 });
 
 test('planes compartidos: reparentar varios, enlazar por cercanía, soltar al mover y por qué no se enlaza', async () => {
-  const { motivoParaNoEnlazar, opsParaSoltarAlMover, planEnlazarPorCercania, planReparentarHuesos } = await import('../src/core/skeleton.js');
-  const doc = op(brazo(), { op: 'create', type: 'bone', id: 'finger', parent: 'rig', props: { x: 190, y: 100, length: 10 } }, { op: 'create', type: 'skeleton', id: 'otro' }, { op: 'create', type: 'bone', id: 'tail_bone', parent: 'otro' });
+  const { reasonNotToBind, opsToReleaseOnMove, planProximityBinding, planReparentBones } = await import('../src/core/skeleton.js');
+  const doc = op(arm(), { op: 'create', type: 'bone', id: 'finger', parent: 'rig', props: { x: 190, y: 100, length: 10 } }, { op: 'create', type: 'skeleton', id: 'otro' }, { op: 'create', type: 'bone', id: 'tail_bone', parent: 'otro' });
   // Colgar finger de lower (el principal): un lote que aplica sin errores y lo deja como hijo.
-  const plan = planReparentarHuesos(doc, esquema, ['finger', 'lower'], 'lower');
-  assert.equal(plan.padre.id, 'lower');
-  assert.deepEqual(plan.hijos.map((h) => h.id), ['finger']);
-  assert.equal(plan.problema, null);
-  assert.equal(buscar(op(doc, ...plan.ops), 'finger').parent, 'lower');
-  assert.ok(Array.isArray(plan.ops.movidas));
+  const plan = planReparentBones(doc, schema, ['finger', 'lower'], 'lower');
+  assert.equal(plan.parent.id, 'lower');
+  assert.deepEqual(plan.children.map((h) => h.id), ['finger']);
+  assert.equal(plan.problem, null);
+  assert.equal(findObject(op(doc, ...plan.ops), 'finger').parent, 'lower');
+  assert.ok(Array.isArray(plan.ops.moved));
   // lower cuelga de upper: se puede soltar a la raíz del skeleton.
-  assert.deepEqual(plan.sueltos.map((h) => h.id), ['lower']);
-  assert.equal(buscar(op(doc, ...plan.opsSoltar), 'lower').parent, 'rig');
+  assert.deepEqual(plan.loose.map((h) => h.id), ['lower']);
+  assert.equal(findObject(op(doc, ...plan.releaseOps), 'lower').parent, 'rig');
   // Problemas: otro skeleton, o el padre cuelga del hijo.
-  assert.match(planReparentarHuesos(doc, esquema, ['tail_bone', 'lower'], 'lower').problema, /another skeleton/);
-  assert.match(planReparentarHuesos(doc, esquema, ['upper', 'lower'], 'lower').problema, /lower hangs from upper/);
+  assert.match(planReparentBones(doc, schema, ['tail_bone', 'lower'], 'lower').problem, /another skeleton/);
+  assert.match(planReparentBones(doc, schema, ['upper', 'lower'], 'lower').problem, /lower hangs from upper/);
   // Enlazar por cercanía: finger y hand ya están cubiertos o se enlazan; el lote es de set bone.
-  const enlazar = planEnlazarPorCercania(op(doc, { op: 'create', type: 'rect', id: 'chip', parent: 'rig', props: { x: 120, y: 100, width: 4, height: 4 } }), esquema, 'rig');
-  assert.deepEqual(enlazar.ops, enlazar.enlaces.map(({ id, bone }) => ({ op: 'set', target: id, props: { bone } })));
-  assert.ok(enlazar.enlaces.some((e) => e.id === 'chip' && e.bone === 'upper'));
+  const bind = planProximityBinding(op(doc, { op: 'create', type: 'rect', id: 'chip', parent: 'rig', props: { x: 120, y: 100, width: 4, height: 4 } }), schema, 'rig');
+  assert.deepEqual(bind.ops, bind.bindings.map(({ id, bone }) => ({ op: 'set', target: id, props: { bone } })));
+  assert.ok(bind.bindings.some((e) => e.id === 'chip' && e.bone === 'upper'));
   // Sacar la mano del skeleton suelta su hueso; por qué no se puede enlazar algo de afuera.
-  assert.deepEqual(opsParaSoltarAlMover(doc, esquema, 'hand', null), [{ op: 'unset', target: 'hand', props: ['bone'] }]);
-  assert.equal(motivoParaNoEnlazar(doc, 'hand', 'lower'), null);
-  assert.match(motivoParaNoEnlazar(doc, 'hand', 'tail_bone'), /hand is in skeleton rig/);
+  assert.deepEqual(opsToReleaseOnMove(doc, schema, 'hand', null), [{ op: 'unset', target: 'hand', props: ['bone'] }]);
+  assert.equal(reasonNotToBind(doc, 'hand', 'lower'), null);
+  assert.match(reasonNotToBind(doc, 'hand', 'tail_bone'), /hand is in skeleton rig/);
 });

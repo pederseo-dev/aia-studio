@@ -14,75 +14,75 @@
 //
 // `index` es la posición entre los hermanos en orden de dibujo: 0 = al fondo; sin index = al frente.
 
-import { expandirDesdeHasta } from './skeleton.js';
-import { leer, sugerir } from './schema.js';
-import { aplicar, invertir, matrizMundo } from './geometry.js';
-import { parsearD } from './paths.js';
-import { ErrorDeValidacion, ID, buscar, errorDeId, hijos, subarbol, validar } from './document.js';
+import { expandFromTo } from './skeleton.js';
+import { read, suggest } from './schema.js';
+import { apply, invert, worldMatrix } from './geometry.js';
+import { parseD } from './paths.js';
+import { ValidationError, ID, findObject, idError, children, subtree, validate } from './document.js';
 
-const ESTRUCTURA = new Set(['id', 'type', 'parent']);
+const STRUCTURE = new Set(['id', 'type', 'parent']);
 
 /**
  * Aplica un lote de forma atómica: si una operación falla o el resultado no es válido, no cambia nada y lanza.
  * Devuelve el documento nuevo, las operaciones inversas (para deshacer) y los avisos nuevos.
  */
-export function aplicarOperaciones(doc, ops, esquema) {
+export function applyOperations(doc, ops, schema) {
   if (!Array.isArray(ops) || !ops.length) throw new Error('Se necesita una lista de operaciones no vacía');
-  const siguiente = structuredClone(doc);
+  const next = structuredClone(doc);
   const inversas = [];
   ops.forEach((op, i) => {
     try {
-      inversas.unshift(...aplicarUna(siguiente, op, esquema));
+      inversas.unshift(...applyOne(next, op, schema));
     } catch (e) {
       throw new Error(`Operación ${i + 1} (${op?.op}): ${e.message}`);
     }
   });
-  const { errores, avisos } = validar(siguiente, esquema);
-  if (errores.length) throw new ErrorDeValidacion(errores);
-  const previos = new Set(validar(doc, esquema).avisos);
-  return { doc: siguiente, inversas, avisos: avisos.filter((a) => !previos.has(a)) };
+  const { errors, warnings } = validate(next, schema);
+  if (errors.length) throw new ValidationError(errors);
+  const previous = new Set(validate(doc, schema).warnings);
+  return { doc: next, inversas, warnings: warnings.filter((a) => !previous.has(a)) };
 }
 
 /** Junta los `set` seguidos sobre el mismo objetivo en uno solo (el último valor gana). */
-export function compactar(ops) {
-  const resultado = [];
+export function compact(ops) {
+  const result = [];
   for (const op of ops) {
-    const anterior = resultado.at(-1);
-    if (op.op === 'set' && anterior?.op === 'set' && anterior.target === op.target) {
-      resultado[resultado.length - 1] = { ...anterior, props: { ...anterior.props, ...op.props } };
+    const previous = result.at(-1);
+    if (op.op === 'set' && previous?.op === 'set' && previous.target === op.target) {
+      result[result.length - 1] = { ...previous, props: { ...previous.props, ...op.props } };
     } else {
-      resultado.push(op);
+      result.push(op);
     }
   }
-  return resultado;
+  return result;
 }
 
 /** Resumen corto de un lote para mostrar: "head.x, head.rotation, crear eye_l". */
-export function resumirOperaciones(ops) {
-  const partes = [];
+export function summarizeOperations(ops) {
+  const parts = [];
   for (const op of ops) {
-    if (op.op === 'set') partes.push(...Object.keys(op.props).map((p) => `${op.target}.${p}`));
-    else if (op.op === 'unset') partes.push(...op.props.map((p) => `${op.target}.${p} (por defecto)`));
-    else if (op.op === 'create') partes.push(`crear ${op.id}`);
-    else if (op.op === 'rename') partes.push(`renombrar ${op.target} → ${op.id}`);
-    else if (op.op === 'duplicate') partes.push(`duplicar ${op.target}`);
-    else if (op.op === 'delete') partes.push(`borrar ${op.target}`);
-    else if (op.op === 'move') partes.push(`mover ${op.target}`);
-    else partes.push(op.op);
+    if (op.op === 'set') parts.push(...Object.keys(op.props).map((p) => `${op.target}.${p}`));
+    else if (op.op === 'unset') parts.push(...op.props.map((p) => `${op.target}.${p} (por defecto)`));
+    else if (op.op === 'create') parts.push(`crear ${op.id}`);
+    else if (op.op === 'rename') parts.push(`renombrar ${op.target} → ${op.id}`);
+    else if (op.op === 'duplicate') parts.push(`duplicar ${op.target}`);
+    else if (op.op === 'delete') parts.push(`borrar ${op.target}`);
+    else if (op.op === 'move') parts.push(`mover ${op.target}`);
+    else parts.push(op.op);
   }
-  return [...new Set(partes)];
+  return [...new Set(parts)];
 }
 
-function objetivo(doc, id) {
-  const obj = buscar(doc, id);
-  if (!obj) throw new Error(`no existe el objeto "${id}".${sugerir(id, doc.objects.map((o) => o.id))}`);
+function target(doc, id) {
+  const obj = findObject(doc, id);
+  if (!obj) throw new Error(`no existe el objeto "${id}".${suggest(id, doc.objects.map((o) => o.id))}`);
   return obj;
 }
 
-function contenedor(doc, id, esquema) {
+function container(doc, id, schema) {
   if (id == null) return null;
-  const padre = objetivo(doc, id);
-  if (!esquema.tipos.get(padre.type)?.container) throw new Error(`"${id}" es un ${padre.type} y no puede tener hijos (usa un group)`);
+  const parent = target(doc, id);
+  if (!schema.types.get(parent.type)?.container) throw new Error(`"${id}" es un ${parent.type} y no puede tener hijos (usa un group)`);
   return id;
 }
 
@@ -90,77 +90,77 @@ function contenedor(doc, id, esquema) {
  * El x/y que deja a un objeto en el mismo lugar de la pantalla al pasar a otro padre (en el montaje). Lo usan
  * `move` con keepPosition y el editor al arrastrar en Layers.
  */
-export function posicionConservada(doc, esquema, obj, padreNuevo) {
-  const mundo = aplicar(matrizMundo(doc, esquema, obj.parent ?? null), leer(esquema, obj, 'x'), leer(esquema, obj, 'y'));
-  const [x, y] = aplicar(invertir(matrizMundo(doc, esquema, padreNuevo)), ...mundo);
+export function keptPosition(doc, schema, obj, newParent) {
+  const world = apply(worldMatrix(doc, schema, obj.parent ?? null), read(schema, obj, 'x'), read(schema, obj, 'y'));
+  const [x, y] = apply(invert(worldMatrix(doc, schema, newParent)), ...world);
   return { x: Math.round(x * 10) / 10 || 0, y: Math.round(y * 10) / 10 || 0 };
 }
 
 /** Inserta obj en la lista plana para que quede en la posición `index` entre los hijos de `padre`. */
-function insertar(doc, obj, padre, index) {
-  const hermanos = hijos(doc, padre);
-  const i = Math.max(0, Math.min(index ?? hermanos.length, hermanos.length));
+function insert(doc, obj, parent, index) {
+  const siblings = children(doc, parent);
+  const i = Math.max(0, Math.min(index ?? siblings.length, siblings.length));
   let pos;
-  if (i < hermanos.length) pos = doc.objects.indexOf(hermanos[i]);
+  if (i < siblings.length) pos = doc.objects.indexOf(siblings[i]);
   // Al frente: después de todo el subárbol del último hermano, para que la lista plana siga ordenada por ramas.
-  else if (hermanos.length) pos = Math.max(...subarbol(doc, hermanos.at(-1).id).map((id) => doc.objects.findIndex((o) => o.id === id))) + 1;
-  else pos = padre == null ? doc.objects.length : doc.objects.indexOf(buscar(doc, padre)) + 1;
+  else if (siblings.length) pos = Math.max(...subtree(doc, siblings.at(-1).id).map((id) => doc.objects.findIndex((o) => o.id === id))) + 1;
+  else pos = parent == null ? doc.objects.length : doc.objects.indexOf(findObject(doc, parent)) + 1;
   doc.objects.splice(pos, 0, obj);
 }
 
 /** Azúcar para la IA: un path acepta `d` (trazado SVG de un solo subtrazado) y se guarda como vértices. */
-function expandirD(tipo, props) {
+function expandD(tipo, props) {
   if (props?.d === undefined) return props;
   if (!tipo?.properties.vertices) throw new Error(`"d" solo sirve en tipos con vértices (path), no en ${tipo?.name ?? 'meta'}`);
-  const subtrazados = parsearD(props.d);
-  if (subtrazados.length !== 1) throw new Error(`d tiene ${subtrazados.length} subtrazados; crea un path por cada uno`);
-  const { d, ...resto } = props;
-  return { closed: subtrazados[0].closed, ...resto, vertices: subtrazados[0].vertices };
+  const subpaths = parseD(props.d);
+  if (subpaths.length !== 1) throw new Error(`d tiene ${subpaths.length} subtrazados; crea un path por cada uno`);
+  const { d, ...rest } = props;
+  return { closed: subpaths[0].closed, ...rest, vertices: subpaths[0].vertices };
 }
 
 /**
  * Rehace los valores de una pose cambiando ids: los de los objetos (claves) y los que son referencias (el hijo
  * activo de un switch). `cambiar(id)` devuelve el id nuevo, o null para quitarlo.
  */
-function mapearPose(doc, esquema, valores, cambiar) {
-  const resultado = {};
-  for (const [id, campos] of Object.entries(valores)) {
-    const nuevo = cambiar(id);
-    if (nuevo == null) continue;
-    const tipo = esquema.tipos.get(buscar(doc, nuevo)?.type ?? buscar(doc, id)?.type);
-    const limpios = {};
-    for (const [k, v] of Object.entries(campos)) {
-      if (tipo?.properties[k]?.type !== 'ref' || v == null) limpios[k] = v;
-      else if (cambiar(v) != null) limpios[k] = cambiar(v);
+function mapPose(doc, schema, values, change) {
+  const result = {};
+  for (const [id, fields] of Object.entries(values)) {
+    const created = change(id);
+    if (created == null) continue;
+    const tipo = schema.types.get(findObject(doc, created)?.type ?? findObject(doc, id)?.type);
+    const clean = {};
+    for (const [k, v] of Object.entries(fields)) {
+      if (tipo?.properties[k]?.type !== 'ref' || v == null) clean[k] = v;
+      else if (change(v) != null) clean[k] = change(v);
     }
-    if (Object.keys(limpios).length) resultado[nuevo] = limpios;
+    if (Object.keys(clean).length) result[created] = clean;
   }
-  return resultado;
+  return result;
 }
 
 /**
  * Azúcar para la IA: dentro de una pose, un path también acepta `d` (se guarda como vértices, para el morph). Los
  * vértices de una pose no guardan `bone`: el enlace por punto es del montaje, como en Moho (ver aplicarPose).
  */
-function expandirPose(doc, esquema, tipo, props) {
+function expandPose(doc, schema, tipo, props) {
   if (tipo !== 'pose' || !props?.values || typeof props.values !== 'object' || Array.isArray(props.values)) return props;
   const values = {};
-  for (const [id, campos] of Object.entries(props.values)) {
-    const destino = buscar(doc, id);
-    const tipoDestino = destino && esquema.tipos.get(destino.type);
-    if (!tipoDestino || !campos || typeof campos !== 'object') {
-      values[id] = campos;
+  for (const [id, fields] of Object.entries(props.values)) {
+    const target = findObject(doc, id);
+    const targetType = target && schema.types.get(target.type);
+    if (!targetType || !fields || typeof fields !== 'object') {
+      values[id] = fields;
       continue;
     }
-    let resto = campos;
-    if (campos.d !== undefined) {
-      const { d, closed, ...sinD } = expandirD(tipoDestino, campos);
-      resto = sinD; // si es cerrado o abierto lo decide el montaje
+    let rest = fields;
+    if (fields.d !== undefined) {
+      const { d, closed, ...withoutD } = expandD(targetType, fields);
+      rest = withoutD; // si es cerrado o abierto lo decide el montaje
     }
-    for (const [k, p] of Object.entries(tipoDestino.properties)) {
-      if (p.type === 'vertices' && Array.isArray(resto[k]) && resto[k].some((v) => v?.bone !== undefined)) resto = { ...resto, [k]: resto[k].map(({ bone, ...v }) => v) };
+    for (const [k, p] of Object.entries(targetType.properties)) {
+      if (p.type === 'vertices' && Array.isArray(rest[k]) && rest[k].some((v) => v?.bone !== undefined)) rest = { ...rest, [k]: rest[k].map(({ bone, ...v }) => v) };
     }
-    values[id] = resto;
+    values[id] = rest;
   }
   return { ...props, values };
 }
@@ -169,145 +169,145 @@ function expandirPose(doc, esquema, tipo, props) {
  * Lo mismo para las pistas de un clip: rehace las pistas cambiando ids de objetos y los valores que son referencias.
  * Un keyframe que apuntaba a algo quitado sale de la pista; una pista vacía sale entera.
  */
-function mapearPistas(doc, esquema, pistas, cambiar) {
-  const resultado = {};
-  for (const [id, campos] of Object.entries(pistas)) {
-    const nuevo = cambiar(id);
-    if (nuevo == null) continue;
-    const tipo = esquema.tipos.get(buscar(doc, nuevo)?.type ?? buscar(doc, id)?.type);
-    const limpios = {};
-    for (const [k, claves] of Object.entries(campos)) {
-      const esRef = tipo?.properties[k]?.type === 'ref';
-      const nuevas = !esRef || !Array.isArray(claves) ? claves : claves.filter((c) => c.value == null || cambiar(c.value) != null).map((c) => (c.value == null ? c : { ...c, value: cambiar(c.value) }));
-      if (!Array.isArray(nuevas) || nuevas.length) limpios[k] = nuevas;
+function mapTracks(doc, schema, tracks, change) {
+  const result = {};
+  for (const [id, fields] of Object.entries(tracks)) {
+    const created = change(id);
+    if (created == null) continue;
+    const tipo = schema.types.get(findObject(doc, created)?.type ?? findObject(doc, id)?.type);
+    const clean = {};
+    for (const [k, keys] of Object.entries(fields)) {
+      const isRef = tipo?.properties[k]?.type === 'ref';
+      const created = !isRef || !Array.isArray(keys) ? keys : keys.filter((c) => c.value == null || change(c.value) != null).map((c) => (c.value == null ? c : { ...c, value: change(c.value) }));
+      if (!Array.isArray(created) || created.length) clean[k] = created;
     }
-    if (Object.keys(limpios).length) resultado[nuevo] = limpios;
+    if (Object.keys(clean).length) result[created] = clean;
   }
-  return resultado;
+  return result;
 }
 
 /**
  * Azúcar para la IA en las pistas de un clip: un path acepta una pista `d` (cada value, un trazado SVG) que se guarda
  * como pista de `vertices` (para el morph). Como en las poses, los vértices no guardan `bone`.
  */
-function expandirPistas(doc, esquema, tipo, props) {
+function expandTracks(doc, schema, tipo, props) {
   if (!props?.tracks || typeof props.tracks !== 'object' || Array.isArray(props.tracks)) return props;
-  if (!Object.values(esquema.tipos.get(tipo)?.properties ?? {}).some((p) => p.type === 'tracks')) return props;
+  if (!Object.values(schema.types.get(tipo)?.properties ?? {}).some((p) => p.type === 'tracks')) return props;
   const tracks = {};
-  for (const [id, campos] of Object.entries(props.tracks)) {
-    const tipoDestino = esquema.tipos.get(buscar(doc, id)?.type);
-    if (!tipoDestino?.properties.vertices || !campos || typeof campos !== 'object') {
-      tracks[id] = campos;
+  for (const [id, fields] of Object.entries(props.tracks)) {
+    const targetType = schema.types.get(findObject(doc, id)?.type);
+    if (!targetType?.properties.vertices || !fields || typeof fields !== 'object') {
+      tracks[id] = fields;
       continue;
     }
-    let { d, ...resto } = campos;
+    let { d, ...rest } = fields;
     if (Array.isArray(d)) {
-      resto.vertices = d.map((c) => {
+      rest.vertices = d.map((c) => {
         if (typeof c?.value !== 'string') return c;
-        const subtrazados = parsearD(c.value);
-        if (subtrazados.length !== 1) throw new Error(`${id}.d at t ${c.t}: the path has ${subtrazados.length} subpaths; a keyframe needs exactly one`);
-        return { ...c, value: subtrazados[0].vertices };
+        const subpaths = parseD(c.value);
+        if (subpaths.length !== 1) throw new Error(`${id}.d at t ${c.t}: the path has ${subpaths.length} subpaths; a keyframe needs exactly one`);
+        return { ...c, value: subpaths[0].vertices };
       });
-    } else if (d !== undefined) resto.d = d;
-    if (Array.isArray(resto.vertices)) resto.vertices = resto.vertices.map((c) => (Array.isArray(c?.value) ? { ...c, value: c.value.map(({ bone, ...v }) => v) } : c));
-    tracks[id] = resto;
+    } else if (d !== undefined) rest.d = d;
+    if (Array.isArray(rest.vertices)) rest.vertices = rest.vertices.map((c) => (Array.isArray(c?.value) ? { ...c, value: c.value.map(({ bone, ...v }) => v) } : c));
+    tracks[id] = rest;
   }
   return { ...props, tracks };
 }
 
 /** Azúcar para la IA: un bone acepta `from` y `to` ([x, y] en el documento) en vez de x, y, rotation y length. */
-function expandirHueso(doc, esquema, tipo, padre, props, actual) {
+function expandBone(doc, schema, tipo, parent, props, current) {
   if (props?.from === undefined && props?.to === undefined) return props;
   if (tipo !== 'bone') throw new Error(`"from"/"to" solo sirven en huesos (bone), no en ${tipo}`);
-  return expandirDesdeHasta(doc, esquema, padre, props, actual);
+  return expandFromTo(doc, schema, parent, props, current);
 }
 
-function comprobarProps(props) {
+function checkProps(props) {
   if (!props || typeof props !== 'object' || Array.isArray(props)) throw new Error('props debe ser un objeto { propiedad: valor }');
   for (const [k, v] of Object.entries(props)) {
-    if (ESTRUCTURA.has(k)) throw new Error(`"${k}" no se cambia con props (usa ${k === 'parent' ? 'move' : k === 'id' ? 'rename' : 'delete y create'})`);
+    if (STRUCTURE.has(k)) throw new Error(`"${k}" no se cambia con props (usa ${k === 'parent' ? 'move' : k === 'id' ? 'rename' : 'delete y create'})`);
     if (v === undefined) throw new Error(`falta el valor de "${k}"`);
   }
 }
 
-function aplicarUna(doc, op, esquema) {
+function applyOne(doc, op, schema) {
   switch (op?.op) {
     case 'create': {
-      const tipo = esquema.tipos.get(op.type);
-      if (!tipo) throw new Error(`tipo desconocido "${op.type}".${sugerir(op.type, esquema.tipos.keys())} Tipos: ${[...esquema.tipos.keys()].join(', ')}`);
-      if (errorDeId(op.id)) throw new Error(errorDeId(op.id));
-      const repetido = buscar(doc, op.id);
-      if (repetido) {
+      const tipo = schema.types.get(op.type);
+      if (!tipo) throw new Error(`tipo desconocido "${op.type}".${suggest(op.type, schema.types.keys())} Tipos: ${[...schema.types.keys()].join(', ')}`);
+      if (idError(op.id)) throw new Error(idError(op.id));
+      const repeated = findObject(doc, op.id);
+      if (repeated) {
         // Los ids son únicos en todo el documento: dibujo, huesos y recursos comparten el espacio de nombres.
-        const pista = op.type === 'bone' && repetido.type !== 'bone' ? ` Para huesos conviene el sufijo _bone: "${op.id}_bone".` : '';
-        throw new Error(`ya existe un objeto "${op.id}" (${repetido.type}).${pista}`);
+        const track = op.type === 'bone' && repeated.type !== 'bone' ? ` Para huesos conviene el sufijo _bone: "${op.id}_bone".` : '';
+        throw new Error(`ya existe un objeto "${op.id}" (${repeated.type}).${track}`);
       }
-      const padre = contenedor(doc, op.parent, esquema);
-      if (op.props !== undefined) comprobarProps(op.props);
-      const props = expandirPistas(doc, esquema, op.type, expandirPose(doc, esquema, op.type, expandirHueso(doc, esquema, op.type, padre, expandirD(tipo, op.props)))) ?? {};
-      insertar(doc, { id: op.id, type: op.type, parent: padre, ...structuredClone(props) }, padre, op.index);
+      const parent = container(doc, op.parent, schema);
+      if (op.props !== undefined) checkProps(op.props);
+      const props = expandTracks(doc, schema, op.type, expandPose(doc, schema, op.type, expandBone(doc, schema, op.type, parent, expandD(tipo, op.props)))) ?? {};
+      insert(doc, { id: op.id, type: op.type, parent: parent, ...structuredClone(props) }, parent, op.index);
       return [{ op: 'delete', target: op.id }];
     }
 
     case 'set': {
-      comprobarProps(op.props);
-      const obj = op.target === 'meta' ? doc.meta : objetivo(doc, op.target);
-      const props = op.target === 'meta' ? op.props : expandirPistas(doc, esquema, obj.type, expandirPose(doc, esquema, obj.type, expandirHueso(doc, esquema, obj.type, obj.parent ?? null, expandirD(esquema.tipos.get(obj.type), op.props), obj)));
-      const anteriores = {};
-      const nuevas = [];
+      checkProps(op.props);
+      const obj = op.target === 'meta' ? doc.meta : target(doc, op.target);
+      const props = op.target === 'meta' ? op.props : expandTracks(doc, schema, obj.type, expandPose(doc, schema, obj.type, expandBone(doc, schema, obj.type, obj.parent ?? null, expandD(schema.types.get(obj.type), op.props), obj)));
+      const previous = {};
+      const created = [];
       for (const [k, v] of Object.entries(props)) {
-        if (k in obj) anteriores[k] = obj[k];
-        else nuevas.push(k);
+        if (k in obj) previous[k] = obj[k];
+        else created.push(k);
         obj[k] = structuredClone(v);
       }
       const inversas = [];
-      if (Object.keys(anteriores).length) inversas.push({ op: 'set', target: op.target, props: anteriores });
-      if (nuevas.length) inversas.push({ op: 'unset', target: op.target, props: nuevas });
+      if (Object.keys(previous).length) inversas.push({ op: 'set', target: op.target, props: previous });
+      if (created.length) inversas.push({ op: 'unset', target: op.target, props: created });
       return inversas;
     }
 
     case 'unset': {
       if (!Array.isArray(op.props)) throw new Error('props debe ser una lista de nombres de propiedad');
-      const obj = op.target === 'meta' ? doc.meta : objetivo(doc, op.target);
-      const anteriores = {};
+      const obj = op.target === 'meta' ? doc.meta : target(doc, op.target);
+      const previous = {};
       for (const k of op.props) {
-        if (ESTRUCTURA.has(k)) throw new Error(`"${k}" no se puede quitar`);
+        if (STRUCTURE.has(k)) throw new Error(`"${k}" no se puede quitar`);
         if (k in obj) {
-          anteriores[k] = obj[k];
+          previous[k] = obj[k];
           delete obj[k];
         }
       }
-      return Object.keys(anteriores).length ? [{ op: 'set', target: op.target, props: anteriores }] : [];
+      return Object.keys(previous).length ? [{ op: 'set', target: op.target, props: previous }] : [];
     }
 
     case 'delete': {
-      objetivo(doc, op.target);
-      const ids = new Set(subarbol(doc, op.target));
-      const quitados = [];
-      doc.objects.forEach((o, pos) => ids.has(o.id) && quitados.push({ pos, obj: o }));
+      target(doc, op.target);
+      const ids = new Set(subtree(doc, op.target));
+      const removed = [];
+      doc.objects.forEach((o, pos) => ids.has(o.id) && removed.push({ pos, obj: o }));
       doc.objects = doc.objects.filter((o) => !ids.has(o.id));
       // Lo que apuntaba a algo borrado (un estilo, un hueso) se suelta; deshacer lo vuelve a enlazar.
-      const reenlazar = [];
+      const rebind = [];
       for (const o of doc.objects) {
-        const anteriores = {};
-        for (const [prop, p] of Object.entries(esquema.tipos.get(o.type)?.properties ?? {})) {
+        const previous = {};
+        for (const [prop, p] of Object.entries(schema.types.get(o.type)?.properties ?? {})) {
           if (p.type === 'ref' && ids.has(o[prop])) {
-            anteriores[prop] = o[prop];
+            previous[prop] = o[prop];
             delete o[prop];
           } else if (p.type === 'vertices' && o[prop]?.some((v) => ids.has(v.bone))) {
-            anteriores[prop] = structuredClone(o[prop]);
+            previous[prop] = structuredClone(o[prop]);
             o[prop] = o[prop].map(({ bone, ...v }) => (bone === undefined || ids.has(bone) ? v : { ...v, bone }));
           } else if ((p.type === 'pose' || p.type === 'tracks') && o[prop]) {
-            const limpia = (p.type === 'pose' ? mapearPose : mapearPistas)(doc, esquema, o[prop], (id) => (ids.has(id) ? null : id));
-            if (JSON.stringify(limpia) !== JSON.stringify(o[prop])) {
-              anteriores[prop] = structuredClone(o[prop]);
-              o[prop] = limpia;
+            const clean = (p.type === 'pose' ? mapPose : mapTracks)(doc, schema, o[prop], (id) => (ids.has(id) ? null : id));
+            if (JSON.stringify(clean) !== JSON.stringify(o[prop])) {
+              previous[prop] = structuredClone(o[prop]);
+              o[prop] = clean;
             }
           }
         }
-        if (Object.keys(anteriores).length) reenlazar.push({ op: 'set', target: o.id, props: anteriores });
+        if (Object.keys(previous).length) rebind.push({ op: 'set', target: o.id, props: previous });
       }
-      return [{ op: '_restore', root: op.target, entries: quitados }, ...reenlazar];
+      return [{ op: '_restore', root: op.target, entries: removed }, ...rebind];
     }
 
     case '_restore': {
@@ -317,97 +317,97 @@ function aplicarUna(doc, op, esquema) {
     }
 
     case 'move': {
-      const obj = objetivo(doc, op.target);
-      const padreAnterior = obj.parent ?? null;
-      const indexAnterior = hijos(doc, padreAnterior).indexOf(obj);
-      const padre = 'parent' in op ? contenedor(doc, op.parent, esquema) : padreAnterior;
-      if (padre != null && subarbol(doc, obj.id).includes(padre)) throw new Error(`"${obj.id}" no puede quedar dentro de sí mismo o de un descendiente`);
-      let posicion = null;
-      if (op.keepPosition && padre !== padreAnterior) {
+      const obj = target(doc, op.target);
+      const previousParent = obj.parent ?? null;
+      const previousIndex = children(doc, previousParent).indexOf(obj);
+      const parent = 'parent' in op ? container(doc, op.parent, schema) : previousParent;
+      if (parent != null && subtree(doc, obj.id).includes(parent)) throw new Error(`"${obj.id}" no puede quedar dentro de sí mismo o de un descendiente`);
+      let position = null;
+      if (op.keepPosition && parent !== previousParent) {
         if (obj.type === 'bone') throw new Error('keepPosition does not apply to bones: use reparent_bone, which keeps the bone in place');
-        posicion = posicionConservada(doc, esquema, obj, padre);
+        position = keptPosition(doc, schema, obj, parent);
       }
-      const posAnterior = doc.objects.indexOf(obj);
-      doc.objects.splice(posAnterior, 1);
-      obj.parent = padre;
-      insertar(doc, obj, padre, op.index);
-      /** @type {import('./types.js').Operacion[]} */
-      const inversas = [{ op: '_place', target: obj.id, parent: padreAnterior, pos: posAnterior }];
-      if (posicion) {
-        const anteriores = Object.fromEntries(['x', 'y'].filter((k) => k in obj).map((k) => [k, obj[k]]));
-        const nuevas = ['x', 'y'].filter((k) => !(k in obj));
-        Object.assign(obj, posicion);
-        if (nuevas.length) inversas.unshift({ op: 'unset', target: obj.id, props: nuevas });
-        if (Object.keys(anteriores).length) inversas.unshift({ op: 'set', target: obj.id, props: anteriores });
+      const previousPos = doc.objects.indexOf(obj);
+      doc.objects.splice(previousPos, 1);
+      obj.parent = parent;
+      insert(doc, obj, parent, op.index);
+      /** @type {import('./types.js').Operation[]} */
+      const inversas = [{ op: '_place', target: obj.id, parent: previousParent, pos: previousPos }];
+      if (position) {
+        const previous = Object.fromEntries(['x', 'y'].filter((k) => k in obj).map((k) => [k, obj[k]]));
+        const created = ['x', 'y'].filter((k) => !(k in obj));
+        Object.assign(obj, position);
+        if (created.length) inversas.unshift({ op: 'unset', target: obj.id, props: created });
+        if (Object.keys(previous).length) inversas.unshift({ op: 'set', target: obj.id, props: previous });
       }
       return inversas;
     }
 
     case '_place': {
       // Interna: inversa de move. Devuelve el objeto a su posición exacta en la lista plana.
-      const obj = objetivo(doc, op.target);
-      const inversa = { op: '_place', target: obj.id, parent: obj.parent ?? null, pos: doc.objects.indexOf(obj) };
-      doc.objects.splice(inversa.pos, 1);
+      const obj = target(doc, op.target);
+      const inverse = { op: '_place', target: obj.id, parent: obj.parent ?? null, pos: doc.objects.indexOf(obj) };
+      doc.objects.splice(inverse.pos, 1);
       obj.parent = op.parent;
       doc.objects.splice(op.pos, 0, obj);
-      return [inversa];
+      return [inverse];
     }
 
     case 'rename': {
-      const obj = objetivo(doc, op.target);
-      if (errorDeId(op.id)) throw new Error(errorDeId(op.id));
-      if (buscar(doc, op.id)) throw new Error(`ya existe un objeto "${op.id}"`);
-      const anterior = obj.id;
+      const obj = target(doc, op.target);
+      if (idError(op.id)) throw new Error(idError(op.id));
+      if (findObject(doc, op.id)) throw new Error(`ya existe un objeto "${op.id}"`);
+      const previous = obj.id;
       obj.id = op.id;
       for (const o of doc.objects) {
-        if (o.parent === anterior) o.parent = op.id;
-        const tipo = esquema.tipos.get(o.type);
+        if (o.parent === previous) o.parent = op.id;
+        const tipo = schema.types.get(o.type);
         for (const [prop, p] of Object.entries(tipo?.properties ?? {})) {
-          if (p.type === 'ref' && o[prop] === anterior) o[prop] = op.id;
-          if (p.type === 'pose' && o[prop]) o[prop] = mapearPose(doc, esquema, o[prop], (id) => (id === anterior ? op.id : id));
-          if (p.type === 'tracks' && o[prop]) o[prop] = mapearPistas(doc, esquema, o[prop], (id) => (id === anterior ? op.id : id));
-          if (p.type === 'vertices' && o[prop]?.some((v) => v.bone === anterior)) o[prop] = o[prop].map((v) => (v.bone === anterior ? { ...v, bone: op.id } : v));
+          if (p.type === 'ref' && o[prop] === previous) o[prop] = op.id;
+          if (p.type === 'pose' && o[prop]) o[prop] = mapPose(doc, schema, o[prop], (id) => (id === previous ? op.id : id));
+          if (p.type === 'tracks' && o[prop]) o[prop] = mapTracks(doc, schema, o[prop], (id) => (id === previous ? op.id : id));
+          if (p.type === 'vertices' && o[prop]?.some((v) => v.bone === previous)) o[prop] = o[prop].map((v) => (v.bone === previous ? { ...v, bone: op.id } : v));
         }
       }
-      return [{ op: 'rename', target: op.id, id: anterior }];
+      return [{ op: 'rename', target: op.id, id: previous }];
     }
 
     case 'duplicate': {
-      const original = objetivo(doc, op.target);
-      const sufijo = op.suffix ?? 'copy';
-      if (!/^[a-z0-9_]+$/.test(sufijo)) throw new Error(`suffix inválido "${sufijo}": minúsculas, números y _`);
-      const ids = subarbol(doc, original.id);
-      const mapa = new Map(ids.map((id) => [id, id === original.id && op.id ? op.id : `${id}_${sufijo}`]));
-      for (const nuevo of mapa.values()) {
-        if (errorDeId(nuevo)) throw new Error(errorDeId(nuevo));
-        if (buscar(doc, nuevo)) throw new Error(`ya existe un objeto "${nuevo}"; elige otro id o suffix`);
+      const original = target(doc, op.target);
+      const suffix = op.suffix ?? 'copy';
+      if (!/^[a-z0-9_]+$/.test(suffix)) throw new Error(`suffix inválido "${suffix}": minúsculas, números y _`);
+      const ids = subtree(doc, original.id);
+      const map = new Map(ids.map((id) => [id, id === original.id && op.id ? op.id : `${id}_${suffix}`]));
+      for (const created of map.values()) {
+        if (idError(created)) throw new Error(idError(created));
+        if (findObject(doc, created)) throw new Error(`ya existe un objeto "${created}"; elige otro id o suffix`);
       }
-      const padreOriginal = original.parent ?? null;
-      const padre = 'parent' in op ? contenedor(doc, op.parent, esquema) : padreOriginal;
-      if (op.props !== undefined) comprobarProps(op.props);
+      const originalParent = original.parent ?? null;
+      const parent = 'parent' in op ? container(doc, op.parent, schema) : originalParent;
+      if (op.props !== undefined) checkProps(op.props);
 
       // Copias en el orden de la lista plana, con padres y referencias apuntando a las copias.
-      const copias = doc.objects
-        .filter((o) => mapa.has(o.id))
+      const copies = doc.objects
+        .filter((o) => map.has(o.id))
         .map((o) => {
           const c = structuredClone(o);
-          c.id = mapa.get(o.id);
-          c.parent = o.id === original.id ? padre : mapa.get(o.parent);
-          for (const [prop, p] of Object.entries(esquema.tipos.get(c.type)?.properties ?? {})) {
-            if (p.type === 'ref' && mapa.has(c[prop])) c[prop] = mapa.get(c[prop]);
+          c.id = map.get(o.id);
+          c.parent = o.id === original.id ? parent : map.get(o.parent);
+          for (const [prop, p] of Object.entries(schema.types.get(c.type)?.properties ?? {})) {
+            if (p.type === 'ref' && map.has(c[prop])) c[prop] = map.get(c[prop]);
             // Al copiar un skeleton entero, los vértices enlazados por punto siguen a los huesos copiados.
-            if (p.type === 'vertices' && c[prop]?.some((v) => mapa.has(v.bone))) c[prop] = c[prop].map((v) => (mapa.has(v.bone) ? { ...v, bone: mapa.get(v.bone) } : v));
+            if (p.type === 'vertices' && c[prop]?.some((v) => map.has(v.bone))) c[prop] = c[prop].map((v) => (map.has(v.bone) ? { ...v, bone: map.get(v.bone) } : v));
           }
           return c;
         });
-      const raiz = copias.find((c) => c.id === mapa.get(original.id));
-      Object.assign(raiz, structuredClone(op.props ?? {}));
+      const root = copies.find((c) => c.id === map.get(original.id));
+      Object.assign(root, structuredClone(op.props ?? {}));
       // Por defecto queda justo delante del original.
-      const index = op.index ?? (padre === padreOriginal ? hijos(doc, padre).indexOf(original) + 1 : undefined);
-      insertar(doc, raiz, padre, index);
-      let pos = doc.objects.indexOf(raiz) + 1;
-      for (const c of copias) if (c !== raiz) doc.objects.splice(pos++, 0, c);
-      return [{ op: 'delete', target: raiz.id }];
+      const index = op.index ?? (parent === originalParent ? children(doc, parent).indexOf(original) + 1 : undefined);
+      insert(doc, root, parent, index);
+      let pos = doc.objects.indexOf(root) + 1;
+      for (const c of copies) if (c !== root) doc.objects.splice(pos++, 0, c);
+      return [{ op: 'delete', target: root.id }];
     }
 
     default:

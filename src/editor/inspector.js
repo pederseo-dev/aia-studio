@@ -3,144 +3,144 @@
 // Con varios objetos seleccionados muestra las propiedades que tienen todos; lo que se cambia se aplica a todos, y los
 // campos donde los valores difieren se marcan como mixtos (muestran el valor del objeto principal).
 
-import { buscar, esqueletoDe } from '../core/document.js';
-import { leer, leerMeta, validarValor } from '../core/schema.js';
-import { opsDeTamano } from '../core/artboard.js';
-import { valoresDeHueso } from '../core/skeleton.js';
-import { origenDelValor, valorEfectivo } from '../core/styles.js';
-import { clipAbierto, nombreDeEdicion, opsDePose, poseActiva } from './editing.js';
-import { ejecutar, esquema, estado, fijar, previsualizar, seleccionar, suscribir } from './state.js';
-import { reemplazarImagen, soloImagenes, tamanoNatural, urlDeAsset } from './images.js';
+import { findObject, skeletonOf } from '../core/document.js';
+import { read, readMeta, validateValue } from '../core/schema.js';
+import { artboardOps } from '../core/artboard.js';
+import { boneValues } from '../core/skeleton.js';
+import { valueOrigin, effectiveValue } from '../core/styles.js';
+import { openedClip, editingName, poseOps, activePose } from './editing.js';
+import { execute, schema, state, setState, preview, select, subscribe } from './state.js';
+import { replaceImage, imagesOnly, naturalSize, assetUrl } from './images.js';
 
-const ORDEN_DE_GRUPOS = ['General', 'Imagen', 'Forma', 'Transformación', 'Apariencia', 'Degradado', 'Lienzo', 'Tiempo'];
+const GROUP_ORDER = ['General', 'Imagen', 'Forma', 'Transformación', 'Apariencia', 'Degradado', 'Lienzo', 'Tiempo'];
 // Nombres de grupo del esquema, como se muestran (el esquema sigue en español).
-const NOMBRES_DE_GRUPO = { General: 'General', Imagen: 'Image', Forma: 'Shape', Transformación: 'Transform', Apariencia: 'Appearance', Degradado: 'Gradient', Lienzo: 'Canvas', Tiempo: 'Time', Driver: 'Driver', Esqueleto: 'Skeleton', Hueso: 'Bone', Límites: 'Limits', Parámetro: 'Parameter', Pose: 'Pose', Switch: 'Switch', Tramo: 'Range', Otros: 'Other' };
-const PARES = { x: 'y', scaleX: 'scaleY', width: 'height', originX: 'originY', x1: 'y1', x2: 'y2', cx: 'cy' };
+const GROUP_NAMES = { General: 'General', Imagen: 'Image', Forma: 'Shape', Transformación: 'Transform', Apariencia: 'Appearance', Degradado: 'Gradient', Lienzo: 'Canvas', Tiempo: 'Time', Driver: 'Driver', Esqueleto: 'Skeleton', Hueso: 'Bone', Límites: 'Limits', Parámetro: 'Parameter', Pose: 'Pose', Switch: 'Switch', Tramo: 'Range', Otros: 'Other' };
+const PAIRS = { x: 'y', scaleX: 'scaleY', width: 'height', originX: 'originY', x1: 'y1', x2: 'y2', cx: 'cy' };
 // En una fila de par, el nombre de la fila va en la columna de etiquetas y cada mitad lleva solo su letra (como Rive).
-const NOMBRES_DE_PAR = { x: 'Position', scaleX: 'Scale', width: 'Size', originX: 'Pivot', x1: 'Start', x2: 'End', cx: 'Center' };
-const LETRAS_DE_PAR = { x: 'X', y: 'Y', scaleX: 'X', scaleY: 'Y', width: 'W', height: 'H', originX: 'X', originY: 'Y', x1: 'X', y1: 'Y', x2: 'X', y2: 'Y', cx: 'X', cy: 'Y' };
-const ETIQUETAS = { x: 'X', y: 'Y', scaleX: 'SX', scaleY: 'SY', width: 'W', height: 'H', originX: 'PX', originY: 'PY', x1: 'X1', y1: 'Y1', x2: 'X2', y2: 'Y2', cx: 'CX', cy: 'CY' };
+const PAIR_NAMES = { x: 'Position', scaleX: 'Scale', width: 'Size', originX: 'Pivot', x1: 'Start', x2: 'End', cx: 'Center' };
+const PAIR_LETTERS = { x: 'X', y: 'Y', scaleX: 'X', scaleY: 'Y', width: 'W', height: 'H', originX: 'X', originY: 'Y', x1: 'X', y1: 'Y', x2: 'X', y2: 'Y', cx: 'X', cy: 'Y' };
+const LABELS = { x: 'X', y: 'Y', scaleX: 'SX', scaleY: 'SY', width: 'W', height: 'H', originX: 'PX', originY: 'PY', x1: 'X1', y1: 'Y1', x2: 'X2', y2: 'Y2', cx: 'CX', cy: 'CY' };
 
-export function montarInspector(raiz) {
-  suscribir((c) => {
+export function mountInspector(root) {
+  subscribe((c) => {
     // El tiempo cambia los valores de un clip; mientras se reproduce no se rehace (sería en cada cuadro).
-    if ('doc' in c || 'seleccion' in c || 'edicion' in c || 'pose' in c || ('tiempo' in c && !estado.reproduciendo) || ('reproduciendo' in c && !estado.reproduciendo)) dibujar();
+    if ('doc' in c || 'selection' in c || 'editing' in c || 'pose' in c || ('time' in c && !state.playing) || ('playing' in c && !state.playing)) draw();
   });
 
-  function dibujar() {
-    const doc = estado.doc;
-    if (!doc) return raiz.replaceChildren();
-    const enFoco = raiz.contains(document.activeElement) ? (/** @type {HTMLElement} */ (document.activeElement.closest('[data-prop]')))?.dataset.prop : null;
+  function draw() {
+    const doc = state.doc;
+    if (!doc) return root.replaceChildren();
+    const inFocus = root.contains(document.activeElement) ? (/** @type {HTMLElement} */ (document.activeElement.closest('[data-prop]')))?.dataset.prop : null;
 
-    const obj = estado.seleccion ? buscar(doc, estado.seleccion) : null;
-    const tipo = obj ? esquema.tipos.get(obj.type) : esquema.meta;
-    const objetivo = obj ? obj.id : 'meta';
-    const datos = obj ?? doc.meta;
-    const otros = obj ? estado.seleccionados.map((id) => buscar(doc, id)).filter((o) => o && o.id !== obj.id) : [];
+    const obj = state.selection ? findObject(doc, state.selection) : null;
+    const tipo = obj ? schema.types.get(obj.type) : schema.meta;
+    const target = obj ? obj.id : 'meta';
+    const data = obj ?? doc.meta;
+    const others = obj ? state.selected.map((id) => findObject(doc, id)).filter((o) => o && o.id !== obj.id) : [];
     // Con varios: solo lo que tienen todos (y que se puede editar en bloque).
-    const comun = ([prop, p]) => !otros.length || (!['vertices', 'stops'].includes(p.type) && otros.every((o) => esquema.tipos.get(o.type).properties[prop]?.type === p.type));
+    const common = ([prop, p]) => !others.length || (!['vertices', 'stops'].includes(p.type) && others.every((o) => schema.types.get(o.type).properties[prop]?.type === p.type));
     // Lo de Live es de los clips de Puppet (una escena no se dispara), y la espera del auto, solo con auto repeat.
-    const deLive = ([prop, p]) =>
-      obj?.type !== 'animation' || otros.length || p.group !== 'Live' || (leer(esquema, obj, 'usage') === 'puppet' && (!prop.startsWith('repeat_') || leer(esquema, obj, 'auto') === 'repeat'));
-    const propiedades = Object.entries(tipo.properties).filter(comun).filter(deLive);
-    contexto = { otros };
+    const fromLive = ([prop, p]) =>
+      obj?.type !== 'animation' || others.length || p.group !== 'Live' || (read(schema, obj, 'usage') === 'puppet' && (!prop.startsWith('repeat_') || read(schema, obj, 'auto') === 'repeat'));
+    const properties = Object.entries(tipo.properties).filter(common).filter(fromLive);
+    context = { others };
 
-    raiz.replaceChildren(otros.length ? tituloVarios(obj, otros) : obj ? titulo(obj, tipo) : Object.assign(document.createElement('h2'), { textContent: 'Artboard' }));
-    if (otros.length && !propiedades.length) raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'No properties in common.' }));
-    const pose = poseActiva();
-    if (pose && obj && !otros.length && !tipo.resource) seccionDePose(obj, tipo, pose);
+    root.replaceChildren(others.length ? severalTitle(obj, others) : obj ? title(obj, tipo) : Object.assign(document.createElement('h2'), { textContent: 'Artboard' }));
+    if (others.length && !properties.length) root.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'No properties in common.' }));
+    const pose = activePose();
+    if (pose && obj && !others.length && !tipo.resource) poseSection(obj, tipo, pose);
 
-    const grupos = Map.groupBy(propiedades, ([, p]) => p.group ?? 'Otros');
-    const nombres = [...grupos.keys()].sort((a, b) => (ORDEN_DE_GRUPOS.indexOf(a) + 1 || 99) - (ORDEN_DE_GRUPOS.indexOf(b) + 1 || 99));
-    for (const nombre of nombres) {
-      raiz.append(Object.assign(document.createElement('h3'), { textContent: NOMBRES_DE_GRUPO[nombre] ?? nombre }));
-      const props = grupos.get(nombre);
-      const enPar = new Set();
+    const groups = Map.groupBy(properties, ([, p]) => p.group ?? 'Otros');
+    const names = [...groups.keys()].sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99));
+    for (const name of names) {
+      root.append(Object.assign(document.createElement('h3'), { textContent: GROUP_NAMES[name] ?? name }));
+      const props = groups.get(name);
+      const inPair = new Set();
       for (const [prop, p] of props) {
-        if (enPar.has(prop)) continue;
+        if (inPair.has(prop)) continue;
         // Pares (x/y, ancho/alto, escala) en una sola fila, como en Rive.
-        const pareja = PARES[prop] && props.find(([q]) => q === PARES[prop]);
-        if (pareja) {
-          enPar.add(pareja[0]);
-          const fila = document.createElement('div');
-          fila.className = 'par';
-          const nombre = Object.assign(document.createElement('span'), { className: 'nombre-par', textContent: NOMBRES_DE_PAR[prop] ?? prop });
-          fila.append(nombre, campo(objetivo, datos, prop, p, LETRAS_DE_PAR[prop]), campo(objetivo, datos, pareja[0], pareja[1], LETRAS_DE_PAR[pareja[0]]));
-          raiz.append(fila);
+        const pair = PAIRS[prop] && props.find(([q]) => q === PAIRS[prop]);
+        if (pair) {
+          inPair.add(pair[0]);
+          const row = document.createElement('div');
+          row.className = 'par';
+          const name = Object.assign(document.createElement('span'), { className: 'nombre-par', textContent: PAIR_NAMES[prop] ?? prop });
+          row.append(name, field(target, data, prop, p, PAIR_LETTERS[prop]), field(target, data, pair[0], pair[1], PAIR_LETTERS[pair[0]]));
+          root.append(row);
         } else {
-          raiz.append(campo(objetivo, datos, prop, p));
+          root.append(field(target, data, prop, p));
         }
       }
     }
 
-    if (enFoco) raiz.querySelector(`[data-prop="${enFoco}"] input, [data-prop="${enFoco}"] select`)?.focus();
+    if (inFocus) root.querySelector(`[data-prop="${inFocus}"] input, [data-prop="${inFocus}"] select`)?.focus();
   }
 
   /**
    * Con una pose activa, lo animable del objeto en esa pose: lo que la pose fija se ve normal y lo demás (que sigue
    * como en el montaje), atenuado. Cambiar un campo lo agrega a la pose; ↺ lo quita.
    */
-  function seccionDePose(obj, tipo, pose) {
-    const animables = Object.entries(tipo.properties).filter(([, p]) => p.animatable);
-    if (!animables.length) return;
-    const clip = clipAbierto();
-    const titulo = clip ? `Clip “${clip.id}” at ${+estado.tiempo.toFixed(3)} s` : `Pose “${pose.id}”`;
-    raiz.append(Object.assign(document.createElement('h3'), { className: 'en-pose', textContent: titulo }));
+  function poseSection(obj, tipo, pose) {
+    const animatable = Object.entries(tipo.properties).filter(([, p]) => p.animatable);
+    if (!animatable.length) return;
+    const clip = openedClip();
+    const title = clip ? `Clip “${clip.id}” at ${+state.time.toFixed(3)} s` : `Pose “${pose.id}”`;
+    root.append(Object.assign(document.createElement('h3'), { className: 'en-pose', textContent: title }));
     // En un clip, «fijado» es lo que tiene pista; el valor es el que se ve en el tiempo del playhead.
-    const fijados = clip ? Object.fromEntries(Object.keys(clip.tracks?.[obj.id] ?? {}).map((k) => [k, pose.values?.[obj.id]?.[k]])) : (pose.values?.[obj.id] ?? {});
-    const deHueso = obj.type === 'bone' ? valoresDeHueso(esquema, obj, pose) : null;
-    const valor = (k) => (deHueso ? deHueso[k] : (pose.values?.[obj.id]?.[k] ?? valorEfectivo(esquema, estado.doc, obj, k)));
-    const enPar = new Set();
-    for (const [k, p] of animables) {
-      if (enPar.has(k)) continue;
-      const pareja = PARES[k] && animables.find(([q]) => q === PARES[k]);
-      if (pareja) {
-        enPar.add(pareja[0]);
-        const fila = document.createElement('div');
-        fila.className = 'par';
-        fila.append(campoDePose(obj, pose, k, p, valor(k), k in fijados), campoDePose(obj, pose, pareja[0], pareja[1], valor(pareja[0]), pareja[0] in fijados));
-        raiz.append(fila);
+    const fixed = clip ? Object.fromEntries(Object.keys(clip.tracks?.[obj.id] ?? {}).map((k) => [k, pose.values?.[obj.id]?.[k]])) : (pose.values?.[obj.id] ?? {});
+    const fromBone = obj.type === 'bone' ? boneValues(schema, obj, pose) : null;
+    const value = (k) => (fromBone ? fromBone[k] : (pose.values?.[obj.id]?.[k] ?? effectiveValue(schema, state.doc, obj, k)));
+    const inPair = new Set();
+    for (const [k, p] of animatable) {
+      if (inPair.has(k)) continue;
+      const pair = PAIRS[k] && animatable.find(([q]) => q === PAIRS[k]);
+      if (pair) {
+        inPair.add(pair[0]);
+        const row = document.createElement('div');
+        row.className = 'par';
+        row.append(poseField(obj, pose, k, p, value(k), k in fixed), poseField(obj, pose, pair[0], pair[1], value(pair[0]), pair[0] in fixed));
+        root.append(row);
       } else {
-        raiz.append(campoDePose(obj, pose, k, p, valor(k), k in fijados));
+        root.append(poseField(obj, pose, k, p, value(k), k in fixed));
       }
     }
-    const ayuda = clip ? 'Changing a value keys it at the playhead (autokey); ↺ removes that keyframe. Below is the setup (the rest pose).' : 'Below is the setup (the rest pose).';
-    raiz.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: ayuda }));
+    const help = clip ? 'Changing a value keys it at the playhead (autokey); ↺ removes that keyframe. Below is the setup (the rest pose).' : 'Below is the setup (the rest pose).';
+    root.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: help }));
   }
 
-  function campoDePose(obj, pose, k, p, valor, fijado) {
+  function poseField(obj, pose, k, p, value, fixed) {
     const div = document.createElement('div');
-    div.className = `campo${fijado ? '' : ' por-defecto'}`;
+    div.className = `campo${fixed ? '' : ' por-defecto'}`;
     div.dataset.prop = `pose.${k}`;
-    const label = Object.assign(document.createElement('label'), { textContent: ETIQUETAS[k] ?? k });
-    const enClip = !!clipAbierto();
-    label.title = enClip ? `${k} in the clip${fijado ? '' : ' (no track yet: uses the setup value)'}` : `${k} in the pose${fijado ? '' : ' (not set by the pose: uses the setup value)'}`;
-    const cambio = (v) => opsDePose(estado.doc, pose.id, obj.id, { [k]: v });
-    const confirmar = (v) => {
-      if (Object.is(v, valor) && fijado) return previsualizar(null);
-      ejecutar(cambio(v), `${nombreDeEdicion(pose.id)}: ${obj.id}.${k}`, { agrupar: `pose:${pose.id}.${obj.id}.${k}` });
+    const label = Object.assign(document.createElement('label'), { textContent: LABELS[k] ?? k });
+    const inClip = !!openedClip();
+    label.title = inClip ? `${k} in the clip${fixed ? '' : ' (no track yet: uses the setup value)'}` : `${k} in the pose${fixed ? '' : ' (not set by the pose: uses the setup value)'}`;
+    const change = (v) => poseOps(state.doc, pose.id, obj.id, { [k]: v });
+    const commit = (v) => {
+      if (Object.is(v, value) && fixed) return preview(null);
+      execute(change(v), `${editingName(pose.id)}: ${obj.id}.${k}`, { group: `pose:${pose.id}.${obj.id}.${k}` });
     };
-    const control = CONTROLES[p.type]({ p, valor, previsualizar: (v) => previsualizar(cambio(v)), confirmar, div, label, objetivo: obj.id });
-    const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: enClip ? 'Remove the keyframe at the playhead' : 'Remove from pose (back to setup)' });
-    restablecer.addEventListener('click', () => ejecutar(opsDePose(estado.doc, pose.id, obj.id, { [k]: undefined }), `${nombreDeEdicion(pose.id)}: ${obj.id}.${k} ${enClip ? 'key removed' : 'from setup'}`));
-    div.append(label, control, restablecer);
+    const control = CONTROLS[p.type]({ p, value, preview: (v) => preview(change(v)), commit, div, label, target: obj.id });
+    const reset = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: inClip ? 'Remove the keyframe at the playhead' : 'Remove from pose (back to setup)' });
+    reset.addEventListener('click', () => execute(poseOps(state.doc, pose.id, obj.id, { [k]: undefined }), `${editingName(pose.id)}: ${obj.id}.${k} ${inClip ? 'key removed' : 'from setup'}`));
+    div.append(label, control, reset);
     return div;
   }
 
   // Lo que el campo necesita saber de una selección múltiple (se arma en cada dibujo).
-  let contexto = { otros: [] };
+  let context = { others: [] };
 
-  function tituloVarios(obj, otros) {
+  function severalTitle(obj, others) {
     const div = document.createElement('div');
     div.className = 'titulo-varios';
-    const nombres = [obj, ...otros].map((o) => o.id);
-    div.innerHTML = `<h2>${nombres.length} objects</h2><p class="ayuda"></p>`;
-    div.querySelector('p').textContent = nombres.join(', ');
+    const names = [obj, ...others].map((o) => o.id);
+    div.innerHTML = `<h2>${names.length} objects</h2><p class="ayuda"></p>`;
+    div.querySelector('p').textContent = names.join(', ');
     div.title = `Primary: ${obj.id}. Changes apply to all.`;
     return div;
   }
 
-  function titulo(obj, tipo) {
+  function title(obj, tipo) {
     const div = document.createElement('div');
     div.className = 'campo';
     div.dataset.prop = '__id';
@@ -148,82 +148,82 @@ export function montarInspector(raiz) {
     const input = div.querySelector('input');
     input.value = obj.id;
     input.addEventListener('change', async () => {
-      const nuevo = input.value.trim();
-      if (!nuevo || nuevo === obj.id) return (input.value = obj.id);
-      const anterior = obj.id;
-      await ejecutar([{ op: 'rename', target: anterior, id: nuevo }], `rename ${anterior} → ${nuevo}`);
-      if (buscar(estado.doc, nuevo)) seleccionar(nuevo);
+      const created = input.value.trim();
+      if (!created || created === obj.id) return (input.value = obj.id);
+      const previous = obj.id;
+      await execute([{ op: 'rename', target: previous, id: created }], `rename ${previous} → ${created}`);
+      if (findObject(state.doc, created)) select(created);
     });
     return div;
   }
 
-  function campo(objetivo, datos, prop, p, etiqueta) {
-    const esObjeto = objetivo !== 'meta';
-    const origen = esObjeto ? origenDelValor(estado.doc, datos, prop) : datos[prop] !== undefined ? 'propio' : 'defecto';
-    const valor = esObjeto ? valorEfectivo(esquema, estado.doc, datos, prop) : (datos[prop] ?? p.default);
-    const { otros } = contexto;
-    const objetivos = [objetivo, ...otros.map((o) => o.id)];
-    const mixto = otros.some((o) => JSON.stringify(valorEfectivo(esquema, estado.doc, o, prop)) !== JSON.stringify(valor));
+  function field(target, data, prop, p, labelText) {
+    const isObject = target !== 'meta';
+    const origen = isObject ? valueOrigin(state.doc, data, prop) : data[prop] !== undefined ? 'propio' : 'defecto';
+    const value = isObject ? effectiveValue(schema, state.doc, data, prop) : (data[prop] ?? p.default);
+    const { others } = context;
+    const targets = [target, ...others.map((o) => o.id)];
+    const mixed = others.some((o) => JSON.stringify(effectiveValue(schema, state.doc, o, prop)) !== JSON.stringify(value));
     const div = document.createElement('div');
-    div.className = `campo${origen === 'defecto' ? ' por-defecto' : origen === 'estilo' ? ' por-defecto por-estilo' : ''}${mixto ? ' mixto' : ''}`;
+    div.className = `campo${origen === 'defecto' ? ' por-defecto' : origen === 'estilo' ? ' por-defecto por-estilo' : ''}${mixed ? ' mixto' : ''}`;
     div.dataset.prop = prop;
     const label = document.createElement('label');
-    label.textContent = etiqueta ?? prop;
-    const deDonde = origen === 'estilo' ? `\nFrom style "${datos.style}".` : '';
-    label.title = `${prop}: ${p.help ?? ''}${p.default !== undefined ? `\nDefault: ${JSON.stringify(p.default)}` : ''}${deDonde}${mixto ? `\nMixed values: showing ${objetivo}.` : ''}`;
-    const restablecer = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Reset to default' });
-    const nombre = otros.length ? `${objetivos.length} objects` : objetivo;
+    label.textContent = labelText ?? prop;
+    const whence = origen === 'estilo' ? `\nFrom style "${data.style}".` : '';
+    label.title = `${prop}: ${p.help ?? ''}${p.default !== undefined ? `\nDefault: ${JSON.stringify(p.default)}` : ''}${whence}${mixed ? `\nMixed values: showing ${target}.` : ''}`;
+    const reset = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Reset to default' });
+    const name = others.length ? `${targets.length} objects` : target;
 
     // El tamaño del lienzo cambia con el dibujo centrado, como la herramienta Artboard y Project Settings.
-    const tamano = objetivo === 'meta' && (prop === 'width' || prop === 'height');
-    const cambio = (v) =>
-      tamano
-        ? opsDeTamano(estado.doc, esquema, prop === 'width' ? v : leerMeta(esquema, estado.doc, 'width'), prop === 'height' ? v : leerMeta(esquema, estado.doc, 'height'))
-        : objetivos.map((t) => ({ op: 'set', target: t, props: { [prop]: v } }));
-    restablecer.addEventListener('click', () => ejecutar(tamano ? cambio(p.default) : objetivos.map((t) => ({ op: 'unset', target: t, props: [prop] })), `${nombre}.${prop} reset`));
+    const size = target === 'meta' && (prop === 'width' || prop === 'height');
+    const change = (v) =>
+      size
+        ? artboardOps(state.doc, schema, prop === 'width' ? v : readMeta(schema, state.doc, 'width'), prop === 'height' ? v : readMeta(schema, state.doc, 'height'))
+        : targets.map((t) => ({ op: 'set', target: t, props: { [prop]: v } }));
+    reset.addEventListener('click', () => execute(size ? change(p.default) : targets.map((t) => ({ op: 'unset', target: t, props: [prop] })), `${name}.${prop} reset`));
     // Varios cambios seguidos de la misma propiedad (flechitas del campo, escribir y corregir) son un solo paso.
-    const confirmar = (v) => {
-      if (Object.is(v, valor) && !mixto) return previsualizar(null);
-      ejecutar(cambio(v), `${nombre}.${prop}`, { agrupar: `${objetivos.join()}.${prop}` });
+    const commit = (v) => {
+      if (Object.is(v, value) && !mixed) return preview(null);
+      execute(change(v), `${name}.${prop}`, { group: `${targets.join()}.${prop}` });
     };
-    const control = CONTROLES[p.type]({ p, valor, previsualizar: (v) => previsualizar(cambio(v)), confirmar, div, label, objetivo });
-    div.append(label, control, restablecer);
+    const control = CONTROLS[p.type]({ p, value, preview: (v) => preview(change(v)), commit, div, label, target });
+    div.append(label, control, reset);
     return div;
   }
 }
 
-const CONTROLES = {
-  number({ p, valor, previsualizar: ver, confirmar, div, label }) {
+const CONTROLS = {
+  number({ p, value, preview: see, commit, div, label }) {
     const input = document.createElement('input');
     input.type = 'number';
     input.step = p.step ?? 1;
     if (p.min != null) input.min = p.min;
     if (p.max != null) input.max = p.max;
-    input.value = valor;
-    const leerInput = () => {
+    input.value = value;
+    const readInput = () => {
       const v = input.value === '' ? NaN : Number(input.value);
-      const error = validarValor(p, v);
+      const error = validateValue(p, v);
       div.classList.toggle('invalido', !!error);
       input.title = error ?? '';
       return error ? null : v;
     };
     input.addEventListener('input', () => {
-      const v = leerInput();
-      if (v != null) ver(v);
+      const v = readInput();
+      if (v != null) see(v);
     });
     input.addEventListener('change', () => {
-      const v = leerInput();
+      const v = readInput();
       if (v == null) {
-        input.value = valor;
+        input.value = value;
         div.classList.remove('invalido');
-        return previsualizar(null);
+        return preview(null);
       }
-      confirmar(v);
+      commit(v);
     });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        input.value = valor;
-        previsualizar(null);
+        input.value = value;
+        preview(null);
         input.blur();
       }
     });
@@ -234,193 +234,193 @@ const CONTROLES = {
       e.preventDefault();
       label.setPointerCapture(e.pointerId);
       const x0 = e.clientX;
-      const paso = p.step ?? 1;
-      let actual = valor;
-      const mover = (ev) => {
+      const step = p.step ?? 1;
+      let current = value;
+      const move = (ev) => {
         const factor = ev.shiftKey ? 0.1 : ev.altKey ? 10 : 1;
-        let v = valor + Math.round((ev.clientX - x0) * factor) * paso;
+        let v = value + Math.round((ev.clientX - x0) * factor) * step;
         if (p.min != null) v = Math.max(p.min, v);
         if (p.max != null) v = Math.min(p.max, v);
         if (p.integer) v = Math.round(v);
-        actual = +v.toFixed(4);
-        input.value = actual;
-        ver(actual);
+        current = +v.toFixed(4);
+        input.value = current;
+        see(current);
       };
-      const soltar = () => {
-        label.removeEventListener('pointermove', mover);
-        label.removeEventListener('pointerup', soltar);
-        confirmar(actual);
+      const release = () => {
+        label.removeEventListener('pointermove', move);
+        label.removeEventListener('pointerup', release);
+        commit(current);
       };
-      label.addEventListener('pointermove', mover);
-      label.addEventListener('pointerup', soltar);
+      label.addEventListener('pointermove', move);
+      label.addEventListener('pointerup', release);
     });
     return input;
   },
 
-  color({ p, valor, previsualizar: ver, confirmar }) {
-    const caja = document.createElement('div');
-    caja.className = 'color';
+  color({ p, value, preview: see, commit }) {
+    const box = document.createElement('div');
+    box.className = 'color';
     const selector = Object.assign(document.createElement('input'), { type: 'color' });
-    const texto = Object.assign(document.createElement('input'), { type: 'text', spellcheck: false });
-    const aSeisDigitos = (c) => (c.length === 4 ? '#' + [...c.slice(1)].map((d) => d + d).join('') : c.slice(0, 7));
-    selector.value = valor ? aSeisDigitos(valor) : '#000000';
-    selector.disabled = valor == null;
-    texto.value = valor ?? '';
-    texto.placeholder = 'none';
-    selector.addEventListener('input', () => ver(selector.value));
-    selector.addEventListener('change', () => confirmar(selector.value));
-    texto.addEventListener('change', () => {
-      const v = texto.value.trim() === '' && p.nullable ? null : texto.value.trim();
-      if (validarValor(p, v)) {
-        texto.value = valor ?? '';
+    const text = Object.assign(document.createElement('input'), { type: 'text', spellcheck: false });
+    const toSixDigits = (c) => (c.length === 4 ? '#' + [...c.slice(1)].map((d) => d + d).join('') : c.slice(0, 7));
+    selector.value = value ? toSixDigits(value) : '#000000';
+    selector.disabled = value == null;
+    text.value = value ?? '';
+    text.placeholder = 'none';
+    selector.addEventListener('input', () => see(selector.value));
+    selector.addEventListener('change', () => commit(selector.value));
+    text.addEventListener('change', () => {
+      const v = text.value.trim() === '' && p.nullable ? null : text.value.trim();
+      if (validateValue(p, v)) {
+        text.value = value ?? '';
         return;
       }
-      confirmar(v);
+      commit(v);
     });
-    caja.append(selector, texto);
+    box.append(selector, text);
     if (p.nullable) {
-      const ninguno = document.createElement('label');
-      const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: valor == null, title: 'No color' });
-      check.addEventListener('change', () => confirmar(check.checked ? null : (p.default ?? '#888888')));
-      ninguno.append(check, ' none');
-      caja.append(ninguno);
+      const none = document.createElement('label');
+      const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: value == null, title: 'No color' });
+      check.addEventListener('change', () => commit(check.checked ? null : (p.default ?? '#888888')));
+      none.append(check, ' none');
+      box.append(none);
     }
-    return caja;
+    return box;
   },
 
-  boolean({ valor, confirmar }) {
-    const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: valor });
-    check.addEventListener('change', () => confirmar(check.checked));
-    const envoltura = document.createElement('div');
-    envoltura.append(check);
-    return envoltura;
+  boolean({ value, commit }) {
+    const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: value });
+    check.addEventListener('change', () => commit(check.checked));
+    const wrapper = document.createElement('div');
+    wrapper.append(check);
+    return wrapper;
   },
 
-  string({ p, valor, confirmar }) {
-    const input = Object.assign(document.createElement('input'), { type: 'text', value: valor ?? '', placeholder: p.nullable ? 'none' : '' });
+  string({ p, value, commit }) {
+    const input = Object.assign(document.createElement('input'), { type: 'text', value: value ?? '', placeholder: p.nullable ? 'none' : '' });
     // Vacío en una propiedad que admite null = null (por ejemplo, la opción inicial de un param enum).
-    input.addEventListener('change', () => confirmar(input.value === '' && p.nullable ? null : input.value));
+    input.addEventListener('change', () => commit(input.value === '' && p.nullable ? null : input.value));
     return input;
   },
 
   // Lista de textos (las opciones de un param enum): se escribe separada por comas.
-  strings({ valor, confirmar }) {
-    const input = Object.assign(document.createElement('input'), { type: 'text', value: valor.join(', '), placeholder: 'rest, a, e, o, m' });
+  strings({ value, commit }) {
+    const input = Object.assign(document.createElement('input'), { type: 'text', value: value.join(', '), placeholder: 'rest, a, e, o, m' });
     input.title = 'Comma-separated';
-    input.addEventListener('change', () => confirmar(input.value.split(',').map((t) => t.trim()).filter(Boolean)));
+    input.addEventListener('change', () => commit(input.value.split(',').map((t) => t.trim()).filter(Boolean)));
     return input;
   },
 
-  enum({ p, valor, confirmar }) {
+  enum({ p, value, commit }) {
     const select = document.createElement('select');
-    for (const v of p.values) select.append(new Option(v, v, false, v === valor));
-    select.addEventListener('change', () => confirmar(select.value));
+    for (const v of p.values) select.append(new Option(v, v, false, v === value));
+    select.addEventListener('change', () => commit(select.value));
     return select;
   },
 
   // Los vértices se editan en el lienzo; aquí solo se resume y se entra a editarlos.
-  vertices({ valor, objetivo }) {
-    const caja = document.createElement('div');
-    caja.className = 'color vertices';
-    const boton = Object.assign(document.createElement('button'), { type: 'button', textContent: estado.edicion === objetivo ? 'Done' : 'Edit points' });
-    boton.title = 'Or double-click the path, or press Enter';
-    boton.addEventListener('click', () => fijar(estado.edicion === objetivo ? { edicion: null, vertice: null } : { edicion: objetivo, seleccion: objetivo, seleccionados: [objetivo], vertice: null, herramienta: 'seleccionar' }));
-    const resumen = document.createElement('span');
-    const curvos = valor.filter((v) => (v.mode ?? 'straight') !== 'straight').length;
-    resumen.textContent = `${valor.length} points${curvos ? `, ${curvos} curved` : ''}`;
-    caja.append(resumen, boton);
-    return caja;
+  vertices({ value, target }) {
+    const box = document.createElement('div');
+    box.className = 'color vertices';
+    const button = Object.assign(document.createElement('button'), { type: 'button', textContent: state.editing === target ? 'Done' : 'Edit points' });
+    button.title = 'Or double-click the path, or press Enter';
+    button.addEventListener('click', () => setState(state.editing === target ? { editing: null, vertex: null } : { editing: target, selection: target, selected: [target], vertex: null, tool: 'seleccionar' }));
+    const summary = document.createElement('span');
+    const curved = value.filter((v) => (v.mode ?? 'straight') !== 'straight').length;
+    summary.textContent = `${value.length} points${curved ? `, ${curved} curved` : ''}`;
+    box.append(summary, button);
+    return box;
   },
 
   // Una pose se edita en el lienzo: aquí se resume y se activa.
-  pose({ valor, objetivo }) {
-    const caja = document.createElement('div');
-    caja.className = 'resumen-pose';
-    const lista = document.createElement('ul');
-    for (const [hueso, campos] of Object.entries(valor)) {
+  pose({ value, target }) {
+    const box = document.createElement('div');
+    box.className = 'resumen-pose';
+    const list = document.createElement('ul');
+    for (const [bone, fields] of Object.entries(value)) {
       const li = document.createElement('li');
-      li.textContent = `${hueso}: ${Object.entries(campos).map(([k, v]) => `${k} ${v}`).join(', ')}`;
-      lista.append(li);
+      li.textContent = `${bone}: ${Object.entries(fields).map(([k, v]) => `${k} ${v}`).join(', ')}`;
+      list.append(li);
     }
-    if (!lista.children.length) lista.innerHTML = '<li>Doesn’t move any bones yet.</li>';
-    const activa = estado.pose === objetivo;
-    const boton = Object.assign(document.createElement('button'), { type: 'button', textContent: activa ? 'Back to setup' : 'View and edit on canvas' });
-    boton.addEventListener('click', () => fijar({ pose: activa ? null : objetivo }));
-    caja.append(lista, boton);
-    return caja;
+    if (!list.children.length) list.innerHTML = '<li>Doesn’t move any bones yet.</li>';
+    const active = state.pose === target;
+    const button = Object.assign(document.createElement('button'), { type: 'button', textContent: active ? 'Back to setup' : 'View and edit on canvas' });
+    button.addEventListener('click', () => setState({ pose: active ? null : target }));
+    box.append(list, button);
+    return box;
   },
 
   // Las pistas de un clip se editan en la timeline: aquí solo se resumen.
-  tracks({ valor }) {
-    const lista = document.createElement('ul');
-    lista.className = 'resumen-pose';
-    for (const [id, campos] of Object.entries(valor ?? {})) {
+  tracks({ value }) {
+    const list = document.createElement('ul');
+    list.className = 'resumen-pose';
+    for (const [id, fields] of Object.entries(value ?? {})) {
       const li = document.createElement('li');
-      li.textContent = `${id}: ${Object.entries(campos).map(([k, claves]) => `${k} (${claves.length} keys)`).join(', ')}`;
-      lista.append(li);
+      li.textContent = `${id}: ${Object.entries(fields).map(([k, keys]) => `${k} (${keys.length} keys)`).join(', ')}`;
+      list.append(li);
     }
-    if (!lista.children.length) lista.innerHTML = '<li>No keyframes yet.</li>';
-    return lista;
+    if (!list.children.length) list.innerHTML = '<li>No keyframes yet.</li>';
+    return list;
   },
 
   // Paradas de un degradado: color, offset y quitar; más un botón para agregar.
-  stops({ valor, confirmar }) {
-    const lista = document.createElement('div');
-    lista.className = 'lista-paradas';
-    const cambiar = (i, cambios) => confirmar(valor.map((s, j) => (j === i ? { ...s, ...cambios } : s)).sort((a, b) => a.offset - b.offset));
-    valor.forEach((s, i) => {
-      const fila = document.createElement('div');
-      fila.className = 'parada';
+  stops({ value, commit }) {
+    const list = document.createElement('div');
+    list.className = 'lista-paradas';
+    const change = (i, changes) => commit(value.map((s, j) => (j === i ? { ...s, ...changes } : s)).sort((a, b) => a.offset - b.offset));
+    value.forEach((s, i) => {
+      const row = document.createElement('div');
+      row.className = 'parada';
       const color = Object.assign(document.createElement('input'), { type: 'color', value: s.color.length === 4 ? '#' + [...s.color.slice(1)].map((d) => d + d).join('') : s.color.slice(0, 7) });
-      color.addEventListener('change', () => cambiar(i, { color: color.value }));
+      color.addEventListener('change', () => change(i, { color: color.value }));
       const offset = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 1, step: 0.05, value: s.offset, title: 'Position, 0 to 1' });
-      offset.addEventListener('change', () => cambiar(i, { offset: Math.min(1, Math.max(0, Number(offset.value) || 0)) }));
-      const opacidad = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 1, step: 0.1, value: s.opacity ?? 1, title: 'Opacity' });
-      opacidad.addEventListener('change', () => cambiar(i, { opacity: Math.min(1, Math.max(0, Number(opacidad.value))) }));
-      const quitar = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '×', title: 'Remove stop' });
-      quitar.style.visibility = valor.length > 1 ? 'visible' : 'hidden';
-      quitar.addEventListener('click', () => confirmar(valor.filter((_, j) => j !== i)));
-      fila.append(color, offset, opacidad, quitar);
-      lista.append(fila);
+      offset.addEventListener('change', () => change(i, { offset: Math.min(1, Math.max(0, Number(offset.value) || 0)) }));
+      const opacity = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 1, step: 0.1, value: s.opacity ?? 1, title: 'Opacity' });
+      opacity.addEventListener('change', () => change(i, { opacity: Math.min(1, Math.max(0, Number(opacity.value))) }));
+      const remove = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '×', title: 'Remove stop' });
+      remove.style.visibility = value.length > 1 ? 'visible' : 'hidden';
+      remove.addEventListener('click', () => commit(value.filter((_, j) => j !== i)));
+      row.append(color, offset, opacity, remove);
+      list.append(row);
     });
-    const agregar = Object.assign(document.createElement('button'), { type: 'button', textContent: '+ Stop' });
-    agregar.addEventListener('click', () => confirmar([...valor, { offset: 1, color: valor.at(-1)?.color ?? '#ffffff' }].sort((a, b) => a.offset - b.offset)));
-    lista.append(agregar);
-    return lista;
+    const add = Object.assign(document.createElement('button'), { type: 'button', textContent: '+ Stop' });
+    add.addEventListener('click', () => commit([...value, { offset: 1, color: value.at(-1)?.color ?? '#ffffff' }].sort((a, b) => a.offset - b.offset)));
+    list.append(add);
+    return list;
   },
 
   // El archivo de una capa image: miniatura, nombre, cambiarlo por otro y volver a su tamaño natural.
-  asset({ valor, objetivo }) {
-    const caja = document.createElement('div');
-    caja.className = 'campo-asset';
-    const miniatura = Object.assign(document.createElement('img'), { src: urlDeAsset(valor), alt: '' });
-    miniatura.addEventListener('error', () => caja.classList.add('falta'), { once: true });
-    const nombre = Object.assign(document.createElement('span'), { className: 'nombre-asset', textContent: valor, title: `${valor} (missing from the document's assets if crossed out)` });
-    const archivo = Object.assign(document.createElement('input'), { type: 'file', hidden: true, accept: 'image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg' });
-    archivo.addEventListener('change', () => {
-      const [elegido] = soloImagenes(archivo.files);
-      if (elegido) reemplazarImagen(objetivo, elegido);
+  asset({ value, target }) {
+    const box = document.createElement('div');
+    box.className = 'campo-asset';
+    const thumbnail = Object.assign(document.createElement('img'), { src: assetUrl(value), alt: '' });
+    thumbnail.addEventListener('error', () => box.classList.add('falta'), { once: true });
+    const name = Object.assign(document.createElement('span'), { className: 'nombre-asset', textContent: value, title: `${value} (missing from the document's assets if crossed out)` });
+    const file = Object.assign(document.createElement('input'), { type: 'file', hidden: true, accept: 'image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg' });
+    file.addEventListener('change', () => {
+      const [chosen] = imagesOnly(file.files);
+      if (chosen) replaceImage(target, chosen);
     });
-    const cambiar = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Replace…', title: 'Use another image file (keeps the width)' });
-    cambiar.addEventListener('click', () => archivo.click());
+    const change = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Replace…', title: 'Use another image file (keeps the width)' });
+    change.addEventListener('click', () => file.click());
     const natural = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Original size', title: 'Set width and height to the file’s own size' });
-    natural.addEventListener('click', () => tamanoNatural(objetivo));
-    const botones = document.createElement('div');
-    botones.className = 'botones-asset';
-    botones.append(cambiar, natural);
-    caja.append(miniatura, nombre, botones, archivo);
-    return caja;
+    natural.addEventListener('click', () => naturalSize(target));
+    const buttons = document.createElement('div');
+    buttons.className = 'botones-asset';
+    buttons.append(change, natural);
+    box.append(thumbnail, name, buttons, file);
+    return box;
   },
 
-  ref({ p, valor, confirmar, objetivo }) {
+  ref({ p, value, commit, target }) {
     const select = document.createElement('select');
     if (p.nullable) select.append(new Option('(none)', ''));
-    for (const o of estado.doc.objects) {
+    for (const o of state.doc.objects) {
       // refScope "children": solo los hijos (el hijo activo de un switch); "skeleton": los huesos de su skeleton.
-      const enAlcance = p.refScope === 'children' ? o.parent === objetivo : p.refScope === 'skeleton' ? esqueletoDe(estado.doc, o.id) === esqueletoDe(estado.doc, objetivo) : o.id !== objetivo;
-      if (enAlcance && (!p.refTypes || p.refTypes.includes(o.type))) select.append(new Option(o.id, o.id, false, o.id === valor));
+      const inReach = p.refScope === 'children' ? o.parent === target : p.refScope === 'skeleton' ? skeletonOf(state.doc, o.id) === skeletonOf(state.doc, target) : o.id !== target;
+      if (inReach && (!p.refTypes || p.refTypes.includes(o.type))) select.append(new Option(o.id, o.id, false, o.id === value));
     }
-    select.addEventListener('change', () => confirmar(select.value || null));
+    select.addEventListener('change', () => commit(select.value || null));
     return select;
   },
 };

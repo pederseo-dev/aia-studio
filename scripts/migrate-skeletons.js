@@ -10,37 +10,37 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { CARPETA_PERSONAJES } from '../server/store.js';
-import { cargarEsquema } from '../server/schema.js';
-import { migrarAEsqueletos } from '../src/core/migration.js';
+import { DOCUMENTS_FOLDER } from '../server/store.js';
+import { loadSchema } from '../server/schema.js';
+import { migrateToSkeletons } from '../src/core/migration.js';
 
-const esquema = cargarEsquema();
-const pedidos = process.argv.slice(2);
-const ids = pedidos.length ? pedidos : (await fs.readdir(CARPETA_PERSONAJES, { withFileTypes: true })).filter((c) => c.isDirectory()).map((c) => c.name).sort();
+const schema = loadSchema();
+const requested = process.argv.slice(2);
+const ids = requested.length ? requested : (await fs.readdir(DOCUMENTS_FOLDER, { withFileTypes: true })).filter((c) => c.isDirectory()).map((c) => c.name).sort();
 
 for (const id of ids) {
-  const archivo = path.join(CARPETA_PERSONAJES, id, 'documento.json');
+  const file = path.join(DOCUMENTS_FOLDER, id, 'documento.json');
   let doc;
   try {
-    doc = JSON.parse(await fs.readFile(archivo, 'utf8'));
+    doc = JSON.parse(await fs.readFile(file, 'utf8'));
   } catch {
     continue;
   }
-  const { doc: migrado, cambios } = migrarAEsqueletos(doc, esquema);
-  if (!cambios.length) {
+  const { doc: migrated, changes } = migrateToSkeletons(doc, schema);
+  if (!changes.length) {
     console.log(`${id}: nada que migrar`);
     continue;
   }
-  await fs.writeFile(archivo + '.tmp', JSON.stringify(migrado, null, 2) + '\n');
-  await fs.rename(archivo + '.tmp', archivo);
-  const historial = path.join(CARPETA_PERSONAJES, id, 'historial.jsonl');
+  await fs.writeFile(file + '.tmp', JSON.stringify(migrated, null, 2) + '\n');
+  await fs.rename(file + '.tmp', file);
+  const history = path.join(DOCUMENTS_FOLDER, id, 'historial.jsonl');
   let n = 1;
   try {
-    n = (await fs.readFile(historial, 'utf8')).split('\n').filter(Boolean).length + 1;
+    n = (await fs.readFile(history, 'utf8')).split('\n').filter(Boolean).length + 1;
   } catch {
     // sin historial
   }
-  const nota = `Moved to the Skeleton model: ${cambios.join('; ')}`;
-  await fs.appendFile(historial, JSON.stringify({ n, fecha: new Date().toISOString(), origen: 'system', tipo: 'migracion', nota, ops: [], inversas: [] }) + '\n');
-  console.log(`${id}: ${cambios.join('; ')}`);
+  const nota = `Moved to the Skeleton model: ${changes.join('; ')}`;
+  await fs.appendFile(history, JSON.stringify({ n, fecha: new Date().toISOString(), origen: 'system', tipo: 'migracion', nota, ops: [], inversas: [] }) + '\n');
+  console.log(`${id}: ${changes.join('; ')}`);
 }

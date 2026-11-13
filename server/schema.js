@@ -1,13 +1,13 @@
 // Carga el esquema desde schema/*.json en Node (el editor lo carga con import.meta.glob).
 
 import { readdirSync, readFileSync } from 'node:fs';
-import { crearEsquema } from '../src/core/schema.js';
+import { createSchema } from '../src/core/schema.js';
 
-const CARPETA = new URL('../schema/', import.meta.url);
+const FOLDER = new URL('../schema/', import.meta.url);
 
-export function cargarEsquema() {
-  const defs = readdirSync(CARPETA)
+export function loadSchema() {
+  const defs = readdirSync(FOLDER)
     .filter((a) => a.endsWith('.json'))
-    .map((a) => JSON.parse(readFileSync(new URL(a, CARPETA), 'utf8')));
-  return crearEsquema(defs);
+    .map((a) => JSON.parse(readFileSync(new URL(a, FOLDER), 'utf8')));
+  return createSchema(defs);
 }

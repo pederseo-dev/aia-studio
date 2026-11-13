@@ -6,24 +6,24 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { buscar } from '../src/core/document.js';
-import { opsParaFijarPose } from '../src/core/blend.js';
-import { guiaParaIA } from '../src/core/guide.js';
-import { resumirOperaciones } from '../src/core/operations.js';
-import { crearAlmacen } from '../server/store.js';
-import { cargarEsquema } from '../server/schema.js';
-import { SIN_VISTA_PREVIA, svgAPng } from '../server/png.js';
-import { NOMBRES_DE_CURVA } from '../src/core/curves.js';
-import { avisosDeGiro, planDeleteKeys, planMoveKeys, planScaleTime, planSetKeys, resumenDeClip } from './animation.js';
-import { manifiesto, textoDeManifiesto } from '../src/core/manifest.js';
-import { assetsUsados, mimeDeAsset, planAgregarImagen } from '../src/core/images.js';
-import { bytesDeImagen, comprobarBorrado, esquemaDelArbol as arbol,planBindByProximity, planBindPoints, planReparentBone, planVistaPrevia, recortesDePose, resumenDeHistorial, textoDeDocumento } from './tools.js';
+import { findObject } from '../src/core/document.js';
+import { opsToSetPose } from '../src/core/blend.js';
+import { guideForAI } from '../src/core/guide.js';
+import { summarizeOperations } from '../src/core/operations.js';
+import { createStore } from '../server/store.js';
+import { loadSchema } from '../server/schema.js';
+import { NO_PREVIEW, svgToPng } from '../server/png.js';
+import { CURVE_NAMES } from '../src/core/curves.js';
+import { rotationWarnings, planDeleteKeys, planMoveKeys, planScaleTime, planSetKeys, clipSummary } from './animation.js';
+import { manifest, manifestText } from '../src/core/manifest.js';
+import { usedAssets, assetMime, planAddImage } from '../src/core/images.js';
+import { imageBytes, checkDeleted, treeOutline as tree,planBindByProximity, planBindPoints, planReparentBone, planPreview, poseClamps, historySummary, documentText } from './tools.js';
 
-const esquema = cargarEsquema();
-const almacen = crearAlmacen({ esquema });
-const ORIGEN = 'ai';
+const schema = loadSchema();
+const store = createStore({ schema });
+const ORIGIN = 'ai';
 
-const servidor = new McpServer(
+const server = new McpServer(
   { name: 'aia-studio', version: '0.1.0' },
   {
     instructions:
@@ -33,15 +33,15 @@ const servidor = new McpServer(
   },
 );
 
-const esquemaDelArbol = (doc, opciones) => arbol(doc, esquema, opciones);
+const treeOutline = (doc, options) => tree(doc, schema, options);
 // Después de un cambio, el árbol va sin las pistas de los clips (con muchos clips eran miles de líneas en cada
 // respuesta): get_document las da enteras o de los clips que se pidan.
-const arbolCorto = (doc) => `${esquemaDelArbol(doc, { pistas: false })}\n(Clips resumidos: sus pistas, con get_document y clips.)`;
+const shortTree = (doc) => `${treeOutline(doc, { tracks: false })}\n(Clips resumidos: sus pistas, con get_document y clips.)`;
 
-const texto = (t) => ({ content: [{ type: 'text', text: typeof t === 'string' ? t : JSON.stringify(t, null, 2) }] });
+const text = (t) => ({ content: [{ type: 'text', text: typeof t === 'string' ? t : JSON.stringify(t, null, 2) }] });
 
 // Los errores vuelven como resultado y no como excepción, para que la IA los lea y corrija el lote.
-const seguro = (fn) => async (args) => {
+const safe = (fn) => async (args) => {
   try {
     return await fn(args);
   } catch (e) {
@@ -50,19 +50,19 @@ const seguro = (fn) => async (args) => {
 };
 
 const id = z.string().describe('id del documento, por ejemplo "robot"');
-const objetivo = z.string().describe('id del objeto, o "meta" para las propiedades del documento');
+const target = z.string().describe('id del objeto, o "meta" para las propiedades del documento');
 const props = z.record(z.string(), z.any()).describe('{ propiedad: valor }; ver get_guide');
-const operacion = z.discriminatedUnion('op', [
+const operation = z.discriminatedUnion('op', [
   z.object({
     op: z.literal('create'),
-    type: z.string().describe('tipo de objeto: ' + [...esquema.tipos.keys()].join(', ')),
+    type: z.string().describe('tipo de objeto: ' + [...schema.types.keys()].join(', ')),
     id: z.string().describe('id nuevo: minúsculas, números y _'),
     parent: z.string().nullable().optional().describe('id del contenedor padre (group, switch o skeleton); un bone va dentro de un skeleton o de otro bone; omitido o null = raíz'),
     index: z.number().int().optional().describe('posición entre hermanos: 0 = al fondo; omitido = al frente'),
     props: props.optional(),
   }),
-  z.object({ op: z.literal('set'), target: objetivo, props }),
-  z.object({ op: z.literal('unset'), target: objetivo, props: z.array(z.string()).describe('propiedades que vuelven a su valor por defecto') }),
+  z.object({ op: z.literal('set'), target: target, props }),
+  z.object({ op: z.literal('unset'), target: target, props: z.array(z.string()).describe('propiedades que vuelven a su valor por defecto') }),
   z.object({ op: z.literal('delete'), target: z.string().describe('id del objeto; borra también sus hijos') }),
   z.object({
     op: z.literal('move'),
@@ -83,19 +83,19 @@ const operacion = z.discriminatedUnion('op', [
   }),
 ]);
 
-servidor.registerTool(
+server.registerTool(
   'get_guide',
   { description: 'Guía del formato: convenciones, tipos de objeto con todas sus propiedades y operaciones. Léela antes de editar.' },
-  seguro(async () => texto(guiaParaIA(esquema))),
+  safe(async () => text(guideForAI(schema))),
 );
 
-servidor.registerTool(
+server.registerTool(
   'list_documents',
   { description: 'Lista los documentos disponibles.' },
-  seguro(async () => texto(await almacen.listar())),
+  safe(async () => text(await store.list())),
 );
 
-servidor.registerTool(
+server.registerTool(
   'get_document',
   {
     description:
@@ -107,10 +107,10 @@ servidor.registerTool(
       clips: z.array(z.string()).optional().describe('ids de clips cuyas pistas se listan en el árbol (por defecto, todos; [] = ninguno)'),
     },
   },
-  seguro(async ({ id, json, clips }) => texto(textoDeDocumento(await almacen.leer(id), esquema, { json, clips }))),
+  safe(async ({ id, json, clips }) => text(documentText(await store.read(id), schema, { json, clips }))),
 );
 
-servidor.registerTool(
+server.registerTool(
   'create_document',
   {
     description: 'Crea un documento vacío o, con copy_from, una copia de otro documento (sin su historial).',
@@ -123,14 +123,14 @@ servidor.registerTool(
       copy_from: z.string().optional().describe('id de un documento existente para copiar sus objetos'),
     },
   },
-  seguro(async ({ id, name, width, height, background, copy_from }) => {
+  safe(async ({ id, name, width, height, background, copy_from }) => {
     const meta = Object.fromEntries(Object.entries({ name, width, height, background }).filter(([, v]) => v !== undefined));
-    const doc = await almacen.crear(id, meta, { origen: ORIGEN, copiarDe: copy_from });
-    return texto(`Documento "${id}" creado${copy_from ? ` como copia de "${copy_from}"` : ''}.\n\nÁrbol:\n${arbolCorto(doc)}`);
+    const doc = await store.crear(id, meta, { origen: ORIGIN, copyFrom: copy_from });
+    return text(`Documento "${id}" creado${copy_from ? ` como copia de "${copy_from}"` : ''}.\n\nÁrbol:\n${shortTree(doc)}`);
   }),
 );
 
-servidor.registerTool(
+server.registerTool(
   'apply_ops',
   {
     description:
@@ -138,29 +138,29 @@ servidor.registerTool(
       'no se aplica nada y se devuelven los errores. Cada lote es un paso de deshacer.',
     inputSchema: {
       id,
-      ops: z.array(operacion).min(1),
+      ops: z.array(operation).min(1),
       note: z.string().describe('qué hace el lote, en pocas palabras (queda en el historial que ve el usuario)'),
     },
   },
-  seguro(async ({ id, ops, note }) => {
-    const { doc, avisos } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note });
-    const partes = [`Aplicadas ${ops.length} operaciones.`];
-    if (avisos.length) partes.push(`Avisos:\n${avisos.map((a) => `- ${a}`).join('\n')}`);
-    partes.push(`Árbol resultante (del fondo al frente):\n${arbolCorto(doc)}`);
-    return texto(partes.join('\n\n'));
+  safe(async ({ id, ops, note }) => {
+    const { doc, warnings } = await store.applyOps(id, ops, { origen: ORIGIN, nota: note });
+    const parts = [`Aplicadas ${ops.length} operaciones.`];
+    if (warnings.length) parts.push(`Avisos:\n${warnings.map((a) => `- ${a}`).join('\n')}`);
+    parts.push(`Árbol resultante (del fondo al frente):\n${shortTree(doc)}`);
+    return text(parts.join('\n\n'));
   }),
 );
 
-const revertir = (tipo) =>
-  seguro(async ({ id }) => {
-    const { doc, entrada } = await almacen[tipo](id, ORIGEN);
-    const verbo = tipo === 'deshacer' ? 'Deshecho' : 'Rehecho';
-    const tocaba = resumirOperaciones(entrada.lote).slice(0, 12).join(', ');
-    const sigue = tipo === 'deshacer' ? ' Lo de los lotes anteriores sigue en pie.' : '';
-    return texto(`${verbo} el lote #${entrada.n} "${entrada.nota}" (${entrada.ops} operaciones: ${tocaba}).${sigue}\n\nÁrbol resultante:\n${arbolCorto(doc)}`);
+const revert = (tipo) =>
+  safe(async ({ id }) => {
+    const { doc, entrada: entry } = await store[tipo](id, ORIGIN);
+    const verb = tipo === 'deshacer' ? 'Deshecho' : 'Rehecho';
+    const touched = summarizeOperations(entry.lote).slice(0, 12).join(', ');
+    const follows = tipo === 'deshacer' ? ' Lo de los lotes anteriores sigue en pie.' : '';
+    return text(`${verb} el lote #${entry.n} "${entry.nota}" (${entry.ops} operaciones: ${touched}).${follows}\n\nÁrbol resultante:\n${shortTree(doc)}`);
   });
 
-servidor.registerTool(
+server.registerTool(
   'undo',
   {
     description:
@@ -168,16 +168,16 @@ servidor.registerTool(
       'cambió después alguna de las mismas propiedades, se niega y dice cuáles y en qué lote: deshacer pisaría su retoque.',
     inputSchema: { id },
   },
-  revertir('deshacer'),
+  revert('deshacer'),
 );
 
-servidor.registerTool(
+server.registerTool(
   'redo',
   { description: 'Rehace el último lote tuyo que deshiciste y dice cuál rehizo. Como undo, se niega si el usuario cambió después lo mismo.', inputSchema: { id } },
-  revertir('rehacer'),
+  revert('rehacer'),
 );
 
-servidor.registerTool(
+server.registerTool(
   'get_history',
   {
     description:
@@ -190,9 +190,9 @@ servidor.registerTool(
       detail: z.boolean().optional().describe('true = incluir las operaciones completas de cada lote'),
     },
   },
-  seguro(async ({ id, limit, origin, detail }) => {
-    const { entradas } = await almacen.historial(id, 1000);
-    return texto(resumenDeHistorial(entradas, { limit, origin, detail }));
+  safe(async ({ id, limit, origin, detail }) => {
+    const { entries } = await store.history(id, 1000);
+    return text(historySummary(entries, { limit, origin, detail }));
   }),
 );
 
@@ -201,24 +201,24 @@ const region = z
   .describe('recorte del documento, en sus coordenadas (para ver un detalle de cerca)');
 
 /** PNG del documento (posado, animado, en vivo o recortado) como resultado de herramienta: el SVG y el texto salen del plan. */
-async function vistaPrevia(id, doc, opciones, encabezado) {
-  const { svg, ancho, texto: resumen } = planVistaPrevia(doc, esquema, opciones);
+async function preview(id, doc, options, header) {
+  const { svg, width, text: summary } = planPreview(doc, schema, options);
   // Las capas image se dibujan con los archivos de assets/; las que no lo tienen no se ven y se avisa.
-  const imagenes = await almacen.imagenesDe(id, doc);
-  const faltan = assetsUsados(doc).filter((src) => !imagenes.has(src));
-  const png = svgAPng(svg, opciones.width ?? ancho, imagenes);
-  const sinVista = [...imagenes.keys()].filter((src) => SIN_VISTA_PREVIA.has(mimeDeAsset(src)));
-  let nota = faltan.length ? `\nFaltan en assets/ (esas capas image no se ven): ${faltan.join(', ')}. Agrégalas con add_image.` : '';
-  if (sinVista.length) nota += `\n${sinVista.join(', ')}: WebP, que esta vista previa no sabe dibujar; sale como un recuadro gris con una cruz en su lugar y tamaño (el usuario la ve bien en el editor).`;
+  const images = await store.imagesOf(id, doc);
+  const missing = usedAssets(doc).filter((src) => !images.has(src));
+  const png = svgToPng(svg, options.width ?? width, images);
+  const withoutView = [...images.keys()].filter((src) => NO_PREVIEW.has(assetMime(src)));
+  let nota = missing.length ? `\nFaltan en assets/ (esas capas image no se ven): ${missing.join(', ')}. Agrégalas con add_image.` : '';
+  if (withoutView.length) nota += `\n${withoutView.join(', ')}: WebP, que esta vista previa no sabe dibujar; sale como un recuadro gris con una cruz en su lugar y tamaño (el usuario la ve bien en el editor).`;
   return {
     content: [
       { type: 'image', data: Buffer.from(png).toString('base64'), mimeType: 'image/png' },
-      { type: 'text', text: (encabezado ? `${encabezado}\n${resumen}` : resumen) + nota },
+      { type: 'text', text: (header ? `${header}\n${summary}` : summary) + nota },
     ],
   };
 }
 
-servidor.registerTool(
+server.registerTool(
   'add_image',
   {
     description:
@@ -241,19 +241,19 @@ servidor.registerTool(
       note: z.string().optional().describe('qué es, para el historial'),
     },
   },
-  seguro(async ({ id, path, url, layer, parent, index, x, y, width, height, props: extra, note }) => {
-    const { bytes, nombre } = await bytesDeImagen({ path, url });
-    const { src, ancho, alto, formato, reusado } = await almacen.guardarAsset(id, nombre, bytes);
-    const { id: capa, ops } = planAgregarImagen(await almacen.leer(id), esquema, { src, ancho, alto, id: layer, parent: parent ?? null, index, x, y, width, height });
+  safe(async ({ id, path, url, layer, parent, index, x, y, width, height, props: extra, note }) => {
+    const { bytes, name } = await imageBytes({ path, url });
+    const { src, naturalWidth, naturalHeight, format, reused } = await store.saveAsset(id, name, bytes);
+    const { id: layerId, ops } = planAddImage(await store.read(id), schema, { src, naturalWidth, naturalHeight, id: layer, parent: parent ?? null, index, x, y, width, height });
     if (extra) Object.assign(ops[0].props, extra);
-    const { doc, avisos } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `add image ${capa}` });
-    const o = buscar(doc, capa);
-    const archivo = `${src} (${formato.toUpperCase()}, ${ancho}×${alto} px${reusado ? ', ya estaba en assets/' : ''})`;
-    return vistaPrevia(id, doc, {}, `Capa image "${capa}" con ${archivo}: x ${o.x}, y ${o.y}, ${o.width}×${o.height}.${avisos.length ? `\nAvisos: ${avisos.join('; ')}` : ''}`);
+    const { doc, warnings } = await store.applyOps(id, ops, { origen: ORIGIN, nota: note ?? `add image ${layerId}` });
+    const o = findObject(doc, layerId);
+    const file = `${src} (${format.toUpperCase()}, ${naturalWidth}×${naturalHeight} px${reused ? ', ya estaba en assets/' : ''})`;
+    return preview(id, doc, {}, `Capa image "${layerId}" con ${file}: x ${o.x}, y ${o.y}, ${o.width}×${o.height}.${warnings.length ? `\nAvisos: ${warnings.join('; ')}` : ''}`);
   }),
 );
 
-servidor.registerTool(
+server.registerTool(
   'render_preview',
   {
     description:
@@ -291,10 +291,10 @@ servidor.registerTool(
       auto: z.boolean().optional().describe('con live: false apaga las capas auto (parpadeo, respiración) para comparar'),
     },
   },
-  seguro(async ({ id, ...opciones }) => vistaPrevia(id, await almacen.leer(id), opciones)),
+  safe(async ({ id, ...options }) => preview(id, await store.read(id), options)),
 );
 
-servidor.registerTool(
+server.registerTool(
   'bind_points',
   {
     description:
@@ -308,14 +308,14 @@ servidor.registerTool(
       note: z.string().optional().describe('qué hace, para el historial'),
     },
   },
-  seguro(async ({ id, path, bones, note }) => {
-    const { ops, reparto } = planBindPoints(await almacen.leer(id), esquema, path, bones);
-    await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `distribute ${path} among bones` });
-    return texto(`Vértices de ${path} por hueso: ${reparto}. Míralo con render_preview y una pose.`);
+  safe(async ({ id, path, bones, note }) => {
+    const { ops, distribution } = planBindPoints(await store.read(id), schema, path, bones);
+    await store.applyOps(id, ops, { origen: ORIGIN, nota: note ?? `distribute ${path} among bones` });
+    return text(`Vértices de ${path} por hueso: ${distribution}. Míralo con render_preview y una pose.`);
   }),
 );
 
-servidor.registerTool(
+server.registerTool(
   'bind_by_proximity',
   {
     description:
@@ -330,15 +330,15 @@ servidor.registerTool(
       note: z.string().optional().describe('qué hace, para el historial'),
     },
   },
-  seguro(async ({ id, skeleton, note }) => {
-    const { ops, enlaces, reparto } = planBindByProximity(await almacen.leer(id), esquema, skeleton);
-    if (!ops.length) return texto(`Todo el dibujo de ${skeleton} ya sigue a un hueso; no hubo nada que enlazar.`);
-    await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `bind all by proximity in ${skeleton}` });
-    return texto(`Enlazados ${enlaces.length}: ${reparto}. Míralo con render_preview y una pose (bones: true).`);
+  safe(async ({ id, skeleton, note }) => {
+    const { ops, bindings, distribution } = planBindByProximity(await store.read(id), schema, skeleton);
+    if (!ops.length) return text(`Todo el dibujo de ${skeleton} ya sigue a un hueso; no hubo nada que enlazar.`);
+    await store.applyOps(id, ops, { origen: ORIGIN, nota: note ?? `bind all by proximity in ${skeleton}` });
+    return text(`Enlazados ${bindings.length}: ${distribution}. Míralo con render_preview y una pose (bones: true).`);
   }),
 );
 
-servidor.registerTool(
+server.registerTool(
   'reparent_bone',
   {
     description:
@@ -357,16 +357,16 @@ servidor.registerTool(
       note: z.string().optional().describe('qué hace, para el historial'),
     },
   },
-  seguro(async ({ id, bone, parent, keep_in_poses, note }) => {
-    const plan = planReparentBone(await almacen.leer(id), esquema, bone, parent, keep_in_poses);
-    if (!plan.ops.length) return texto(plan.texto);
-    const { doc } = await almacen.operar(id, plan.ops, { origen: ORIGEN, nota: note ?? `reparent ${bone} to ${parent}` });
-    const h = buscar(doc, bone);
-    return texto(`${plan.texto} (x ${h.x}, y ${h.y}, rotation ${h.rotation})`);
+  safe(async ({ id, bone, parent, keep_in_poses, note }) => {
+    const plan = planReparentBone(await store.read(id), schema, bone, parent, keep_in_poses);
+    if (!plan.ops.length) return text(plan.text);
+    const { doc } = await store.applyOps(id, plan.ops, { origen: ORIGIN, nota: note ?? `reparent ${bone} to ${parent}` });
+    const h = findObject(doc, bone);
+    return text(`${plan.text} (x ${h.x}, y ${h.y}, rotation ${h.rotation})`);
   }),
 );
 
-servidor.registerTool(
+server.registerTool(
   'set_pose',
   {
     description:
@@ -391,17 +391,17 @@ servidor.registerTool(
       show_bones: z.boolean().optional().describe('true = la vista previa muestra el esqueleto'),
     },
   },
-  seguro(async ({ id, pose, values, replace, remove, note, width, show_bones }) => {
-    const ops = opsParaFijarPose(await almacen.leer(id), pose, values ?? {}, replace, remove ?? []);
-    const { doc, avisos } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `pose ${pose}` });
-    const guardada = buscar(doc, pose).values;
-    const lista = Object.entries(guardada).map(([h, c]) => `${h} ${JSON.stringify(c, (k, v) => (k === 'vertices' ? `(${v.length} vértices)` : v))}`).join(', ') || 'vacía';
-    const notas = [...avisos, ...recortesDePose(doc, esquema, guardada)];
-    return vistaPrevia(id, doc, { width, pose, bones: show_bones }, `Pose "${pose}": ${lista}.${notas.length ? `\nAvisos: ${notas.join('; ')}` : ''}`);
+  safe(async ({ id, pose, values, replace, remove, note, width, show_bones }) => {
+    const ops = opsToSetPose(await store.read(id), pose, values ?? {}, replace, remove ?? []);
+    const { doc, warnings } = await store.applyOps(id, ops, { origen: ORIGIN, nota: note ?? `pose ${pose}` });
+    const saved = findObject(doc, pose).values;
+    const list = Object.entries(saved).map(([h, c]) => `${h} ${JSON.stringify(c, (k, v) => (k === 'vertices' ? `(${v.length} vértices)` : v))}`).join(', ') || 'vacía';
+    const notes = [...warnings, ...poseClamps(doc, schema, saved)];
+    return preview(id, doc, { width, pose, bones: show_bones }, `Pose "${pose}": ${list}.${notes.length ? `\nAvisos: ${notes.join('; ')}` : ''}`);
   }),
 );
 
-const momento = z.object({
+const moment = z.object({
   t: z.number().min(0).describe('tiempo en segundos'),
   values: z
     .record(z.string(), z.record(z.string(), z.any()))
@@ -414,12 +414,12 @@ const momento = z.object({
   setup: z.boolean().optional().describe('true = en ese momento, todo lo que el clip anima (y lo que fija pose, si la pasas) vuelve al valor del montaje, y en puppet sus params al inicial; values los pisa. Sirve para empezar y terminar en reposo'),
   targets: z.array(z.string()).optional().describe('con un momento que solo trae ease: a qué pistas cambiarle la curva ("objeto.propiedad" o un id); por defecto, a todas las que tienen keyframe en ese t'),
   ease: z
-    .union([z.enum(NOMBRES_DE_CURVA), z.array(z.number()).length(4)])
+    .union([z.enum(CURVE_NAMES), z.array(z.number()).length(4)])
     .optional()
     .describe('curva del tramo que SALE de estos keyframes hacia los siguientes: linear (por defecto), step, ease-in, ease-out, ease-in-out, las fuertes (ease-in-quad, -cubic, -expo, -back y sus -out y -in-out; la guía dice qué hace cada una) o [x1, y1, x2, y2] (cubic-bezier de CSS). Un momento con solo t y ease cambia la curva de los keyframes que ya hay en ese t, sin tocar sus valores'),
 });
 
-servidor.registerTool(
+server.registerTool(
   'set_keys',
   {
     description:
@@ -436,7 +436,7 @@ servidor.registerTool(
     inputSchema: {
       id,
       animation: z.string().describe('id del clip, por ejemplo "wave", "blink" o "idle"'),
-      keys: z.array(momento).optional().describe('los momentos, en cualquier orden'),
+      keys: z.array(moment).optional().describe('los momentos, en cualquier orden'),
       usage: z.enum(['animate', 'puppet']).optional().describe('al crear, por defecto "animate"'),
       duration: z.number().positive().optional().describe('duración en segundos'),
       loop: z.enum(['once', 'loop', 'pingpong']).optional(),
@@ -453,18 +453,18 @@ servidor.registerTool(
       show_bones: z.boolean().optional().describe('true = la vista previa muestra el esqueleto'),
     },
   },
-  seguro(async ({ id, animation, keys, usage, duration, loop, description, remove, note, width, show_bones, ...vivo }) => {
-    const plan = planSetKeys(await almacen.leer(id), esquema, animation, { keys, usage, duration, loop, description, remove, ...vivo });
-    const { doc, avisos } = await almacen.operar(id, plan.ops, { origen: ORIGEN, nota: note ?? `animation ${animation}` });
-    const notas = [...avisos];
-    if (plan.alargadaDesde != null) notas.push(`duration pasó de ${plan.alargadaDesde} a ${plan.duracion} s para que entren los keyframes`);
-    notas.push(...avisosDeGiro(doc, esquema, buscar(doc, animation)));
+  safe(async ({ id, animation, keys, usage, duration, loop, description, remove, note, width, show_bones, ...live }) => {
+    const plan = planSetKeys(await store.read(id), schema, animation, { keys, usage, duration, loop, description, remove, ...live });
+    const { doc, warnings } = await store.applyOps(id, plan.ops, { origen: ORIGIN, nota: note ?? `animation ${animation}` });
+    const notes = [...warnings];
+    if (plan.extendedFrom != null) notes.push(`duration pasó de ${plan.extendedFrom} a ${plan.duration} s para que entren los keyframes`);
+    notes.push(...rotationWarnings(doc, schema, findObject(doc, animation)));
     // La vista del clip ya lista qué poses mueve cada param animado (planVistaDeClip).
-    return vistaPrevia(id, doc, { width, animation, bones: show_bones }, notas.length ? `Avisos: ${notas.join('; ')}` : '');
+    return preview(id, doc, { width, animation, bones: show_bones }, notes.length ? `Avisos: ${notes.join('; ')}` : '');
   }),
 );
 
-servidor.registerTool(
+server.registerTool(
   'delete_keys',
   {
     description:
@@ -478,15 +478,15 @@ servidor.registerTool(
       note: z.string().optional().describe('qué hace, para el historial'),
     },
   },
-  seguro(async ({ id, animation, times, targets, note }) => {
-    const { ops, quitadas } = planDeleteKeys(await almacen.leer(id), animation, { times, targets });
-    if (!ops.length) return texto(`No había keyframes que quitar en "${animation}" con esos tiempos y pistas.`);
-    const { doc } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `delete keys in ${animation}` });
-    return texto(`Quitados ${quitadas} keyframes. ${animation}: ${resumenDeClip(esquema, buscar(doc, animation))}.`);
+  safe(async ({ id, animation, times, targets, note }) => {
+    const { ops, removed } = planDeleteKeys(await store.read(id), animation, { times, targets });
+    if (!ops.length) return text(`No había keyframes que quitar en "${animation}" con esos tiempos y pistas.`);
+    const { doc } = await store.applyOps(id, ops, { origen: ORIGIN, nota: note ?? `delete keys in ${animation}` });
+    return text(`Quitados ${removed} keyframes. ${animation}: ${clipSummary(schema, findObject(doc, animation))}.`);
   }),
 );
 
-servidor.registerTool(
+server.registerTool(
   'move_keys',
   {
     description:
@@ -503,14 +503,14 @@ servidor.registerTool(
       width: z.number().int().min(64).max(2048).optional().describe('ancho de la vista previa'),
     },
   },
-  seguro(async ({ id, animation, from, to, targets, note, width }) => {
-    const { ops, movidas } = planMoveKeys(await almacen.leer(id), esquema, animation, { from, to, targets });
-    const { doc } = await almacen.operar(id, ops, { origen: ORIGEN, nota: note ?? `move keys in ${animation} ${from} → ${to} s` });
-    return vistaPrevia(id, doc, { width, animation }, `Movidos de ${from} a ${to} s: ${movidas.join(', ')}.`);
+  safe(async ({ id, animation, from, to, targets, note, width }) => {
+    const { ops, moved } = planMoveKeys(await store.read(id), schema, animation, { from, to, targets });
+    const { doc } = await store.applyOps(id, ops, { origen: ORIGIN, nota: note ?? `move keys in ${animation} ${from} → ${to} s` });
+    return preview(id, doc, { width, animation }, `Movidos de ${from} a ${to} s: ${moved.join(', ')}.`);
   }),
 );
 
-servidor.registerTool(
+server.registerTool(
   'scale_time',
   {
     description:
@@ -528,15 +528,15 @@ servidor.registerTool(
       width: z.number().int().min(64).max(2048).optional().describe('ancho de la vista previa'),
     },
   },
-  seguro(async ({ id, animation, duration, factor, from, to, note, width }) => {
-    const plan = planScaleTime(await almacen.leer(id), esquema, animation, { duration, factor, from, to });
-    const tramo = from == null && to == null ? '' : ` (tramo ${plan.desde}…${plan.hasta} s → ${plan.largo} s)`;
-    const { doc } = await almacen.operar(id, plan.ops, { origen: ORIGEN, nota: note ?? `scale time of ${animation}: ${plan.antes} → ${plan.duracion} s` });
-    return vistaPrevia(id, doc, { width, animation }, `${animation}: ${plan.antes} → ${plan.duracion} s${tramo}.`);
+  safe(async ({ id, animation, duration, factor, from, to, note, width }) => {
+    const plan = planScaleTime(await store.read(id), schema, animation, { duration, factor, from, to });
+    const span = from == null && to == null ? '' : ` (tramo ${plan.from}…${plan.to} s → ${plan.length} s)`;
+    const { doc } = await store.applyOps(id, plan.ops, { origen: ORIGIN, nota: note ?? `scale time of ${animation}: ${plan.before} → ${plan.duration} s` });
+    return preview(id, doc, { width, animation }, `${animation}: ${plan.before} → ${plan.duration} s${span}.`);
   }),
 );
 
-servidor.registerTool(
+server.registerTool(
   'get_manifest',
   {
     description:
@@ -546,13 +546,13 @@ servidor.registerTool(
       '(una descripción vacía, un param que no mueve nada) es lo que confundirá a la app.',
     inputSchema: { id, format: z.enum(['text', 'json']).optional().describe('text (por defecto) para leerlo; json, el objeto que recibe la app') },
   },
-  seguro(async ({ id, format }) => {
-    const m = manifiesto(await almacen.leer(id), esquema);
-    return texto(format === 'json' ? m : textoDeManifiesto(m));
+  safe(async ({ id, format }) => {
+    const m = manifest(await store.read(id), schema);
+    return text(format === 'json' ? m : manifestText(m));
   }),
 );
 
-servidor.registerTool(
+server.registerTool(
   'delete_document',
   {
     description:
@@ -563,11 +563,11 @@ servidor.registerTool(
       confirm: z.string().describe('el mismo id del documento, para confirmar'),
     },
   },
-  seguro(async ({ id, confirm }) => {
-    comprobarBorrado(id, confirm);
-    await almacen.eliminar(id);
-    return texto(`Documento "${id}" borrado (con su historial).`);
+  safe(async ({ id, confirm }) => {
+    checkDeleted(id, confirm);
+    await store.eliminar(id);
+    return text(`Documento "${id}" borrado (con su historial).`);
   }),
 );
 
-await servidor.connect(new StdioServerTransport());
+await server.connect(new StdioServerTransport());

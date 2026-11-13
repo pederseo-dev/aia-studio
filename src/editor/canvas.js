@@ -1,342 +1,342 @@
 // Lienzo: dibuja el documento, maneja la cámara (pan y zoom) y reparte los eventos entre las herramientas:
 // seleccionar (con manijas), pluma, edición de puntos, creación de formas y huesos (con la pose activa, si hay).
 
-import { buscar } from '../core/document.js';
-import { leerMeta } from '../core/schema.js';
-import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometry.js';
-import { contenidoSvg } from '../render/svg.js';
-import { avisar, docVisible, ejecutar, esquema, estado, fijar, idLibre, padreParaNuevo, seleccionar, suscribir } from './state.js';
-import { agregarImagenes, soloImagenes, urlDeAsset } from './images.js';
-import { crearArtboard } from './artboard.js';
-import { crearHuesos } from './bones.js';
-import { clipAbierto, variantesAMostrar } from './editing.js';
-import { crearPluma } from './pen.js';
-import { crearPuntos } from './points.js';
-import { crearTransformar, esLibre } from './transform.js';
+import { findObject } from '../core/document.js';
+import { readMeta } from '../core/schema.js';
+import { apply, invert, worldMatrix, multiply } from '../core/geometry.js';
+import { svgContent } from '../render/svg.js';
+import { notify, docVisible, execute, schema, state, setState, freeId, parentForNew, select, subscribe } from './state.js';
+import { addImages, imagesOnly, assetUrl } from './images.js';
+import { createArtboard } from './artboard.js';
+import { createBones } from './bones.js';
+import { openedClip, variantsToShow } from './editing.js';
+import { createPen } from './pen.js';
+import { createPoints } from './points.js';
+import { createTransform, isFree } from './transform.js';
 
 const NS = 'http://www.w3.org/2000/svg';
-const redondear = (v) => Math.round(v * 10) / 10;
+const round = (v) => Math.round(v * 10) / 10;
 
-export function montarLienzo(contenedor) {
-  const vista = contenedor.querySelector('#vista');
-  const camaraG = vista.querySelector('#camara');
-  const documentoG = vista.querySelector('#documento');
-  const superposicion = vista.querySelector('#superposicion');
-  const camara = { x: 0, y: 0, zoom: 1 };
-  let ajustadoPara = null;
-  let espacio = false;
-  let mostrando = '{}'; // variantes de switch que se muestran por la selección
-  let tamanoDibujado = null; // { id, w, h } del último dibujo: si cambia el tamaño, el centro queda quieto en pantalla
+export function mountCanvas(container) {
+  const view = container.querySelector('#vista');
+  const cameraG = view.querySelector('#camara');
+  const documentG = view.querySelector('#documento');
+  const overlay = view.querySelector('#superposicion');
+  const camera = { x: 0, y: 0, zoom: 1 };
+  let adjustedFor = null;
+  let space = false;
+  let showing = '{}'; // variantes de switch que se muestran por la selección
+  let drawnSize = null; // { id, w, h } del último dibujo: si cambia el tamaño, el centro queda quieto en pantalla
 
   // Lo que comparten las herramientas. "Pantalla" = píxeles dentro del lienzo, el espacio de la superposición.
   const ctx = {
-    documentoG,
-    superposicion,
-    matrizCamara: () => [camara.zoom, 0, 0, camara.zoom, camara.x, camara.y],
-    puntoPantalla: (e) => {
-      const r = vista.getBoundingClientRect();
+    documentG,
+    overlay,
+    cameraMatrix: () => [camera.zoom, 0, 0, camera.zoom, camera.x, camera.y],
+    screenPoint: (e) => {
+      const r = view.getBoundingClientRect();
       return [e.clientX - r.left, e.clientY - r.top];
     },
-    elemento: (id) => documentoG.querySelector(`[data-id="${CSS.escape(id)}"]`),
-    crear(tipo, atributos, titulo) {
+    element: (id) => documentG.querySelector(`[data-id="${CSS.escape(id)}"]`),
+    crear(tipo, attributes, title) {
       const el = document.createElementNS(NS, tipo);
-      for (const [k, v] of Object.entries(atributos)) if (v !== '') el.setAttribute(k, v);
-      if (titulo) el.append(Object.assign(document.createElementNS(NS, 'title'), { textContent: titulo }));
+      for (const [k, v] of Object.entries(attributes)) if (v !== '') el.setAttribute(k, v);
+      if (title) el.append(Object.assign(document.createElementNS(NS, 'title'), { textContent: title }));
       return el;
     },
-    arrastrar,
-    redibujar: () => dibujarSuperposicion(),
+    drag,
+    redraw: () => drawOverlay(),
   };
-  const transformar = crearTransformar(ctx);
-  const pluma = crearPluma(ctx);
-  const puntos = crearPuntos(ctx);
-  const huesos = crearHuesos(ctx);
-  const artboard = crearArtboard(ctx);
+  const transform = createTransform(ctx);
+  const pen = createPen(ctx);
+  const points = createPoints(ctx);
+  const bones = createBones(ctx);
+  const artboard = createArtboard(ctx);
 
-  suscribir((c) => {
-    if ('pose' in c) contenedor.classList.toggle('modo-pose', !!estado.pose);
-    if ('params' in c) contenedor.classList.toggle('modo-params', !!estado.params && !estado.pose);
-    if ('vivo' in c) contenedor.classList.toggle('en-vivo', estado.vivo);
-    if ('doc' in c || 'previa' in c || 'pose' in c || 'params' in c || 'tiempo' in c || 'poseViva' in c) dibujarDocumento();
+  subscribe((c) => {
+    if ('pose' in c) container.classList.toggle('modo-pose', !!state.pose);
+    if ('params' in c) container.classList.toggle('modo-params', !!state.params && !state.pose);
+    if ('live' in c) container.classList.toggle('en-vivo', state.live);
+    if ('doc' in c || 'previewDoc' in c || 'pose' in c || 'params' in c || 'time' in c || 'livePose' in c) drawDocument();
     // Seleccionar una variante oculta de un switch la muestra (solo en la vista): hay que redibujar el documento.
-    else if ('seleccion' in c && JSON.stringify(variantesAMostrar()) !== mostrando) dibujarDocumento();
-    else if ('seleccion' in c || 'edicion' in c || 'vertice' in c) dibujarSuperposicion();
-    if ('herramienta' in c) {
-      contenedor.className = `herramienta-${estado.herramienta}${estado.pose ? ' modo-pose' : ''}${estado.vivo ? ' en-vivo' : ''}`;
-      if (estado.herramienta !== 'path' && pluma.activa()) pluma.terminar(false);
-      if (estado.herramienta !== 'seleccionar' && estado.edicion) fijar({ edicion: null, vertice: null });
-      dibujarSuperposicion();
+    else if ('selection' in c && JSON.stringify(variantsToShow()) !== showing) drawDocument();
+    else if ('selection' in c || 'editing' in c || 'vertex' in c) drawOverlay();
+    if ('tool' in c) {
+      container.className = `herramienta-${state.tool}${state.pose ? ' modo-pose' : ''}${state.live ? ' en-vivo' : ''}`;
+      if (state.tool !== 'path' && pen.active()) pen.finish(false);
+      if (state.tool !== 'seleccionar' && state.editing) setState({ editing: null, vertex: null });
+      drawOverlay();
     }
     // Salir de la edición de puntos si cambia la selección o el path desaparece.
-    if (estado.edicion && ('seleccion' in c || 'doc' in c) && (estado.seleccion !== estado.edicion || estado.seleccionados.length > 1 || !buscar(estado.doc, estado.edicion))) {
-      fijar({ edicion: null, vertice: null });
+    if (state.editing && ('selection' in c || 'doc' in c) && (state.selection !== state.editing || state.selected.length > 1 || !findObject(state.doc, state.editing))) {
+      setState({ editing: null, vertex: null });
     }
-    if ('id' in c && estado.doc && ajustadoPara !== estado.id) ajustar();
+    if ('id' in c && state.doc && adjustedFor !== state.id) adjust();
   });
 
   // Soltar imágenes sobre el lienzo: una capa image por archivo, donde se soltó.
-  vista.addEventListener('dragover', (e) => {
-    if (!estado.doc || !e.dataTransfer?.types.includes('Files')) return;
+  view.addEventListener('dragover', (e) => {
+    if (!state.doc || !e.dataTransfer?.types.includes('Files')) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   });
-  vista.addEventListener('drop', (e) => {
-    const archivos = soloImagenes(e.dataTransfer?.files);
-    if (!estado.doc || !e.dataTransfer?.types.includes('Files')) return;
+  view.addEventListener('drop', (e) => {
+    const files = imagesOnly(e.dataTransfer?.files);
+    if (!state.doc || !e.dataTransfer?.types.includes('Files')) return;
     e.preventDefault();
-    if (!archivos.length) return avisar('Only PNG, JPG, WebP or SVG images can be dropped here.', true);
-    agregarImagenes(archivos, aplicar(invertir(ctx.matrizCamara()), ...ctx.puntoPantalla(e)));
+    if (!files.length) return notify('Only PNG, JPG, WebP or SVG images can be dropped here.', true);
+    addImages(files, apply(invert(ctx.cameraMatrix()), ...ctx.screenPoint(e)));
   });
 
-  new ResizeObserver(() => estado.doc && (ajustadoPara === estado.id ? aplicarCamara() : ajustar())).observe(contenedor);
+  new ResizeObserver(() => state.doc && (adjustedFor === state.id ? applyCamera() : adjust())).observe(container);
 
   // ---------- Dibujo ----------
 
-  function dibujarDocumento() {
+  function drawDocument() {
     const doc = docVisible();
-    if (!doc) return documentoG.replaceChildren();
-    const w = leerMeta(esquema, doc, 'width');
-    const h = leerMeta(esquema, doc, 'height');
+    if (!doc) return documentG.replaceChildren();
+    const w = readMeta(schema, doc, 'width');
+    const h = readMeta(schema, doc, 'height');
     // El tamaño cambia anclado al centro (core/tamano.js): la cámara se corre para que el centro no salte.
-    if (tamanoDibujado?.id === estado.id && (tamanoDibujado.w !== w || tamanoDibujado.h !== h)) {
-      camara.x -= ((w - tamanoDibujado.w) / 2) * camara.zoom;
-      camara.y -= ((h - tamanoDibujado.h) / 2) * camara.zoom;
-      camaraG.setAttribute('transform', `translate(${camara.x} ${camara.y}) scale(${camara.zoom})`);
+    if (drawnSize?.id === state.id && (drawnSize.w !== w || drawnSize.h !== h)) {
+      camera.x -= ((w - drawnSize.w) / 2) * camera.zoom;
+      camera.y -= ((h - drawnSize.h) / 2) * camera.zoom;
+      cameraG.setAttribute('transform', `translate(${camera.x} ${camera.y}) scale(${camera.zoom})`);
     }
-    tamanoDibujado = { id: estado.id, w, h };
+    drawnSize = { id: state.id, w, h };
     // Lo que se ve: la pose que se edita, la mezcla de los params (vista Parámetros) o el montaje.
-    const clip = clipAbierto(doc);
+    const clip = openedClip(doc);
     // Con Live encendido, lo que da el runtime en este cuadro (como lo vería la app).
-    const vista = estado.vivo ? { pose: estado.poseViva } : clip ? { animation: clip.id, time: estado.tiempo, params: estado.params ?? {} } : estado.pose ? { pose: estado.pose } : estado.params ? { params: estado.params } : {};
-    const mostrar = estado.vivo || (estado.params && !estado.pose) ? {} : variantesAMostrar(doc);
-    mostrando = JSON.stringify(mostrar);
-    documentoG.innerHTML = `${contenidoSvg(doc, esquema, { ...vista, mostrar, assets: (src) => urlDeAsset(src) })}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
+    const view = state.live ? { pose: state.livePose } : clip ? { animation: clip.id, time: state.time, params: state.params ?? {} } : state.pose ? { pose: state.pose } : state.params ? { params: state.params } : {};
+    const show = state.live || (state.params && !state.pose) ? {} : variantsToShow(doc);
+    showing = JSON.stringify(show);
+    documentG.innerHTML = `${svgContent(doc, schema, { ...view, show, assets: (src) => assetUrl(src) })}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
     // Con candado: los clics pasan de largo (llegan a lo de abajo), y sus hijos lo heredan.
-    for (const o of doc.objects) if (o.locked) ctx.elemento(o.id)?.style.setProperty('pointer-events', 'none');
-    dibujarSuperposicion();
+    for (const o of doc.objects) if (o.locked) ctx.element(o.id)?.style.setProperty('pointer-events', 'none');
+    drawOverlay();
   }
 
-  function dibujarSuperposicion() {
-    superposicion.replaceChildren();
-    if (!estado.doc) return;
-    if (estado.edicion) {
-      const el = ctx.elemento(estado.edicion);
+  function drawOverlay() {
+    overlay.replaceChildren();
+    if (!state.doc) return;
+    if (state.editing) {
+      const el = ctx.element(state.editing);
       if (el) {
         // Contorno del path en edición, encima de todo.
-        const contorno = el.querySelector(':scope > path')?.cloneNode();
-        if (contorno) {
+        const outline = el.querySelector(':scope > path')?.cloneNode();
+        if (outline) {
           const m = el.getCTM();
-          contorno.setAttribute('class', 'contorno-edicion');
-          contorno.setAttribute('transform', `matrix(${m.a} ${m.b} ${m.c} ${m.d} ${m.e} ${m.f})`);
-          superposicion.append(contorno);
+          outline.setAttribute('class', 'contorno-edicion');
+          outline.setAttribute('transform', `matrix(${m.a} ${m.b} ${m.c} ${m.d} ${m.e} ${m.f})`);
+          overlay.append(outline);
         }
       }
-      puntos.dibujar();
+      points.draw();
     } else {
       // En una pose, las manijas solo salen para lo que no sigue a un hueso (transformar.dibujar lo decide).
-      transformar.dibujar();
+      transform.draw();
     }
-    huesos.dibujar();
-    pluma.dibujar();
-    if (estado.herramienta === 'artboard') artboard.dibujar();
+    bones.draw();
+    pen.draw();
+    if (state.tool === 'artboard') artboard.draw();
   }
 
   // ---------- Cámara ----------
 
-  function aplicarCamara() {
-    camaraG.setAttribute('transform', `translate(${camara.x} ${camara.y}) scale(${camara.zoom})`);
-    document.querySelector('#zoom').textContent = `${Math.round(camara.zoom * 100)}%`;
-    dibujarSuperposicion();
+  function applyCamera() {
+    cameraG.setAttribute('transform', `translate(${camera.x} ${camera.y}) scale(${camera.zoom})`);
+    document.querySelector('#zoom').textContent = `${Math.round(camera.zoom * 100)}%`;
+    drawOverlay();
   }
 
   /** Zoom fijo, manteniendo el centro de la vista. */
-  function fijarZoom(zoom) {
-    const r = contenedor.getBoundingClientRect();
+  function setZoom(zoom) {
+    const r = container.getBoundingClientRect();
     const [cx, cy] = [r.width / 2, r.height / 2];
-    camara.x = cx - ((cx - camara.x) * zoom) / camara.zoom;
-    camara.y = cy - ((cy - camara.y) * zoom) / camara.zoom;
-    camara.zoom = zoom;
-    aplicarCamara();
+    camera.x = cx - ((cx - camera.x) * zoom) / camera.zoom;
+    camera.y = cy - ((cy - camera.y) * zoom) / camera.zoom;
+    camera.zoom = zoom;
+    applyCamera();
   }
 
-  function ajustar() {
-    const r = contenedor.getBoundingClientRect();
-    if (!r.width || !estado.doc) return;
-    const w = leerMeta(esquema, estado.doc, 'width');
-    const h = leerMeta(esquema, estado.doc, 'height');
-    camara.zoom = Math.min((r.width - 60) / w, (r.height - 60) / h);
-    camara.x = (r.width - w * camara.zoom) / 2;
-    camara.y = (r.height - h * camara.zoom) / 2;
-    ajustadoPara = estado.id;
-    aplicarCamara();
+  function adjust() {
+    const r = container.getBoundingClientRect();
+    if (!r.width || !state.doc) return;
+    const w = readMeta(schema, state.doc, 'width');
+    const h = readMeta(schema, state.doc, 'height');
+    camera.zoom = Math.min((r.width - 60) / w, (r.height - 60) / h);
+    camera.x = (r.width - w * camera.zoom) / 2;
+    camera.y = (r.height - h * camera.zoom) / 2;
+    adjustedFor = state.id;
+    applyCamera();
   }
 
-  vista.addEventListener(
+  view.addEventListener(
     'wheel',
     (e) => {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
-        const [mx, my] = ctx.puntoPantalla(e);
-        const zoom = Math.min(20, Math.max(0.05, camara.zoom * Math.exp(-e.deltaY * 0.002)));
-        camara.x = mx - ((mx - camara.x) * zoom) / camara.zoom;
-        camara.y = my - ((my - camara.y) * zoom) / camara.zoom;
-        camara.zoom = zoom;
+        const [mx, my] = ctx.screenPoint(e);
+        const zoom = Math.min(20, Math.max(0.05, camera.zoom * Math.exp(-e.deltaY * 0.002)));
+        camera.x = mx - ((mx - camera.x) * zoom) / camera.zoom;
+        camera.y = my - ((my - camera.y) * zoom) / camera.zoom;
+        camera.zoom = zoom;
       } else {
-        camara.x -= e.shiftKey ? e.deltaY : e.deltaX;
-        camara.y -= e.shiftKey ? 0 : e.deltaY;
+        camera.x -= e.shiftKey ? e.deltaY : e.deltaX;
+        camera.y -= e.shiftKey ? 0 : e.deltaY;
       }
-      aplicarCamara();
+      applyCamera();
     },
     { passive: false },
   );
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space' && !(/** @type {Element} */ (e.target)).closest('input, select, textarea')) {
-      espacio = true;
+      space = true;
       e.preventDefault();
     }
   });
-  window.addEventListener('keyup', (e) => e.code === 'Space' && (espacio = false));
+  window.addEventListener('keyup', (e) => e.code === 'Space' && (space = false));
 
   // Sigue el puntero hasta soltarlo.
-  function arrastrar(e, mover, soltar) {
+  function drag(e, move, release) {
     try {
-      vista.setPointerCapture(e.pointerId);
+      view.setPointerCapture(e.pointerId);
     } catch {
       // puntero que ya no está activo (o evento sintético): se sigue sin captura
     }
-    const alSoltar = (ev) => {
-      vista.removeEventListener('pointermove', mover);
-      vista.removeEventListener('pointerup', alSoltar);
-      vista.removeEventListener('pointercancel', alSoltar);
-      soltar(ev);
+    const onRelease = (ev) => {
+      view.removeEventListener('pointermove', move);
+      view.removeEventListener('pointerup', onRelease);
+      view.removeEventListener('pointercancel', onRelease);
+      release(ev);
     };
-    vista.addEventListener('pointermove', mover);
-    vista.addEventListener('pointerup', alSoltar);
-    vista.addEventListener('pointercancel', alSoltar);
+    view.addEventListener('pointermove', move);
+    view.addEventListener('pointerup', onRelease);
+    view.addEventListener('pointercancel', onRelease);
   }
 
   // ---------- Eventos ----------
 
-  vista.addEventListener('pointerdown', (e) => {
-    contenedor.focus();
-    if (!estado.doc) return;
-    if (e.button === 1 || (e.button === 0 && espacio)) return panear(e);
+  view.addEventListener('pointerdown', (e) => {
+    container.focus();
+    if (!state.doc) return;
+    if (e.button === 1 || (e.button === 0 && space)) return pan(e);
     if (e.button !== 0) return;
-    const manija = e.target.closest('[data-manija]')?.dataset.manija;
-    if (manija?.startsWith('hueso-')) return huesos.manija(e, manija);
-    if (manija?.startsWith('artboard-')) return artboard.manija(e, manija);
+    const handle = e.target.closest('[data-manija]')?.dataset.manija;
+    if (handle?.startsWith('hueso-')) return bones.handle(e, handle);
+    if (handle?.startsWith('artboard-')) return artboard.handle(e, handle);
     // Artboard: el lienzo queda elegido (el inspector muestra sus propiedades); fuera de las manijas no hace nada.
-    if (estado.herramienta === 'artboard') return estado.seleccion && seleccionar(null);
-    if (manija) return estado.edicion ? puntos.manija(e, manija) : transformar.manija(e, manija);
+    if (state.tool === 'artboard') return state.selection && select(null);
+    if (handle) return state.editing ? points.handle(e, handle) : transform.handle(e, handle);
     // Con una pose activa, el lienzo posa: se giran huesos (o el dibujo a través de su hueso).
     // Lo que no sigue a un hueso se elige, mueve, gira y escala como en el montaje; queda en la pose (o en el clip).
-    if (estado.pose) {
+    if (state.pose) {
       const g = e.target.closest('[data-id]');
-      if (g && documentoG.contains(g) && !e.target.closest('[data-hueso]') && esLibre(estado.doc, g.dataset.id)) return transformar.seleccionarYMover(e);
-      return huesos.pointerdownPose(e);
+      if (g && documentG.contains(g) && !e.target.closest('[data-hueso]') && isFree(state.doc, g.dataset.id)) return transform.selectAndMove(e);
+      return bones.pointerdownPose(e);
     }
     // En la vista Parámetros se mira la mezcla: un clic solo selecciona.
-    if (estado.params) {
+    if (state.params) {
       const g = e.target.closest('[data-id]');
-      return seleccionar(g && documentoG.contains(g) ? g.dataset.id : null);
+      return select(g && documentG.contains(g) ? g.dataset.id : null);
     }
-    if (estado.herramienta === 'hueso') return huesos.pointerdown(e);
-    if (estado.herramienta === 'manipular') return huesos.pointerdownManipular(e);
-    if (estado.herramienta === 'reparentar') return huesos.pointerdownReparentar(e);
-    if (estado.herramienta === 'enlazarCapa') return huesos.pointerdownEnlazarCapa(e);
-    if (estado.herramienta === 'enlazarPuntos') return huesos.pointerdownEnlazarPuntos(e);
-    if (estado.herramienta === 'path') return pluma.pointerdown(e);
-    if (estado.herramienta === 'rotar' || estado.herramienta === 'escalar') return transformar.conHerramienta(e, estado.herramienta);
-    if (estado.herramienta === 'rect' || estado.herramienta === 'ellipse') return crearForma(e, estado.herramienta);
-    if (estado.edicion) {
-      if (puntos.pointerdown(e)) return;
-      fijar({ edicion: null, vertice: null });
+    if (state.tool === 'hueso') return bones.pointerdown(e);
+    if (state.tool === 'manipular') return bones.pointerdownManipulate(e);
+    if (state.tool === 'reparentar') return bones.pointerdownReparent(e);
+    if (state.tool === 'enlazarCapa') return bones.pointerdownBindLayer(e);
+    if (state.tool === 'enlazarPuntos') return bones.pointerdownBindPoints(e);
+    if (state.tool === 'path') return pen.pointerdown(e);
+    if (state.tool === 'rotar' || state.tool === 'escalar') return transform.withTool(e, state.tool);
+    if (state.tool === 'rect' || state.tool === 'ellipse') return createShape(e, state.tool);
+    if (state.editing) {
+      if (points.pointerdown(e)) return;
+      setState({ editing: null, vertex: null });
     }
-    transformar.seleccionarYMover(e);
+    transform.selectAndMove(e);
   });
 
-  vista.addEventListener('pointermove', (e) => estado.herramienta === 'path' && pluma.hover(e));
+  view.addEventListener('pointermove', (e) => state.tool === 'path' && pen.hover(e));
 
-  vista.addEventListener('dblclick', (e) => {
-    if (estado.herramienta !== 'seleccionar') return;
+  view.addEventListener('dblclick', (e) => {
+    if (state.tool !== 'seleccionar') return;
     // Por la captura del puntero, el doble clic llega a la vista: se busca qué hay debajo.
-    const debajo = document.elementFromPoint(e.clientX, e.clientY) ?? e.target;
-    const manija = debajo.closest('[data-manija^="ancla-"]')?.dataset.manija;
-    if (manija && estado.edicion) return puntos.alternar(Number(manija.split('-')[1]));
-    const g = debajo.closest('[data-id]');
-    const obj = g && documentoG.contains(g) && buscar(estado.doc, g.dataset.id);
-    if (obj?.type === 'path') editarPuntos(obj.id);
+    const below = document.elementFromPoint(e.clientX, e.clientY) ?? e.target;
+    const handle = below.closest('[data-manija^="ancla-"]')?.dataset.manija;
+    if (handle && state.editing) return points.toggle(Number(handle.split('-')[1]));
+    const g = below.closest('[data-id]');
+    const obj = g && documentG.contains(g) && findObject(state.doc, g.dataset.id);
+    if (obj?.type === 'path') editPoints(obj.id);
   });
 
-  function panear(e) {
+  function pan(e) {
     e.preventDefault();
-    contenedor.classList.add('paneando');
-    const inicio = { x: e.clientX - camara.x, y: e.clientY - camara.y };
-    arrastrar(
+    container.classList.add('paneando');
+    const start = { x: e.clientX - camera.x, y: e.clientY - camera.y };
+    drag(
       e,
       (ev) => {
-        camara.x = ev.clientX - inicio.x;
-        camara.y = ev.clientY - inicio.y;
-        aplicarCamara();
+        camera.x = ev.clientX - start.x;
+        camera.y = ev.clientY - start.y;
+        applyCamera();
       },
-      () => contenedor.classList.remove('paneando'),
+      () => container.classList.remove('paneando'),
     );
   }
 
-  function crearForma(e, tipo) {
-    const padre = padreParaNuevo();
-    const inversa = invertir(multiplicar(ctx.matrizCamara(), matrizMundo(estado.doc, esquema, padre)));
-    const s0 = ctx.puntoPantalla(e);
-    const borrador = ctx.crear(tipo === 'ellipse' ? 'ellipse' : 'rect', { class: 'borrador' });
-    superposicion.append(borrador);
+  function createShape(e, tipo) {
+    const parent = parentForNew();
+    const inverse = invert(multiply(ctx.cameraMatrix(), worldMatrix(state.doc, schema, parent)));
+    const s0 = ctx.screenPoint(e);
+    const draft = ctx.crear(tipo === 'ellipse' ? 'ellipse' : 'rect', { class: 'borrador' });
+    overlay.append(draft);
 
-    const caja = (ev) => {
-      const s = ctx.puntoPantalla(ev);
+    const box = (ev) => {
+      const s = ctx.screenPoint(ev);
       let dx = s[0] - s0[0];
       let dy = s[1] - s0[1];
       // Shift: cuadrado o círculo.
       if (ev.shiftKey) {
-        const lado = Math.max(Math.abs(dx), Math.abs(dy));
-        dx = Math.sign(dx || 1) * lado;
-        dy = Math.sign(dy || 1) * lado;
+        const side = Math.max(Math.abs(dx), Math.abs(dy));
+        dx = Math.sign(dx || 1) * side;
+        dy = Math.sign(dy || 1) * side;
       }
-      return { x: Math.min(s0[0], s0[0] + dx), y: Math.min(s0[1], s0[1] + dy), w: Math.abs(dx), h: Math.abs(dy), fin: [s0[0] + dx, s0[1] + dy] };
+      return { x: Math.min(s0[0], s0[0] + dx), y: Math.min(s0[1], s0[1] + dy), w: Math.abs(dx), h: Math.abs(dy), end: [s0[0] + dx, s0[1] + dy] };
     };
 
-    arrastrar(
+    drag(
       e,
       (ev) => {
-        const c = caja(ev);
-        const atributos = tipo === 'ellipse' ? { cx: c.x + c.w / 2, cy: c.y + c.h / 2, rx: c.w / 2, ry: c.h / 2 } : { x: c.x, y: c.y, width: c.w, height: c.h };
-        for (const [k, v] of Object.entries(atributos)) borrador.setAttribute(k, v);
+        const c = box(ev);
+        const attributes = tipo === 'ellipse' ? { cx: c.x + c.w / 2, cy: c.y + c.h / 2, rx: c.w / 2, ry: c.h / 2 } : { x: c.x, y: c.y, width: c.w, height: c.h };
+        for (const [k, v] of Object.entries(attributes)) draft.setAttribute(k, v);
       },
       (ev) => {
-        borrador.remove();
-        const c = caja(ev);
-        const [ax, ay] = aplicar(inversa, ...s0);
-        const [bx, by] = aplicar(inversa, ...c.fin);
+        draft.remove();
+        const c = box(ev);
+        const [ax, ay] = apply(inverse, ...s0);
+        const [bx, by] = apply(inverse, ...c.end);
         const props =
           c.w < 4 && c.h < 4
-            ? { x: redondear(ax), y: redondear(ay) }
-            : { x: redondear((ax + bx) / 2), y: redondear((ay + by) / 2), width: redondear(Math.abs(bx - ax)), height: redondear(Math.abs(by - ay)) };
-        const id = idLibre(tipo);
-        ejecutar([{ op: 'create', type: tipo, id, parent: padre, props }], `create ${id}`);
-        fijar({ herramienta: 'seleccionar' });
-        seleccionar(id);
+            ? { x: round(ax), y: round(ay) }
+            : { x: round((ax + bx) / 2), y: round((ay + by) / 2), width: round(Math.abs(bx - ax)), height: round(Math.abs(by - ay)) };
+        const id = freeId(tipo);
+        execute([{ op: 'create', type: tipo, id, parent: parent, props }], `create ${id}`);
+        setState({ tool: 'seleccionar' });
+        select(id);
       },
     );
   }
 
-  function editarPuntos(id) {
-    fijar({ herramienta: 'seleccionar', seleccion: id, seleccionados: [id], edicion: id, vertice: null });
+  function editPoints(id) {
+    setState({ tool: 'seleccionar', selection: id, selected: [id], editing: id, vertex: null });
   }
 
   return {
-    ajustar,
-    fijarZoom,
-    editarPuntos,
-    pluma,
-    puntos,
+    adjust,
+    setZoom,
+    editPoints,
+    pen,
+    points,
   };
 }

@@ -1,19 +1,19 @@
 // Estilos compartidos (de Moho): una forma toma de su estilo las propiedades de apariencia que no tiene propias.
 // Orden: valor propio → valor del estilo → valor por defecto del esquema.
 
-import { buscar } from './document.js';
-import { leer } from './schema.js';
+import { findObject } from './document.js';
+import { read } from './schema.js';
 
-export function valorEfectivo(esquema, doc, obj, prop) {
+export function effectiveValue(schema, doc, obj, prop) {
   if (obj[prop] !== undefined) return obj[prop];
-  const estilo = obj.style ? buscar(doc, obj.style) : null;
-  if (estilo?.type === 'style' && estilo[prop] !== undefined) return estilo[prop];
-  return leer(esquema, obj, prop);
+  const style = obj.style ? findObject(doc, obj.style) : null;
+  if (style?.type === 'style' && style[prop] !== undefined) return style[prop];
+  return read(schema, obj, prop);
 }
 
 /** De dónde sale el valor: 'propio', 'estilo' o 'defecto' (para mostrarlo en el inspector). */
-export function origenDelValor(doc, obj, prop) {
+export function valueOrigin(doc, obj, prop) {
   if (obj[prop] !== undefined) return 'propio';
-  const estilo = obj.style ? buscar(doc, obj.style) : null;
-  return estilo?.type === 'style' && estilo[prop] !== undefined ? 'estilo' : 'defecto';
+  const style = obj.style ? findObject(doc, obj.style) : null;
+  return style?.type === 'style' && style[prop] !== undefined ? 'estilo' : 'defecto';
 }

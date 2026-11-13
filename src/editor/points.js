@@ -2,48 +2,48 @@
 // clic sobre el contorno para agregar un vértice y Supr para borrar el seleccionado. Alt al arrastrar una tangente
 // la separa de la otra (pico).
 
-import { buscar } from '../core/document.js';
-import { leer } from '../core/schema.js';
-import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometry.js';
-import { aplicarPose } from '../core/blend.js';
-import { conHueso, dividirTramo, manijas, muestrearTramo, tangentes, verticeDesdeTangentes } from '../core/paths.js';
-import { docVisible, ejecutar, esquema, estado, fijar, previsualizar } from './state.js';
-import { nombreDeEdicion, opsDePose, poseActiva } from './editing.js';
+import { findObject } from '../core/document.js';
+import { read } from '../core/schema.js';
+import { apply, invert, worldMatrix, multiply } from '../core/geometry.js';
+import { applyPose } from '../core/blend.js';
+import { withBone, splitSpan, handles, sampleSpan, tangents, vertexFromTangents } from '../core/paths.js';
+import { docVisible, execute, schema, state, setState, preview } from './state.js';
+import { editingName, poseOps, activePose } from './editing.js';
 
-const CERCA_DEL_CONTORNO = 8; // px
+const NEAR_OUTLINE = 8; // px
 
-export function crearPuntos(ctx) {
+export function createPoints(ctx) {
   // Con una pose activa se editan los vértices de la pose (el morph); sin pose, los del montaje.
-  const path = () => buscar(aplicarPose(docVisible(), esquema, poseActiva(docVisible())), estado.edicion);
+  const path = () => findObject(applyPose(docVisible(), schema, activePose(docVisible())), state.editing);
   // La matriz del dibujo en pantalla tal como se ve (con huesos y pose incluidos).
-  const matriz = () => {
-    const m = ctx.elemento(estado.edicion)?.getCTM();
-    return m ? [m.a, m.b, m.c, m.d, m.e, m.f] : multiplicar(ctx.matrizCamara(), matrizMundo(docVisible(), esquema, estado.edicion));
+  const matrix = () => {
+    const m = ctx.element(state.editing)?.getCTM();
+    return m ? [m.a, m.b, m.c, m.d, m.e, m.f] : multiply(ctx.cameraMatrix(), worldMatrix(docVisible(), schema, state.editing));
   };
-  const opsDeVertices = (vertices) => {
-    const pose = poseActiva();
-    return pose ? opsDePose(estado.doc, pose.id, estado.edicion, { vertices }) : [{ op: 'set', target: estado.edicion, props: { vertices } }];
+  const vertexOps = (vertices) => {
+    const pose = activePose();
+    return pose ? poseOps(state.doc, pose.id, state.editing, { vertices }) : [{ op: 'set', target: state.editing, props: { vertices } }];
   };
-  const guardar = (vertices, nota) => ejecutar(opsDeVertices(vertices), `${estado.pose ? `${nombreDeEdicion()}: ` : ''}${nota} in ${estado.edicion}`);
+  const save = (vertices, nota) => execute(vertexOps(vertices), `${state.pose ? `${editingName()}: ` : ''}${nota} in ${state.editing}`);
 
-  function dibujar() {
+  function draw() {
     const obj = path();
     if (!obj) return;
-    const m = matriz();
-    const pantalla = (p) => aplicar(m, ...p);
-    const vertices = leer(esquema, obj, 'vertices');
-    manijas(vertices).forEach((h, i) => {
-      const a = pantalla(h.ancla);
-      for (const [cual, punto] of [['entrada', h.entrada], ['salida', h.salida]]) {
-        if (!punto) continue;
-        const t = pantalla(punto);
-        ctx.superposicion.append(ctx.crear('line', { class: 'tangente', x1: a[0], y1: a[1], x2: t[0], y2: t[1] }));
-        ctx.superposicion.append(ctx.crear('circle', { class: 'manija tangente-punto', 'data-manija': `${cual}-${i}`, cx: t[0], cy: t[1], r: 4 }, 'Tangent (Alt: break)'));
+    const m = matrix();
+    const screen = (p) => apply(m, ...p);
+    const vertices = read(schema, obj, 'vertices');
+    handles(vertices).forEach((h, i) => {
+      const a = screen(h.anchor);
+      for (const [which, point] of [['entrada', h.entrada], ['salida', h.salida]]) {
+        if (!point) continue;
+        const t = screen(point);
+        ctx.overlay.append(ctx.crear('line', { class: 'tangente', x1: a[0], y1: a[1], x2: t[0], y2: t[1] }));
+        ctx.overlay.append(ctx.crear('circle', { class: 'manija tangente-punto', 'data-manija': `${which}-${i}`, cx: t[0], cy: t[1], r: 4 }, 'Tangent (Alt: break)'));
       }
-      ctx.superposicion.append(
+      ctx.overlay.append(
         ctx.crear(
           'rect',
-          { class: `manija ancla${i === estado.vertice ? ' activa' : ''}${vertices[i].bone ? ' con-hueso' : ''}`, 'data-manija': `ancla-${i}`, x: a[0] - 4.5, y: a[1] - 4.5, width: 9, height: 9 },
+          { class: `manija ancla${i === state.vertex ? ' activa' : ''}${vertices[i].bone ? ' con-hueso' : ''}`, 'data-manija': `ancla-${i}`, x: a[0] - 4.5, y: a[1] - 4.5, width: 9, height: 9 },
           `Vertex ${i}${vertices[i].bone ? `, follows ${vertices[i].bone}` : ''} (double-click: straight/curved)`,
         ),
       );
@@ -51,42 +51,42 @@ export function crearPuntos(ctx) {
   }
 
   /** Arrastre de un ancla o de una tangente. */
-  function manija(e, tipo) {
-    const [cual, texto] = tipo.split('-');
-    const i = Number(texto);
+  function handle(e, tipo) {
+    const [which, text] = tipo.split('-');
+    const i = Number(text);
     const obj = path();
-    const vertices = leer(esquema, obj, 'vertices');
-    const inversa = invertir(matriz());
-    const local = (ev) => aplicar(inversa, ...ctx.puntoPantalla(ev));
-    const inicio = local(e);
-    fijar({ vertice: i });
-    let cambio = null;
+    const vertices = read(schema, obj, 'vertices');
+    const inverse = invert(matrix());
+    const local = (ev) => apply(inverse, ...ctx.screenPoint(ev));
+    const start = local(e);
+    setState({ vertex: i });
+    let change = null;
 
-    ctx.arrastrar(
+    ctx.drag(
       e,
       (ev) => {
         const p = local(ev);
         const v = vertices[i];
-        const nuevos = [...vertices];
-        if (cual === 'ancla') {
-          nuevos[i] = { ...v, x: Math.round((v.x + p[0] - inicio[0]) * 100) / 100, y: Math.round((v.y + p[1] - inicio[1]) * 100) / 100 };
+        const created = [...vertices];
+        if (which === 'ancla') {
+          created[i] = { ...v, x: Math.round((v.x + p[0] - start[0]) * 100) / 100, y: Math.round((v.y + p[1] - start[1]) * 100) / 100 };
         } else {
-          const t = tangentes(v);
-          const otra = cual === 'entrada' ? 'salida' : 'entrada';
-          t[cual] = [p[0] - v.x, p[1] - v.y];
-          const modo = ev.altKey ? 'detached' : (v.mode ?? 'straight');
-          if (modo === 'mirrored') t[otra] = [-t[cual][0], -t[cual][1]];
-          if (modo === 'asymmetric') {
-            const largoOtra = Math.hypot(...t[otra]);
-            const l = Math.hypot(...t[cual]) || 1;
-            t[otra] = [(-t[cual][0] / l) * largoOtra, (-t[cual][1] / l) * largoOtra];
+          const t = tangents(v);
+          const other = which === 'entrada' ? 'salida' : 'entrada';
+          t[which] = [p[0] - v.x, p[1] - v.y];
+          const mode = ev.altKey ? 'detached' : (v.mode ?? 'straight');
+          if (mode === 'mirrored') t[other] = [-t[which][0], -t[which][1]];
+          if (mode === 'asymmetric') {
+            const otherLength = Math.hypot(...t[other]);
+            const l = Math.hypot(...t[which]) || 1;
+            t[other] = [(-t[which][0] / l) * otherLength, (-t[which][1] / l) * otherLength];
           }
-          nuevos[i] = conHueso(v, verticeDesdeTangentes(v.x, v.y, t.entrada, t.salida));
+          created[i] = withBone(v, vertexFromTangents(v.x, v.y, t.entrada, t.salida));
         }
-        cambio = nuevos;
-        previsualizar(opsDeVertices(nuevos));
+        change = created;
+        preview(vertexOps(created));
       },
-      () => (cambio ? guardar(cambio, cual === 'ancla' ? 'move vertex' : 'adjust curve') : previsualizar(null)),
+      () => (change ? save(change, which === 'ancla' ? 'move vertex' : 'adjust curve') : preview(null)),
     );
   }
 
@@ -94,52 +94,52 @@ export function crearPuntos(ctx) {
   function pointerdown(e) {
     const obj = path();
     if (!obj) return false;
-    const vertices = leer(esquema, obj, 'vertices');
-    const m = matriz();
-    const p = ctx.puntoPantalla(e);
-    const tramos = leer(esquema, obj, 'closed') ? vertices.length : vertices.length - 1;
-    let mejor = null;
-    for (let i = 0; i < tramos; i++) {
-      for (const { t, p: q } of muestrearTramo(vertices, i, 40)) {
-        const s = aplicar(m, ...q);
+    const vertices = read(schema, obj, 'vertices');
+    const m = matrix();
+    const p = ctx.screenPoint(e);
+    const spans = read(schema, obj, 'closed') ? vertices.length : vertices.length - 1;
+    let best = null;
+    for (let i = 0; i < spans; i++) {
+      for (const { t, p: q } of sampleSpan(vertices, i, 40)) {
+        const s = apply(m, ...q);
         const d = Math.hypot(s[0] - p[0], s[1] - p[1]);
-        if (!mejor || d < mejor.d) mejor = { d, i, t };
+        if (!best || d < best.d) best = { d, i, t };
       }
     }
-    if (!mejor || mejor.d > CERCA_DEL_CONTORNO || mejor.t < 0.02 || mejor.t > 0.98) return false;
-    guardar(dividirTramo(vertices, mejor.i, mejor.t), 'add vertex');
-    fijar({ vertice: mejor.i + 1 });
+    if (!best || best.d > NEAR_OUTLINE || best.t < 0.02 || best.t > 0.98) return false;
+    save(splitSpan(vertices, best.i, best.t), 'add vertex');
+    setState({ vertex: best.i + 1 });
     return true;
   }
 
   /** Doble clic en un ancla: recto ↔ curvo. */
-  function alternar(i) {
+  function toggle(i) {
     const obj = path();
-    const vertices = leer(esquema, obj, 'vertices');
+    const vertices = read(schema, obj, 'vertices');
     const v = vertices[i];
-    const nuevos = [...vertices];
+    const created = [...vertices];
     if ((v.mode ?? 'straight') !== 'straight') {
-      nuevos[i] = conHueso(v, { x: v.x, y: v.y });
+      created[i] = withBone(v, { x: v.x, y: v.y });
     } else {
       // Tangente paralela a la línea entre los vecinos, de un tercio de la distancia media.
-      const anterior = vertices[(i - 1 + vertices.length) % vertices.length];
-      const siguiente = vertices[(i + 1) % vertices.length];
-      const dx = siguiente.x - anterior.x;
-      const dy = siguiente.y - anterior.y;
+      const previous = vertices[(i - 1 + vertices.length) % vertices.length];
+      const next = vertices[(i + 1) % vertices.length];
+      const dx = next.x - previous.x;
+      const dy = next.y - previous.y;
       const dist = Math.round((Math.hypot(dx, dy) / 6) * 100) / 100 || 20;
-      nuevos[i] = conHueso(v, { x: v.x, y: v.y, mode: 'mirrored', angle: Math.round((Math.atan2(dy, dx) * 180) / Math.PI * 100) / 100, dist });
+      created[i] = withBone(v, { x: v.x, y: v.y, mode: 'mirrored', angle: Math.round((Math.atan2(dy, dx) * 180) / Math.PI * 100) / 100, dist });
     }
-    guardar(nuevos, 'toggle vertex');
+    save(created, 'toggle vertex');
   }
 
-  function borrarVertice() {
+  function deleteVertex() {
     const obj = path();
-    const vertices = leer(esquema, obj, 'vertices');
-    if (estado.vertice == null || vertices.length <= 2) return false;
-    guardar(vertices.filter((_, i) => i !== estado.vertice), 'delete vertex');
-    fijar({ vertice: null });
+    const vertices = read(schema, obj, 'vertices');
+    if (state.vertex == null || vertices.length <= 2) return false;
+    save(vertices.filter((_, i) => i !== state.vertex), 'delete vertex');
+    setState({ vertex: null });
     return true;
   }
 
-  return { dibujar, manija, pointerdown, alternar, borrarVertice };
+  return { draw, handle, pointerdown, toggle, deleteVertex };
 }

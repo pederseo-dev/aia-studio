@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
-import { aiaDocumentos } from './server/vitePlugin.js';
+import { aiaDocuments } from './server/vitePlugin.js';
 
 export default defineConfig({
-  plugins: [aiaDocumentos()],
+  plugins: [aiaDocuments()],
   server: {
     watch: { ignored: ['**/referencias/**', '**/*.tmp'] },
   },

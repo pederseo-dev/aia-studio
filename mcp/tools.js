@@ -3,190 +3,190 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { buscar, hijos, huesosDe } from '../src/core/document.js';
-import { MAXIMO_DE_IMAGEN } from '../src/core/images.js';
-import { evaluarEsqueleto, planEnlazarPorCercania, huesoDe, limitarAngulo, puntaDe, reparentarHueso, repartirEntreHuesos } from '../src/core/skeleton.js';
-import { aplicar } from '../src/core/geometry.js';
-import { leer, leerMeta, sugerir } from '../src/core/schema.js';
-import { paramsDeSwitch, pesoDeDriver, valoresDeParams } from '../src/core/blend.js';
-import { resumirOperaciones } from '../src/core/operations.js';
-import { svgDocumento } from '../src/render/svg.js';
-import { errorDeVistaPrevia, lineasDePistas, planVistaDeClip, planVistaEnVivo, resumenDeClip } from './animation.js';
+import { findObject, children, bonesOf } from '../src/core/document.js';
+import { IMAGE_MAX } from '../src/core/images.js';
+import { evaluateSkeleton, planProximityBinding, boneOf, limitAngle, tipOf, reparentBone, distributeBetweenBones } from '../src/core/skeleton.js';
+import { apply } from '../src/core/geometry.js';
+import { read, readMeta, suggest } from '../src/core/schema.js';
+import { switchParams, driverWeight, paramValues } from '../src/core/blend.js';
+import { summarizeOperations } from '../src/core/operations.js';
+import { svgDocument } from '../src/render/svg.js';
+import { previewError, trackLines, planClipView, planLiveView, clipSummary } from './animation.js';
 
 /**
  * Árbol legible del documento: una línea por objeto, indentado por jerarquía, del fondo al frente. `pistas`: true
  * lista las pistas de todos los clips, false ninguna, o los ids de los clips a listar.
- * @param {any} doc @param {any} esquema @param {{ pistas?: boolean | string[] }} [opciones]
+ * @param {any} doc @param {any} schema @param {{ tracks?: boolean | string[] }} [options]
  */
-export function esquemaDelArbol(doc, esquema, { pistas = true } = {}) {
-  const lineas = [];
-  const { reposo } = evaluarEsqueleto(doc, esquema);
+export function treeOutline(doc, schema, { tracks = true } = {}) {
+  const lines = [];
+  const { rest } = evaluateSkeleton(doc, schema);
   const r = (v) => Math.round(v);
-  const recorrer = (padre, nivel) => {
-    for (const o of hijos(doc, padre)) {
-      let detalle = '';
-      if (o.bone) detalle = ` → hueso ${o.bone}`;
+  const walk = (parent, level) => {
+    for (const o of children(doc, parent)) {
+      let detail = '';
+      if (o.bone) detail = ` → hueso ${o.bone}`;
       // Dibujo de un skeleton que no sigue a ningún hueso: en las poses queda quieto.
-      else if (buscar(doc, o.parent)?.type === 'skeleton' && o.type !== 'bone' && !huesoDe(doc, o.id) && !o.vertices?.some((v) => v.bone)) detalle = ' (sin hueso: queda quieto en las poses)';
-      if (o.type === 'skeleton') detalle += ` [${huesosDe(doc, o.id).length} huesos]`;
-      if (o.type === 'image') detalle += ` [${leer(esquema, o, 'src')}, ${r(leer(esquema, o, 'width'))}×${r(leer(esquema, o, 'height'))}]`;
-      if (o.type === 'pose') detalle = ` [${Object.keys(o.values ?? {}).join(', ') || 'vacía'}]`;
-      if (o.type === 'animation') detalle = ` ${resumenDeClip(esquema, o)}`;
+      else if (findObject(doc, o.parent)?.type === 'skeleton' && o.type !== 'bone' && !boneOf(doc, o.id) && !o.vertices?.some((v) => v.bone)) detail = ' (sin hueso: queda quieto en las poses)';
+      if (o.type === 'skeleton') detail += ` [${bonesOf(doc, o.id).length} huesos]`;
+      if (o.type === 'image') detail += ` [${read(schema, o, 'src')}, ${r(read(schema, o, 'width'))}×${r(read(schema, o, 'height'))}]`;
+      if (o.type === 'pose') detail = ` [${Object.keys(o.values ?? {}).join(', ') || 'vacía'}]`;
+      if (o.type === 'animation') detail = ` ${clipSummary(schema, o)}`;
       if (o.type === 'switch') {
-        const params = paramsDeSwitch(doc, o.id);
-        detalle = ` (muestra ${o.active ?? 'el primero'}${params.length ? `; lo elige${params.length > 1 ? 'n los params' : ' el param'} ${params.join(', ')}` : ''})`;
+        const params = switchParams(doc, o.id);
+        detail = ` (muestra ${o.active ?? 'el primero'}${params.length ? `; lo elige${params.length > 1 ? 'n los params' : ' el param'} ${params.join(', ')}` : ''})`;
       }
       if (o.type === 'param') {
-        const tipo = leer(esquema, o, 'kind');
-        detalle = tipo === 'enum' ? ` enum [${leer(esquema, o, 'options').join(', ')}]` : tipo === 'boolean' ? ' boolean' : ` ${leer(esquema, o, 'min')}…${leer(esquema, o, 'max')}`;
+        const tipo = read(schema, o, 'kind');
+        detail = tipo === 'enum' ? ` enum [${read(schema, o, 'options').join(', ')}]` : tipo === 'boolean' ? ' boolean' : ` ${read(schema, o, 'min')}…${read(schema, o, 'max')}`;
       }
-      if (o.type === 'driver') detalle = ` ${o.param ?? '?'} → ${o.pose ?? '?'}${o.equals != null ? ` cuando = "${o.equals}"` : ` (${leer(esquema, o, 'inMin')}…${leer(esquema, o, 'inMax')})`}`;
+      if (o.type === 'driver') detail = ` ${o.param ?? '?'} → ${o.pose ?? '?'}${o.equals != null ? ` cuando = "${o.equals}"` : ` (${read(schema, o, 'inMin')}…${read(schema, o, 'inMax')})`}`;
       if (o.type === 'bone') {
         // Dónde queda en el documento: con ángulos relativos encadenados, esto ahorra cuentas.
-        const m = reposo.get(o.id);
-        const [ox, oy] = aplicar(m, 0, 0);
-        const [px, py] = puntaDe(esquema, o, m);
-        detalle = ` de (${r(ox)}, ${r(oy)}) a (${r(px)}, ${r(py)}), ${r((Math.atan2(m[1], m[0]) * 180) / Math.PI)}° en pantalla`;
+        const m = rest.get(o.id);
+        const [ox, oy] = apply(m, 0, 0);
+        const [px, py] = tipOf(schema, o, m);
+        detail = ` de (${r(ox)}, ${r(oy)}) a (${r(px)}, ${r(py)}), ${r((Math.atan2(m[1], m[0]) * 180) / Math.PI)}° en pantalla`;
       }
-      lineas.push(`${'  '.repeat(nivel)}- ${o.id} (${o.type})${detalle}`);
+      lines.push(`${'  '.repeat(level)}- ${o.id} (${o.type})${detail}`);
       // Las pistas de un clip, con sus keyframes: para leerlo sin el JSON entero.
       // `pistas`: true = todas; false = ninguna (solo el resumen); una lista = solo las de esos clips.
-      const conPistas = pistas === true || (Array.isArray(pistas) && pistas.includes(o.id));
-      if (o.type === 'animation' && conPistas) for (const l of lineasDePistas(o)) lineas.push(`${'  '.repeat(nivel + 2)}${l}`);
-      recorrer(o.id, nivel + 1);
+      const withTracks = tracks === true || (Array.isArray(tracks) && tracks.includes(o.id));
+      if (o.type === 'animation' && withTracks) for (const l of trackLines(o)) lines.push(`${'  '.repeat(level + 2)}${l}`);
+      walk(o.id, level + 1);
     }
   };
-  recorrer(null, 0);
-  return lineas.length ? lineas.join('\n') : '(vacío)';
+  walk(null, 0);
+  return lines.length ? lines.join('\n') : '(vacío)';
 }
 
 /** delete_document: el confirm tiene que repetir el id (borrar no se puede deshacer). */
-export function comprobarBorrado(id, confirm) {
+export function checkDeleted(id, confirm) {
   if (confirm !== id) throw new Error(`To delete the document, confirm has to be "${id}" (the same id). Deleting can't be undone.`);
 }
 
 /** set_pose: lo que recortan los límites de los huesos (la pose guarda el valor pedido, pero se ve el recortado). */
-export function recortesDePose(doc, esquema, valores) {
-  return Object.entries(valores).flatMap(([h, c]) => {
-    const hueso = buscar(doc, h);
-    if (hueso?.type !== 'bone' || c.rotation === undefined) return [];
-    const visto = limitarAngulo(esquema, hueso, c.rotation);
-    return visto !== c.rotation ? [`${h}.rotation ${c.rotation} queda en ${visto} por minAngle/maxAngle`] : [];
+export function poseClamps(doc, schema, values) {
+  return Object.entries(values).flatMap(([h, c]) => {
+    const bone = findObject(doc, h);
+    if (bone?.type !== 'bone' || c.rotation === undefined) return [];
+    const seen = limitAngle(schema, bone, c.rotation);
+    return seen !== c.rotation ? [`${h}.rotation ${c.rotation} queda en ${seen} por minAngle/maxAngle`] : [];
   });
 }
 
 /** bind_points: el lote y el reparto "hueso [índices]". */
-export function planBindPoints(doc, esquema, path, bones) {
-  if (buscar(doc, path)?.type !== 'path') throw new Error(`"${path}" no es un path`);
-  const vertices = repartirEntreHuesos(doc, esquema, path, bones);
-  const cuenta = {};
-  vertices.forEach((v, i) => (cuenta[v.bone] ??= []).push(i));
-  const reparto = Object.entries(cuenta).map(([h, indices]) => `${h} [${indices.join(', ')}]`).join('; ');
-  return { ops: [{ op: 'set', target: path, props: { vertices } }], reparto };
+export function planBindPoints(doc, schema, path, bones) {
+  if (findObject(doc, path)?.type !== 'path') throw new Error(`"${path}" no es un path`);
+  const vertices = distributeBetweenBones(doc, schema, path, bones);
+  const count = {};
+  vertices.forEach((v, i) => (count[v.bone] ??= []).push(i));
+  const distribution = Object.entries(count).map(([h, indices]) => `${h} [${indices.join(', ')}]`).join('; ');
+  return { ops: [{ op: 'set', target: path, props: { vertices } }], distribution };
 }
 
 /** bind_by_proximity: el lote (vacío si no hay nada que enlazar) y el reparto "hueso ← piezas". */
-export function planBindByProximity(doc, esquema, skeleton) {
-  const { ops, enlaces } = planEnlazarPorCercania(doc, esquema, skeleton);
-  const porHueso = {};
-  for (const e of enlaces) (porHueso[e.bone] ??= []).push(e.id);
-  const reparto = Object.entries(porHueso).map(([h, ids]) => `${h} ← ${ids.join(', ')}`).join('; ');
-  return { ops, enlaces, reparto };
+export function planBindByProximity(doc, schema, skeleton) {
+  const { ops, bindings } = planProximityBinding(doc, schema, skeleton);
+  const byBone = {};
+  for (const e of bindings) (byBone[e.bone] ??= []).push(e.id);
+  const distribution = Object.entries(byBone).map(([h, ids]) => `${h} ← ${ids.join(', ')}`).join('; ');
+  return { ops, bindings, distribution };
 }
 
 /** reparent_bone: el lote y el texto que explica qué pasa en las poses. */
-export function planReparentBone(doc, esquema, bone, parent, keepInPoses = false) {
-  const { ops, movidas } = reparentarHueso(doc, esquema, bone, parent, { conservarEnPoses: keepInPoses });
-  if (!ops.length) return { ops, movidas, texto: `${bone} ya cuelga de ${parent}; no hubo cambios.` };
-  const compensadas = ops.filter((o) => o.op === 'set' && buscar(doc, o.target)?.type === 'pose' && o.props.values?.[bone]).map((o) => o.target);
+export function planReparentBone(doc, schema, bone, parent, keepInPoses = false) {
+  const { ops, moved } = reparentBone(doc, schema, bone, parent, { keepInPoses: keepInPoses });
+  if (!ops.length) return { ops, moved, text: `${bone} ya cuelga de ${parent}; no hubo cambios.` };
+  const compensated = ops.filter((o) => o.op === 'set' && findObject(doc, o.target)?.type === 'pose' && o.props.values?.[bone]).map((o) => o.target);
   let poses = '';
-  if (movidas.length) {
+  if (moved.length) {
     poses = keepInPoses
-      ? ` En ${movidas.join(', ')} no se pudo dejar donde estaba (minAngle/maxAngle o un marco que deforma): revísalas con render_preview.`
-      : ` Ojo: en las poses ${movidas.join(', ')} ahora queda en otro lugar, porque esas poses mueven al padre viejo o al nuevo y el hueso sigue al nuevo. Si tiene que quedar donde estaba también ahí, repite con keep_in_poses: true (o ajusta esas poses).`;
-  } else if (keepInPoses && compensadas.length) poses = ` En las poses quedó donde estaba (valores ajustados en ${[...new Set(compensadas)].join(', ')}).`;
+      ? ` En ${moved.join(', ')} no se pudo dejar donde estaba (minAngle/maxAngle o un marco que deforma): revísalas con render_preview.`
+      : ` Ojo: en las poses ${moved.join(', ')} ahora queda en otro lugar, porque esas poses mueven al padre viejo o al nuevo y el hueso sigue al nuevo. Si tiene que quedar donde estaba también ahí, repite con keep_in_poses: true (o ajusta esas poses).`;
+  } else if (keepInPoses && compensated.length) poses = ` En las poses quedó donde estaba (valores ajustados en ${[...new Set(compensated)].join(', ')}).`;
   else poses = ' En las poses tampoco cambia de lugar.';
-  return { ops, movidas, texto: `${bone} ahora cuelga de ${parent}; en el montaje quedó donde estaba.${poses}` };
+  return { ops, moved, text: `${bone} ahora cuelga de ${parent}; en el montaje quedó donde estaba.${poses}` };
 }
 
 // ---------- Lecturas: get_document, get_history y render_preview ----------
 
 // Más que esto no entra cómodo en la respuesta: get_document deja el JSON afuera si no se pidió.
-const MAXIMO_DE_RESPUESTA = 60000;
+const RESPONSE_MAX = 60000;
 
 /** get_document: el árbol (con las pistas de `clips`, o de todos) y el JSON, salvo que no se pida o pese demasiado. */
-/** @param {any} doc @param {any} esquema @param {{ json?: boolean, clips?: string[] }} [opciones] */
-export function textoDeDocumento(doc, esquema, { json, clips } = {}) {
-  const arbolTexto = `Árbol (del fondo al frente):
-${esquemaDelArbol(doc, esquema, { pistas: clips ?? true })}`;
-  if (json === false) return arbolTexto;
-  const completo = JSON.stringify(doc, null, 2);
-  if (json === undefined && arbolTexto.length + completo.length > MAXIMO_DE_RESPUESTA) {
-    return `${arbolTexto}
+/** @param {any} doc @param {any} schema @param {{ json?: boolean, clips?: string[] }} [options] */
+export function documentText(doc, schema, { json, clips } = {}) {
+  const textTree = `Árbol (del fondo al frente):
+${treeOutline(doc, schema, { tracks: clips ?? true })}`;
+  if (json === false) return textTree;
+  const complete = JSON.stringify(doc, null, 2);
+  if (json === undefined && textTree.length + complete.length > RESPONSE_MAX) {
+    return `${textTree}
 
-(JSON omitido: el documento pesa ${completo.length} caracteres. Pide json: true si de verdad lo necesitas; para leer clips, usa clips.)`;
+(JSON omitido: el documento pesa ${complete.length} caracteres. Pide json: true si de verdad lo necesitas; para leer clips, usa clips.)`;
   }
-  return `${arbolTexto}
+  return `${textTree}
 
 JSON:
-${completo}`;
+${complete}`;
 }
 
 /** Valor con el que quedó cada propiedad que un lote fijó con set (los largos, resumidos). */
-function valoresFinales(ops) {
-  const valores = {};
+function finalValues(ops) {
+  const values = {};
   for (const op of ops) {
     if (op.op !== 'set') continue;
     for (const [k, v] of Object.entries(op.props)) {
       const json = JSON.stringify(v);
-      valores[`${op.target}.${k}`] = Array.isArray(v) ? `(${v.length} elementos)` : json.length > 160 ? `${json.slice(0, 157)}...` : v;
+      values[`${op.target}.${k}`] = Array.isArray(v) ? `(${v.length} elementos)` : json.length > 160 ? `${json.slice(0, 157)}...` : v;
     }
   }
-  return valores;
+  return values;
 }
 
 /** get_history: los últimos `limit` lotes (de `origin`, si se pide), resumidos o con sus operaciones (`detail`). */
-/** @param {any[]} entradas @param {{ limit?: number, origin?: string, detail?: boolean }} [opciones] */
-export function resumenDeHistorial(entradas, { limit, origin, detail } = {}) {
-  const elegidas = entradas.filter((e) => !origin || e.origen === origin).slice(-(limit ?? 20));
-  return elegidas.map(({ inversas, ops, ...e }) => ({ ...e, ...(detail ? { ops } : { toca: resumirOperaciones(ops), valores: valoresFinales(ops) }) }));
+/** @param {any[]} entries @param {{ limit?: number, origin?: string, detail?: boolean }} [options] */
+export function historySummary(entries, { limit, origin, detail } = {}) {
+  const chosen = entries.filter((e) => !origin || e.origen === origin).slice(-(limit ?? 20));
+  return chosen.map(({ inversas, ops, ...e }) => ({ ...e, ...(detail ? { ops } : { touches: summarizeOperations(ops), values: finalValues(ops) }) }));
 }
 
 /**
  * render_preview (y la vista de set_pose, set_keys…): el SVG, el ancho por defecto del PNG y el texto que lo resume.
  * Un clip o un guion en vivo van a sus planes (mcp/animacion.js); lo demás es el documento en el montaje, en una pose
  * o con params.
- * @param {any} doc @param {any} esquema @param {Record<string, any>} [opciones]
+ * @param {any} doc @param {any} schema @param {Record<string, any>} [options]
  */
-export function planVistaPrevia(doc, esquema, { pose, region, bones, params, animation, time, times, live, until, auto } = {}) {
-  const error = errorDeVistaPrevia({ pose, animation, time, times, live });
+export function planPreview(doc, schema, { pose, region, bones, params, animation, time, times, live, until, auto } = {}) {
+  const error = previewError({ pose, animation, time, times, live });
   if (error) throw new Error(error);
-  if (live) return planVistaEnVivo(doc, esquema, { region, bones, params, live, times, until, auto });
-  if (animation) return planVistaDeClip(doc, esquema, { region, bones, params, animation, time, times });
-  if (pose && buscar(doc, pose)?.type !== 'pose') {
+  if (live) return planLiveView(doc, schema, { region, bones, params, live, times, until, auto });
+  if (animation) return planClipView(doc, schema, { region, bones, params, animation, time, times });
+  if (pose && findObject(doc, pose)?.type !== 'pose') {
     const poses = doc.objects.filter((o) => o.type === 'pose').map((o) => o.id);
     throw new Error(`no existe la pose "${pose}". Poses: ${poses.join(', ') || 'ninguna'}`);
   }
   if (params) {
     const ids = doc.objects.filter((o) => o.type === 'param').map((o) => o.id);
-    const raros = Object.keys(params).filter((k) => !ids.includes(k));
-    if (raros.length) throw new Error(`no existe el param "${raros[0]}".${sugerir(raros[0], ids)} Params: ${ids.join(', ') || 'ninguno'}`);
+    const unknown = Object.keys(params).filter((k) => !ids.includes(k));
+    if (unknown.length) throw new Error(`no existe el param "${unknown[0]}".${suggest(unknown[0], ids)} Params: ${ids.join(', ') || 'ninguno'}`);
   }
-  const svg = svgDocumento(doc, esquema, { pose, params, region, huesos: bones });
-  const tamaño = region ? `recorte de ${region.width}×${region.height} en (${region.x}, ${region.y})` : `${leerMeta(esquema, doc, 'width')}×${leerMeta(esquema, doc, 'height')} px`;
-  let vista = 'en el montaje';
-  if (pose) vista = `en la pose "${pose}"`;
+  const svg = svgDocument(doc, schema, { pose, params, region, bones: bones });
+  const size = region ? `recorte de ${region.width}×${region.height} en (${region.x}, ${region.y})` : `${readMeta(schema, doc, 'width')}×${readMeta(schema, doc, 'height')} px`;
+  let view = 'en el montaje';
+  if (pose) view = `en la pose "${pose}"`;
   else if (params) {
     // Qué quedó activo: ayuda a ver si los drivers hacen lo que se esperaba.
-    const valores = valoresDeParams(doc, esquema, params);
-    const pesos = doc.objects
-      .filter((o) => o.type === 'driver' && o.pose && o.param in valores)
-      .map((o) => [o.pose, pesoDeDriver(doc, esquema, o, valores[o.param])])
+    const values = paramValues(doc, schema, params);
+    const weights = doc.objects
+      .filter((o) => o.type === 'driver' && o.pose && o.param in values)
+      .map((o) => [o.pose, driverWeight(doc, schema, o, values[o.param])])
       .filter(([, w]) => w > 0)
       .map(([p, w]) => `${p} ${Math.round(w * 100)}%`);
-    vista = `con params ${JSON.stringify(valores)} (poses: ${pesos.join(', ') || 'ninguna'})`;
+    view = `con params ${JSON.stringify(values)} (poses: ${weights.join(', ') || 'ninguna'})`;
   }
-  return { svg, ancho: 600, texto: `${tamaño}, ${doc.objects.length} objetos, ${vista}.` };
+  return { svg, width: 600, text: `${size}, ${doc.objects.length} objetos, ${view}.` };
 }
 
 // ---------- add_image ----------
@@ -195,27 +195,27 @@ export function planVistaPrevia(doc, esquema, { pose, region, bones, params, ani
  * Bytes y nombre de un archivo de imagen para add_image: una ruta local (absoluta) o una URL http(s). Lanza si no se
  * puede leer o pasa del máximo; si es una imagen válida lo decide después el almacén (leerImagen).
  * @param {{ path?: string, url?: string }} origen
- * @returns {Promise<{ bytes: Uint8Array, nombre: string }>}
+ * @returns {Promise<{ bytes: Uint8Array, name: string }>}
  */
-export async function bytesDeImagen({ path: ruta, url }) {
-  if (!!ruta === !!url) throw new Error('Give exactly one of path (a local file) or url');
-  if (ruta) {
-    if (!path.isAbsolute(ruta)) throw new Error(`path must be absolute (received "${ruta}")`);
-    const info = await fs.stat(ruta).catch(() => null);
-    if (!info?.isFile()) throw new Error(`No file at "${ruta}"`);
-    if (info.size > MAXIMO_DE_IMAGEN) throw new Error(`The image is too big (${Math.round(info.size / 1048576)} MB; at most ${MAXIMO_DE_IMAGEN / 1048576} MB)`);
-    return { bytes: new Uint8Array(await fs.readFile(ruta)), nombre: path.basename(ruta) };
+export async function imageBytes({ path: filePath, url }) {
+  if (!!filePath === !!url) throw new Error('Give exactly one of path (a local file) or url');
+  if (filePath) {
+    if (!path.isAbsolute(filePath)) throw new Error(`path must be absolute (received "${filePath}")`);
+    const info = await fs.stat(filePath).catch(() => null);
+    if (!info?.isFile()) throw new Error(`No file at "${filePath}"`);
+    if (info.size > IMAGE_MAX) throw new Error(`The image is too big (${Math.round(info.size / 1048576)} MB; at most ${IMAGE_MAX / 1048576} MB)`);
+    return { bytes: new Uint8Array(await fs.readFile(filePath)), name: path.basename(filePath) };
   }
-  let direccion;
+  let direction;
   try {
-    direccion = new URL(url);
+    direction = new URL(url);
   } catch {
     throw new Error(`Invalid url "${url}"`);
   }
-  if (!['http:', 'https:'].includes(direccion.protocol)) throw new Error('url must be http or https');
-  const respuesta = await fetch(direccion, { signal: AbortSignal.timeout(30000) });
-  if (!respuesta.ok) throw new Error(`Couldn't download ${url}: HTTP ${respuesta.status}`);
-  if (Number(respuesta.headers.get('content-length')) > MAXIMO_DE_IMAGEN) throw new Error(`The image is too big (at most ${MAXIMO_DE_IMAGEN / 1048576} MB)`);
-  const bytes = new Uint8Array(await respuesta.arrayBuffer());
-  return { bytes, nombre: decodeURIComponent(direccion.pathname.split('/').pop() || 'image') };
+  if (!['http:', 'https:'].includes(direction.protocol)) throw new Error('url must be http or https');
+  const response = await fetch(direction, { signal: AbortSignal.timeout(30000) });
+  if (!response.ok) throw new Error(`Couldn't download ${url}: HTTP ${response.status}`);
+  if (Number(response.headers.get('content-length')) > IMAGE_MAX) throw new Error(`The image is too big (at most ${IMAGE_MAX / 1048576} MB)`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  return { bytes, name: decodeURIComponent(direction.pathname.split('/').pop() || 'image') };
 }

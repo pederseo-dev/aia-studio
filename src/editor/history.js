@@ -1,30 +1,30 @@
 // Historial: quién cambió qué (IA o usuario). Lo deshecho aparece tachado.
 
-import { estado, suscribir } from './state.js';
+import { state, subscribe } from './state.js';
 
-export function montarHistorial(lista) {
-  suscribir((c) => {
-    if ('historial' in c) dibujar();
+export function mountHistory(list) {
+  subscribe((c) => {
+    if ('history' in c) draw();
   });
 
-  function dibujar() {
-    const { entradas } = estado.historial;
+  function draw() {
+    const { entries } = state.history;
 
-    const porNumero = new Map(entradas.map((e) => [e.n, e]));
-    const revertidas = new Set();
-    for (const e of entradas) {
-      if (e.tipo === 'deshacer') revertidas.add(e.ref);
-      if (e.tipo === 'rehacer') revertidas.delete(porNumero.get(e.ref)?.ref);
+    const byNumber = new Map(entries.map((e) => [e.n, e]));
+    const reverted = new Set();
+    for (const e of entries) {
+      if (e.tipo === 'deshacer') reverted.add(e.ref);
+      if (e.tipo === 'rehacer') reverted.delete(byNumber.get(e.ref)?.ref);
     }
 
-    lista.replaceChildren(
-      ...entradas
+    list.replaceChildren(
+      ...entries
         .filter((e) => e.tipo === 'cambio' || e.tipo === 'crear' || e.tipo === 'migracion')
         .reverse()
         .slice(0, 40)
         .map((e) => {
           const li = document.createElement('li');
-          li.className = `${e.origen}${revertidas.has(e.n) ? ' revertida' : ''}`;
+          li.className = `${e.origen}${reverted.has(e.n) ? ' revertida' : ''}`;
           li.innerHTML = `<span class="quien">${e.origen === 'ai' ? 'AI' : e.origen === 'system' ? 'System' : 'You'}</span><span class="hora"></span><span class="nota"></span>`;
           li.querySelector('.hora').textContent = new Date(e.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           li.querySelector('.nota').textContent = e.nota;

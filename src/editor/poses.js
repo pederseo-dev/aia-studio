@@ -2,72 +2,72 @@
 // editando. Las poses son fotos fijas del muñeco que los params mezclan; antes se elegían en un desplegable «View»
 // arriba, que parecía un modo de vista. Ver docs/decision-animacion.md §10.
 
-import { buscar } from '../core/document.js';
-import { avisar, ejecutar, estado, fijar, suscribir } from './state.js';
-import { alternarLive } from './live.js';
+import { findObject } from '../core/document.js';
+import { notify, execute, state, setState, subscribe } from './state.js';
+import { toggleLive } from './live.js';
 
 /** Los params que mueven una pose (por sus drivers). */
-const paramsDePose = (doc, pose) => [...new Set(doc.objects.filter((d) => d.type === 'driver' && d.pose === pose && d.param).map((d) => d.param))];
+const poseParams = (doc, pose) => [...new Set(doc.objects.filter((d) => d.type === 'driver' && d.pose === pose && d.param).map((d) => d.param))];
 
 /** Abre una pose para editarla (o la cierra si ya está abierta): lo que se cambia va a la pose, no al montaje. */
-export function abrirPose(id) {
-  if (estado.vivo) return avisar('Live is on: turn it off (■ Live) to edit a pose.', true);
-  if (estado.pose === id) return fijar({ pose: null, params: estado.params ?? {}, edicion: null, vertice: null });
-  fijar({ pose: id, edicion: null, vertice: null, reproduciendo: false });
+export function openPose(id) {
+  if (state.live) return notify('Live is on: turn it off (■ Live) to edit a pose.', true);
+  if (state.pose === id) return setState({ pose: null, params: state.params ?? {}, editing: null, vertex: null });
+  setState({ pose: id, editing: null, vertex: null, playing: false });
 }
 
-export function montarPoses(raiz, lista, botonNueva, botonBorrar) {
+export function mountPoses(root, list, newButton, deleteButton) {
   // 🗑 borra la pose seleccionada (en Assets) o, si no, la abierta. Sus drivers quedan sin pose (no mueven nada).
-  const elegida = () => {
-    const doc = estado.doc;
+  const chosen = () => {
+    const doc = state.doc;
     if (!doc) return null;
-    if (buscar(doc, estado.seleccion)?.type === 'pose') return estado.seleccion;
-    return buscar(doc, estado.pose)?.type === 'pose' ? estado.pose : null;
+    if (findObject(doc, state.selection)?.type === 'pose') return state.selection;
+    return findObject(doc, state.pose)?.type === 'pose' ? state.pose : null;
   };
-  botonBorrar.addEventListener('click', () => {
-    const id = elegida();
+  deleteButton.addEventListener('click', () => {
+    const id = chosen();
     if (!id) return;
-    if (estado.pose === id) fijar({ pose: null, params: estado.params ?? {}, edicion: null, vertice: null });
-    ejecutar([{ op: 'delete', target: id }], `delete pose ${id}`);
+    if (state.pose === id) setState({ pose: null, params: state.params ?? {}, editing: null, vertex: null });
+    execute([{ op: 'delete', target: id }], `delete pose ${id}`);
   });
-  suscribir((c) => {
-    if ('doc' in c || 'seleccion' in c || 'pose' in c || 'vivo' in c) botonBorrar.disabled = !elegida() || estado.vivo;
+  subscribe((c) => {
+    if ('doc' in c || 'selection' in c || 'pose' in c || 'live' in c) deleteButton.disabled = !chosen() || state.live;
   });
-  botonNueva.addEventListener('click', () => {
-    if (!estado.doc) return;
+  newButton.addEventListener('click', () => {
+    if (!state.doc) return;
     const base = prompt('Pose name (e.g. happy, eyes_closed, mouth_o):', '')?.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
     if (!base) return;
     const id = /^[a-z]/.test(base) ? base : `pose_${base}`;
-    if (buscar(estado.doc, id)) return avisar(`"${id}" already exists`, true);
-    ejecutar([{ op: 'create', type: 'pose', id }], `create pose ${id}`);
-    abrirPose(id);
+    if (findObject(state.doc, id)) return notify(`"${id}" already exists`, true);
+    execute([{ op: 'create', type: 'pose', id }], `create pose ${id}`);
+    openPose(id);
   });
-  suscribir((c) => {
-    if ('doc' in c || 'pose' in c || 'modo' in c || 'id' in c || 'vivo' in c) dibujar();
+  subscribe((c) => {
+    if ('doc' in c || 'pose' in c || 'mode' in c || 'id' in c || 'live' in c) draw();
   });
 
-  function dibujar() {
-    const doc = estado.doc;
-    raiz.hidden = estado.modo !== 'puppet' || !doc;
-    botonNueva.disabled = estado.vivo;
-    if (raiz.hidden) return;
+  function draw() {
+    const doc = state.doc;
+    root.hidden = state.mode !== 'puppet' || !doc;
+    newButton.disabled = state.live;
+    if (root.hidden) return;
     const poses = doc.objects.filter((o) => o.type === 'pose');
     if (!poses.length) {
-      lista.innerHTML = '<p class="ayuda">No poses yet. A pose is a still shape of the puppet (happy, eyes closed, mouth O…). Create one with + above, change it on the canvas, then blend it with a parameter.</p>';
+      list.innerHTML = '<p class="ayuda">No poses yet. A pose is a still shape of the puppet (happy, eyes closed, mouth O…). Create one with + above, change it on the canvas, then blend it with a parameter.</p>';
       return;
     }
-    lista.replaceChildren(
+    list.replaceChildren(
       ...poses.map((pose) => {
-        const abierta = estado.pose === pose.id;
-        const fila = Object.assign(document.createElement('button'), { type: 'button', className: `pose-fila${abierta ? ' abierta' : ''}`, disabled: estado.vivo });
-        const params = paramsDePose(doc, pose.id);
-        fila.innerHTML = '<b></b><small></small>';
-        fila.querySelector('b').textContent = pose.id;
-        fila.querySelector('small').textContent = params.length ? `← ${params.join(', ')}` : 'no parameter';
-        const objetos = Object.keys(pose.values ?? {});
-        fila.title = `${abierta ? 'Click to stop editing this pose' : 'Click to edit this pose'}. It sets: ${objetos.join(', ') || 'nothing yet'}.${params.length ? ` Blended by: ${params.join(', ')}.` : ' No parameter blends it yet: connect one with + under a parameter.'}`;
-        fila.addEventListener('click', () => abrirPose(pose.id));
-        return fila;
+        const open = state.pose === pose.id;
+        const row = Object.assign(document.createElement('button'), { type: 'button', className: `pose-fila${open ? ' abierta' : ''}`, disabled: state.live });
+        const params = poseParams(doc, pose.id);
+        row.innerHTML = '<b></b><small></small>';
+        row.querySelector('b').textContent = pose.id;
+        row.querySelector('small').textContent = params.length ? `← ${params.join(', ')}` : 'no parameter';
+        const objects = Object.keys(pose.values ?? {});
+        row.title = `${open ? 'Click to stop editing this pose' : 'Click to edit this pose'}. It sets: ${objects.join(', ') || 'nothing yet'}.${params.length ? ` Blended by: ${params.join(', ')}.` : ' No parameter blends it yet: connect one with + under a parameter.'}`;
+        row.addEventListener('click', () => openPose(pose.id));
+        return row;
       }),
     );
   }
@@ -77,39 +77,39 @@ export function montarPoses(raiz, lista, botonNueva, botonBorrar) {
  * Cartel arriba del lienzo (solo Puppet): qué se está editando o viendo, en el color del marco, con el botón para
  * salir. Reemplaza al desplegable «View».
  */
-export function montarCartel(el) {
-  suscribir((c) => {
-    if ('doc' in c || 'pose' in c || 'params' in c || 'modo' in c || 'id' in c || 'vivo' in c || ('tiempo' in c && !estado.reproduciendo) || 'reproduciendo' in c) dibujar();
+export function mountBanner(el) {
+  subscribe((c) => {
+    if ('doc' in c || 'pose' in c || 'params' in c || 'mode' in c || 'id' in c || 'live' in c || ('time' in c && !state.playing) || 'playing' in c) draw();
   });
 
-  function dibujar() {
-    const doc = estado.doc;
-    el.hidden = estado.modo !== 'puppet' || !doc;
+  function draw() {
+    const doc = state.doc;
+    el.hidden = state.mode !== 'puppet' || !doc;
     if (el.hidden) return;
-    const abierto = estado.pose && buscar(doc, estado.pose);
-    let clase;
-    let texto;
+    const open = state.pose && findObject(doc, state.pose);
+    let className;
+    let text;
     /** @type {[string, string, () => void] | null} */
-    let boton;
-    if (estado.vivo) {
-      [clase, texto] = ['vivo', '<b>● Live</b>: the puppet as the app sees it. Nothing is saved.'];
-      boton = ['■ Stop Live', 'Turn Live off and go back to editing', alternarLive];
-    } else if (abierto?.type === 'animation') {
-      [clase, texto] = ['clip', `Editing clip <b></b> at ${+estado.tiempo.toFixed(2)} s: every change is a keyframe at the playhead.`];
-      boton = ['Close clip', 'Back to the parameter preview', () => fijar({ pose: null, params: estado.params ?? {}, edicion: null, vertice: null, reproduciendo: false })];
-    } else if (abierto?.type === 'pose') {
-      [clase, texto] = ['pose', 'Editing pose <b></b>: what you change goes into the pose, not the setup.'];
-      boton = ['Done', 'Stop editing the pose and go back to the parameter preview', () => abrirPose(abierto.id)];
+    let button;
+    if (state.live) {
+      [className, text] = ['vivo', '<b>● Live</b>: the puppet as the app sees it. Nothing is saved.'];
+      button = ['■ Stop Live', 'Turn Live off and go back to editing', toggleLive];
+    } else if (open?.type === 'animation') {
+      [className, text] = ['clip', `Editing clip <b></b> at ${+state.time.toFixed(2)} s: every change is a keyframe at the playhead.`];
+      button = ['Close clip', 'Back to the parameter preview', () => setState({ pose: null, params: state.params ?? {}, editing: null, vertex: null, playing: false })];
+    } else if (open?.type === 'pose') {
+      [className, text] = ['pose', 'Editing pose <b></b>: what you change goes into the pose, not the setup.'];
+      button = ['Done', 'Stop editing the pose and go back to the parameter preview', () => openPose(open.id)];
     } else {
-      [clase, texto] = ['params', 'Previewing <b>parameters</b>: the canvas shows the poses they blend. To change a pose, open it under Poses.'];
-      boton = null; // Reset está en la barra de Puppet, arriba de Clips
+      [className, text] = ['params', 'Previewing <b>parameters</b>: the canvas shows the poses they blend. To change a pose, open it under Poses.'];
+      button = null; // Reset está en la barra de Puppet, arriba de Clips
     }
-    el.className = `cartel-${clase}`;
-    el.innerHTML = `<span>${texto}</span>`;
-    if (clase === 'clip' || clase === 'pose') el.querySelector('span b').textContent = abierto.id;
-    if (!boton) return;
-    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: boton[0], title: boton[1] });
-    b.addEventListener('click', boton[2]);
+    el.className = `cartel-${className}`;
+    el.innerHTML = `<span>${text}</span>`;
+    if (className === 'clip' || className === 'pose') el.querySelector('span b').textContent = open.id;
+    if (!button) return;
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: button[0], title: button[1] });
+    b.addEventListener('click', button[2]);
     el.append(b);
   }
 }

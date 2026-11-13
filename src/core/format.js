@@ -1,6 +1,6 @@
 // Constantes y convenciones del formato de documento. El núcleo no usa el DOM: corre igual en Node y en el navegador.
 
-export const FORMATO = 'aia/0.1';
+export const FORMAT = 'aia/0.1';
 
 /**
  * Convenciones comunes a todo el formato:
@@ -8,8 +8,8 @@ export const FORMATO = 'aia/0.1';
  * - Ángulos en grados; los positivos giran en sentido horario.
  * - Tiempo en segundos. Los fps del documento solo sirven para mostrar frames y para el snapping.
  */
-export const CONVENCIONES = {
-  ejeY: 'abajo',
-  angulos: 'grados-horario',
-  tiempo: 'segundos',
+export const CONVENTIONS = {
+  axisY: 'abajo',
+  angles: 'grados-horario',
+  time: 'segundos',
 };

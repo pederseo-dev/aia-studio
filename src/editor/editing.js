@@ -2,38 +2,38 @@
 // la mezcla de los params, la variante de cada switch, y el lote que escribe en la pose o el clip abiertos. Lo usan
 // el lienzo, el inspector, la timeline y las herramientas; no dibuja nada.
 
-import { buscar } from '../core/document.js';
-import { opsParaClavesEnClip, poseDeClip } from '../core/animation.js';
-import { mezclarPoses, opsParaFijarPose } from '../core/blend.js';
-import { ejecutar, esquema, estado } from './state.js';
+import { findObject } from '../core/document.js';
+import { opsForKeysInClip, clipPose } from '../core/animation.js';
+import { blendPoses, opsToSetPose } from '../core/blend.js';
+import { execute, schema, state } from './state.js';
 
 /**
  * La pose que se está editando en el documento indicado, o null. Con un clip abierto, es lo que se ve en el tiempo
  * del playhead (con el id del clip, para que los cambios vayan a sus keyframes).
  */
-export function poseActiva(doc = estado.doc) {
+export function activePose(doc = state.doc) {
   // Con Live encendido no se edita nada: no hay pose ni clip que reciba cambios.
-  if (estado.vivo) return null;
-  const p = estado.pose && buscar(doc, estado.pose);
-  if (p?.type === 'animation') return { ...poseDeClip(doc, esquema, p, estado.tiempo, estado.params ?? {}), id: p.id };
+  if (state.live) return null;
+  const p = state.pose && findObject(doc, state.pose);
+  if (p?.type === 'animation') return { ...clipPose(doc, schema, p, state.time, state.params ?? {}), id: p.id };
   return p?.type === 'pose' ? p : null;
 }
 
 /** Cómo se nombra en el historial lo que se edita: «pose happy» o «clip wave @ 0.5s». */
-export function nombreDeEdicion(id = estado.pose) {
-  return buscar(estado.doc, id)?.type === 'animation' ? `clip ${id} @ ${+estado.tiempo.toFixed(3)}s` : `pose ${id}`;
+export function editingName(id = state.pose) {
+  return findObject(state.doc, id)?.type === 'animation' ? `clip ${id} @ ${+state.time.toFixed(3)}s` : `pose ${id}`;
 }
 
 /** El clip abierto (animation), o null. */
-export function clipAbierto(doc = estado.doc) {
-  const p = estado.pose && doc && buscar(doc, estado.pose);
+export function openedClip(doc = state.doc) {
+  const p = state.pose && doc && findObject(doc, state.pose);
   return p?.type === 'animation' ? p : null;
 }
 
 /** Lo que se ve: la pose que se edita, la mezcla de los params (vista Parámetros) o null (el montaje). */
-export function poseVista(doc = estado.doc) {
-  if (estado.vivo) return estado.poseViva;
-  return poseActiva(doc) ?? (estado.params ? mezclarPoses(doc, esquema, estado.params) : null);
+export function viewedPose(doc = state.doc) {
+  if (state.live) return state.livePose;
+  return activePose(doc) ?? (state.params ? blendPoses(doc, schema, state.params) : null);
 }
 
 /**
@@ -41,34 +41,34 @@ export function poseVista(doc = estado.doc) {
  * clip, cada propiedad queda como keyframe en el tiempo del playhead (autokey); undefined quita ese keyframe. La
  * lógica está en el núcleo, la misma que usa el MCP.
  */
-export function opsDePose(doc, poseId, id, campos) {
-  if (buscar(doc, poseId)?.type === 'animation') return opsParaClavesEnClip(doc, esquema, poseId, id, campos, estado.tiempo, estado.params ?? {});
-  return opsParaFijarPose(doc, poseId, { [id]: campos });
+export function poseOps(doc, poseId, id, fields) {
+  if (findObject(doc, poseId)?.type === 'animation') return opsForKeysInClip(doc, schema, poseId, id, fields, state.time, state.params ?? {});
+  return opsToSetPose(doc, poseId, { [id]: fields });
 }
 
 /** Variante que muestra un switch: la de la pose que se edita, si la fija; si no, la del montaje (o la primera). */
-export function varianteDe(doc, sw) {
-  const hijos = doc.objects.filter((o) => o.parent === sw.id);
-  const elegida = poseActiva(doc)?.values?.[sw.id]?.active ?? sw.active;
-  return hijos.find((o) => o.id === elegida)?.id ?? hijos[0]?.id ?? null;
+export function variantOf(doc, sw) {
+  const children = doc.objects.filter((o) => o.parent === sw.id);
+  const chosen = activePose(doc)?.values?.[sw.id]?.active ?? sw.active;
+  return children.find((o) => o.id === chosen)?.id ?? children[0]?.id ?? null;
 }
 
 /** Elegir qué muestra un switch: en la pose que se edita, si hay una; si no, en el montaje. */
-export function elegirVariante(swId, hijo) {
-  const pose = poseActiva();
-  if (pose) return ejecutar(opsDePose(estado.doc, pose.id, swId, { active: hijo }), `${nombreDeEdicion(pose.id)}: ${swId} shows ${hijo}`);
-  ejecutar([{ op: 'set', target: swId, props: { active: hijo } }], `${swId} shows ${hijo}`);
+export function chooseVariant(swId, child) {
+  const pose = activePose();
+  if (pose) return execute(poseOps(state.doc, pose.id, swId, { active: child }), `${editingName(pose.id)}: ${swId} shows ${child}`);
+  execute([{ op: 'set', target: swId, props: { active: child } }], `${swId} shows ${child}`);
 }
 
 /**
  * Variantes que hay que mostrar aunque su switch muestre otra: la seleccionada (y sus ancestros dentro de switches),
  * para poder verla y editarla. Es solo de la vista: no cambia el documento.
  */
-export function variantesAMostrar(doc = estado.doc) {
-  const mostrar = {};
-  for (let o = estado.seleccion && buscar(doc, estado.seleccion); o?.parent; o = buscar(doc, o.parent)) {
-    const padre = buscar(doc, o.parent);
-    if (padre?.type === 'switch' && varianteDe(doc, padre) !== o.id) mostrar[padre.id] = o.id;
+export function variantsToShow(doc = state.doc) {
+  const show = {};
+  for (let o = state.selection && findObject(doc, state.selection); o?.parent; o = findObject(doc, o.parent)) {
+    const parent = findObject(doc, o.parent);
+    if (parent?.type === 'switch' && variantOf(doc, parent) !== o.id) show[parent.id] = o.id;
   }
-  return mostrar;
+  return show;
 }

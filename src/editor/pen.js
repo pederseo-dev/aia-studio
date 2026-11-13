@@ -1,97 +1,97 @@
 // Pluma: clic agrega un vértice recto; clic y arrastrar agrega uno curvo (mirrored). Clic en el primer vértice
 // cierra la forma; Enter o Escape la terminan abierta.
 
-import { aplicar, invertir, matrizMundo, multiplicar } from '../core/geometry.js';
-import { verticeDesdeTangentes, verticesAD } from '../core/paths.js';
-import { ejecutar, esquema, estado, fijar, idLibre, padreParaNuevo, seleccionar } from './state.js';
+import { apply, invert, worldMatrix, multiply } from '../core/geometry.js';
+import { vertexFromTangents, verticesAD } from '../core/paths.js';
+import { execute, schema, state, setState, freeId, parentForNew, select } from './state.js';
 
-const CERCA = 9; // px en pantalla para cerrar en el primer vértice
+const NEAR = 9; // px en pantalla para cerrar en el primer vértice
 
-export function crearPluma(ctx) {
+export function createPen(ctx) {
   // Puntos en pantalla: { p, entrada, salida } con las tangentes como vectores.
-  let puntos = [];
+  let points = [];
   let cursor = null;
 
-  const cerca = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= CERCA;
+  const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= NEAR;
 
   function pointerdown(e) {
-    const p = ctx.puntoPantalla(e);
-    if (puntos.length >= 2 && cerca(p, puntos[0].p)) return terminar(true);
-    const punto = { p, entrada: [0, 0], salida: [0, 0] };
-    puntos.push(punto);
-    ctx.redibujar();
-    ctx.arrastrar(
+    const p = ctx.screenPoint(e);
+    if (points.length >= 2 && near(p, points[0].p)) return finish(true);
+    const point = { p, entrada: [0, 0], salida: [0, 0] };
+    points.push(point);
+    ctx.redraw();
+    ctx.drag(
       e,
       (ev) => {
-        const q = ctx.puntoPantalla(ev);
+        const q = ctx.screenPoint(ev);
         const v = [q[0] - p[0], q[1] - p[1]];
         if (Math.hypot(...v) < 3) return;
-        punto.salida = v;
-        punto.entrada = [-v[0], -v[1]];
-        ctx.redibujar();
+        point.salida = v;
+        point.entrada = [-v[0], -v[1]];
+        ctx.redraw();
       },
       () => {},
     );
   }
 
   function hover(e) {
-    if (!puntos.length) return;
-    cursor = ctx.puntoPantalla(e);
-    ctx.redibujar();
+    if (!points.length) return;
+    cursor = ctx.screenPoint(e);
+    ctx.redraw();
   }
 
-  function dibujar() {
-    if (estado.herramienta !== 'path' || !puntos.length) return;
-    const vertices = puntos.map((pt) => verticeDesdeTangentes(pt.p[0], pt.p[1], pt.entrada, pt.salida));
-    ctx.superposicion.append(ctx.crear('path', { class: 'trazo-pluma', d: verticesAD(vertices, false) }));
+  function draw() {
+    if (state.tool !== 'path' || !points.length) return;
+    const vertices = points.map((pt) => vertexFromTangents(pt.p[0], pt.p[1], pt.entrada, pt.salida));
+    ctx.overlay.append(ctx.crear('path', { class: 'trazo-pluma', d: verticesAD(vertices, false) }));
     if (cursor) {
-      const u = puntos.at(-1).p;
-      ctx.superposicion.append(ctx.crear('line', { class: 'trazo-pluma guia', x1: u[0], y1: u[1], x2: cursor[0], y2: cursor[1] }));
+      const u = points.at(-1).p;
+      ctx.overlay.append(ctx.crear('line', { class: 'trazo-pluma guia', x1: u[0], y1: u[1], x2: cursor[0], y2: cursor[1] }));
     }
-    puntos.forEach((pt, i) => {
+    points.forEach((pt, i) => {
       if (Math.hypot(...pt.salida) > 0) {
         for (const t of [pt.entrada, pt.salida]) {
-          ctx.superposicion.append(ctx.crear('line', { class: 'tangente', x1: pt.p[0], y1: pt.p[1], x2: pt.p[0] + t[0], y2: pt.p[1] + t[1] }));
+          ctx.overlay.append(ctx.crear('line', { class: 'tangente', x1: pt.p[0], y1: pt.p[1], x2: pt.p[0] + t[0], y2: pt.p[1] + t[1] }));
         }
       }
-      const cierra = i === 0 && puntos.length >= 2 && cursor && cerca(cursor, pt.p);
-      ctx.superposicion.append(ctx.crear('rect', { class: `ancla${cierra ? ' activa' : ''}`, x: pt.p[0] - 4, y: pt.p[1] - 4, width: 8, height: 8 }));
+      const closes = i === 0 && points.length >= 2 && cursor && near(cursor, pt.p);
+      ctx.overlay.append(ctx.crear('rect', { class: `ancla${closes ? ' activa' : ''}`, x: pt.p[0] - 4, y: pt.p[1] - 4, width: 8, height: 8 }));
     });
   }
 
   /** Crea el path con los puntos dibujados (en coordenadas del padre) y vuelve a la herramienta de selección. */
-  function terminar(cerrado) {
-    const dibujados = puntos;
-    puntos = [];
+  function finish(closed) {
+    const drawn = points;
+    points = [];
     cursor = null;
-    if (dibujados.length < 2) return ctx.redibujar();
+    if (drawn.length < 2) return ctx.redraw();
 
-    const padre = padreParaNuevo();
-    const inversa = invertir(multiplicar(ctx.matrizCamara(), matrizMundo(estado.doc, esquema, padre)));
-    const lineal = ([x, y]) => [inversa[0] * x + inversa[2] * y, inversa[1] * x + inversa[3] * y];
-    const [ox, oy] = aplicar(inversa, ...dibujados[0].p).map((v) => Math.round(v * 10) / 10);
-    const vertices = dibujados.map((pt) => {
-      const [x, y] = aplicar(inversa, ...pt.p);
-      return verticeDesdeTangentes(x - ox, y - oy, lineal(pt.entrada), lineal(pt.salida));
+    const parent = parentForNew();
+    const inverse = invert(multiply(ctx.cameraMatrix(), worldMatrix(state.doc, schema, parent)));
+    const linear = ([x, y]) => [inverse[0] * x + inverse[2] * y, inverse[1] * x + inverse[3] * y];
+    const [ox, oy] = apply(inverse, ...drawn[0].p).map((v) => Math.round(v * 10) / 10);
+    const vertices = drawn.map((pt) => {
+      const [x, y] = apply(inverse, ...pt.p);
+      return vertexFromTangents(x - ox, y - oy, linear(pt.entrada), linear(pt.salida));
     });
-    const props = { x: ox, y: oy, vertices, closed: cerrado };
-    if (!cerrado) Object.assign(props, { fill: null, stroke: '#2b2135', strokeWidth: 3 });
-    const id = idLibre('path');
-    ejecutar([{ op: 'create', type: 'path', id, parent: padre, props }], `draw ${id}`);
-    fijar({ herramienta: 'seleccionar' });
-    seleccionar(id);
+    const props = { x: ox, y: oy, vertices, closed: closed };
+    if (!closed) Object.assign(props, { fill: null, stroke: '#2b2135', strokeWidth: 3 });
+    const id = freeId('path');
+    execute([{ op: 'create', type: 'path', id, parent: parent, props }], `draw ${id}`);
+    setState({ tool: 'seleccionar' });
+    select(id);
   }
 
   return {
     pointerdown,
     hover,
-    dibujar,
-    terminar,
-    activa: () => puntos.length > 0,
-    cancelar: () => {
-      puntos = [];
+    draw,
+    finish,
+    active: () => points.length > 0,
+    cancel: () => {
+      points = [];
       cursor = null;
-      ctx.redibujar();
+      ctx.redraw();
     },
   };
 }
