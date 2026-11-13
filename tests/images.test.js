@@ -10,11 +10,11 @@ import { embedImages, svgToPng } from '../server/png.js';
 import { findObject, createDocument, validate } from '../src/core/document.js';
 import { validateValue } from '../src/core/schema.js';
 import { boxOf } from '../src/core/skeleton.js';
-import { usedAssets, readImage, assetName, freeName, planAddImage } from '../src/core/images.js';
+import { usedAssets, readImage, assetName, freeName, planAddImage, planReplaceImage } from '../src/core/images.js';
 import { guideForAI } from '../src/core/guide.js';
 import { applyOperations } from '../src/core/operations.js';
 import { svgDocument } from '../src/render/svg.js';
-import { imageBytes, treeOutline } from '../mcp/tools.js';
+import { imageBytes, treeOutline, addImage, documentText } from '../mcp/tools.js';
 
 const schema = loadSchema();
 const op = (doc, ...ops) => applyOperations(doc, ops, schema).doc;
@@ -166,3 +166,30 @@ test('MCP: imageBytes reads absolute paths and rejects the rest; the tree shows 
   assert.ok(findObject(doc, 'logo'));
   assert.match(guideForAI(schema), /add_image/);
 });
+
+test('add_image: a layer that fails leaves no file in assets/; replace keeps the width; get_document lists the files', () =>
+  withStore(async (a) => {
+    await a.create('doc', { width: 200, height: 200 }, { origin: 'user' });
+    const entry = { origin: 'ai' };
+    const first = await addImage(a, schema, 'doc', { bytes: png(20, 10), name: 'logo.png', layer: 'logo' }, entry);
+    assert.equal(first.layerId, 'logo');
+    // Same id again with a different file: the batch fails and the new file does not stay.
+    await assert.rejects(addImage(a, schema, 'doc', { bytes: png(8, 8, '#0000ff'), name: 'blue.png', layer: 'logo' }, entry), /already an object with id "logo"/);
+    assert.deepEqual(await a.listAssets('doc'), ['logo.png']);
+    // A file that is reused (same bytes) is not deleted when the layer fails.
+    await assert.rejects(addImage(a, schema, 'doc', { bytes: png(20, 10), name: 'otra.png', parent: 'nada' }, entry));
+    assert.deepEqual(await a.listAssets('doc'), ['logo.png']);
+    // replace: another file in the same layer, same width, height in the new proportion.
+    const { doc } = await addImage(a, schema, 'doc', { bytes: png(10, 20, '#00ff00'), name: 'tall.png', replace: 'logo' }, entry);
+    const logo = findObject(doc, 'logo');
+    assert.deepEqual([logo.src, logo.width, logo.height], ['tall.png', first.doc.objects[0].width, first.doc.objects[0].width * 2]);
+    assert.throws(() => planReplaceImage(doc, 'nada', { src: 'tall.png', naturalWidth: 1, naturalHeight: 1 }), /no object "nada"/);
+    // get_document: files with their size and who uses them.
+    const text = documentText(doc, schema, { json: false, assets: await a.assetsInfo('doc', doc) });
+    assert.match(text, /- logo\.png \(20×10 px\) unused/);
+    assert.match(text, /- tall\.png \(10×20 px\) used by logo/);
+    // An unused file can be discarded; a used one is kept.
+    assert.equal(await a.discardAsset('doc', 'tall.png'), false);
+    assert.equal(await a.discardAsset('doc', 'logo.png'), true);
+    assert.deepEqual(await a.listAssets('doc'), ['tall.png']);
+  }));

@@ -29,7 +29,7 @@ test('undo and redo go by origin', () =>
     let { doc, in: entry } = await a.undo('robot', 'ai');
     assert.deepEqual(doc.objects.map((o) => o.id), ['torso']);
     assert.equal(doc.objects[0].fill, '#ff0000');
-    assert.deepEqual({ ...entry, lote: entry.lote.map((o) => o.op) }, { n: 4, note: 'cabeza', ops: 1, lote: ['create'] });
+    assert.deepEqual({ ...entry, batch: entry.batch.map((o) => o.op) }, { n: 4, note: 'cabeza', ops: 1, batch: ['create'] });
 
     ({ doc } = await a.redo('robot', 'ai'));
     assert.deepEqual(doc.objects.map((o) => o.id), ['torso', 'head']);
@@ -182,6 +182,9 @@ test('old on-disk format: Spanish personajes/, documento.json and historial.json
     assert.deepEqual((await a.history('gato')).entries.map((e) => `${e.origin}:${e.kind}`), ['ai:create', 'user:undo']);
     // A new entry stays the same.
     assert.deepEqual(entryFromLegacy(entries[0]), entries[0]);
+    // If personajes/ shows up again next to documents/, it is not migrated: a warning says so.
+    await fs.mkdir(path.join(base, 'personajes', 'perro'), { recursive: true });
+    assert.match(migrateLegacyFolder(folder) ?? '', /Both .*personajes.* exist: the old folder is not migrated/);
   } finally {
     await fs.rm(base, { recursive: true, force: true });
   }

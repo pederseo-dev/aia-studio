@@ -7,7 +7,7 @@ const BONE = 'M8 10.2h8a2.4 2.4 0 1 1 3.2 1.8 2.4 2.4 0 1 1-3.2 1.8H8a2.4 2.4 0 
 // The shrunk bone in the top-left corner, with the same stroke width as the rest.
 const smallBone = `<path transform="translate(9 9) scale(0.72) translate(-12 -12) rotate(-45 12 12)" stroke-width="2.1" d="${BONE}"/>`;
 
-export const ICONOS = {
+export const ICONS = {
   select: stroke('<path d="M5 3.5 18.5 10l-6 1.8-2.6 6.2z"/>'),
   rotate: stroke('<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v4h-4"/>'),
   scale: stroke('<rect x="4" y="11" width="9" height="9" rx="1"/><path d="M13 11l7-7M14.5 4H20v5.5"/>'),
@@ -52,9 +52,9 @@ export const ICONOS = {
 
 // Icon of each object type, for the hierarchy and the assets.
 export const TYPE_ICON = {
-  group: ICONOS.group, switch: ICONOS.switch, skeleton: ICONOS.skeleton, rect: ICONOS.rect, ellipse: ICONOS.ellipse, path: ICONOS.path, image: ICONOS.image,
-  bone: ICONOS.bone, style: ICONOS.style, linear_gradient: ICONOS.gradient, radial_gradient: ICONOS.radial,
-  pose: ICONOS.pose, param: ICONOS.param, driver: ICONOS.driver, animation: ICONOS.animation,
+  group: ICONS.group, switch: ICONS.switch, skeleton: ICONS.skeleton, rect: ICONS.rect, ellipse: ICONS.ellipse, path: ICONS.path, image: ICONS.image,
+  bone: ICONS.bone, style: ICONS.style, linear_gradient: ICONS.gradient, radial_gradient: ICONS.radial,
+  pose: ICONS.pose, param: ICONS.param, driver: ICONS.driver, animation: ICONS.animation,
 };
 
 export const ARROW = `<svg class="ico-arrow" viewBox="0 0 10 10" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5"/></svg>`;

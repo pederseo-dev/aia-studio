@@ -44,7 +44,7 @@ function serveAsset(res, { bytes, mime }) {
 
 export function aiaDocuments() {
   return {
-    name: 'aia-documentos',
+    name: 'aia-documents',
     configureServer(server) {
       const store = createStore({ schema: loadSchema() });
 

@@ -3,7 +3,7 @@
 // Dragging a row changes the order or the parent; double click renames; the eye shows or hides.
 // Ctrl + click adds or removes from the selection; Shift + click selects the span of rows from the previous one.
 
-import { TYPE_ICON, ICONOS } from './icons.js';
+import { TYPE_ICON, ICONS } from './icons.js';
 import { findObject, children, subtree } from '../core/document.js';
 import { read } from '../core/schema.js';
 import { applyOperations } from '../core/operations.js';
@@ -72,9 +72,9 @@ export function mountTree(root, resourcesRoot) {
         const hasChildren = layers(doc, o.id).length > 0;
         const folded = foldedOf().has(o.id);
         row.innerHTML = `<button type="button" class="fold${hasChildren ? '' : ' empty'}" title="${folded ? 'Expand' : 'Collapse'}" tabindex="-1">${folded ? '▸' : '▾'}</button>
-          <span class="type" title="${o.type}">${TYPE_ICON[o.type] ?? '•'}</span><span class="name"></span>${o.bone ? `<span class="binding">${ICONOS.bone}</span>` : ''}
+          <span class="type" title="${o.type}">${TYPE_ICON[o.type] ?? '•'}</span><span class="name"></span>${o.bone ? `<span class="binding">${ICONS.bone}</span>` : ''}
           ${o.type === 'switch' ? '<span class="dropdown variant-switch"><button type="button" class="variant" title="Variant shown (in a pose, saved to the pose)"></button><div class="menu" role="menu" hidden></div></span>' : ''}
-          ${withEye ? `<button type="button" class="lock${o.locked ? ' set' : ''}" title="${o.locked ? 'Unlock: pick and edit it on the canvas again' : 'Lock: it can’t be picked or changed on the canvas'}">${o.locked ? ICONOS.lock : ICONOS.openLock}</button>` : ''}
+          ${withEye ? `<button type="button" class="lock${o.locked ? ' set' : ''}" title="${o.locked ? 'Unlock: pick and edit it on the canvas again' : 'Lock: it can’t be picked or changed on the canvas'}">${o.locked ? ICONS.lock : ICONS.openLock}</button>` : ''}
           ${withEye ? `<button type="button" class="eye${visible ? '' : ' concealed'}" title="${visible ? 'Hide' : 'Show'}">${visible ? '◉' : '○'}</button>` : ''}`;
         row.querySelector('.name').textContent = o.id;
         if (o.bone) (/** @type {HTMLElement} */ (row.querySelector('.binding'))).title = `Follows bone ${o.bone}`;
@@ -244,9 +244,9 @@ export function mountTree(root, resourcesRoot) {
     let doc = state.doc;
     const ops = [];
     const loose = [];
-    const step = (lote) => {
-      doc = applyOperations(doc, lote, schema).doc;
-      ops.push(...lote);
+    const step = (batch) => {
+      doc = applyOperations(doc, batch, schema).doc;
+      ops.push(...batch);
     };
     // A move first releases the bindings that would stop being valid (drawing that leaves the skeleton of its bone).
     const move = (id, parent, index) => {

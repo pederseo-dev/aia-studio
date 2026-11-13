@@ -26,6 +26,7 @@ things by hand** when needed.
 npm install
 npm run dev     # editor at http://localhost:5173
 npm test        # core tests
+npm run typecheck  # type check (tsc over JS with JSDoc); must pass before each commit
 npm run mcp     # MCP server over stdio (usually started by the AI client)
 ```
 
@@ -96,12 +97,14 @@ stays in the history for the AI to respect.
 - **Other MCP clients** (Cursor, etc.): the same command, `node <path>/mcp/server.js`, over stdio.
 
 Tools: `get_guide` (the format guide, generated from the schema), `list_documents`, `get_document` (with
-`json: false` and `clips` to read a large document in parts),
+`json: false` and `clips` to read a large document in parts; it also lists the files in `assets/` and marks the
+layers the user locked),
 `create_document`, `delete_document` (deletes a document with its history; asks to repeat the id in `confirm`),
 `apply_ops`, `undo`, `redo`, `get_history`, `set_pose` (creates or adjusts a named pose; `remove` takes out individual
 properties), `bind_points` (distributes a path's points among the bones of its skeleton), `reparent_bone` (changes a
 bone's parent without moving it in the setup; with `keep_in_poses`, not in the poses either), `bind_by_proximity` (binds
-to the nearest bone all the drawing of a skeleton that does not follow any bone yet) and
+to the nearest bone all the drawing of a skeleton that does not follow any bone yet) `add_image` (adds a PNG, JPG, WebP or SVG file as an image layer, copying it to the document's
+`assets/`; with `replace`, changes the file of an existing layer) and
 `set_keys` (creates or adjusts a clip by moments; in Puppet, also `fade`, `next`, `blend` and `auto` for Live: `values` (also relative to the setup, `"+=14"`), `pose` (whole or a part, with `only`/`except`), `params` (only in Puppet clips), `setup` to go back to the setup, `ease` with strong named curves),
 `delete_keys` (removes keyframes by time or track), `move_keys` (moves the keyframes from one moment to another), `scale_time` (stretches or compresses the time of the clip or of a range, in one undo step) and
 `render_preview` (returns a PNG so the AI can see what it did; with `pose`, `params`, `region` or `bones`, and with
@@ -120,7 +123,7 @@ each one overrides and the problems).
 | `server/` | Reading and writing to disk, and the local API the editor uses (Vite plugin). |
 | `mcp/` | MCP server for the AI. |
 | `scripts/` | `migrate-skeletons.js` (`npm run migrate`): brings old documents, with bones at the root, to the skeleton model. |
-| `documents/` | The documents (`documents/<id>/document.json` and `history.jsonl`). |
+| `documents/` | The documents (`documents/<id>/document.json`, `history.jsonl` and the image files in `assets/`). |
 | `tests/` | Core tests (`node --test`). |
 | `docs/pruebas-ia/` | Tasks and results of the AI tests for each phase. |
 | `referencias/` | Third-party code to study (ignored by git). |

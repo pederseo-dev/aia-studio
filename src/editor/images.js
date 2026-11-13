@@ -4,7 +4,7 @@
 
 import { findObject } from '../core/document.js';
 import { readMeta } from '../core/schema.js';
-import { readImage, planAddImage } from '../core/images.js';
+import { readImage, planAddImage, planReplaceImage } from '../core/images.js';
 import { notify, execute, schema, state, parentForNew, selectSeveral } from './state.js';
 
 const IS_IMAGE = /^image\/(png|jpeg|webp|svg\+xml)$/;
@@ -58,9 +58,7 @@ export async function addImages(files, point) {
 export async function replaceImage(id, file) {
   try {
     const { src, naturalWidth, naturalHeight } = await upload(file);
-    const previous = findObject(state.doc, id);
-    const currentWidth = previous?.width ?? naturalWidth;
-    await execute([{ op: 'set', target: id, props: { src, width: currentWidth, height: Math.round((currentWidth * naturalHeight * 100) / naturalWidth) / 100 } }], `${id}: replace image with ${src}`);
+    await execute(planReplaceImage(state.doc, id, { src, naturalWidth, naturalHeight }), `${id}: replace image with ${src}`);
   } catch (err) {
     notify(err.message, true);
   }

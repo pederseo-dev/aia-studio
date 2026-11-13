@@ -378,3 +378,14 @@ it touches vertices, `bind_points`, poses, timeline, render, the Points tool and
 AI names a mesh point without depending on the index, which is fragile. Before that, two smaller steps are worth doing:
 Layers that tells groups (layers) apart from shapes (folded children), and `path` with several subpaths and a fill rule
 for shapes with a hole, as in Rive.
+- ✅ MCP parity (2026-11-13 audit): `add_image` with `replace` (shared `planReplaceImage`, as the editor's
+  Replace…); `get_document` lists the files in `assets/` with their natural size and which layers use them (to reuse
+  them or go back to the original size); a layer that fails does not leave its file in `assets/`.
+
+## Lock in Layers ✅ (2026-11-12)
+
+- ✅ `locked` (in `transformable`): the padlock in Layers. The layer and its children can't be picked or changed
+  on the canvas (clicks go through to what is below): drawing, bones, Bind Points points, marquees and the arrow
+  keys. It stays editable from Layers and the inspector, is saved in the document and can be undone.
+- ✅ The AI sees it: `get_document` marks "(locked by the user)" (and "(hidden)") and the guide tells it not to change
+  a locked layer unless asked.

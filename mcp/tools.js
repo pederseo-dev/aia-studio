@@ -4,7 +4,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { findObject, children, bonesOf } from '../src/core/document.js';
-import { IMAGE_MAX } from '../src/core/images.js';
+import { IMAGE_MAX, planAddImage, planReplaceImage } from '../src/core/images.js';
 import { evaluateSkeleton, planProximityBinding, boneOf, limitAngle, tipOf, reparentBone, distributeBetweenBones } from '../src/core/skeleton.js';
 import { apply } from '../src/core/geometry.js';
 import { read, readMeta, suggest } from '../src/core/schema.js';
@@ -48,6 +48,9 @@ export function treeOutline(doc, schema, { tracks = true } = {}) {
         const [px, py] = tipOf(schema, o, m);
         detail = ` from (${r(ox)}, ${r(oy)}) to (${r(px)}, ${r(py)}), ${r((Math.atan2(m[1], m[0]) * 180) / Math.PI)}° on screen`;
       }
+      // The user's lock and hidden layers: the AI sees them so it does not change, by mistake, what the user protected.
+      if (o.locked) detail += ' (locked by the user)';
+      if (o.visible === false) detail += ' (hidden)';
       lines.push(`${'  '.repeat(level)}- ${o.id} (${o.type})${detail}`);
       // The tracks of a clip, with their keyframes: to read it without the whole JSON.
       // `tracks`: true = all; false = none (only the summary); a list = only those of these clips.
@@ -115,10 +118,15 @@ export function planReparentBone(doc, schema, bone, parent, keepInPoses = false)
 const RESPONSE_MAX = 60000;
 
 /** get_document: the tree (with the tracks of `clips`, or of all) and the JSON, unless not requested or too heavy. */
-/** @param {any} doc @param {any} schema @param {{ json?: boolean, clips?: string[] }} [options] */
-export function documentText(doc, schema, { json, clips } = {}) {
-  const textTree = `Tree (back to front):
+/** @param {any} doc @param {any} schema @param {{ json?: boolean, clips?: string[], assets?: { src: string, size: string, layers: string[] }[] }} [options] */
+export function documentText(doc, schema, { json, clips, assets } = {}) {
+  let textTree = `Tree (back to front):
 ${treeOutline(doc, schema, { tracks: clips ?? true })}`;
+  // The files in assets/: to reuse them with apply_ops (src), go back to their size or see which are left unused.
+  if (assets?.length) {
+    const lines = assets.map((a) => `- ${a.src} (${a.size}) ${a.layers.length ? `used by ${a.layers.join(', ')}` : 'unused'}`);
+    textTree += `\n\nFiles in assets/:\n${lines.join('\n')}`;
+  }
   if (json === false) return textTree;
   const complete = JSON.stringify(doc, null, 2);
   if (json === undefined && textTree.length + complete.length > RESPONSE_MAX) {
@@ -218,4 +226,27 @@ export async function imageBytes({ path: filePath, url }) {
   if (Number(response.headers.get('content-length')) > IMAGE_MAX) throw new Error(`The image is too big (at most ${IMAGE_MAX / 1048576} MB)`);
   const bytes = new Uint8Array(await response.arrayBuffer());
   return { bytes, name: decodeURIComponent(direction.pathname.split('/').pop() || 'image') };
+}
+
+/**
+ * add_image: saves the file in assets/ and creates the layer (or, with `replace`, changes the file of an existing
+ * one). If the layer can't be created or changed, the file just copied is deleted so it is not left in assets/.
+ * @param {any} store @param {any} schema @param {string} id
+ * @param {{ bytes: Uint8Array, name: string, layer?: string, replace?: string, parent?: string | null, index?: number, x?: number, y?: number, width?: number, height?: number, props?: Record<string, any> }} image
+ * @param {{ origin: string, note?: string }} entry
+ */
+export async function addImage(store, schema, id, { bytes, name, layer, replace, parent, index, x, y, width, height, props }, { origin, note }) {
+  const { src, naturalWidth, naturalHeight, format, reused } = await store.saveAsset(id, name, bytes);
+  try {
+    const current = await store.read(id);
+    const plan = replace != null
+      ? { id: replace, ops: planReplaceImage(current, replace, { src, naturalWidth, naturalHeight }) }
+      : planAddImage(current, schema, { src, naturalWidth, naturalHeight, id: layer, parent: parent ?? null, index, x, y, width, height });
+    if (props) Object.assign(plan.ops[0].props, props);
+    const { doc, warnings } = await store.applyOps(id, plan.ops, { origin, note: note ?? (replace != null ? `${plan.id}: replace image with ${src}` : `add image ${plan.id}`) });
+    return { layerId: plan.id, doc, warnings, src, naturalWidth, naturalHeight, format, reused };
+  } catch (e) {
+    if (!reused) await store.discardAsset(id, src);
+    throw e;
+  }
 }

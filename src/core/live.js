@@ -219,7 +219,7 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
         if (sum) {
           if (number(id)) P[id] += w * (v - read(schema, findObject(documentData, id), 'default'));
         } else {
-          const created = overwrite(number(id) ? 'number' : 'discreto', P[id], v, w);
+          const created = overwrite(number(id) ? 'number' : 'discrete', P[id], v, w);
           if (created !== undefined) P[id] = created;
         }
       }
@@ -250,7 +250,7 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
         }
         for (const [id, v] of Object.entries(b.ev.params)) {
           const before = layer.params[id];
-          const created = before === undefined ? v : overwrite(number(id) ? 'number' : 'discreto', before, v, r);
+          const created = before === undefined ? v : overwrite(number(id) ? 'number' : 'discrete', before, v, r);
           if (created !== undefined) layer.params[id] = created;
         }
       }

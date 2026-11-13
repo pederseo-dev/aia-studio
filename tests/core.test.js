@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadSchema } from '../server/schema.js';
-import { createDocument, validate } from '../src/core/document.js';
+import { createDocument, validate, locked } from '../src/core/document.js';
 import { applyOperations, compact, summarizeOperations } from '../src/core/operations.js';
 import { apply, worldMatrix } from '../src/core/geometry.js';
 import { guideForAI } from '../src/core/guide.js';
 import { DRAW, svgDocument } from '../src/render/svg.js';
+import { treeOutline } from '../mcp/tools.js';
 
 const schema = loadSchema();
 const op = (doc, ...ops) => applyOperations(doc, ops, schema);
@@ -45,7 +46,7 @@ test('create builds the hierarchy and the draw order', () => {
 
 test('every operation is undone exactly by its inverses', () => {
   const doc = robot();
-  const lotes = [
+  const batches = [
     [{ op: 'set', target: 'torso', props: { width: 10, fill: '#ff0000' } }],
     [{ op: 'unset', target: 'eye_l', props: ['x', 'width'] }],
     [{ op: 'set', target: 'meta', props: { width: 600, background: null } }],
@@ -55,7 +56,7 @@ test('every operation is undone exactly by its inverses', () => {
     [{ op: 'rename', target: 'head', id: 'cabeza' }],
     [{ op: 'move', target: 'body', parent: null, index: 0 }, { op: 'delete', target: 'body' }],
   ];
-  for (const ops of lotes) {
+  for (const ops of batches) {
     const { doc: changed, inverses } = op(doc, ...ops);
     assert.notDeepEqual(changed, doc, JSON.stringify(ops));
     assert.deepEqual(op(changed, ...inverses).doc, doc, JSON.stringify(ops));
@@ -216,4 +217,21 @@ test('artboardOps resizes the artboard with the drawing anchored to the center (
   assert.deepEqual(get('paso').tracks.body.x.map((c) => c.value), [400, 420]);
   // Same size: only width/height.
   assert.equal(artboardOps(r, schema, 800, 500).length, 1);
+});
+
+test('locked: an object is locked if it or one of its parents has locked; the tree tells the AI', () => {
+  let doc = createDocument({});
+  doc = applyOperations(doc, [
+    { op: 'create', type: 'group', id: 'body', props: { locked: true } },
+    { op: 'create', type: 'rect', id: 'arm', parent: 'body' },
+    { op: 'create', type: 'rect', id: 'sun', props: { visible: false } },
+  ], schema).doc;
+  assert.equal(locked(doc, 'body'), true);
+  assert.equal(locked(doc, 'arm'), true);
+  assert.equal(locked(doc, 'sun'), false);
+  assert.equal(locked(doc, 'nothing'), false);
+  const tree = treeOutline(doc, schema);
+  assert.match(tree, /- body \(group\) \(locked by the user\)/);
+  assert.doesNotMatch(tree, /arm \(rect\) \(locked/);
+  assert.match(tree, /- sun \(rect\) \(hidden\)/);
 });

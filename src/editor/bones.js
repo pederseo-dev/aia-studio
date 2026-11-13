@@ -136,7 +136,8 @@ export function createBones(ctx) {
       const reparenting = state.tool === 'reparent' && state.selected.length > 1;
       const kinship = reparenting ? (h.id === state.selection ? ' new-parent' : '') : chosen && h.id === chosen.parent ? ' parent' : chosen && h.parent === chosen.id ? ' child' : '';
       const className = `bone${state.selected.includes(h.id) ? ' selected' : ''}${h.id === state.selection ? ' main' : ''}${kinship}`;
-      const color = { style: `--c: ${boneColor(doc, h.id)}` };
+      // Locked (it or a parent): drawn but not picked, so clicks go through to what is below.
+      const color = { style: `--c: ${boneColor(doc, h.id)}${locked(doc, h.id) ? '; pointer-events: none' : ''}` };
       // Dotted joint when the bone does not start at its parent's tip.
       const parent = h.parent && findObject(doc, h.parent);
       if (parent?.type === 'bone') {
@@ -201,7 +202,8 @@ export function createBones(ctx) {
     if (!skeleton) return;
     const camera = ctx.cameraMatrix();
     const layer = ctx.create('g', { class: 'bone-points' });
-    for (const path of doc.objects.filter((o) => o.type === 'path' && skeletonOf(doc, o.id) === skeleton)) {
+    // Points of locked paths are not shown: they cannot be bound from the canvas.
+    for (const path of doc.objects.filter((o) => o.type === 'path' && skeletonOf(doc, o.id) === skeleton && !locked(doc, o.id))) {
       const m = multiply(camera, worldMatrix(doc, schema, path.id));
       read(schema, path, 'vertices').forEach((v, i) => {
         const [x, y] = apply(m, v.x, v.y);
@@ -342,7 +344,7 @@ export function createBones(ctx) {
     const { posed } = evaluateInPose(doc, schema, viewedPose(doc));
     const camera = ctx.cameraMatrix();
     // Each bone as a few points along its axis, on screen: the marquee touches it if any falls inside.
-    const bones = doc.objects.filter((o) => o.type === 'bone').map((h) => {
+    const bones = doc.objects.filter((o) => o.type === 'bone' && !locked(doc, o.id)).map((h) => {
       const m = multiply(camera, posed.get(h.id));
       const length = read(schema, h, 'length');
       return { id: h.id, points: Array.from({ length: 13 }, (_, i) => apply(m, (length * i) / 12, 0)) };
@@ -443,7 +445,7 @@ export function createBones(ctx) {
         const camera = ctx.cameraMatrix();
         const skeleton = skeletonOf(doc, bone.id);
         const changes = new Map();
-        for (const path of doc.objects.filter((o) => o.type === 'path' && skeletonOf(doc, o.id) === skeleton)) {
+        for (const path of doc.objects.filter((o) => o.type === 'path' && skeletonOf(doc, o.id) === skeleton && !locked(doc, o.id))) {
           const m = multiply(camera, worldMatrix(doc, schema, path.id));
           read(schema, path, 'vertices').forEach((v, i) => {
             const [x, y] = apply(m, v.x, v.y);
@@ -480,6 +482,8 @@ export function createBones(ctx) {
       const g = e.target.closest('[data-id]');
       if (!g || !ctx.documentG.contains(g)) return boneMarquee(e, e.ctrlKey || e.metaKey || e.shiftKey, true);
       id = boneOf(state.doc, g.dataset.id) ?? nearestBoneToPoints(g.dataset.id, ctx.screenPoint(e));
+      // A drawing that follows a locked bone does not rotate it.
+      if (id && locked(state.doc, id)) id = null;
       if (!id) return e.ctrlKey || e.metaKey ? toggleSelection(g.dataset.id) : select(g.dataset.id);
     }
     // Ctrl + click: adds or removes from the selection without rotating (to see and key several in the timeline).

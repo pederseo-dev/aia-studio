@@ -1,13 +1,13 @@
 // Editor entry point: mounts the panels and wires up the bar, the keyboard and the live notices.
 
-import { findObject, skeletonOf, children, subtree } from '../core/document.js';
+import { findObject, skeletonOf, children, subtree, locked } from '../core/document.js';
 import { applyOperations } from '../core/operations.js';
 import { read, readMeta } from '../core/schema.js';
 import { artboardOps } from '../core/artboard.js';
 import { mountTree } from './layers.js';
 import { notifyLoose, bindByProximity, reasonNotToBind, releaseOnMove } from './bones.js';
 import { mountHistory } from './history.js';
-import { ARROW, ICONOS } from './icons.js';
+import { ARROW, ICONS } from './icons.js';
 import { importOperations } from './importSvg.js';
 import { addImages, imagesOnly } from './images.js';
 import { mountInspector } from './inspector.js';
@@ -25,7 +25,7 @@ import {
 
 const $ = (s) => document.querySelector(s);
 // Fixed icons of the HTML: data-icon puts them at the start of the element and data-arrow is a dropdown's arrow.
-for (const el of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-icon]'))) el.insertAdjacentHTML('afterbegin', ICONOS[el.dataset.icon]);
+for (const el of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-icon]'))) el.insertAdjacentHTML('afterbegin', ICONS[el.dataset.icon]);
 for (const el of document.querySelectorAll('[data-arrow]')) el.innerHTML = ARROW;
 
 mountTree($('#tree'), $('#resources'));
@@ -295,7 +295,7 @@ function drawGroups() {
     if (active) lastInGroup[group] = active.id;
     const visible = tools.find((h) => h.id === lastInGroup[group]);
     box.classList.toggle('active', !!active);
-    box.innerHTML = `<button type="button" class="main" title="${visible.name}${visible.shortcut ? ` (${visible.shortcut})` : ''}" aria-label="${visible.name}">${ICONOS[visible.icon ?? visible.id]}</button>${tools.length > 1 ? `<button type="button" class="choose" aria-haspopup="menu" title="More tools">${ARROW}</button><div class="menu" role="menu" hidden></div>` : ''}`;
+    box.innerHTML = `<button type="button" class="main" title="${visible.name}${visible.shortcut ? ` (${visible.shortcut})` : ''}" aria-label="${visible.name}">${ICONS[visible.icon ?? visible.id]}</button>${tools.length > 1 ? `<button type="button" class="choose" aria-haspopup="menu" title="More tools">${ARROW}</button><div class="menu" role="menu" hidden></div>` : ''}`;
     box.querySelector('.main').addEventListener('click', () => setState({ tool: visible.id }));
     // A lone tool (Artboard) has no menu.
     if (tools.length === 1) continue;
@@ -305,7 +305,7 @@ function drawGroups() {
       b.type = 'button';
       b.setAttribute('role', 'menuitem');
       b.className = h.id === state.tool ? 'marked' : '';
-      b.innerHTML = `<span class="with-icon">${ICONOS[h.icon ?? h.id]}${h.name}</span>${h.shortcut ? `<kbd>${h.shortcut}</kbd>` : ''}`;
+      b.innerHTML = `<span class="with-icon">${ICONS[h.icon ?? h.id]}${h.name}</span>${h.shortcut ? `<kbd>${h.shortcut}</kbd>` : ''}`;
       b.addEventListener('click', () => {
         closeMenus();
         setState({ tool: h.id });
@@ -483,9 +483,9 @@ function groupSelection(kind = 'group') {
     // What goes into a new skeleton can no longer follow the bones of the outer one: it is released first.
     const release = releaseOnMove(doc, id, group);
     loose.push(...release);
-    const lote = [...release, { op: 'move', target: id, parent: group }, ...keepPosition(doc, id, group)];
-    doc = applyOperations(doc, lote, schema).doc;
-    ops.push(...lote);
+    const batch = [...release, { op: 'move', target: id, parent: group }, ...keepPosition(doc, id, group)];
+    doc = applyOperations(doc, batch, schema).doc;
+    ops.push(...batch);
   }
   const verb = { switch: 'switch with', skeleton: 'skeleton with' }[kind] ?? 'group';
   execute(ops, `${verb} ${nameOf(roots)} into ${group}`).then((ok) => ok && notifyLoose(loose));
@@ -609,7 +609,8 @@ window.addEventListener('keydown', (e) => {
 
   // Arrows: move the selection 1 px (Shift: 10 px).
   const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-  const roots = selectionRoots();
+  // Locked layers (picked from Layers) are not moved: the lock protects them on the canvas and from the keyboard.
+  const roots = selectionRoots().filter((id) => !locked(state.doc, id));
   // In a pose, the arrows do not move the setup.
   if (arrows[e.key] && roots.length && !state.pose) {
     e.preventDefault();

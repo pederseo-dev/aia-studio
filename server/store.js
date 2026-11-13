@@ -148,9 +148,17 @@ export function entryFromLegacy(e) {
   return Object.fromEntries(Object.entries({ n, date, origin, kind, ref, note, ops, inverses, ...extra }).filter(([, v]) => v !== undefined));
 }
 
-/** Moves `folder` (and the old personajes/ folder next to it, if `folder` does not exist yet) to the new format. */
+/**
+ * Moves `folder` (and the old personajes/ folder next to it, if `folder` does not exist yet) to the new format.
+ * Returns a warning when both folders exist: personajes/ is then left as it is, and someone has to merge it by hand.
+ * @returns {string | null}
+ */
 export function migrateLegacyFolder(folder) {
   const legacy = path.join(path.dirname(path.resolve(folder)), 'personajes');
+  let warning = null;
+  if (existsSync(folder) && existsSync(legacy) && readdirSync(legacy).length) {
+    warning = `Both ${legacy} (old format) and ${path.resolve(folder)} exist: the old folder is not migrated. Move its documents into the new one by hand (they are migrated on the next start).`;
+  }
   if (!existsSync(folder) && existsSync(legacy)) {
     try {
       renameSync(legacy, folder);
@@ -159,7 +167,7 @@ export function migrateLegacyFolder(folder) {
       if (!existsSync(folder)) throw e;
     }
   }
-  if (!existsSync(folder)) return;
+  if (!existsSync(folder)) return warning;
   for (const d of readdirSync(folder, { withFileTypes: true })) {
     if (!d.isDirectory()) continue;
     const dir = path.join(folder, d.name);
@@ -174,10 +182,13 @@ export function migrateLegacyFolder(folder) {
       unlinkSync(oldHistory);
     }
   }
+  return warning;
 }
 
 export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
-  migrateLegacyFolder(folder);
+  const warning = migrateLegacyFolder(folder);
+  // On stderr: the MCP uses stdout for the protocol.
+  if (warning) console.error(warning);
   // This process's writes are queued so they do not overwrite each other.
   /** @type {Promise<any>} */
   let row = Promise.resolve();
@@ -340,7 +351,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     // The user sees the note in the history: in English (old Spanish prefixes are cleaned up too).
     const note = entry.note?.replace(/^(deshacer|rehacer|undo|redo): /, '') ?? '';
     await record(id, { origin, kind, ref: entry.n, note: `${kind === 'undo' ? 'undo' : 'redo'}: ${note}`, ops: inverses, inverses: result.inverses });
-    return { doc: result.doc, in: { n: entry.n, note, ops: entry.ops.length, lote: entry.ops } };
+    return { doc: result.doc, in: { n: entry.n, note, ops: entry.ops.length, batch: entry.ops } };
   }
 
   return {
@@ -421,6 +432,39 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
         await fs.writeFile(assetPath(id, src), bytes);
         return { src, naturalWidth, naturalHeight, format, reused: false };
       }),
+
+    /**
+     * Deletes an asset that no image layer uses (for example, the file of an add_image whose layer could not be
+     * created). Returns whether it deleted it.
+     * @param {string} id @param {string} src
+     */
+    discardAsset: (id, src) =>
+      enqueue(async () => {
+        if (usedAssets(await read(id)).includes(src)) return false;
+        await fs.rm(assetPath(id, src), { force: true });
+        return true;
+      }),
+
+    /**
+     * The files in assets/ with their natural size and the layers that use them (for get_document: the AI can reuse
+     * them, go back to the original size or see what is left unused).
+     * @param {string} id @param {any} doc
+     */
+    async assetsInfo(id, doc) {
+      const info = [];
+      for (const src of await listAssets(id)) {
+        const layers = doc.objects.filter((o) => o.type === 'image' && o.src === src).map((o) => o.id);
+        let size = '';
+        try {
+          const { naturalWidth, naturalHeight } = readImage(new Uint8Array(await fs.readFile(assetPath(id, src))));
+          size = `${naturalWidth}×${naturalHeight} px`;
+        } catch {
+          size = 'size unknown';
+        }
+        info.push({ src, size, layers });
+      }
+      return info;
+    },
 
     /** Bytes and MIME type of an asset. */
     async readAsset(id, src) {

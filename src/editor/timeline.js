@@ -4,7 +4,7 @@
 // An open clip is edited like a pose (state.pose = clip id): what is changed on the canvas or in the inspector
 // becomes a keyframe at the playhead time (autokey, see poseOps in editing.js).
 
-import { ICONOS } from './icons.js';
+import { ICONS } from './icons.js';
 import { clipWarnings, scaleTime, isScene, moveKey, putKey, removeKey, roundTime, localTime, keyTimes, valueToSave, setupValues } from '../core/animation.js';
 import { CURVE_NAMES, applyCurve, curveError, sameTime } from '../core/curves.js';
 import { findObject, subtree } from '../core/document.js';
@@ -345,7 +345,7 @@ export function mountTimeline(root) {
       });
       row.append(p);
     }
-    const created = Object.assign(document.createElement('button'), { type: 'button', className: 'tab-new', title: animate ? 'New scene' : 'New clip', innerHTML: ICONOS.add });
+    const created = Object.assign(document.createElement('button'), { type: 'button', className: 'tab-new', title: animate ? 'New scene' : 'New clip', innerHTML: ICONS.add });
     created.setAttribute('aria-label', created.title);
     created.addEventListener('click', () => newClip(animate ? 'animate' : 'puppet'));
     row.append(created);
@@ -770,15 +770,15 @@ export function mountTimeline(root) {
     window.addEventListener('pointerup', () => {
       window.removeEventListener('pointermove', move);
       if (sameTime(created, t0)) return preview(null);
-      let lote;
+      let batch;
       try {
-        lote = ops(created);
+        batch = ops(created);
       } catch (error) {
         preview(null);
         return notify(error.message, true);
       }
       chosen = { id, props, t: roundTime(created), channel: channel.name };
-      execute(lote, `${clip.id}: move key ${id} ${channel.name} ${n(t0)} → ${n(created)} s`);
+      execute(batch, `${clip.id}: move key ${id} ${channel.name} ${n(t0)} → ${n(created)} s`);
     }, { once: true });
   }
 
@@ -818,15 +818,15 @@ export function mountTimeline(root) {
     window.addEventListener('pointerup', () => {
       window.removeEventListener('pointermove', move);
       if (sameTime(created, t0)) return preview(null);
-      let lote;
+      let batch;
       try {
-        lote = ops(created);
+        batch = ops(created);
       } catch (error) {
         preview(null);
         return notify(error.message, true);
       }
       chosen = null;
-      execute(lote, `${clip.id}: move ${idOnly ? `${idOnly} keys` : 'keys'} ${n(t0)} → ${n(created)} s`);
+      execute(batch, `${clip.id}: move ${idOnly ? `${idOnly} keys` : 'keys'} ${n(t0)} → ${n(created)} s`);
     }, { once: true });
   }
 

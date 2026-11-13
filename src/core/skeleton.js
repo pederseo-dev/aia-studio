@@ -402,7 +402,7 @@ export function reparentSeveral(doc, schema, steps, options = {}) {
 export function reparentBone(doc, schema, boneId, parentId, { keepInPoses = false } = {}) {
   const ops = opsToReparent(doc, schema, boneId, parentId);
   if (!ops.length) return { ops, moved: [] };
-  const after = (lote) => applyOperations(doc, lote, schema).doc;
+  const after = (batch) => applyOperations(doc, batch, schema).doc;
   const poses = doc.objects.filter((o) => o.type === 'pose');
   const worldIn = (d, pose) => evaluateInPose(d, schema, pose).posed.get(boneId);
   const before = new Map(poses.map((p) => [p.id, worldIn(doc, p)]));

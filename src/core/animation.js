@@ -76,7 +76,7 @@ export function evaluateClip(doc, schema, clip, t) {
     if (obj.type === 'param') {
       if (fields.value?.length) {
         const kind = read(schema, obj, 'kind');
-        params[id] = trackValue(fields.value, local, kind === 'number' ? 'number' : 'discreto');
+        params[id] = trackValue(fields.value, local, kind === 'number' ? 'number' : 'discrete');
       }
       continue;
     }

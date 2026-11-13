@@ -120,7 +120,11 @@ is its name.
   file to \`assets/\` and creates the layer centered on the canvas, at its natural size (shrunk if it doesn't fit), or where and at the
   size you say (\`x\`, \`y\`, \`width\` or \`height\`; with only one, the other follows in proportion). Returns the preview.
 - **Reuse a file** already in \`assets/\` (for example, the same image twice): \`create\` with \`apply_ops\` and
-  its \`src\`. A \`src\` that isn't in \`assets/\` is accepted but not drawn, and apply_ops warns.
+  its \`src\`. \`get_document\` lists the files in \`assets/\` with their natural size and the layers that use them.
+  A \`src\` that isn't in \`assets/\` is accepted but not drawn, and apply_ops warns.
+- **Change the file** of a layer: \`add_image\` with \`replace\` (the layer id). It keeps the width and the height
+  follows the new file's proportion, as the editor's Replace… does.
+- **Original size:** set \`width\` and \`height\` to the natural size that \`get_document\` lists for its file.
 - It behaves like any layer: it is centered on \`x\`/\`y\` (\`originX\`/\`originY\` move the pivot), goes inside
   groups, switches and skeletons, sticks to a bone with \`bone\`, and in poses and clips its position, rotation, scale,
   \`opacity\`, \`visible\`, \`width\` and \`height\` are animated. \`width\`/\`height\` stretch it: to avoid distorting it, change them in
@@ -406,6 +410,8 @@ ${types}
 1. **Check the history** (\`get_history\`, with \`origin: "user"\` to see only the user's) before editing an existing
    document. Each entry has \`origin\` (\`"ai"\`, \`"user"\` or \`"system"\`), \`kind\` (\`"create"\`, \`"change"\`, \`"undo"\`,
    \`"redo"\`, \`"migration"\`) and \`note\`. The user's entries are hand tweaks: respect them and don't overwrite them.
+   In the \`get_document\` tree, a layer marked "(locked by the user)" is one the user protected (\`locked\`): don't
+   change it or its children unless the user asks for it, and don't unlock it.
 2. **Use groups as joints.** A group's \`x\`/\`y\` is its pivot: for a head to rotate from the
    neck, put the group \`head\` at the neck and draw the face with negative \`y\` inside the group.
 3. **Look at the result** with \`render_preview\` after each important change.

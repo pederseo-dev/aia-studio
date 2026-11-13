@@ -16,8 +16,8 @@ import { NO_PREVIEW, svgToPng } from '../server/png.js';
 import { CURVE_NAMES } from '../src/core/curves.js';
 import { rotationWarnings, planDeleteKeys, planMoveKeys, planScaleTime, planSetKeys, clipSummary } from './animation.js';
 import { manifest, manifestText } from '../src/core/manifest.js';
-import { usedAssets, assetMime, planAddImage } from '../src/core/images.js';
-import { imageBytes, checkDeleted, treeOutline as tree,planBindByProximity, planBindPoints, planReparentBone, planPreview, poseClamps, historySummary, documentText } from './tools.js';
+import { usedAssets, assetMime } from '../src/core/images.js';
+import { imageBytes, addImage, checkDeleted, treeOutline as tree,planBindByProximity, planBindPoints, planReparentBone, planPreview, poseClamps, historySummary, documentText } from './tools.js';
 
 const schema = loadSchema();
 const store = createStore({ schema });
@@ -107,7 +107,10 @@ server.registerTool(
       clips: z.array(z.string()).optional().describe('ids of clips whose tracks are listed in the tree (by default, all; [] = none)'),
     },
   },
-  safe(async ({ id, json, clips }) => text(documentText(await store.read(id), schema, { json, clips }))),
+  safe(async ({ id, json, clips }) => {
+    const doc = await store.read(id);
+    return text(documentText(doc, schema, { json, clips, assets: await store.assetsInfo(id, doc) }));
+  }),
 );
 
 server.registerTool(
@@ -155,7 +158,7 @@ const revert = (kind) =>
   safe(async ({ id }) => {
     const { doc, in: entry } = await store[kind](id, ORIGIN);
     const verb = kind === 'undo' ? 'Undid' : 'Redid';
-    const touched = summarizeOperations(entry.lote).slice(0, 12).join(', ');
+    const touched = summarizeOperations(entry.batch).slice(0, 12).join(', ');
     const follows = kind === 'undo' ? ' The earlier batches still stand.' : '';
     return text(`${verb} batch #${entry.n} "${entry.note}" (${entry.ops} operations: ${touched}).${follows}\n\nResulting tree:\n${shortTree(doc)}`);
   });
@@ -224,13 +227,15 @@ server.registerTool(
     description:
       'Adds an image (PNG, JPG, WebP or SVG) as a layer: copies the file to the document\'s assets/ folder, creates ' +
       'an image object that uses it, and returns how it looks. By default it is centered on the canvas, at its natural size ' +
-      '(shrunk if it doesn\'t fit). An SVG comes in as a whole image (its shapes are not editable). To reuse a ' +
-      'file already in assets/, create the image with apply_ops and its src.',
+      '(shrunk if it doesn\'t fit). An SVG comes in as a whole image (its shapes are not editable). With replace, ' +
+      'changes the file of an existing image layer instead (keeps its width, the height follows the new proportion). ' +
+      'To reuse a file already in assets/ (get_document lists them with their size), use apply_ops with its src.',
     inputSchema: {
       id,
       path: z.string().optional().describe('absolute path of a local file the user gave'),
       url: z.string().optional().describe('or an http(s) URL of the image'),
       layer: z.string().optional().describe('id of the new layer (by default, taken from the file name)'),
+      replace: z.string().optional().describe('id of an existing image layer whose file is changed (no new layer is created; layer, parent, index, x, y, width and height are ignored)'),
       parent: z.string().nullable().optional().describe('parent container (group, switch or skeleton); omitted = root'),
       index: z.number().int().optional().describe('position among siblings: 0 = at the back; omitted = at the front'),
       x: z.number().optional().describe('x of the center (of the pivot), relative to the parent; by default, the center of the canvas'),
@@ -241,12 +246,9 @@ server.registerTool(
       note: z.string().optional().describe('what it is, for the history'),
     },
   },
-  safe(async ({ id, path, url, layer, parent, index, x, y, width, height, props: extra, note }) => {
+  safe(async ({ id, path, url, layer, replace, parent, index, x, y, width, height, props: extra, note }) => {
     const { bytes, name } = await imageBytes({ path, url });
-    const { src, naturalWidth, naturalHeight, format, reused } = await store.saveAsset(id, name, bytes);
-    const { id: layerId, ops } = planAddImage(await store.read(id), schema, { src, naturalWidth, naturalHeight, id: layer, parent: parent ?? null, index, x, y, width, height });
-    if (extra) Object.assign(ops[0].props, extra);
-    const { doc, warnings } = await store.applyOps(id, ops, { origin: ORIGIN, note: note ?? `add image ${layerId}` });
+    const { layerId, doc, warnings, src, naturalWidth, naturalHeight, format, reused } = await addImage(store, schema, id, { bytes, name, layer, replace, parent, index, x, y, width, height, props: extra }, { origin: ORIGIN, note });
     const o = findObject(doc, layerId);
     const file = `${src} (${format.toUpperCase()}, ${naturalWidth}×${naturalHeight} px${reused ? ', already in assets/' : ''})`;
     return preview(id, doc, {}, `Image layer "${layerId}" with ${file}: x ${o.x}, y ${o.y}, ${o.width}×${o.height}.${warnings.length ? `\nWarnings: ${warnings.join('; ')}` : ''}`);

@@ -159,6 +159,23 @@ export function planAddImage(doc, schema, { src, naturalWidth, naturalHeight, id
   return { id, ops: [op] };
 }
 
+/**
+ * Operation to change the file of the image layer `id` to `src`: keeps its width and adapts the height to the new
+ * file's proportion. The editor (Replace…) and the MCP (add_image with replace) use it.
+ * @param {any} doc @param {string} id
+ * @param {{ src: string, naturalWidth: number, naturalHeight: number }} file
+ * @returns {import('./types.js').Operation[]}
+ */
+export function planReplaceImage(doc, id, { src, naturalWidth, naturalHeight }) {
+  const obj = findObject(doc, id);
+  if (!obj) throw new Error(`There is no object "${id}"`);
+  if (obj.type !== 'image') throw new Error(`"${id}" is a ${obj.type}, not an image layer: only image layers can change their file`);
+  if (!ASSET_FILE.test(src ?? '')) throw new Error(`Invalid asset name "${src}"`);
+  if (!(naturalWidth > 0 && naturalHeight > 0)) throw new Error(`The image "${src}" has no size`);
+  const width = obj.width ?? naturalWidth;
+  return [{ op: 'set', target: id, props: { src, width, height: round((width * naturalHeight) / naturalWidth) } }];
+}
+
 function free(doc, base) {
   for (let n = 2; ; n++) if (!findObject(doc, `${base}_${n}`)) return `${base}_${n}`;
 }
