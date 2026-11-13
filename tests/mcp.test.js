@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cargarEsquema } from '../servidor/esquema.js';
-import { buscar, crearDocumento, validar } from '../src/core/documento.js';
-import { evaluarEnPose, puntaDe } from '../src/core/esqueleto.js';
-import { guiaParaIA } from '../src/core/guia.js';
-import { aplicarOperaciones } from '../src/core/operaciones.js';
-import { fusionarPose, opsParaFijarPose as opsDeSetPose } from '../src/core/mezcla.js';
-import { comprobarBorrado, esquemaDelArbol, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from '../mcp/herramientas.js';
+import { cargarEsquema } from '../server/schema.js';
+import { buscar, crearDocumento, validar } from '../src/core/document.js';
+import { evaluarEnPose, puntaDe } from '../src/core/skeleton.js';
+import { guiaParaIA } from '../src/core/guide.js';
+import { aplicarOperaciones } from '../src/core/operations.js';
+import { fusionarPose, opsParaFijarPose as opsDeSetPose } from '../src/core/blend.js';
+import { comprobarBorrado, esquemaDelArbol, planBindByProximity, planBindPoints, planReparentBone, recortesDePose } from '../mcp/tools.js';
 
 const esquema = cargarEsquema();
 const op = (doc, ...ops) => aplicarOperaciones(doc, ops, esquema).doc;
@@ -159,7 +159,7 @@ test('el árbol dice qué params eligen la variante de un switch', () => {
 });
 
 test('lecturas del MCP sin el servidor: get_document, get_history y render_preview', async () => {
-  const { planVistaPrevia, resumenDeHistorial, textoDeDocumento } = await import('../mcp/herramientas.js');
+  const { planVistaPrevia, resumenDeHistorial, textoDeDocumento } = await import('../mcp/tools.js');
   const doc = op(
     crearDocumento({}),
     { op: 'create', type: 'rect', id: 'r', props: { x: 1 } },

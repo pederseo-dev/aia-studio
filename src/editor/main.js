@@ -1,27 +1,27 @@
 // Punto de entrada del editor: monta los paneles y conecta la barra, el teclado y los avisos en vivo.
 
-import { buscar, esqueletoDe, hijos, subarbol } from '../core/documento.js';
-import { aplicarOperaciones } from '../core/operaciones.js';
-import { leer, leerMeta } from '../core/esquema.js';
-import { opsDeTamano } from '../core/tamano.js';
-import { montarArbol } from './arbol.js';
-import { avisarSueltos, enlazarPorCercania, motivoParaNoEnlazar, soltarAlMover } from './huesos.js';
-import { montarHistorial } from './historial.js';
-import { FLECHA, ICONOS } from './iconos.js';
-import { operacionesDeImportar } from './importar.js';
-import { agregarImagenes, soloImagenes } from './imagenes.js';
+import { buscar, esqueletoDe, hijos, subarbol } from '../core/document.js';
+import { aplicarOperaciones } from '../core/operations.js';
+import { leer, leerMeta } from '../core/schema.js';
+import { opsDeTamano } from '../core/artboard.js';
+import { montarArbol } from './layers.js';
+import { avisarSueltos, enlazarPorCercania, motivoParaNoEnlazar, soltarAlMover } from './bones.js';
+import { montarHistorial } from './history.js';
+import { FLECHA, ICONOS } from './icons.js';
+import { operacionesDeImportar } from './importSvg.js';
+import { agregarImagenes, soloImagenes } from './images.js';
 import { montarInspector } from './inspector.js';
-import { montarLienzo } from './lienzo.js';
-import { montarOpciones } from './opciones.js';
-import { montarParametros } from './parametros.js';
+import { montarLienzo } from './canvas.js';
+import { montarOpciones } from './toolOptions.js';
+import { montarParametros } from './parameters.js';
 import { cambiarModo, montarClips, montarModos, montarTimeline } from './timeline.js';
 import { montarCartel, montarPoses } from './poses.js';
-import { reiniciarParams } from './vivo.js';
+import { reiniciarParams } from './live.js';
 import {
   abrir, agregarPestana, api, avisar, borradosAqui, cargarDocumentos, cerrarPestana, deshacer, ejecutar, eliminarDocumento,
   enviarPendiente, esquema, estado, fijar, hayPendiente, idLibre, mantenerPosicion, padreParaNuevo,
   pestanasGuardadas, refrescarHistorial, rehacer, seleccionRaices, seleccionar, seleccionarVarios, suscribir,
-} from './estado.js';
+} from './state.js';
 
 const $ = (s) => document.querySelector(s);
 // Íconos fijos del HTML: data-icono los pone al principio del elemento y data-flecha es la flecha de un desplegable.

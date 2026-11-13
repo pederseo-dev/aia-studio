@@ -3,14 +3,14 @@
 // Con varios objetos seleccionados muestra las propiedades que tienen todos; lo que se cambia se aplica a todos, y los
 // campos donde los valores difieren se marcan como mixtos (muestran el valor del objeto principal).
 
-import { buscar, esqueletoDe } from '../core/documento.js';
-import { leer, leerMeta, validarValor } from '../core/esquema.js';
-import { opsDeTamano } from '../core/tamano.js';
-import { valoresDeHueso } from '../core/esqueleto.js';
-import { origenDelValor, valorEfectivo } from '../core/estilos.js';
-import { clipAbierto, nombreDeEdicion, opsDePose, poseActiva } from './edicion.js';
-import { ejecutar, esquema, estado, fijar, previsualizar, seleccionar, suscribir } from './estado.js';
-import { reemplazarImagen, soloImagenes, tamanoNatural, urlDeAsset } from './imagenes.js';
+import { buscar, esqueletoDe } from '../core/document.js';
+import { leer, leerMeta, validarValor } from '../core/schema.js';
+import { opsDeTamano } from '../core/artboard.js';
+import { valoresDeHueso } from '../core/skeleton.js';
+import { origenDelValor, valorEfectivo } from '../core/styles.js';
+import { clipAbierto, nombreDeEdicion, opsDePose, poseActiva } from './editing.js';
+import { ejecutar, esquema, estado, fijar, previsualizar, seleccionar, suscribir } from './state.js';
+import { reemplazarImagen, soloImagenes, tamanoNatural, urlDeAsset } from './images.js';
 
 const ORDEN_DE_GRUPOS = ['General', 'Imagen', 'Forma', 'Transformación', 'Apariencia', 'Degradado', 'Lienzo', 'Tiempo'];
 // Nombres de grupo del esquema, como se muestran (el esquema sigue en español).

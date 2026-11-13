@@ -4,15 +4,15 @@
 // Un clip abierto se edita como una pose (estado.pose = id del clip): lo que se cambia en el lienzo o en el inspector
 // queda como keyframe en el tiempo del playhead (autokey, ver opsDePose en huesos.js).
 
-import { ICONOS } from './iconos.js';
-import { avisosDeClip, escalarTiempo, esEscena, moverClave, ponerClave, quitarClave, redondearTiempo, tiempoLocal, tiemposDeClaves, valorAGuardar, valoresDeMontaje } from '../core/animacion.js';
-import { NOMBRES_DE_CURVA, aplicarCurva, errorDeCurva, mismoTiempo } from '../core/curvas.js';
-import { buscar, subarbol } from '../core/documento.js';
-import { leer, leerMeta } from '../core/esquema.js';
-import { valorEfectivo } from '../core/estilos.js';
-import { avisar, ejecutar, esquema, estado, fijar, previsualizar, seleccionar, seleccionarVarios, suscribir } from './estado.js';
-import { clipAbierto, poseActiva } from './edicion.js';
-import { alternarLive, dispararClip, mostrarManifiesto, pararTodo } from './vivo.js';
+import { ICONOS } from './icons.js';
+import { avisosDeClip, escalarTiempo, esEscena, moverClave, ponerClave, quitarClave, redondearTiempo, tiempoLocal, tiemposDeClaves, valorAGuardar, valoresDeMontaje } from '../core/animation.js';
+import { NOMBRES_DE_CURVA, aplicarCurva, errorDeCurva, mismoTiempo } from '../core/curves.js';
+import { buscar, subarbol } from '../core/document.js';
+import { leer, leerMeta } from '../core/schema.js';
+import { valorEfectivo } from '../core/styles.js';
+import { avisar, ejecutar, esquema, estado, fijar, previsualizar, seleccionar, seleccionarVarios, suscribir } from './state.js';
+import { clipAbierto, poseActiva } from './editing.js';
+import { alternarLive, dispararClip, mostrarManifiesto, pararTodo } from './live.js';
 
 const MODOS = {
   design: 'Design: draw and rig the character (the setup).',

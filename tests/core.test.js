@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cargarEsquema } from '../servidor/esquema.js';
-import { crearDocumento, validar } from '../src/core/documento.js';
-import { aplicarOperaciones, compactar, resumirOperaciones } from '../src/core/operaciones.js';
-import { aplicar, matrizMundo } from '../src/core/geometria.js';
-import { guiaParaIA } from '../src/core/guia.js';
+import { cargarEsquema } from '../server/schema.js';
+import { crearDocumento, validar } from '../src/core/document.js';
+import { aplicarOperaciones, compactar, resumirOperaciones } from '../src/core/operations.js';
+import { aplicar, matrizMundo } from '../src/core/geometry.js';
+import { guiaParaIA } from '../src/core/guide.js';
 import { DIBUJAR, svgDocumento } from '../src/render/svg.js';
 
 const esquema = cargarEsquema();
@@ -198,7 +198,7 @@ test('cada tipo y propiedad tiene una ayuda en inglés para el editor', () => {
 });
 
 test('opsDeTamano cambia el lienzo con el dibujo anclado al centro (raíz, poses y clips)', async () => {
-  const { opsDeTamano } = await import('../src/core/tamano.js');
+  const { opsDeTamano } = await import('../src/core/artboard.js');
   const doc = op(
     crearDocumento({ width: 600, height: 400 }),
     { op: 'create', type: 'group', id: 'body', props: { x: 300, y: 200 } },

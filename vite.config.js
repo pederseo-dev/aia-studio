@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { aiaDocumentos } from './servidor/plugin-vite.js';
+import { aiaDocumentos } from './server/vitePlugin.js';
 
 export default defineConfig({
   plugins: [aiaDocumentos()],

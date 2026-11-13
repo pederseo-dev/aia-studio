@@ -2,9 +2,9 @@
 // queda anclado al centro: el lienzo crece o se achica por igual a cada lado (ver core/tamano.js), así que el centro
 // del marco no se mueve en pantalla (el lienzo corrige la cámara) y el tamaño sale del punto arrastrado.
 
-import { leerMeta } from '../core/esquema.js';
-import { opsDeTamano } from '../core/tamano.js';
-import { docVisible, ejecutar, esquema, estado, previsualizar } from './estado.js';
+import { leerMeta } from '../core/schema.js';
+import { opsDeTamano } from '../core/artboard.js';
+import { docVisible, ejecutar, esquema, estado, previsualizar } from './state.js';
 
 // Manijas: dirección en x e y (-1 izquierda/arriba, 0 medio, 1 derecha/abajo).
 const MANIJAS = { no: [-1, -1], n: [0, -1], ne: [1, -1], e: [1, 0], se: [1, 1], s: [0, 1], so: [-1, 1], o: [-1, 0] };

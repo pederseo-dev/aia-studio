@@ -2,9 +2,9 @@
 // editando. Las poses son fotos fijas del muñeco que los params mezclan; antes se elegían en un desplegable «View»
 // arriba, que parecía un modo de vista. Ver docs/decision-animacion.md §10.
 
-import { buscar } from '../core/documento.js';
-import { avisar, ejecutar, estado, fijar, suscribir } from './estado.js';
-import { alternarLive } from './vivo.js';
+import { buscar } from '../core/document.js';
+import { avisar, ejecutar, estado, fijar, suscribir } from './state.js';
+import { alternarLive } from './live.js';
 
 /** Los params que mueven una pose (por sus drivers). */
 const paramsDePose = (doc, pose) => [...new Set(doc.objects.filter((d) => d.type === 'driver' && d.pose === pose && d.param).map((d) => d.param))];
