@@ -3,6 +3,7 @@
 
 import { createApi } from './api.js';
 import { liveNotices } from './events.js';
+import { createAiRoutes, devEntry } from './aiRoutes.js';
 import { DOCUMENTS_FOLDER, createStore } from './store.js';
 import { loadSchema } from './schema.js';
 
@@ -13,7 +14,8 @@ export function aiaDocuments() {
     configureServer(server) {
       const store = createStore({ schema: loadSchema() });
       const live = liveNotices(DOCUMENTS_FOLDER);
-      const api = createApi({ store, events: live });
+      const ai = createAiRoutes({ documents: DOCUMENTS_FOLDER, entry: devEntry(DOCUMENTS_FOLDER) });
+      const api = createApi({ store, events: live, ai });
       server.middlewares.use(async (req, res, next) => {
         if (!(await api(req, res))) next();
       });

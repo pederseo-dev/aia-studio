@@ -10,7 +10,8 @@ import { findObject } from '../src/core/document.js';
 import { opsToSetPose } from '../src/core/blend.js';
 import { guideForAI } from '../src/core/guide.js';
 import { summarizeOperations } from '../src/core/operations.js';
-import { createStore } from '../server/store.js';
+import { DOCUMENTS_FOLDER, createStore } from '../server/store.js';
+import { markRunning } from '../server/mcpStatus.js';
 import { loadSchema } from '../server/schema.js';
 import { NO_PREVIEW, svgToPng } from '../server/png.js';
 import { CURVE_NAMES } from '../src/core/curves.js';
@@ -571,5 +572,9 @@ server.registerTool(
     return text(`Document "${id}" deleted (with its history).`);
   }),
 );
+
+// The editor shows "Claude connected" while this process runs (see server/mcpStatus.js).
+const running = markRunning(DOCUMENTS_FOLDER, { version: '0.1.0' });
+server.server.oninitialized = () => running.setClient(server.server.getClientVersion());
 
 await server.connect(new StdioServerTransport());
