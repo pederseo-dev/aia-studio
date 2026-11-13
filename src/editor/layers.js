@@ -30,22 +30,22 @@ export function mountTree(root, resourcesRoot) {
     if (!doc) return root.replaceChildren(), resourcesRoot.replaceChildren();
     const objects = branch(doc, null, 0);
     if (objects.length) root.replaceChildren(...objects);
-    else root.innerHTML = '<li class="vacio">Empty. Draw with the tools or ask the AI.</li>';
+    else root.innerHTML = '<li class="empty">Empty. Draw with the tools or ask the AI.</li>';
     // Cada modo muestra sus recursos: Design, estilos y degradados; Animate, además los clips de escena; Puppet, todo
     // (poses, params, drivers y clips).
     const visible = (o) => !FROM_PUPPET.has(o.type) || state.mode === 'puppet' || (state.mode === 'animate' && o.type === 'animation' && o.usage !== 'puppet');
     const resources = doc.objects.filter((o) => isResource(o) && visible(o)).map((o) => {
       const li = document.createElement('li');
-      li.innerHTML = `<div class="fila${selectionClass(o.id)}" data-id="${o.id}" style="padding-left:8px"><span class="tipo" title="${o.type}">${TYPE_ICON[o.type] ?? '•'}</span><span class="nombre"></span></div>`;
-      li.querySelector('.nombre').textContent = o.id;
+      li.innerHTML = `<div class="row${selectionClass(o.id)}" data-id="${o.id}" style="padding-left:8px"><span class="type" title="${o.type}">${TYPE_ICON[o.type] ?? '•'}</span><span class="name"></span></div>`;
+      li.querySelector('.name').textContent = o.id;
       return li;
     });
     if (resources.length) resourcesRoot.replaceChildren(...resources);
-    else resourcesRoot.innerHTML = '<li class="vacio">No styles or gradients.</li>';
-    root.querySelector('.principal')?.scrollIntoView({ block: 'nearest' });
+    else resourcesRoot.innerHTML = '<li class="empty">No styles or gradients.</li>';
+    root.querySelector('.main')?.scrollIntoView({ block: 'nearest' });
   }
 
-  const selectionClass = (id) => (id === state.selection ? ' seleccionada principal' : state.selected.includes(id) ? ' seleccionada' : '');
+  const selectionClass = (id) => (id === state.selection ? ' selected main' : state.selected.includes(id) ? ' selected' : '');
 
   /** Filas de las capas hijas de `padre`, con lo del frente arriba. Los huesos no son capas: no salen. */
   const layers = (doc, parent) => children(doc, parent).filter((o) => !isResource(o) && o.type !== 'bone');
@@ -62,23 +62,23 @@ export function mountTree(root, resourcesRoot) {
         // En un switch, las variantes que no se ven quedan atenuadas (la seleccionada se muestra igual, para editarla).
         const parent = o.parent && findObject(doc, o.parent);
         const active = parent?.type === 'switch' ? variantOf(doc, parent) : null;
-        const apagada = active != null && o.id !== active;
-        const fromView = apagada && variantsToShow(doc)[parent.id] === o.id;
-        row.className = `fila${selectionClass(o.id)}${visible ? '' : ' oculta'}${apagada ? ' apagada' : ''}`;
-        if (apagada) row.title = fromView ? `Visible while selected; switch ${parent.id} shows ${active}` : `Hidden: switch ${parent.id} shows ${active}`;
+        const switchedOff = active != null && o.id !== active;
+        const fromView = switchedOff && variantsToShow(doc)[parent.id] === o.id;
+        row.className = `row${selectionClass(o.id)}${visible ? '' : ' concealed'}${switchedOff ? ' off' : ''}`;
+        if (switchedOff) row.title = fromView ? `Visible while selected; switch ${parent.id} shows ${active}` : `Hidden: switch ${parent.id} shows ${active}`;
         row.dataset.id = o.id;
         row.draggable = true;
         row.style.paddingLeft = `${4 + level * 14}px`;
         const hasChildren = layers(doc, o.id).length > 0;
         const folded = foldedOf().has(o.id);
-        row.innerHTML = `<button type="button" class="plegar${hasChildren ? '' : ' vacio'}" title="${folded ? 'Expand' : 'Collapse'}" tabindex="-1">${folded ? '▸' : '▾'}</button>
-          <span class="tipo" title="${o.type}">${TYPE_ICON[o.type] ?? '•'}</span><span class="nombre"></span>${o.bone ? `<span class="enlace">${ICONOS.hueso}</span>` : ''}
-          ${o.type === 'switch' ? '<span class="desplegable variante-switch"><button type="button" class="variante" title="Variant shown (in a pose, saved to the pose)"></button><div class="menu" role="menu" hidden></div></span>' : ''}
-          ${withEye ? `<button type="button" class="candado${o.locked ? ' puesto' : ''}" title="${o.locked ? 'Unlock: pick and edit it on the canvas again' : 'Lock: it can’t be picked or changed on the canvas'}">${o.locked ? ICONOS.candado : ICONOS.candadoAbierto}</button>` : ''}
-          ${withEye ? `<button type="button" class="ojo${visible ? '' : ' oculto'}" title="${visible ? 'Hide' : 'Show'}">${visible ? '◉' : '○'}</button>` : ''}`;
-        row.querySelector('.nombre').textContent = o.id;
-        if (o.bone) (/** @type {HTMLElement} */ (row.querySelector('.enlace'))).title = `Follows bone ${o.bone}`;
-        if (o.type === 'switch') row.querySelector('.variante').textContent = `▾ ${variantOf(doc, o) ?? 'empty'}`;
+        row.innerHTML = `<button type="button" class="fold${hasChildren ? '' : ' empty'}" title="${folded ? 'Expand' : 'Collapse'}" tabindex="-1">${folded ? '▸' : '▾'}</button>
+          <span class="type" title="${o.type}">${TYPE_ICON[o.type] ?? '•'}</span><span class="name"></span>${o.bone ? `<span class="binding">${ICONOS.bone}</span>` : ''}
+          ${o.type === 'switch' ? '<span class="dropdown variant-switch"><button type="button" class="variant" title="Variant shown (in a pose, saved to the pose)"></button><div class="menu" role="menu" hidden></div></span>' : ''}
+          ${withEye ? `<button type="button" class="lock${o.locked ? ' set' : ''}" title="${o.locked ? 'Unlock: pick and edit it on the canvas again' : 'Lock: it can’t be picked or changed on the canvas'}">${o.locked ? ICONOS.lock : ICONOS.openLock}</button>` : ''}
+          ${withEye ? `<button type="button" class="eye${visible ? '' : ' concealed'}" title="${visible ? 'Hide' : 'Show'}">${visible ? '◉' : '○'}</button>` : ''}`;
+        row.querySelector('.name').textContent = o.id;
+        if (o.bone) (/** @type {HTMLElement} */ (row.querySelector('.binding'))).title = `Follows bone ${o.bone}`;
+        if (o.type === 'switch') row.querySelector('.variant').textContent = `▾ ${variantOf(doc, o) ?? 'empty'}`;
         li.append(row);
         const subbranch = folded ? [] : branch(doc, o.id, level + 1);
         if (subbranch.length) {
@@ -97,27 +97,27 @@ export function mountTree(root, resourcesRoot) {
   }
 
   function onClick(e) {
-    const row = e.target.closest('.fila');
+    const row = e.target.closest('.row');
     if (!row) return;
     const id = row.dataset.id;
-    if (e.target.closest('.plegar')) {
+    if (e.target.closest('.fold')) {
       const set = foldedOf();
       set.has(id) ? set.delete(id) : set.add(id);
       return draw();
     }
     // Botón de variante de un switch: abre la lista de sus hijos (como el menú de un switch layer de Moho).
-    const item = e.target.closest('[data-variante]');
+    const item = e.target.closest('[data-variant]');
     if (item) {
       item.closest('.menu').hidden = true;
-      return chooseVariant(id, item.dataset.variante);
+      return chooseVariant(id, item.dataset.variant);
     }
-    if (e.target.closest('.variante')) return openVariants(row, id);
-    if (e.target.closest('.candado')) {
+    if (e.target.closest('.variant')) return openVariants(row, id);
+    if (e.target.closest('.lock')) {
       const set = !!findObject(state.doc, id)?.locked;
       execute([set ? { op: 'unset', target: id, props: ['locked'] } : { op: 'set', target: id, props: { locked: true } }], `${set ? 'unlock' : 'lock'} ${id}`);
       return;
     }
-    if (e.target.closest('.ojo')) {
+    if (e.target.closest('.eye')) {
       const visible = read(schema, findObject(state.doc, id), 'visible');
       execute([visible ? { op: 'set', target: id, props: { visible: false } } : { op: 'unset', target: id, props: ['visible'] }], `${visible ? 'hide' : 'show'} ${id}`);
       return;
@@ -132,8 +132,8 @@ export function mountTree(root, resourcesRoot) {
 
   // Shift + clic: todas las filas visibles entre la del objeto principal y la clicada, en la misma lista.
   function selectSpan(row) {
-    const list = row.closest('#arbol, #recursos') ?? root;
-    const rows = [...list.querySelectorAll('.fila')].map((f) => f.dataset.id);
+    const list = row.closest('#tree, #resources') ?? root;
+    const rows = [...list.querySelectorAll('.row')].map((f) => f.dataset.id);
     const a = rows.indexOf(state.selection);
     const b = rows.indexOf(row.dataset.id);
     if (a < 0) return select(row.dataset.id);
@@ -142,19 +142,19 @@ export function mountTree(root, resourcesRoot) {
   }
 
   function openVariants(row, id) {
-    const button = row.querySelector('.variante');
-    const menu = row.querySelector('.variante-switch .menu');
+    const button = row.querySelector('.variant');
+    const menu = row.querySelector('.variant-switch .menu');
     const active = variantOf(state.doc, findObject(state.doc, id));
     const variants = children(state.doc, id);
     menu.replaceChildren(
       ...(variants.length
         ? variants.map((h) => {
-            const b = Object.assign(document.createElement('button'), { type: 'button', className: h.id === active ? 'marcado' : '', textContent: h.id });
+            const b = Object.assign(document.createElement('button'), { type: 'button', className: h.id === active ? 'marked' : '', textContent: h.id });
             b.setAttribute('role', 'menuitemradio');
-            b.dataset.variante = h.id;
+            b.dataset.variant = h.id;
             return b;
           })
-        : [Object.assign(document.createElement('span'), { className: 'ayuda', textContent: 'Empty: drag drawings into it.' })]),
+        : [Object.assign(document.createElement('span'), { className: 'help', textContent: 'Empty: drag drawings into it.' })]),
     );
     // Fijo en la pantalla: la lista de la jerarquía tiene su propio desplazamiento y lo cortaría.
     const r = button.getBoundingClientRect();
@@ -164,9 +164,9 @@ export function mountTree(root, resourcesRoot) {
 
   // Renombrar con doble clic.
   function rename(e) {
-    const name = e.target.closest('.nombre');
+    const name = e.target.closest('.name');
     if (!name) return;
-    const previous = name.closest('.fila').dataset.id;
+    const previous = name.closest('.row').dataset.id;
     const input = document.createElement('input');
     input.value = previous;
     name.replaceChildren(input);
@@ -197,12 +197,12 @@ export function mountTree(root, resourcesRoot) {
     const r = row.getBoundingClientRect();
     const y = (e.clientY - r.top) / r.height;
     const target = findObject(state.doc, row.dataset.id);
-    if (schema.types.get(target.type).container && y > 0.25 && y < 0.75) return 'dentro';
-    return y < 0.5 ? 'antes' : 'despues';
+    if (schema.types.get(target.type).container && y > 0.25 && y < 0.75) return 'inside';
+    return y < 0.5 ? 'before' : 'after';
   }
 
   function cleanMarks() {
-    root.querySelectorAll('.soltar-antes, .soltar-despues, .soltar-dentro').forEach((f) => f.classList.remove('soltar-antes', 'soltar-despues', 'soltar-dentro'));
+    root.querySelectorAll('.release-before, .release-after, .release-inside').forEach((f) => f.classList.remove('release-before', 'release-after', 'release-inside'));
   }
 
   // Lo que se arrastra: la selección entera si la fila es parte de ella, si no solo esa fila (los huesos elegidos en el
@@ -211,18 +211,18 @@ export function mountTree(root, resourcesRoot) {
   const containsA = (ids, target) => ids.some((id) => subtree(state.doc, id).includes(target));
 
   root.addEventListener('dragstart', (e) => {
-    const row = e.target.closest('.fila');
+    const row = e.target.closest('.row');
     dragged = row?.dataset.id ?? null;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', dragged ?? '');
   });
 
   root.addEventListener('dragover', (e) => {
-    const row = e.target.closest('.fila');
+    const row = e.target.closest('.row');
     if (!dragged || !row || containsA(draggedIds(), row.dataset.id)) return;
     e.preventDefault();
     cleanMarks();
-    row.classList.add(`soltar-${zone(e, row)}`);
+    row.classList.add(`release${zone(e, row)}`);
   });
 
   root.addEventListener('dragleave', (e) => {
@@ -232,7 +232,7 @@ export function mountTree(root, resourcesRoot) {
   root.addEventListener('drop', (e) => {
     e.preventDefault();
     cleanMarks();
-    const row = e.target.closest('.fila');
+    const row = e.target.closest('.row');
     if (!row || !dragged) return (dragged = null);
     const ids = draggedIds();
     const where = zone(e, row);
@@ -258,17 +258,17 @@ export function mountTree(root, resourcesRoot) {
       if (!ops.length) return;
       execute(ops, note).then((ok) => ok && notifyLoose(loose));
     };
-    if (where === 'dentro') {
+    if (where === 'inside') {
       for (const id of ids) move(id, target.id);
       return finish(`move ${name} into ${target.id}`);
     }
     // En el panel, "arriba" es "delante": antes de la fila = un lugar más al frente que el destino.
     // Se insertan de a uno junto al destino, en el orden que conserva cómo estaban entre ellos.
     const parent = target.parent ?? null;
-    for (const id of where === 'antes' ? [...ids].reverse() : ids) {
+    for (const id of where === 'before' ? [...ids].reverse() : ids) {
       const siblings = children(doc, parent).filter((o) => o.id !== id);
       const pos = siblings.findIndex((o) => o.id === target.id);
-      move(id, parent, where === 'antes' ? pos + 1 : pos);
+      move(id, parent, where === 'before' ? pos + 1 : pos);
     }
     finish(`reorder ${name}`);
   });

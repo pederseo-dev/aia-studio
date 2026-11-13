@@ -94,7 +94,7 @@ export function blendVertices(a, b, w) {
     const [ta, tb] = [tangents(goes), tangents(vb)];
     const [x, y] = lerp([goes.x, goes.y], [vb.x, vb.y]);
     const radius = (goes.radius ?? 0) + ((vb.radius ?? 0) - (goes.radius ?? 0)) * w;
-    return vertexFromTangents(x, y, lerp(ta.entrada, tb.entrada), lerp(ta.salida, tb.salida), radius ? { radius: Math.round(radius * 100) / 100 } : {});
+    return vertexFromTangents(x, y, lerp(ta.in, tb.in), lerp(ta.out, tb.out), radius ? { radius: Math.round(radius * 100) / 100 } : {});
   });
 }
 

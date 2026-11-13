@@ -353,7 +353,7 @@ export function planLiveView(doc, schema, { live, times, until, auto, params, re
   const svg = frames.length === 1 ? svgDocument(doc, schema, { ...options, pose: frames[0].pose }) : svgStrip(doc, schema, { ...options, times: frameTimes, poses: frames.map((c) => c.pose) });
   const pct = (w) => `${Math.round(w * 100)}%`;
   const lines = frames.map((c) => {
-    const playing = c.state.playing.filter((s) => s.weight > 0).map((s) => `${s.clip} (${s.layer === 'gesto' ? 'gesto' : s.layer}, ${pct(s.weight)}${s.leaving ? ', saliendo' : ''})`);
+    const playing = c.state.playing.filter((s) => s.weight > 0).map((s) => `${s.clip} (${s.layer === 'gesture' ? 'gesto' : s.layer}, ${pct(s.weight)}${s.leaving ? ', saliendo' : ''})`);
     return `- t = ${n(c.t)} s: ${playing.join(', ') || 'nada (montaje y params)'}`;
   });
   // En el último cuadro: el valor que se ve (mezclado con los clips que animan params) y, si difiere, el de la app.

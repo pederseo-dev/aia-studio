@@ -155,7 +155,7 @@ test('la vista previa puede dibujar el esqueleto encima, posado', () => {
   const doc = arm();
   assert.doesNotMatch(svgDocument(doc, schema), /data-huesos/);
   const svg = svgDocument(doc, schema, { bones: true, pose: 'up' });
-  assert.match(svg, /<g data-huesos="">/);
+  assert.match(svg, /<g data-bones="">/);
   assert.match(svg, />lower<\/text>/);
 });
 

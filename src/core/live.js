@@ -46,7 +46,7 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
   const rng = random(seed);
   let clock = 0;
   const app = {}; // valores de la app (los que falten, el inicial)
-  // Entradas que suenan: { clip, t, peso, objetivo, fade, capa: 'base' | 'gesto' | 'auto', siguienteHecho }
+  // Entradas que suenan: { clip, t, peso, objetivo, fade, capa: 'base' | 'gesture' | 'auto', siguienteHecho }
   let entries = [];
   // Clips auto repeat: id → segundos que faltan para la próxima vez.
   const waits = new Map();
@@ -101,9 +101,9 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
       else entries.push({ clip: id, t: 0, weight: fade > 0 ? 0 : 1, target: 1, fade, layer: 'base' });
       return;
     }
-    const existing = entries.find((e) => e.layer === 'gesto' && e.clip === id);
+    const existing = entries.find((e) => e.layer === 'gesture' && e.clip === id);
     if (existing) Object.assign(existing, { t: 0, target: 1, fade, nextDone: false });
-    else entries.push({ clip: id, t: 0, weight: fade > 0 ? 0 : 1, target: 1, fade, layer: 'gesto' });
+    else entries.push({ clip: id, t: 0, weight: fade > 0 ? 0 : 1, target: 1, fade, layer: 'gesture' });
   }
 
   function stop(id) {
@@ -154,19 +154,19 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
       const clip = clipOf(e.clip);
       if (!clip) continue;
       const inAuto = e.layer === 'auto' && read(schema, clip, 'auto') === 'always';
-      if (!(e.layer === 'gesto' || e.layer === 'auto') || inAuto || e.t < read(schema, clip, 'duration')) e.t += dt;
+      if (!(e.layer === 'gesture' || e.layer === 'auto') || inAuto || e.t < read(schema, clip, 'duration')) e.t += dt;
       // El peso va hacia su objetivo a razón de 1/fade por segundo.
       const fade = e.fade ?? fadeOf(clip);
       e.weight = fade > 0 ? Math.max(0, Math.min(1, e.weight + Math.sign(e.target - e.weight) * Math.min(Math.abs(e.target - e.weight), dt / fade))) : e.target;
       if (Math.abs(e.weight - e.target) < 1e-9) e.weight = e.target;
       // Un clip once empieza a salir a tiempo para terminar en su final; ahí se dispara su next.
-      if ((e.layer === 'gesto' || (e.layer === 'auto' && !inAuto)) && e.target === 1) {
+      if ((e.layer === 'gesture' || (e.layer === 'auto' && !inAuto)) && e.target === 1) {
         const d = read(schema, clip, 'duration');
         if (e.t >= d - fade - 1e-9) {
           e.target = 0;
           if (fade === 0) e.weight = e.t >= d - 1e-9 ? 0 : e.weight;
           const next = read(schema, clip, 'next');
-          if (e.layer === 'gesto' && next && !e.nextDone && clipOf(next)) {
+          if (e.layer === 'gesture' && next && !e.nextDone && clipOf(next)) {
             e.nextDone = true;
             created.push(next);
           }
@@ -258,7 +258,7 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
     for (const b of bases.filter((x) => !overlap.includes(x))) apply(b.ev, b.w, true);
 
     // 2. Gestos y capas auto, de a uno y en orden, cada uno encima de lo de abajo.
-    for (const e of entries.filter((x) => x.layer === 'gesto').concat(entries.filter((x) => x.layer === 'auto'))) {
+    for (const e of entries.filter((x) => x.layer === 'gesture').concat(entries.filter((x) => x.layer === 'auto'))) {
       const c = evaluated(e);
       if (c && c.w > 0) apply(c.ev, c.w, read(schema, c.clip, 'blend') === 'additive');
     }

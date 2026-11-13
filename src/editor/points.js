@@ -34,16 +34,16 @@ export function createPoints(ctx) {
     const vertices = read(schema, obj, 'vertices');
     handles(vertices).forEach((h, i) => {
       const a = screen(h.anchor);
-      for (const [which, point] of [['entrada', h.entrada], ['salida', h.salida]]) {
+      for (const [which, point] of [['in', h.in], ['out', h.out]]) {
         if (!point) continue;
         const t = screen(point);
-        ctx.overlay.append(ctx.crear('line', { class: 'tangente', x1: a[0], y1: a[1], x2: t[0], y2: t[1] }));
-        ctx.overlay.append(ctx.crear('circle', { class: 'manija tangente-punto', 'data-manija': `${which}-${i}`, cx: t[0], cy: t[1], r: 4 }, 'Tangent (Alt: break)'));
+        ctx.overlay.append(ctx.create('line', { class: 'tangent', x1: a[0], y1: a[1], x2: t[0], y2: t[1] }));
+        ctx.overlay.append(ctx.create('circle', { class: 'handle point-tangent', 'data-handle': `${which}-${i}`, cx: t[0], cy: t[1], r: 4 }, 'Tangent (Alt: break)'));
       }
       ctx.overlay.append(
-        ctx.crear(
+        ctx.create(
           'rect',
-          { class: `manija ancla${i === state.vertex ? ' activa' : ''}${vertices[i].bone ? ' con-hueso' : ''}`, 'data-manija': `ancla-${i}`, x: a[0] - 4.5, y: a[1] - 4.5, width: 9, height: 9 },
+          { class: `handle anchor${i === state.vertex ? ' active' : ''}${vertices[i].bone ? ' with-bone' : ''}`, 'data-handle': `anchor${i}`, x: a[0] - 4.5, y: a[1] - 4.5, width: 9, height: 9 },
           `Vertex ${i}${vertices[i].bone ? `, follows ${vertices[i].bone}` : ''} (double-click: straight/curved)`,
         ),
       );
@@ -68,11 +68,11 @@ export function createPoints(ctx) {
         const p = local(ev);
         const v = vertices[i];
         const created = [...vertices];
-        if (which === 'ancla') {
+        if (which === 'anchor') {
           created[i] = { ...v, x: Math.round((v.x + p[0] - start[0]) * 100) / 100, y: Math.round((v.y + p[1] - start[1]) * 100) / 100 };
         } else {
           const t = tangents(v);
-          const other = which === 'entrada' ? 'salida' : 'entrada';
+          const other = which === 'in' ? 'out' : 'in';
           t[which] = [p[0] - v.x, p[1] - v.y];
           const mode = ev.altKey ? 'detached' : (v.mode ?? 'straight');
           if (mode === 'mirrored') t[other] = [-t[which][0], -t[which][1]];
@@ -81,12 +81,12 @@ export function createPoints(ctx) {
             const l = Math.hypot(...t[which]) || 1;
             t[other] = [(-t[which][0] / l) * otherLength, (-t[which][1] / l) * otherLength];
           }
-          created[i] = withBone(v, vertexFromTangents(v.x, v.y, t.entrada, t.salida));
+          created[i] = withBone(v, vertexFromTangents(v.x, v.y, t.in, t.out));
         }
         change = created;
         preview(vertexOps(created));
       },
-      () => (change ? save(change, which === 'ancla' ? 'move vertex' : 'adjust curve') : preview(null)),
+      () => (change ? save(change, which === 'anchor' ? 'move vertex' : 'adjust curve') : preview(null)),
     );
   }
 

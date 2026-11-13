@@ -188,7 +188,7 @@ export function boxOf(doc, schema, id) {
       for (const [x, y] of [[x0, y0], [x0 + w, y0], [x0, y0 + h], [x0 + w, y0 + h]]) add(m, x, y);
     } else if (o.type === 'path') {
       for (const v of read(schema, o, 'vertices')) {
-        const { entrada: entry, salida: output } = tangents(v);
+        const { in: entry, out: output } = tangents(v);
         add(m, v.x, v.y);
         add(m, v.x + entry[0], v.y + entry[1]);
         add(m, v.x + output[0], v.y + output[1]);

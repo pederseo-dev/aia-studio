@@ -17,7 +17,7 @@ export function createPen(ctx) {
   function pointerdown(e) {
     const p = ctx.screenPoint(e);
     if (points.length >= 2 && near(p, points[0].p)) return finish(true);
-    const point = { p, entrada: [0, 0], salida: [0, 0] };
+    const point = { p, in: [0, 0], out: [0, 0] };
     points.push(point);
     ctx.redraw();
     ctx.drag(
@@ -26,8 +26,8 @@ export function createPen(ctx) {
         const q = ctx.screenPoint(ev);
         const v = [q[0] - p[0], q[1] - p[1]];
         if (Math.hypot(...v) < 3) return;
-        point.salida = v;
-        point.entrada = [-v[0], -v[1]];
+        point.out = v;
+        point.in = [-v[0], -v[1]];
         ctx.redraw();
       },
       () => {},
@@ -42,20 +42,20 @@ export function createPen(ctx) {
 
   function draw() {
     if (state.tool !== 'path' || !points.length) return;
-    const vertices = points.map((pt) => vertexFromTangents(pt.p[0], pt.p[1], pt.entrada, pt.salida));
-    ctx.overlay.append(ctx.crear('path', { class: 'trazo-pluma', d: verticesAD(vertices, false) }));
+    const vertices = points.map((pt) => vertexFromTangents(pt.p[0], pt.p[1], pt.in, pt.out));
+    ctx.overlay.append(ctx.create('path', { class: 'pen-stroke', d: verticesAD(vertices, false) }));
     if (cursor) {
       const u = points.at(-1).p;
-      ctx.overlay.append(ctx.crear('line', { class: 'trazo-pluma guia', x1: u[0], y1: u[1], x2: cursor[0], y2: cursor[1] }));
+      ctx.overlay.append(ctx.create('line', { class: 'pen-stroke guide', x1: u[0], y1: u[1], x2: cursor[0], y2: cursor[1] }));
     }
     points.forEach((pt, i) => {
-      if (Math.hypot(...pt.salida) > 0) {
-        for (const t of [pt.entrada, pt.salida]) {
-          ctx.overlay.append(ctx.crear('line', { class: 'tangente', x1: pt.p[0], y1: pt.p[1], x2: pt.p[0] + t[0], y2: pt.p[1] + t[1] }));
+      if (Math.hypot(...pt.out) > 0) {
+        for (const t of [pt.in, pt.out]) {
+          ctx.overlay.append(ctx.create('line', { class: 'tangent', x1: pt.p[0], y1: pt.p[1], x2: pt.p[0] + t[0], y2: pt.p[1] + t[1] }));
         }
       }
       const closes = i === 0 && points.length >= 2 && cursor && near(cursor, pt.p);
-      ctx.overlay.append(ctx.crear('rect', { class: `ancla${closes ? ' activa' : ''}`, x: pt.p[0] - 4, y: pt.p[1] - 4, width: 8, height: 8 }));
+      ctx.overlay.append(ctx.create('rect', { class: `anchor${closes ? ' active' : ''}`, x: pt.p[0] - 4, y: pt.p[1] - 4, width: 8, height: 8 }));
     });
   }
 
@@ -72,13 +72,13 @@ export function createPen(ctx) {
     const [ox, oy] = apply(inverse, ...drawn[0].p).map((v) => Math.round(v * 10) / 10);
     const vertices = drawn.map((pt) => {
       const [x, y] = apply(inverse, ...pt.p);
-      return vertexFromTangents(x - ox, y - oy, linear(pt.entrada), linear(pt.salida));
+      return vertexFromTangents(x - ox, y - oy, linear(pt.in), linear(pt.out));
     });
     const props = { x: ox, y: oy, vertices, closed: closed };
     if (!closed) Object.assign(props, { fill: null, stroke: '#2b2135', strokeWidth: 3 });
     const id = freeId('path');
     execute([{ op: 'create', type: 'path', id, parent: parent, props }], `draw ${id}`);
-    setState({ tool: 'seleccionar' });
+    setState({ tool: 'select' });
     select(id);
   }
 

@@ -64,10 +64,10 @@ export function aiaDocuments() {
           if (!id && method === 'GET') return respond(res, 200, await store.list());
           if (!id && method === 'POST') {
             const { id: created, meta, copyFrom } = await readBody(req);
-            return respond(res, 200, await store.crear(created, meta ?? {}, { origin: ORIGIN, copyFrom }));
+            return respond(res, 200, await store.create(created, meta ?? {}, { origin: ORIGIN, copyFrom }));
           }
           if (id && !action && method === 'GET') return respond(res, 200, await store.read(id));
-          if (id && !action && method === 'DELETE') return respond(res, 200, await store.eliminar(id) ?? { ok: true });
+          if (id && !action && method === 'DELETE') return respond(res, 200, await store.delete(id) ?? { ok: true });
           if (action === 'history' && method === 'GET') return respond(res, 200, await store.history(id));
           if (action === 'ops' && method === 'POST') {
             const { ops, note } = await readBody(req);

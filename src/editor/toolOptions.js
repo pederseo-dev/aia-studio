@@ -26,7 +26,7 @@ const SIZES = [
 
 export function mountOptions(root, actions) {
   subscribe((c) => {
-    if (['doc', 'seleccion', 'herramienta', 'pose', 'params', 'edicion', 'vertice', 'id', 'modo'].some((k) => k in c) || ('time' in c && !state.playing)) draw();
+    if (['doc', 'selection', 'tool', 'pose', 'params', 'editing', 'vertex', 'id', 'mode'].some((k) => k in c) || ('time' in c && !state.playing)) draw();
   });
 
   const button = (text, title, onClick, className = '') => {
@@ -34,7 +34,7 @@ export function mountOptions(root, actions) {
     b.addEventListener('click', onClick);
     return b;
   };
-  const text = (html) => Object.assign(document.createElement('span'), { className: 'texto', innerHTML: html });
+  const text = (html) => Object.assign(document.createElement('span'), { className: 'text', innerHTML: html });
   const code = (id) => `<b>${id}</b>`;
 
   function draw() {
@@ -43,9 +43,9 @@ export function mountOptions(root, actions) {
     if (!doc) return;
     root.replaceChildren(...content(doc));
     // En la barra el texto entra en una línea; entero, al pasar el mouse.
-    for (const t of root.querySelectorAll('.texto')) t.title = t.textContent;
-    root.classList.toggle('en-pose', !!state.pose);
-    root.classList.toggle('enlazando', ['enlazarCapa', 'enlazarPuntos'].includes(state.tool) && !state.pose);
+    for (const t of root.querySelectorAll('.text')) t.title = t.textContent;
+    root.classList.toggle('in-pose', !!state.pose);
+    root.classList.toggle('binding', ['bindLayer', 'bindPoints'].includes(state.tool) && !state.pose);
   }
 
   function content(doc) {
@@ -54,7 +54,7 @@ export function mountOptions(root, actions) {
     const bones = doc.objects.filter((o) => o.type === 'bone');
 
     // Reparent Bone, Bind Layer y Bind Points trabajan sobre el hueso elegido: dicen qué hacer con él.
-    if (!state.pose && !state.params && ['reparentar', 'enlazarCapa', 'enlazarPuntos'].includes(state.tool)) return bindingOptions(doc, sel?.type === 'bone' ? sel : null);
+    if (!state.pose && !state.params && ['reparent', 'bindLayer', 'bindPoints'].includes(state.tool)) return bindingOptions(doc, sel?.type === 'bone' ? sel : null);
 
     if (state.pose && findObject(doc, state.pose)?.type === 'animation') {
       const t = +state.time.toFixed(3);
@@ -93,7 +93,7 @@ export function mountOptions(root, actions) {
     if (state.editing) {
       const parts = [text('Points: drag anchors and tangents (Alt breaks them), double-click an anchor = straight or curved, click the outline to add, <kbd>Del</kbd> deletes.')];
       parts.push(...pointBones(doc));
-      parts.push(button('Done', 'Exit point editing (Enter)', () => setState({ editing: null, vertex: null }), 'principal'));
+      parts.push(button('Done', 'Exit point editing (Enter)', () => setState({ editing: null, vertex: null }), 'main'));
       return parts;
     }
 
@@ -102,7 +102,7 @@ export function mountOptions(root, actions) {
     switch (state.tool) {
       case 'artboard':
         return artboardOptions(doc);
-      case 'hueso': {
+      case 'bone': {
         const skeleton = activeSkeleton(doc);
         if (!skeleton) return [text('Add Bone: bones live in a skeleton (a bone layer). Pick one in Layers, or just drag on the canvas and a new skeleton is created for the bone.')];
         return [
@@ -113,19 +113,19 @@ export function mountOptions(root, actions) {
           ),
         ];
       }
-      case 'manipular':
+      case 'manipulate':
         return [
           text(bones.length ? 'Manipulate Bones: drag a bone to rotate it; drag on empty space to select several (Ctrl or Shift adds); select one to move its origin or change its direction and length with the handles.' : 'Manipulate Bones: there are no bones yet. Create them with Add Bone (B).'),
-          ...(bones.length ? [] : [button('Add Bone', 'Create bones (B)', () => setState({ tool: 'hueso' }), 'principal')]),
+          ...(bones.length ? [] : [button('Add Bone', 'Create bones (B)', () => setState({ tool: 'bone' }), 'main')]),
         ];
       case 'path':
         return [text('Pen: click = straight point, click and drag = curved, click the first point = close, <kbd>Enter</kbd> = finish open.')];
       case 'rect':
       case 'ellipse':
         return [text(`Drag to draw ${state.tool === 'rect' ? 'a rectangle' : 'an ellipse'}; <kbd>Shift</kbd> = ${state.tool === 'rect' ? 'square' : 'circle'}.`)];
-      case 'rotar':
-      case 'escalar':
-        return [text(`${state.tool === 'rotar' ? 'Rotate' : 'Scale'}: drag anywhere; the selection ${state.tool === 'rotar' ? 'rotates' : 'scales'} around its pivot.`)];
+      case 'rotate':
+      case 'scale':
+        return [text(`${state.tool === 'rotate' ? 'Rotate' : 'Scale'}: drag anywhere; the selection ${state.tool === 'rotate' ? 'rotates' : 'scales'} around its pivot.`)];
     }
 
     if (several) {
@@ -168,13 +168,13 @@ export function mountOptions(root, actions) {
         for (const v of sel.vertices) if (v.bone) count[v.bone] = (count[v.bone] ?? 0) + 1;
         const list = Object.entries(count).map(([h, n]) => `<b style="color:${boneColor(doc, h)}">${h}</b> ${n}`).join(', ');
         parts.push(text(`Its points follow bones: ${list}.`));
-        parts.push(button('Bind Points', 'Bind Points tool: pick a bone, then click or box the points', () => setState({ tool: 'enlazarPuntos' })));
+        parts.push(button('Bind Points', 'Bind Points tool: pick a bone, then click or box the points', () => setState({ tool: 'bindPoints' })));
         parts.push(button('Unbind points', 'Points go back to following the shape', () => execute([{ op: 'set', target: sel.id, props: { vertices: sel.vertices.map(({ bone, ...v }) => v) } }], `unbind points of ${sel.id}`)));
       } else {
         const skeleton = skeletonOf(doc, sel.id);
         if (skeleton && bonesOf(doc, skeleton).length) {
           parts.push(text(`Doesn’t follow any bone of ${code(skeleton)}: it stays still in poses. Bind it with Bind Layer (L), or its points with Bind Points.`));
-          parts.push(button('Bind Layer', 'Bind Layer tool: click a bone, then this drawing (L)', () => setState({ tool: 'enlazarCapa' })));
+          parts.push(button('Bind Layer', 'Bind Layer tool: click a bone, then this drawing (L)', () => setState({ tool: 'bindLayer' })));
           parts.push(button('Bind all by proximity', `Bind every unbound drawing of ${skeleton} to its nearest bone`, () => actions.bindAll(skeleton)));
         } else if (skeleton) {
           parts.push(text(`In skeleton ${code(skeleton)}, which has no bones yet: draw them with Add Bone (B).`));
@@ -213,11 +213,11 @@ export function mountOptions(root, actions) {
 
   /** Caja del dibujo (lo que se ve, en coordenadas del documento) más un margen; centra el contenido en el lienzo nuevo. */
   function fitToContent(margin = 20) {
-    const frame = document.querySelector('#documento > .marco-documento')?.getBoundingClientRect();
+    const frame = document.querySelector('#document > .document-frame')?.getBoundingClientRect();
     if (!frame?.width) return;
     const scale = frame.width / readMeta(schema, state.doc, 'width');
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const el of document.querySelectorAll('#documento > [data-id]')) {
+    for (const el of document.querySelectorAll('#document > [data-id]')) {
       const r = el.getBoundingClientRect();
       if (!r.width && !r.height) continue;
       x0 = Math.min(x0, r.left); y0 = Math.min(y0, r.top); x1 = Math.max(x1, r.right); y1 = Math.max(y1, r.bottom);
@@ -246,7 +246,7 @@ export function mountOptions(root, actions) {
     const parts = [];
     if (state.vertex != null && vertices[state.vertex]) {
       const i = state.vertex;
-      const label = Object.assign(document.createElement('label'), { className: 'texto', textContent: `Point ${i} follows ` });
+      const label = Object.assign(document.createElement('label'), { className: 'text', textContent: `Point ${i} follows ` });
       const select = document.createElement('select');
       select.append(new Option(`(the shape’s${boneOf(doc, path.id) ? `: ${boneOf(doc, path.id)}` : ''})`, ''), ...bones.map((h) => new Option(h.id, h.id)));
       select.value = vertices[i].bone ?? '';
@@ -286,7 +286,7 @@ export function mountOptions(root, actions) {
   /** «X muestra [lista]»: en una pose cambia la pose; si no, el montaje. */
   function variantSelector(doc, sw) {
     const variants = doc.objects.filter((o) => o.parent === sw.id);
-    const label = Object.assign(document.createElement('label'), { className: 'texto', textContent: `${state.pose ? `In pose ${state.pose}, ` : ''}${sw.id} shows ` });
+    const label = Object.assign(document.createElement('label'), { className: 'text', textContent: `${state.pose ? `In pose ${state.pose}, ` : ''}${sw.id} shows ` });
     const select = document.createElement('select');
     select.append(...variants.map((o) => new Option(o.id, o.id, false, o.id === variantOf(doc, sw))));
     select.title = 'Which variant is shown';
@@ -301,7 +301,7 @@ export function mountOptions(root, actions) {
     if (!bones.length) {
       return [
         text(`Skeleton ${code(skeleton.id)} has no bones yet: draw them with Add Bone, from the joint toward the tip. The drawing inside it stays still until it’s bound.`),
-        button('＋ Bone', 'Add Bone: drag on the canvas to create a root bone in this skeleton (B)', () => setState({ tool: 'hueso' }), 'principal'),
+        button('＋ Bone', 'Add Bone: drag on the canvas to create a root bone in this skeleton (B)', () => setState({ tool: 'bone' }), 'main'),
       ];
     }
     const pending = bindingsByProximity(doc, schema, skeleton.id);
@@ -311,17 +311,17 @@ export function mountOptions(root, actions) {
           (pending.length ? pending.length === 1 ? '1 piece of its drawing doesn’t follow any bone yet (it stays still in poses).' : `${pending.length} pieces of its drawing don’t follow any bone yet (they stay still in poses).` : 'All its drawing follows a bone.'),
       ),
     ];
-    if (pending.length) parts.push(button('Bind all by proximity', `Each unbound piece goes to its nearest bone: ${pending.map((e) => `${e.id} → ${e.bone}`).join(', ')}`, () => actions.bindAll(skeleton.id), 'principal'));
-    parts.push(button('＋ Bone', 'Add Bone: drag on the canvas to create a root bone in this skeleton (B)', () => setState({ tool: 'hueso' })));
-    parts.push(button('Manipulate', 'Manipulate Bones: rotate, move and resize its bones (M)', () => setState({ tool: 'manipular' })));
+    if (pending.length) parts.push(button('Bind all by proximity', `Each unbound piece goes to its nearest bone: ${pending.map((e) => `${e.id} → ${e.bone}`).join(', ')}`, () => actions.bindAll(skeleton.id), 'main'));
+    parts.push(button('＋ Bone', 'Add Bone: drag on the canvas to create a root bone in this skeleton (B)', () => setState({ tool: 'bone' })));
+    parts.push(button('Manipulate', 'Manipulate Bones: rotate, move and resize its bones (M)', () => setState({ tool: 'manipulate' })));
     return parts;
   }
 
   /** «Parent: x · Children: a, b»: nombres que se tocan para ir a ese hueso (o al skeleton). */
   function kinship(doc, bone) {
-    const box = Object.assign(document.createElement('span'), { className: 'texto parentesco' });
+    const box = Object.assign(document.createElement('span'), { className: 'text kinship' });
     const go = (id) => {
-      const b = button(id, `Select ${id}`, () => select(id), 'enlace-hueso');
+      const b = button(id, `Select ${id}`, () => select(id), 'bone-binding');
       if (findObject(doc, id)?.type === 'bone') b.style.color = boneColor(doc, id);
       return b;
     };
@@ -357,7 +357,7 @@ export function mountOptions(root, actions) {
       const alreadyThere = !plan.ops.length;
       const which = plan.children.map((x) => x.id).join(', ');
       if (plan.ops.moved?.length) parts.push(text(`${inPoses(plan.ops.moved)} “Keep poses” adds values to those poses so the bones stay where they were.`));
-      const b = button(`Parent to ${plan.parent.id}`, alreadyThere ? 'They already hang from it' : `Make ${plan.parent.id} the parent of ${which}`, () => execute(plan.ops, `parent ${which} to ${plan.parent.id}`), 'principal');
+      const b = button(`Parent to ${plan.parent.id}`, alreadyThere ? 'They already hang from it' : `Make ${plan.parent.id} the parent of ${which}`, () => execute(plan.ops, `parent ${which} to ${plan.parent.id}`), 'main');
       b.disabled = alreadyThere;
       parts.push(b);
       if (plan.ops.moved?.length) parts.push(button('Keep poses', `Make ${plan.parent.id} the parent and fix ${plan.ops.moved.join(', ')} so the bones don’t move in them`, () => execute(plan.keepingOps(), `parent ${which} to ${plan.parent.id}, keeping poses`)));
@@ -376,8 +376,8 @@ export function mountOptions(root, actions) {
   function bindingOptions(doc, bone) {
     const h = bone && code(bone.id);
     const skeleton = bone && skeletonOf(doc, bone.id);
-    if (state.tool === 'reparentar') return reparentOptions(doc, bone);
-    if (state.tool === 'enlazarCapa') {
+    if (state.tool === 'reparent') return reparentOptions(doc, bone);
+    if (state.tool === 'bindLayer') {
       if (!bone) return [text('Bind Layer: click a bone, then click the drawing that should follow it whole (or its row in Layers). Click again to unbind; Alt + click picks its group.')];
       const n = doc.objects.filter((o) => o.bone === bone.id).length;
       const parts = [text(`Bind Layer → ${h}: click drawing of ${code(skeleton)} (or its row in Layers) to bind or unbind it; Alt + click picks its group. ${n} bound.`)];
@@ -396,16 +396,16 @@ export function mountOptions(root, actions) {
     const moved = [bound.length && `${bound.length} object${bound.length === 1 ? '' : 's'}`, points && `${points} point${points === 1 ? '' : 's'}`].filter(Boolean);
     const binding = moved.length ? `It moves ${moved.join(' and ')}, only in poses.` : 'Nothing is bound to it yet.';
     const summary =
-      state.tool === 'hueso'
+      state.tool === 'bone'
         ? `Add Bone: drag from the tip of ${code(bone.id)} to chain a child, or on empty space for another one. ${binding}`
-        : state.tool === 'manipular'
+        : state.tool === 'manipulate'
           ? `Manipulate, Setup: drag ${code(bone.id)} to rotate it; its origin dot moves it, its tip changes direction and length. ${binding}`
           : `Setup, bone ${code(bone.id)}. ${binding}`;
     const parts = [
       text(summary),
       kinship(doc, bone),
-      button('Bind Layer', 'Bind Layer tool: click drawing to make it follow this bone (L)', () => setState({ tool: 'enlazarCapa' }), bound.length ? '' : 'principal'),
-      button('Bind Points', 'Bind Points tool: click or box points of a path to make them follow this bone', () => setState({ tool: 'enlazarPuntos' })),
+      button('Bind Layer', 'Bind Layer tool: click drawing to make it follow this bone (L)', () => setState({ tool: 'bindLayer' }), bound.length ? '' : 'main'),
+      button('Bind Points', 'Bind Points tool: click or box points of a path to make them follow this bone', () => setState({ tool: 'bindPoints' })),
     ];
     const skeleton = skeletonOf(doc, bone.id);
     if (skeleton && bindingsByProximity(doc, schema, skeleton).length) {
@@ -422,7 +422,7 @@ export function mountOptions(root, actions) {
           execute([{ op: 'create', type: 'pose', id }], `create pose ${id}`);
           setState({ pose: id });
         },
-        bound.length ? 'principal' : '',
+        bound.length ? 'main' : '',
       ),
     );
     return parts;

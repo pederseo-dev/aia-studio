@@ -67,7 +67,7 @@ export const stopAll = () => live?.stop();
 export function showManifest() {
   if (!state.doc) return;
   const dialog = document.createElement('dialog');
-  dialog.className = 'manifiesto';
+  dialog.className = 'manifest';
   dialog.innerHTML = '<h2>What the app’s AI sees</h2><pre></pre><form method="dialog"><button type="submit">Close</button></form>';
   dialog.querySelector('pre').textContent = manifestText(manifest(state.doc, schema));
   dialog.addEventListener('close', () => dialog.remove());

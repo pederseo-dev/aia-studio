@@ -63,7 +63,7 @@ test('transformar y dividir conservan la forma', () => {
   const split = splitSpan(s.vertices, 0, 0.5);
   assert.equal(split.length, 3);
   assert.ok(near(split[1].x, 30) && near(split[1].y, -30));
-  assert.deepEqual(tangents(split[1]).entrada.map((v) => Math.round(v) || 0), [-15, 0]);
+  assert.deepEqual(tangents(split[1]).in.map((v) => Math.round(v) || 0), [-15, 0]);
   assert.deepEqual(splitSpan([{ x: 0, y: 0 }, { x: 100, y: 0 }], 0, 0.25), [{ x: 0, y: 0 }, { x: 25, y: 0 }, { x: 100, y: 0 }]);
 });
 

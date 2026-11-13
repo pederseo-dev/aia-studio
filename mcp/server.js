@@ -125,7 +125,7 @@ server.registerTool(
   },
   safe(async ({ id, name, width, height, background, copy_from }) => {
     const meta = Object.fromEntries(Object.entries({ name, width, height, background }).filter(([, v]) => v !== undefined));
-    const doc = await store.crear(id, meta, { origin: ORIGIN, copyFrom: copy_from });
+    const doc = await store.create(id, meta, { origin: ORIGIN, copyFrom: copy_from });
     return text(`Documento "${id}" creado${copy_from ? ` como copia de "${copy_from}"` : ''}.\n\nÁrbol:\n${shortTree(doc)}`);
   }),
 );
@@ -153,7 +153,7 @@ server.registerTool(
 
 const revert = (kind) =>
   safe(async ({ id }) => {
-    const { doc, entrada: entry } = await store[kind](id, ORIGIN);
+    const { doc, in: entry } = await store[kind](id, ORIGIN);
     const verb = kind === 'undo' ? 'Deshecho' : 'Rehecho';
     const touched = summarizeOperations(entry.lote).slice(0, 12).join(', ');
     const follows = kind === 'undo' ? ' Lo de los lotes anteriores sigue en pie.' : '';
@@ -565,7 +565,7 @@ server.registerTool(
   },
   safe(async ({ id, confirm }) => {
     checkDeleted(id, confirm);
-    await store.eliminar(id);
+    await store.delete(id);
     return text(`Documento "${id}" borrado (con su historial).`);
   }),
 );

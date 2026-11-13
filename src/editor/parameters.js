@@ -63,7 +63,7 @@ export function mountParameters(root, newButton, deleteButton) {
     if (!doc || state.mode !== 'puppet') return root.replaceChildren();
     const params = doc.objects.filter((o) => o.type === 'param');
     if (!params.length) {
-      root.innerHTML = '<p class="ayuda">No parameters. A parameter (happiness, head turn, mouth…) drives one or more poses through drivers: create one with + above and connect it to a pose with its own +.</p>';
+      root.innerHTML = '<p class="help">No parameters. A parameter (happiness, head turn, mouth…) drives one or more poses through drivers: create one with + above and connect it to a pose with its own +.</p>';
       return;
     }
     const values = seenValues(doc);
@@ -92,11 +92,11 @@ export function mountParameters(root, newButton, deleteButton) {
   function row(doc, param, value) {
     const kind = read(schema, param, 'kind');
     const div = document.createElement('div');
-    div.className = `param${param.id === state.selection ? ' seleccionado' : ''}`;
+    div.className = `param${param.id === state.selection ? ' selected' : ''}`;
     div.dataset.param = param.id;
     const head = document.createElement('div');
-    head.className = 'cabeza-param';
-    const name = Object.assign(document.createElement('button'), { type: 'button', className: 'nombre', textContent: param.id });
+    head.className = 'head-param';
+    const name = Object.assign(document.createElement('button'), { type: 'button', className: 'name', textContent: param.id });
     const description = read(schema, param, 'description');
     name.title = `${description ? `${description}\n` : ''}Select the parameter (kind, range, options and description in the inspector)`;
     name.addEventListener('click', () => select(param.id));
@@ -105,7 +105,7 @@ export function mountParameters(root, newButton, deleteButton) {
       const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: value >= 0.5, title: 'On / off' });
       check.addEventListener('change', () => move(param.id, check.checked ? 1 : 0));
       head.append(check);
-    } else if (kind === 'number') head.append(Object.assign(document.createElement('span'), { className: 'valor', textContent: +value.toFixed(2) }));
+    } else if (kind === 'number') head.append(Object.assign(document.createElement('span'), { className: 'value', textContent: +value.toFixed(2) }));
     div.append(head);
     if (kind !== 'boolean') div.append(control(param, value, kind));
 
@@ -114,7 +114,7 @@ export function mountParameters(root, newButton, deleteButton) {
     const list = document.createElement('div');
     list.className = 'drivers';
     for (const d of drivers) {
-      const chip = Object.assign(document.createElement('button'), { type: 'button', className: `driver${d.id === state.selection ? ' seleccionado' : ''}` });
+      const chip = Object.assign(document.createElement('button'), { type: 'button', className: `driver${d.id === state.selection ? ' selected' : ''}` });
       chip.dataset.driver = d.id;
       chip.title = `Driver ${d.id}: ${span(d)}. Click to edit it in the inspector.`;
       chip.addEventListener('click', () => select(d.id));
@@ -122,7 +122,7 @@ export function mountParameters(root, newButton, deleteButton) {
     }
     const poses = doc.objects.filter((o) => o.type === 'pose');
     const connect = document.createElement('select');
-    connect.className = 'conectar';
+    connect.className = 'connect';
     connect.title = poses.length ? 'Blend one more pose with this parameter (creates a driver)' : 'There are no poses yet: create one under Poses';
     connect.append(new Option('＋', ''), ...poses.map((p) => new Option(p.id, p.id)));
     connect.disabled = !poses.length || state.live;
@@ -134,7 +134,7 @@ export function mountParameters(root, newButton, deleteButton) {
       execute([{ op: 'create', type: 'driver', id, props }], `connect ${param.id} → ${connect.value}`);
       select(id);
     });
-    if (!drivers.length) list.append(Object.assign(document.createElement('span'), { className: 'sin-poses', textContent: 'blends no pose yet' }));
+    if (!drivers.length) list.append(Object.assign(document.createElement('span'), { className: 'no-poses', textContent: 'blends no pose yet' }));
     list.append(connect);
     div.append(list);
     weights(doc, div, value);
@@ -147,24 +147,24 @@ export function mountParameters(root, newButton, deleteButton) {
       const d = findObject(doc, chip.dataset.driver);
       const weight = d?.pose && findObject(doc, d.pose) ? driverWeight(doc, schema, d, value) : 0;
       chip.textContent = `${d?.pose ?? '(no pose)'}${d?.equals != null ? ` = ${d.equals}` : ''} ${Math.round(weight * 100)}%`;
-      chip.style.setProperty('--peso', `${Math.round(weight * 100)}%`);
-      chip.classList.toggle('activo', weight > 0);
+      chip.style.setProperty('--weight', `${Math.round(weight * 100)}%`);
+      chip.classList.toggle('active', weight > 0);
     }
-    const number = row.querySelector('.valor');
+    const number = row.querySelector('.value');
     if (number && typeof value === 'number') number.textContent = +value.toFixed(2);
   }
 
   function control(param, value, kind) {
     if (kind === 'enum') {
       const select = document.createElement('select');
-      select.className = 'opciones-param';
+      select.className = 'options-param';
       for (const o of read(schema, param, 'options')) select.append(new Option(o, o, false, o === value));
       if (!select.options.length) select.append(new Option('(no options)', ''));
       select.addEventListener('change', () => move(param.id, select.value));
       return select;
     }
     const [min, max] = [read(schema, param, 'min'), read(schema, param, 'max')];
-    const range = Object.assign(document.createElement('input'), { type: 'range', className: 'deslizador', min, max, step: (max - min) / 100 || 0.01, value: value });
+    const range = Object.assign(document.createElement('input'), { type: 'range', className: 'slider', min, max, step: (max - min) / 100 || 0.01, value: value });
     range.title = `${min} … ${max} (double-click: back to ${read(schema, param, 'default')})`;
     // Mientras se arrastra, el panel no se rehace (se cortaría el arrastre): solo se actualizan los pesos.
     range.addEventListener('pointerdown', () => (dragging = true));

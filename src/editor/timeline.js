@@ -72,16 +72,16 @@ function stop() {
 // ---------- Modos ----------
 
 export function mountModes(buttons) {
-  for (const b of buttons.querySelectorAll('[data-modo]')) {
-    b.title = MODES[b.dataset.modo];
-    b.addEventListener('click', () => changeMode(b.dataset.modo));
+  for (const b of buttons.querySelectorAll('[data-mode]')) {
+    b.title = MODES[b.dataset.mode];
+    b.addEventListener('click', () => changeMode(b.dataset.mode));
   }
   subscribe((c) => {
     if (!('mode' in c) && !('id' in c)) return;
-    document.body.dataset.modo = state.mode;
-    for (const b of buttons.querySelectorAll('[data-modo]')) b.setAttribute('aria-selected', String(b.dataset.modo === state.mode));
+    document.body.dataset.mode = state.mode;
+    for (const b of buttons.querySelectorAll('[data-mode]')) b.setAttribute('aria-selected', String(b.dataset.mode === state.mode));
   });
-  document.body.dataset.modo = state.mode;
+  document.body.dataset.mode = state.mode;
 }
 
 export function changeMode(mode) {
@@ -142,7 +142,7 @@ export function mountClips(root, list, newButton, liveButton, manifestButton, de
   function draw() {
     const doc = state.doc;
     root.hidden = state.mode !== 'puppet' || !doc;
-    root.classList.toggle('en-vivo', state.live);
+    root.classList.toggle('in-live', state.live);
     liveButton.textContent = state.live ? '■ Live' : '▶ Live';
     liveButton.setAttribute('aria-pressed', String(state.live));
     liveButton.title = state.live
@@ -152,7 +152,7 @@ export function mountClips(root, list, newButton, liveButton, manifestButton, de
     if (root.hidden) return;
     const clips = doc.objects.filter((o) => o.type === 'animation' && read(schema, o, 'usage') === 'puppet');
     if (!clips.length) {
-      list.innerHTML = '<p class="ayuda">No clips yet. A clip is a short animation the app or its AI triggers (wave, blink, idle). Create one with + above.</p>';
+      list.innerHTML = '<p class="help">No clips yet. A clip is a short animation the app or its AI triggers (wave, blink, idle). Create one with + above.</p>';
       return;
     }
     list.replaceChildren(...clips.map((clip) => (state.live ? liveRow(clip) : rowToEdit(clip))));
@@ -162,8 +162,8 @@ export function mountClips(root, list, newButton, liveButton, manifestButton, de
   function rowToEdit(clip) {
     const open = state.pose === clip.id;
     const row = document.createElement('div');
-    row.className = `clip${open ? ' abierto' : ''}`;
-    const button = Object.assign(document.createElement('button'), { type: 'button', className: 'nombre' });
+    row.className = `clip${open ? ' open' : ''}`;
+    const button = Object.assign(document.createElement('button'), { type: 'button', className: 'name' });
     const description = read(schema, clip, 'description');
     button.innerHTML = `<b></b><small></small>`;
     button.querySelector('b').textContent = clip.id;
@@ -185,11 +185,11 @@ export function mountClips(root, list, newButton, liveButton, manifestButton, de
   function liveRow(clip) {
     const auto = read(schema, clip, 'auto') !== 'off';
     const row = document.createElement('div');
-    row.className = `clip vivo${auto ? ' auto' : ''}`;
+    row.className = `clip live${auto ? ' auto' : ''}`;
     row.dataset.clip = clip.id;
-    const button = Object.assign(document.createElement('button'), { type: 'button', className: 'nombre', disabled: auto });
+    const button = Object.assign(document.createElement('button'), { type: 'button', className: 'name', disabled: auto });
     const description = read(schema, clip, 'description');
-    button.innerHTML = `<b></b><small></small><span class="peso"></span>`;
+    button.innerHTML = `<b></b><small></small><span class="weight"></span>`;
     button.querySelector('b').textContent = clip.id;
     button.querySelector('small').textContent = liveRole(clip);
     button.title = `${description ? `${description}\n` : ''}${auto ? 'Plays by itself (auto)' : read(schema, clip, 'loop') === 'once' ? 'Click: play this gesture on top of the base' : 'Click: make this the base (crossfade)'}`;
@@ -204,11 +204,11 @@ export function mountClips(root, list, newButton, liveButton, manifestButton, de
   /** Cada cuadro: el peso de cada clip que suena, sin rehacer los botones (un clic no se perdería a mitad). */
   function updateLive() {
     const playing = state.liveState?.playing ?? [];
-    for (const row of list.querySelectorAll('.clip.vivo')) {
+    for (const row of list.querySelectorAll('.clip.live')) {
       const s = playing.filter((x) => x.clip === row.dataset.clip);
       const weight = Math.max(0, ...s.map((x) => x.weight));
-      row.style.setProperty('--peso', `${Math.round(weight * 100)}%`);
-      row.classList.toggle('sonando', weight > 0);
+      row.style.setProperty('--weight', `${Math.round(weight * 100)}%`);
+      row.classList.toggle('playing', weight > 0);
       const stop = row.querySelector('.play');
       stop.disabled = !s.some((x) => !x.leaving && x.layer !== 'auto');
     }
@@ -254,17 +254,17 @@ export function mountTimeline(root) {
    */
   function live(doc) {
     const box = document.createElement('div');
-    box.className = 'tiempo-vivo';
+    box.className = 'live-time';
     const title = document.createElement('p');
-    title.className = 'ayuda';
+    title.className = 'help';
     title.textContent = 'Live: what the app sees. Click clips on the right to play them, move Parameters, ■ Live to edit again.';
-    const stop = Object.assign(document.createElement('button'), { type: 'button', className: 'parar-todo', textContent: '■ Stop all', title: 'Fade out everything the app played (auto clips keep playing), like stop() in the app' });
+    const stop = Object.assign(document.createElement('button'), { type: 'button', className: 'stop-all', textContent: '■ Stop all', title: 'Fade out everything the app played (auto clips keep playing), like stop() in the app' });
     stop.addEventListener('click', stopAll);
     const head = document.createElement('div');
-    head.className = 'cabeza-vivo';
+    head.className = 'live-head';
     head.append(title, stop);
     const rows = document.createElement('div');
-    rows.className = 'filas-vivo';
+    rows.className = 'live-rows';
     box.append(head, rows);
     queueMicrotask(liveRows);
     return box;
@@ -273,32 +273,32 @@ export function mountTimeline(root) {
   /** Las filas de lo que suena (Live), en su lugar; y si hay algo que parar. */
   function liveRows() {
     const doc = state.doc;
-    const box = root.querySelector('.filas-vivo');
+    const box = root.querySelector('.live-rows');
     if (!box || !doc) return;
     box.replaceChildren();
     const playing = state.liveState?.playing ?? [];
-    const stop = root.querySelector('.parar-todo');
+    const stop = root.querySelector('.stop-all');
     if (stop) stop.disabled = !playing.some((s) => s.layer !== 'auto' && !s.leaving);
-    const names = { base: 'base', gesto: 'gesture', auto: 'auto' };
+    const names = { base: 'base', gesture: 'gesture', auto: 'auto' };
     for (const s of playing) {
       const clip = findObject(doc, s.clip);
       if (!clip) continue;
       const d = read(schema, clip, 'duration');
       const progress = Math.min(1, localTime(schema, clip, s.t) / d);
       const row = document.createElement('div');
-      row.className = `fila-vivo capa-${s.layer}${s.leaving ? ' saliendo' : ''}`;
-      row.innerHTML = '<span class="nombre"></span><span class="capa"></span><span class="barra"><span class="lleno"></span><span class="avance"></span></span><span class="valor"></span>';
-      row.querySelector('.nombre').textContent = s.clip;
-      row.querySelector('.capa').textContent = `${names[s.layer]}${s.leaving ? ' · out' : ''}`;
-      (/** @type {HTMLElement} */ (row.querySelector('.lleno'))).style.width = `${Math.round(s.weight * 100)}%`;
-      (/** @type {HTMLElement} */ (row.querySelector('.avance'))).style.left = `${progress * 100}%`;
-      row.querySelector('.valor').textContent = `${Math.round(s.weight * 100)}%`;
+      row.className = `live-row layer${s.layer}${s.leaving ? ' leaving' : ''}`;
+      row.innerHTML = '<span class="name"></span><span class="layer"></span><span class="bar"><span class="filled"></span><span class="progress"></span></span><span class="value"></span>';
+      row.querySelector('.name').textContent = s.clip;
+      row.querySelector('.layer').textContent = `${names[s.layer]}${s.leaving ? ' · out' : ''}`;
+      (/** @type {HTMLElement} */ (row.querySelector('.filled'))).style.width = `${Math.round(s.weight * 100)}%`;
+      (/** @type {HTMLElement} */ (row.querySelector('.progress'))).style.left = `${progress * 100}%`;
+      row.querySelector('.value').textContent = `${Math.round(s.weight * 100)}%`;
       row.title = `${s.clip}: weight ${Math.round(s.weight * 100)}%, at ${n(localTime(schema, clip, s.t))} of ${n(d)} s`;
       box.append(row);
     }
     if (!playing.length) {
       const p = document.createElement('p');
-      p.className = 'ayuda';
+      p.className = 'help';
       p.textContent = 'Nothing is playing: the setup with the parameters. Click a base clip (loop) to start.';
       box.append(p);
     }
@@ -306,7 +306,7 @@ export function mountTimeline(root) {
 
   function empty() {
     const p = document.createElement('p');
-    p.className = 'ayuda';
+    p.className = 'help';
     p.innerHTML =
       state.mode === 'animate'
         ? 'No scene yet. Create one with + (above): then move the playhead and change things on the canvas or in the inspector — each change is keyed at the playhead.'
@@ -320,22 +320,22 @@ export function mountTimeline(root) {
    */
   function tabs(doc, clip) {
     const row = document.createElement('div');
-    row.className = 'pestanas-tiempo';
+    row.className = 'time-tabs';
     row.setAttribute('role', 'tablist');
     const animate = state.mode === 'animate';
     const list = animate ? doc.objects.filter((o) => o.type === 'animation' && read(schema, o, 'usage') === 'animate') : clip ? [clip] : [];
     for (const c of list) {
       const active = c.id === clip?.id;
       const p = document.createElement('div');
-      p.className = `pestana${active ? ' activa' : ''}`;
+      p.className = `tab${active ? ' active' : ''}`;
       p.setAttribute('role', 'tab');
       p.setAttribute('aria-selected', String(active));
       p.title = read(schema, c, 'description') || c.id;
       const closeTitle = animate ? 'Delete this scene (undo brings it back)' : 'Close the clip';
-      p.innerHTML = `<span class="titulo"></span><button type="button" class="cerrar" title="${closeTitle}">×</button>`;
-      p.querySelector('.titulo').textContent = c.id;
+      p.innerHTML = `<span class="title"></span><button type="button" class="close" title="${closeTitle}">×</button>`;
+      p.querySelector('.title').textContent = c.id;
       p.addEventListener('click', (e) => {
-        if (!(/** @type {Element} */ (e.target)).closest('.cerrar')) return active || openClip(c.id);
+        if (!(/** @type {Element} */ (e.target)).closest('.close')) return active || openClip(c.id);
         if (!animate) return closeClip();
         if (!confirm(`Delete scene "${c.id}" and all its keyframes?`)) return;
         stop();
@@ -345,7 +345,7 @@ export function mountTimeline(root) {
       });
       row.append(p);
     }
-    const created = Object.assign(document.createElement('button'), { type: 'button', className: 'nueva-pestana', title: animate ? 'New scene' : 'New clip', innerHTML: ICONOS.agregar });
+    const created = Object.assign(document.createElement('button'), { type: 'button', className: 'tab-new', title: animate ? 'New scene' : 'New clip', innerHTML: ICONOS.add });
     created.setAttribute('aria-label', created.title);
     created.addEventListener('click', () => newClip(animate ? 'animate' : 'puppet'));
     row.append(created);
@@ -367,27 +367,27 @@ export function mountTimeline(root) {
 
   function bar(doc, clip) {
     const container = document.createElement('div');
-    container.className = 'cabeza-tiempo';
+    container.className = 'time-head';
     container.append(tabs(doc, clip));
     if (!clip) return container;
     const row = document.createElement('div');
-    row.className = 'barra-tiempo';
+    row.className = 'time-bar';
     const left = document.createElement('div');
-    left.className = 'zona izquierda';
-    const centro = document.createElement('div');
-    centro.className = 'zona centro';
+    left.className = 'zone left';
+    const center = document.createElement('div');
+    center.className = 'zone center';
     const div = document.createElement('div');
-    div.className = 'zona derecha';
-    row.append(left, centro, div);
+    div.className = 'zone right';
+    row.append(left, center, div);
     container.append(row);
 
     const duration = read(schema, clip, 'duration');
-    centro.append(
+    center.append(
       button('«', 'Previous keyframe (or the start)', () => skip(clip, -1)),
       button(state.playing ? '⏸' : '▶', state.playing ? 'Pause' : 'Play', () => (state.playing ? stop() : startPlayback()), 'play'),
       button('»', 'Next keyframe (or the end)', () => skip(clip, 1)),
     );
-    left.append(Object.assign(document.createElement('span'), { className: 'reloj' }));
+    left.append(Object.assign(document.createElement('span'), { className: 'clock' }));
 
     const durationField = Object.assign(document.createElement('input'), { type: 'number', min: 0.05, step: 0.1, value: n(duration), title: 'Duration in seconds' });
     durationField.addEventListener('change', () => {
@@ -414,11 +414,11 @@ export function mountTimeline(root) {
       execute([{ op: 'set', target: clip.id, props: { duration: v } }], `${clip.id} duration ${v} s`);
       if (state.time > v) setState({ time: v });
     });
-    const durationLabel = Object.assign(document.createElement('label'), { className: 'campo-corto', textContent: 'Length' });
+    const durationLabel = Object.assign(document.createElement('label'), { className: 'short-field', textContent: 'Length' });
     durationLabel.append(durationField, document.createTextNode('s'));
     const scale = Object.assign(document.createElement('input'), { type: 'checkbox', checked: scaleKeys });
     scale.addEventListener('change', () => (scaleKeys = scale.checked));
-    const scaleLabel = Object.assign(document.createElement('label'), { className: 'campo-corto', title: 'When on, changing Length stretches or squeezes every keyframe in proportion (one undo step)' });
+    const scaleLabel = Object.assign(document.createElement('label'), { className: 'short-field', title: 'When on, changing Length stretches or squeezes every keyframe in proportion (one undo step)' });
     scaleLabel.append(scale, document.createTextNode('Scale keys'));
 
     const loop = document.createElement('select');
@@ -464,7 +464,7 @@ export function mountTimeline(root) {
 
     // Drivers que suman encima de pistas del clip (lo mismo que avisan set_keys y render_preview a la IA).
     const warnings = clipWarnings(doc, schema, clip, state.params ?? {});
-    if (warnings.length) div.append(Object.assign(document.createElement('span'), { className: 'aviso-drivers', textContent: `⚠ ${warnings.length} driver${warnings.length > 1 ? 's' : ''} add on top`, title: warnings.join('\n') }));
+    if (warnings.length) div.append(Object.assign(document.createElement('span'), { className: 'notice-drivers', textContent: `⚠ ${warnings.length} driver${warnings.length > 1 ? 's' : ''} add on top`, title: warnings.join('\n') }));
 
     // Curva y borrar del keyframe elegido (en todas las propiedades de su canal que tienen keyframe ahí).
     if (chosen) {
@@ -477,12 +477,12 @@ export function mountTimeline(root) {
       if (current === 'mixed') curve.append(new Option('(mixed)', 'mixed', false, true));
       for (const v of CURVE_NAMES) curve.append(new Option(v, v, false, v === current));
       if (current === 'custom') curve.append(new Option(`cubic-bezier(${first.join(', ')})`, 'custom', false, true));
-      curve.append(new Option('cubic-bezier…', 'editar'));
+      curve.append(new Option('cubic-bezier…', 'edit'));
       curve.addEventListener('change', () => {
         /** @type {any} */
         let ease = curve.value;
         if (ease === 'custom' || ease === 'mixed') return;
-        if (ease === 'editar') {
+        if (ease === 'edit') {
           // Como en CSS: x1, y1, x2, y2 (x entre 0 y 1; y puede pasarse para un rebote).
           const previewDoc = Array.isArray(first) ? first.join(', ') : '0.3, 1.6, 0.6, 1';
           const text = prompt('cubic-bezier x1, y1, x2, y2 (as in CSS; y outside 0…1 overshoots):', previewDoc);
@@ -498,13 +498,13 @@ export function mountTimeline(root) {
         for (const [prop, c] of keys) tracks = putKey(tracks, chosen.id, prop, c.t, c.value, ease);
         execute([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: ease ${Array.isArray(ease) ? `cubic-bezier(${ease.join(', ')})` : ease} at ${n(chosen.t)} s`);
       });
-      const label = Object.assign(document.createElement('label'), { className: 'campo-corto', textContent: `${chosen.id} ${chosen.channel} @ ${n(chosen.t)} s` });
+      const label = Object.assign(document.createElement('label'), { className: 'short-field', textContent: `${chosen.id} ${chosen.channel} @ ${n(chosen.t)} s` });
       label.append(curve);
       if (current !== 'mixed') label.append(curveShape(first ?? 'linear'));
       div.append(label, button('Delete key', 'Delete this keyframe (Del)', () => deleteChosen(clip)));
     }
     if (state.mode === 'puppet') {
-      const description = Object.assign(document.createElement('input'), { type: 'text', className: 'descripcion', value: read(schema, clip, 'description'), placeholder: 'What it does (for the app’s AI)' });
+      const description = Object.assign(document.createElement('input'), { type: 'text', className: 'description', value: read(schema, clip, 'description'), placeholder: 'What it does (for the app’s AI)' });
       description.addEventListener('change', () => execute([{ op: 'set', target: clip.id, props: { description: description.value } }], `${clip.id} description`));
       left.append(description);
     }
@@ -550,13 +550,13 @@ export function mountTimeline(root) {
    * Keyframes en el playhead con estos valores ({ objeto: { propiedad: valor } }; un param, { value }). Con `vistos`,
    * son lo que se ve y se les resta lo que suman los drivers; los de una pose o del montaje se guardan tal cual.
    */
-  function pinValues(clip, values, que, seen = true) {
+  function pinValues(clip, values, what, seen = true) {
     const params = state.params ?? {};
     let tracks = clip.tracks ?? {};
     for (const [id, fields] of Object.entries(values)) {
       for (const [k, v] of Object.entries(fields)) tracks = putKey(tracks, id, k, state.time, seen ? valueToSave(state.doc, schema, clip, state.time, params, id, k, v) : v);
     }
-    execute([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: key ${que} at ${n(state.time)} s`);
+    execute([{ op: 'set', target: clip.id, props: { tracks } }], `${clip.id}: key ${what} at ${n(state.time)} s`);
   }
 
   /** Borra un canal entero (todos los keyframes de sus propiedades). */
@@ -592,27 +592,27 @@ export function mountTimeline(root) {
   function tracks(clip) {
     const duration = read(schema, clip, 'duration');
     const body = document.createElement('div');
-    body.className = 'pistas';
+    body.className = 'tracks';
     const left = (t) => `${(t / duration) * 100}%`;
 
     const rule = document.createElement('div');
-    rule.className = 'fila-pista regla';
+    rule.className = 'track-row ruler';
     const lane = document.createElement('div');
-    lane.className = 'carril';
+    lane.className = 'lane';
     const markStep = duration > 20 ? 5 : duration > 8 ? 2 : duration > 3 ? 1 : duration > 1 ? 0.5 : 0.25;
     for (let t = 0; t <= duration + 1e-9; t += markStep) {
-      const mark = Object.assign(document.createElement('span'), { className: 'marca', textContent: `${n(t)}s` });
+      const mark = Object.assign(document.createElement('span'), { className: 'mark', textContent: `${n(t)}s` });
       mark.style.left = left(t);
       lane.append(mark);
     }
-    rule.append(Object.assign(document.createElement('span'), { className: 'etiqueta' }), lane);
+    rule.append(Object.assign(document.createElement('span'), { className: 'label' }), lane);
     body.append(rule);
 
     // Todos los keyframes del clip, en gris: para ver el ritmo y saber dónde hay algo (clic = llevar el playhead ahí).
     const all = row('All keys', 'Every keyframe of the clip, of any object. Click one to move the playhead there.');
-    all.classList.add('resumen');
+    all.classList.add('summary');
     for (const t of keyTimes(clip)) {
-      const diamond = Object.assign(document.createElement('span'), { className: 'clave resumen', title: `Keyframes at ${n(t)} s. Click to go there; drag to move the whole moment (every keyframe at ${n(t)} s).` });
+      const diamond = Object.assign(document.createElement('span'), { className: 'key summary', title: `Keyframes at ${n(t)} s. Click to go there; drag to move the whole moment (every keyframe at ${n(t)} s).` });
       diamond.style.left = left(t);
       diamond.addEventListener('pointerdown', (e) => dragMoment(e, clip, null, t, all.lane));
       all.lane.append(diamond);
@@ -624,7 +624,7 @@ export function mountTimeline(root) {
     if (!objs.length) {
       // Sin selección: qué objetos tiene animados el clip, para ir a ellos.
       const help = document.createElement('div');
-      help.className = 'ayuda-canales';
+      help.className = 'channels-help';
       const animated = Object.keys(clip.tracks ?? {}).filter((id) => findObject(state.doc, id));
       help.append(document.createTextNode(state.selection ? `${state.selection} has no animatable channels. ` : 'Select objects or bones (Ctrl + click in Layers adds more) to see their channels. '));
       if (animated.length) {
@@ -638,19 +638,19 @@ export function mountTimeline(root) {
       const open = openGroup(obj.id, objs.length);
       // La fila del objeto: ▸/▾ pliega, el nombre lo hace principal, y en el carril todos sus keyframes juntos.
       const head = row(obj.id, `${obj.id} (${obj.type})`);
-      head.classList.add('grupo');
-      if (obj.id === state.selection) head.classList.add('principal');
+      head.classList.add('group');
+      if (obj.id === state.selection) head.classList.add('main');
       const flecha = button(open ? '▾' : '▸', open ? `Collapse ${obj.id}` : `Expand ${obj.id} to see its channels`, () => {
         folded.set(obj.id, !open);
         draw();
-      }, 'plegar');
+      }, 'fold');
       head.label.prepend(flecha);
-      const name = /** @type {HTMLElement} */ (head.label.querySelector('.nombre-pista'));
+      const name = /** @type {HTMLElement} */ (head.label.querySelector('.track-name'));
       name.style.cursor = 'pointer';
       name.addEventListener('click', () => selectSeveral(state.selected, obj.id));
       const props = channels.flatMap((c) => c.props);
       for (const t of channelTimes(clip, obj.id, props)) {
-        const diamond = Object.assign(document.createElement('span'), { className: 'clave resumen', title: `${obj.id}: keyframes at ${n(t)} s. Click to go there; drag to move all of ${obj.id}'s keyframes at ${n(t)} s.` });
+        const diamond = Object.assign(document.createElement('span'), { className: 'key summary', title: `${obj.id}: keyframes at ${n(t)} s. Click to go there; drag to move all of ${obj.id}'s keyframes at ${n(t)} s.` });
         diamond.style.left = left(t);
         diamond.addEventListener('pointerdown', (e) => dragMoment(e, clip, obj.id, t, head.lane));
         head.lane.append(diamond);
@@ -667,10 +667,10 @@ export function mountTimeline(root) {
   function channelRow(clip, obj, channel, left) {
     const withTrack = channel.props.some((p) => clip.tracks?.[obj.id]?.[p]?.length);
     const f = row(channel.name, `${obj.id}: ${channel.props.join(', ')}`);
-    f.classList.add('canal');
-    if (!withTrack) f.classList.add('vacia');
-    const pin = button(withTrack ? '◆' : '◇', `Key ${obj.id} ${channel.name} at the playhead`, () => pinChannel(clip, obj, channel), 'clavar-canal');
-    const remove = button('×', `Delete the whole ${channel.name} track of ${obj.id} (all its keyframes)`, () => deleteChannel(clip, obj.id, channel), 'quitar-pista');
+    f.classList.add('channel');
+    if (!withTrack) f.classList.add('empty');
+    const pin = button(withTrack ? '◆' : '◇', `Key ${obj.id} ${channel.name} at the playhead`, () => pinChannel(clip, obj, channel), 'pin-channel');
+    const remove = button('×', `Delete the whole ${channel.name} track of ${obj.id} (all its keyframes)`, () => deleteChannel(clip, obj.id, channel), 'remove-track');
     if (!withTrack) remove.hidden = true;
     f.label.append(pin, remove);
     // Un param mueve todas las poses de sus drivers (también las que no se ven en la timeline): se dice al lado.
@@ -684,7 +684,7 @@ export function mountTimeline(root) {
       const keys = keysIn(clip, obj.id, channel.props, t);
       const diamond = document.createElement('span');
       const isChosen = chosen && chosen.id === obj.id && chosen.channel === channel.name && sameTime(chosen.t, t);
-      diamond.className = `clave ${curveClass(keys)}${isChosen ? ' elegida' : ''}`;
+      diamond.className = `key ${curveClass(keys)}${isChosen ? ' chosen' : ''}`;
       diamond.style.left = left(t);
       diamond.title = `${obj.id} ${channel.name} at ${n(t)} s: ${keys.map(([p, c]) => `${p} = ${summarize(c.value)}`).join(', ')} (${curveName(keys)}). Drag to move it in time.`;
       diamond.addEventListener('pointerdown', (e) => dragKey(e, clip, obj.id, channel, t, f.lane));
@@ -700,8 +700,8 @@ export function mountTimeline(root) {
     body.append(playhead);
     // Clic o arrastre en la regla o en un carril vacío: mover el playhead (con imán a los cuadros).
     body.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || e.target.closest('.clave, .etiqueta, .ayuda-canales')) return;
-      const zone = body.querySelector('.carril').getBoundingClientRect();
+      if (e.button !== 0 || e.target.closest('.key, .label, .channels-help')) return;
+      const zone = body.querySelector('.lane').getBoundingClientRect();
       const move = (ev) => setState({ time: Math.max(0, Math.min(duration, adjustToFrame(((ev.clientX - zone.left) / zone.width) * duration))) });
       stop();
       root.focus();
@@ -716,12 +716,12 @@ export function mountTimeline(root) {
   /** Una fila de la timeline: etiqueta a la izquierda y carril a la derecha. */
   function row(text, title) {
     const div = document.createElement('div');
-    div.className = 'fila-pista';
+    div.className = 'track-row';
     const label = document.createElement('span');
-    label.className = 'etiqueta';
-    label.append(Object.assign(document.createElement('span'), { className: 'nombre-pista', textContent: text, title: title }));
+    label.className = 'label';
+    label.append(Object.assign(document.createElement('span'), { className: 'track-name', textContent: text, title: title }));
     const lane = document.createElement('div');
-    lane.className = 'carril';
+    lane.className = 'lane';
     div.append(label, lane);
     return Object.assign(div, { label, lane });
   }
@@ -835,12 +835,12 @@ export function mountTimeline(root) {
     if (!clip) return;
     const duration = read(schema, clip, 'duration');
     const playhead = root.querySelector('.playhead');
-    const lane = root.querySelector('.carril');
+    const lane = root.querySelector('.lane');
     if (playhead && lane) {
       const base = lane.offsetLeft;
       playhead.style.left = `${base + (Math.min(state.time, duration) / duration) * lane.offsetWidth}px`;
     }
-    const clock = root.querySelector('.reloj');
+    const clock = root.querySelector('.clock');
     if (clock) clock.textContent = `${state.time.toFixed(2)} s · frame ${Math.round(state.time * fps())}`;
   }
   new ResizeObserver(movePlayhead).observe(root);
@@ -886,9 +886,9 @@ function keysIn(clip, id, props, t) {
 /** El color del ◆ dice la curva del tramo que sale de él (como la forma del keyframe en Moho). */
 function curveClass(keys) {
   const curves = new Set(keys.map(([, c]) => (Array.isArray(c.ease) ? 'bezier' : (c.ease ?? 'linear'))));
-  if (curves.size > 1) return 'curva-mixta';
+  if (curves.size > 1) return 'curve-mixed';
   const [curve] = curves;
-  return `curva-${curve.startsWith('ease-') ? 'ease' : curve}`;
+  return `curve${curve.startsWith('ease-') ? 'ease' : curve}`;
 }
 
 /** Un dibujito de la curva de un tramo (tiempo → avance), para ver la forma sin adivinar los números. */
@@ -901,7 +901,7 @@ function curveShape(ease) {
   });
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  svg.setAttribute('class', 'forma-curva');
+  svg.setAttribute('class', 'curve-shape');
   svg.setAttribute('aria-hidden', 'true');
   svg.innerHTML = `<line x1="0" y1="${y(0)}" x2="${width}" y2="${y(0)}"/><line x1="0" y1="${y(1)}" x2="${width}" y2="${y(1)}"/><polyline points="${points.join(' ')}"/>`;
   return svg;

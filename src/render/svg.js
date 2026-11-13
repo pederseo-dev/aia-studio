@@ -81,7 +81,7 @@ const reader = (doc, schema, obj, assets = null) => Object.assign((prop) => effe
  * delta de su hueso lo lleva, vista desde el padre (que ya se movió con el suyo).
  */
 function transformInPose(doc, schema, obj, v, ctx) {
-  const delta = obj.bone ? (ctx.esqueleto.delta.get(obj.bone) ?? IDENTITY) : ctx.parentDelta;
+  const delta = obj.bone ? (ctx.skeleton.delta.get(obj.bone) ?? IDENTITY) : ctx.parentDelta;
   if (delta === ctx.parentDelta) return { delta, attribute: transform(v) };
   const parent = worldMatrix(doc, schema, obj.parent ?? null);
   const m = multiply(multiply(multiply(invert(parent), multiply(invert(ctx.parentDelta), delta)), parent), localMatrix(schema, obj));
@@ -98,7 +98,7 @@ function verticesInPose(doc, schema, obj, vertices, delta, ctx) {
   const inverse = invert(multiply(delta, rest));
   const matrices = new Map();
   return vertices.map((vt) => {
-    const d = vt.bone && ctx.esqueleto.delta.get(vt.bone);
+    const d = vt.bone && ctx.skeleton.delta.get(vt.bone);
     if (!d || d === delta) return vt;
     if (!matrices.has(vt.bone)) matrices.set(vt.bone, multiply(multiply(inverse, d), rest));
     return transformVertices([vt], matrices.get(vt.bone))[0];
@@ -107,8 +107,8 @@ function verticesInPose(doc, schema, obj, vertices, delta, ctx) {
 
 function node(doc, schema, obj, ctx) {
   let v = reader(doc, schema, obj, ctx.assets);
-  const { delta, attribute: transformAttr } = ctx.esqueleto ? transformInPose(doc, schema, obj, v, ctx) : { delta: IDENTITY, attribute: transform(v) };
-  if (ctx.esqueleto && obj.type === 'path') {
+  const { delta, attribute: transformAttr } = ctx.skeleton ? transformInPose(doc, schema, obj, v, ctx) : { delta: IDENTITY, attribute: transform(v) };
+  if (ctx.skeleton && obj.type === 'path') {
     const base = v;
     const deformed = verticesInPose(doc, schema, obj, base('vertices'), delta, ctx);
     v = Object.assign((prop) => (prop === 'vertices' ? deformed : base(prop)), { doc: base.doc, assets: base.assets });
@@ -161,10 +161,10 @@ export function svgContent(setup, schema, { pose, params, animation, time, show,
   const root = children(doc, null);
   const definitions = root.filter((o) => DEFINE[o.type]).map((o) => DEFINE[o.type](o, reader(doc, schema, o)));
   const defs = definitions.length ? `<defs>${definitions.join('')}</defs>` : '';
-  const rect = background == null ? '' : `<rect data-fondo="" width="${w}" height="${h}" fill="${attribute(background)}"/>`;
+  const rect = background == null ? '' : `<rect data-background="" width="${w}" height="${h}" fill="${attribute(background)}"/>`;
   // `mostrar`: { id_de_switch: id_de_hijo } para ver una variante sin cambiarla (el editor, al seleccionarla).
   // `assets`: src → href de las capas image (el editor da la URL del servidor).
-  const ctx = { esqueleto: activePose ? evaluateSkeleton(doc, schema, activePose) : null, parentDelta: IDENTITY, show, assets };
+  const ctx = { skeleton: activePose ? evaluateSkeleton(doc, schema, activePose) : null, parentDelta: IDENTITY, show, assets };
   const objects = root.filter((o) => DRAW[o.type]).map((o) => node(doc, schema, o, ctx));
   return defs + rect + objects.join('');
 }
@@ -189,7 +189,7 @@ function svgBones(doc, schema, { pose, params, animation, time }) {
     const name = `<text x="${n(ox + 6)}" y="${n(oy - 6)}" font-family="sans-serif" font-size="12" fill="#ff3d7f" stroke="#ffffff" stroke-width="3" paint-order="stroke">${attribute(h.id)}</text>`;
     return shape + `<circle cx="${n(ox)}" cy="${n(oy)}" r="3" fill="#ff3d7f"/>` + name;
   });
-  return `<g data-huesos="">${parts.join('')}</g>`;
+  return `<g data-bones="">${parts.join('')}</g>`;
 }
 
 /**

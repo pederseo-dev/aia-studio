@@ -24,16 +24,16 @@ export function createArtboard(ctx) {
 
   function draw() {
     const m = frame();
-    ctx.overlay.append(ctx.crear('rect', { class: 'seleccion marco-artboard', x: m.x, y: m.y, width: m.w, height: m.h }));
+    ctx.overlay.append(ctx.create('rect', { class: 'selection artboard-frame', x: m.x, y: m.y, width: m.w, height: m.h }));
     for (const [name, [dx, dy]] of Object.entries(HANDLES)) {
       const x = m.x + ((dx + 1) / 2) * m.w;
       const y = m.y + ((dy + 1) / 2) * m.h;
-      const handle = ctx.crear('rect', { class: 'manija', 'data-manija': `artboard-${name}`, x: x - 4, y: y - 4, width: 8, height: 8 }, 'Resize the artboard; the drawing stays centered (Shift: keep proportions)');
+      const handle = ctx.create('rect', { class: 'handle', 'data-handle': `artboard-${name}`, x: x - 4, y: y - 4, width: 8, height: 8 }, 'Resize the artboard; the drawing stays centered (Shift: keep proportions)');
       handle.style.cursor = `${CURSORS[name]}-resize`;
       ctx.overlay.append(handle);
     }
     if (measure) {
-      const t = ctx.crear('text', { class: 'medida-artboard', x: measure.x + 14, y: measure.y - 10 });
+      const t = ctx.create('text', { class: 'artboard-size', x: measure.x + 14, y: measure.y - 10 });
       t.textContent = measure.text;
       ctx.overlay.append(t);
     }
@@ -43,7 +43,7 @@ export function createArtboard(ctx) {
     const [dx, dy] = HANDLES[name.slice('artboard-'.length)];
     const m = frame();
     // El centro queda fijo en pantalla mientras dura el arrastre.
-    const centro = [m.x + m.w / 2, m.y + m.h / 2];
+    const center = [m.x + m.w / 2, m.y + m.h / 2];
     const proportion = m.width / m.height;
     let size = null;
 
@@ -51,8 +51,8 @@ export function createArtboard(ctx) {
       e,
       (ev) => {
         const [px, py] = ctx.screenPoint(ev);
-        let width = dx ? Math.max(1, Math.round((2 * Math.abs(px - centro[0])) / m.zoom)) : m.width;
-        let height = dy ? Math.max(1, Math.round((2 * Math.abs(py - centro[1])) / m.zoom)) : m.height;
+        let width = dx ? Math.max(1, Math.round((2 * Math.abs(px - center[0])) / m.zoom)) : m.width;
+        let height = dy ? Math.max(1, Math.round((2 * Math.abs(py - center[1])) / m.zoom)) : m.height;
         // Shift: mantiene la proporción (en una manija de lado, el otro lado acompaña).
         if (ev.shiftKey) {
           if (dx && (!dy || width / m.width >= height / m.height)) height = Math.max(1, Math.round(width / proportion));

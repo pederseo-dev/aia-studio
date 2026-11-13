@@ -339,7 +339,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     // La nota la ve el usuario en el historial: en inglés (los prefijos viejos en español también se limpian).
     const note = entry.note?.replace(/^(deshacer|rehacer|undo|redo): /, '') ?? '';
     await record(id, { origin, kind, ref: entry.n, note: `${kind === 'undo' ? 'undo' : 'redo'}: ${note}`, ops: inverses, inverses: result.inverses });
-    return { doc: result.doc, entrada: { n: entry.n, note, ops: entry.ops.length, lote: entry.ops } };
+    return { doc: result.doc, in: { n: entry.n, note, ops: entry.ops.length, lote: entry.ops } };
   }
 
   return {
@@ -362,7 +362,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
 
     /** Crea un documento vacío o, con `copiarDe`, una copia de otro (sin su historial). */
     /** @param {string} id @param {Record<string, any>} meta @param {{ origin: string, note?: string, copyFrom?: string }} options */
-    crear: (id, meta, { origin, note, copyFrom }) =>
+    create: (id, meta, { origin, note, copyFrom }) =>
       enqueue(async () => {
         try {
           await fs.access(filePath(id, 'document.json'));
@@ -396,7 +396,7 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
       }),
 
     /** Borra el documento y su historial. No se puede deshacer. */
-    eliminar: (id) =>
+    delete: (id) =>
       enqueue(async () => {
         await read(id);
         await fs.rm(path.dirname(filePath(id, 'document.json')), { recursive: true });

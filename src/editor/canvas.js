@@ -18,10 +18,10 @@ const NS = 'http://www.w3.org/2000/svg';
 const round = (v) => Math.round(v * 10) / 10;
 
 export function mountCanvas(container) {
-  const view = container.querySelector('#vista');
-  const cameraG = view.querySelector('#camara');
-  const documentG = view.querySelector('#documento');
-  const overlay = view.querySelector('#superposicion');
+  const view = container.querySelector('#view');
+  const cameraG = view.querySelector('#camera');
+  const documentG = view.querySelector('#document');
+  const overlay = view.querySelector('#overlay');
   const camera = { x: 0, y: 0, zoom: 1 };
   let adjustedFor = null;
   let space = false;
@@ -38,7 +38,7 @@ export function mountCanvas(container) {
       return [e.clientX - r.left, e.clientY - r.top];
     },
     element: (id) => documentG.querySelector(`[data-id="${CSS.escape(id)}"]`),
-    crear(kind, attributes, title) {
+    create(kind, attributes, title) {
       const el = document.createElementNS(NS, kind);
       for (const [k, v] of Object.entries(attributes)) if (v !== '') el.setAttribute(k, v);
       if (title) el.append(Object.assign(document.createElementNS(NS, 'title'), { textContent: title }));
@@ -54,17 +54,17 @@ export function mountCanvas(container) {
   const artboard = createArtboard(ctx);
 
   subscribe((c) => {
-    if ('pose' in c) container.classList.toggle('modo-pose', !!state.pose);
-    if ('params' in c) container.classList.toggle('modo-params', !!state.params && !state.pose);
-    if ('live' in c) container.classList.toggle('en-vivo', state.live);
+    if ('pose' in c) container.classList.toggle('mode-pose', !!state.pose);
+    if ('params' in c) container.classList.toggle('mode-params', !!state.params && !state.pose);
+    if ('live' in c) container.classList.toggle('in-live', state.live);
     if ('doc' in c || 'previewDoc' in c || 'pose' in c || 'params' in c || 'time' in c || 'livePose' in c) drawDocument();
     // Seleccionar una variante oculta de un switch la muestra (solo en la vista): hay que redibujar el documento.
     else if ('selection' in c && JSON.stringify(variantsToShow()) !== showing) drawDocument();
     else if ('selection' in c || 'editing' in c || 'vertex' in c) drawOverlay();
     if ('tool' in c) {
-      container.className = `herramienta-${state.tool}${state.pose ? ' modo-pose' : ''}${state.live ? ' en-vivo' : ''}`;
+      container.className = `tool${state.tool}${state.pose ? ' mode-pose' : ''}${state.live ? ' in-live' : ''}`;
       if (state.tool !== 'path' && pen.active()) pen.finish(false);
-      if (state.tool !== 'seleccionar' && state.editing) setState({ editing: null, vertex: null });
+      if (state.tool !== 'select' && state.editing) setState({ editing: null, vertex: null });
       drawOverlay();
     }
     // Salir de la edición de puntos si cambia la selección o el path desaparece.
@@ -110,7 +110,7 @@ export function mountCanvas(container) {
     const view = state.live ? { pose: state.livePose } : clip ? { animation: clip.id, time: state.time, params: state.params ?? {} } : state.pose ? { pose: state.pose } : state.params ? { params: state.params } : {};
     const show = state.live || (state.params && !state.pose) ? {} : variantsToShow(doc);
     showing = JSON.stringify(show);
-    documentG.innerHTML = `${svgContent(doc, schema, { ...view, show, assets: (src) => assetUrl(src) })}<rect class="marco-documento" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
+    documentG.innerHTML = `${svgContent(doc, schema, { ...view, show, assets: (src) => assetUrl(src) })}<rect class="document-frame" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
     // Con candado: los clics pasan de largo (llegan a lo de abajo), y sus hijos lo heredan.
     for (const o of doc.objects) if (o.locked) ctx.element(o.id)?.style.setProperty('pointer-events', 'none');
     drawOverlay();
@@ -126,7 +126,7 @@ export function mountCanvas(container) {
         const outline = el.querySelector(':scope > path')?.cloneNode();
         if (outline) {
           const m = el.getCTM();
-          outline.setAttribute('class', 'contorno-edicion');
+          outline.setAttribute('class', 'editing-outline');
           outline.setAttribute('transform', `matrix(${m.a} ${m.b} ${m.c} ${m.d} ${m.e} ${m.f})`);
           overlay.append(outline);
         }
@@ -223,8 +223,8 @@ export function mountCanvas(container) {
     if (!state.doc) return;
     if (e.button === 1 || (e.button === 0 && space)) return pan(e);
     if (e.button !== 0) return;
-    const handle = e.target.closest('[data-manija]')?.dataset.manija;
-    if (handle?.startsWith('hueso-')) return bones.handle(e, handle);
+    const handle = e.target.closest('[data-handle]')?.dataset.handle;
+    if (handle?.startsWith('bone')) return bones.handle(e, handle);
     if (handle?.startsWith('artboard-')) return artboard.handle(e, handle);
     // Artboard: el lienzo queda elegido (el inspector muestra sus propiedades); fuera de las manijas no hace nada.
     if (state.tool === 'artboard') return state.selection && select(null);
@@ -233,7 +233,7 @@ export function mountCanvas(container) {
     // Lo que no sigue a un hueso se elige, mueve, gira y escala como en el montaje; queda en la pose (o en el clip).
     if (state.pose) {
       const g = e.target.closest('[data-id]');
-      if (g && documentG.contains(g) && !e.target.closest('[data-hueso]') && isFree(state.doc, g.dataset.id)) return transform.selectAndMove(e);
+      if (g && documentG.contains(g) && !e.target.closest('[data-bone]') && isFree(state.doc, g.dataset.id)) return transform.selectAndMove(e);
       return bones.pointerdownPose(e);
     }
     // En la vista Parámetros se mira la mezcla: un clic solo selecciona.
@@ -241,13 +241,13 @@ export function mountCanvas(container) {
       const g = e.target.closest('[data-id]');
       return select(g && documentG.contains(g) ? g.dataset.id : null);
     }
-    if (state.tool === 'hueso') return bones.pointerdown(e);
-    if (state.tool === 'manipular') return bones.pointerdownManipulate(e);
-    if (state.tool === 'reparentar') return bones.pointerdownReparent(e);
-    if (state.tool === 'enlazarCapa') return bones.pointerdownBindLayer(e);
-    if (state.tool === 'enlazarPuntos') return bones.pointerdownBindPoints(e);
+    if (state.tool === 'bone') return bones.pointerdown(e);
+    if (state.tool === 'manipulate') return bones.pointerdownManipulate(e);
+    if (state.tool === 'reparent') return bones.pointerdownReparent(e);
+    if (state.tool === 'bindLayer') return bones.pointerdownBindLayer(e);
+    if (state.tool === 'bindPoints') return bones.pointerdownBindPoints(e);
     if (state.tool === 'path') return pen.pointerdown(e);
-    if (state.tool === 'rotar' || state.tool === 'escalar') return transform.withTool(e, state.tool);
+    if (state.tool === 'rotate' || state.tool === 'scale') return transform.withTool(e, state.tool);
     if (state.tool === 'rect' || state.tool === 'ellipse') return createShape(e, state.tool);
     if (state.editing) {
       if (points.pointerdown(e)) return;
@@ -259,10 +259,10 @@ export function mountCanvas(container) {
   view.addEventListener('pointermove', (e) => state.tool === 'path' && pen.hover(e));
 
   view.addEventListener('dblclick', (e) => {
-    if (state.tool !== 'seleccionar') return;
+    if (state.tool !== 'select') return;
     // Por la captura del puntero, el doble clic llega a la vista: se busca qué hay debajo.
     const below = document.elementFromPoint(e.clientX, e.clientY) ?? e.target;
-    const handle = below.closest('[data-manija^="ancla-"]')?.dataset.manija;
+    const handle = below.closest('[data-handle^="anchor"]')?.dataset.handle;
     if (handle && state.editing) return points.toggle(Number(handle.split('-')[1]));
     const g = below.closest('[data-id]');
     const obj = g && documentG.contains(g) && findObject(state.doc, g.dataset.id);
@@ -271,7 +271,7 @@ export function mountCanvas(container) {
 
   function pan(e) {
     e.preventDefault();
-    container.classList.add('paneando');
+    container.classList.add('panning');
     const start = { x: e.clientX - camera.x, y: e.clientY - camera.y };
     drag(
       e,
@@ -280,7 +280,7 @@ export function mountCanvas(container) {
         camera.y = ev.clientY - start.y;
         applyCamera();
       },
-      () => container.classList.remove('paneando'),
+      () => container.classList.remove('panning'),
     );
   }
 
@@ -288,7 +288,7 @@ export function mountCanvas(container) {
     const parent = parentForNew();
     const inverse = invert(multiply(ctx.cameraMatrix(), worldMatrix(state.doc, schema, parent)));
     const s0 = ctx.screenPoint(e);
-    const draft = ctx.crear(kind === 'ellipse' ? 'ellipse' : 'rect', { class: 'borrador' });
+    const draft = ctx.create(kind === 'ellipse' ? 'ellipse' : 'rect', { class: 'draft' });
     overlay.append(draft);
 
     const box = (ev) => {
@@ -322,14 +322,14 @@ export function mountCanvas(container) {
             : { x: round((ax + bx) / 2), y: round((ay + by) / 2), width: round(Math.abs(bx - ax)), height: round(Math.abs(by - ay)) };
         const id = freeId(kind);
         execute([{ op: 'create', type: kind, id, parent: parent, props }], `create ${id}`);
-        setState({ tool: 'seleccionar' });
+        setState({ tool: 'select' });
         select(id);
       },
     );
   }
 
   function editPoints(id) {
-    setState({ tool: 'seleccionar', selection: id, selected: [id], editing: id, vertex: null });
+    setState({ tool: 'select', selection: id, selected: [id], editing: id, vertex: null });
   }
 
   return {

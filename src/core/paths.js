@@ -38,14 +38,14 @@ export function tangents(v) {
   switch (v.mode ?? 'straight') {
     case 'mirrored': {
       const output = polar(v.angle, v.dist);
-      return { entrada: [-output[0], -output[1]], salida: output };
+      return { in: [-output[0], -output[1]], out: output };
     }
     case 'asymmetric':
-      return { entrada: polar(v.angle + 180, v.inDist), salida: polar(v.angle, v.outDist) };
+      return { in: polar(v.angle + 180, v.inDist), out: polar(v.angle, v.outDist) };
     case 'detached':
-      return { entrada: polar(v.inAngle, v.inDist), salida: polar(v.outAngle, v.outDist) };
+      return { in: polar(v.inAngle, v.inDist), out: polar(v.outAngle, v.outDist) };
     default:
-      return { entrada: [0, 0], salida: [0, 0] };
+      return { in: [0, 0], out: [0, 0] };
   }
 }
 
@@ -79,7 +79,7 @@ export function vertexFromTangents(x, y, entry, output, extra = {}) {
 function expand(vertices, closed) {
   const points = [];
   vertices.forEach((v, i) => {
-    const { entrada: entry, salida: output } = tangents(v);
+    const { in: entry, out: output } = tangents(v);
     const radius = (v.mode ?? 'straight') === 'straight' ? (v.radius ?? 0) : 0;
     const previous = vertices[i - 1] ?? (closed ? vertices.at(-1) : null);
     const next = vertices[i + 1] ?? (closed ? vertices[0] : null);
@@ -92,12 +92,12 @@ function expand(vertices, closed) {
         const ub = [b[0] / length(b), b[1] / length(b)];
         const start = [v.x + ua[0] * r, v.y + ua[1] * r];
         const end = [v.x + ub[0] * r, v.y + ub[1] * r];
-        points.push({ p: start, entrada: [0, 0], salida: [-ua[0] * r * KAPPA, -ua[1] * r * KAPPA] });
-        points.push({ p: end, entrada: [-ub[0] * r * KAPPA, -ub[1] * r * KAPPA], salida: [0, 0] });
+        points.push({ p: start, in: [0, 0], out: [-ua[0] * r * KAPPA, -ua[1] * r * KAPPA] });
+        points.push({ p: end, in: [-ub[0] * r * KAPPA, -ub[1] * r * KAPPA], out: [0, 0] });
         return;
       }
     }
-    points.push({ p: [v.x, v.y], entrada: entry, salida: output });
+    points.push({ p: [v.x, v.y], in: entry, out: output });
   });
   return points;
 }
@@ -106,8 +106,8 @@ export function verticesAD(vertices, closed) {
   if (!vertices?.length) return '';
   const points = expand(vertices, closed);
   const span = (a, b) => {
-    if (length(a.salida) < 1e-9 && length(b.entrada) < 1e-9) return `L${n(b.p[0])} ${n(b.p[1])}`;
-    return `C${n(a.p[0] + a.salida[0])} ${n(a.p[1] + a.salida[1])} ${n(b.p[0] + b.entrada[0])} ${n(b.p[1] + b.entrada[1])} ${n(b.p[0])} ${n(b.p[1])}`;
+    if (length(a.out) < 1e-9 && length(b.in) < 1e-9) return `L${n(b.p[0])} ${n(b.p[1])}`;
+    return `C${n(a.p[0] + a.out[0])} ${n(a.p[1] + a.out[1])} ${n(b.p[0] + b.in[0])} ${n(b.p[1] + b.in[1])} ${n(b.p[0])} ${n(b.p[1])}`;
   };
   let d = `M${n(points[0].p[0])} ${n(points[0].p[1])}`;
   for (let i = 1; i < points.length; i++) d += span(points[i - 1], points[i]);
@@ -149,7 +149,7 @@ export function parseD(d) {
   let lastCommand = '';
 
   const startSubpath = (p) => {
-    current = { closed: false, points: [{ p, entrada: [0, 0], salida: [0, 0] }] };
+    current = { closed: false, points: [{ p, in: [0, 0], out: [0, 0] }] };
     subpaths.push(current);
     start = p;
   };
@@ -157,13 +157,13 @@ export function parseD(d) {
   const cubic = (c1, c2, p) => {
     ensure();
     const last = current.points.at(-1);
-    last.salida = [c1[0] - last.p[0], c1[1] - last.p[1]];
-    current.points.push({ p, entrada: [c2[0] - p[0], c2[1] - p[1]], salida: [0, 0] });
+    last.out = [c1[0] - last.p[0], c1[1] - last.p[1]];
+    current.points.push({ p, in: [c2[0] - p[0], c2[1] - p[1]], out: [0, 0] });
     pos = p;
   };
   const line = (p) => {
     ensure();
-    current.points.push({ p, entrada: [0, 0], salida: [0, 0] });
+    current.points.push({ p, in: [0, 0], out: [0, 0] });
     pos = p;
   };
 
@@ -240,7 +240,7 @@ export function parseD(d) {
           const first = current.points[0];
           const last = current.points.at(-1);
           if (current.points.length > 1 && Math.hypot(last.p[0] - first.p[0], last.p[1] - first.p[1]) < 1e-6) {
-            first.entrada = last.entrada;
+            first.in = last.in;
             current.points.pop();
           }
           current.closed = true;
@@ -259,7 +259,7 @@ export function parseD(d) {
 
   return subpaths
     .filter((s) => s.points.length > 1 || s.closed)
-    .map((s) => ({ closed: s.closed, vertices: s.points.map((pt) => vertexFromTangents(pt.p[0], pt.p[1], pt.entrada, pt.salida)) }));
+    .map((s) => ({ closed: s.closed, vertices: s.points.map((pt) => vertexFromTangents(pt.p[0], pt.p[1], pt.in, pt.out)) }));
 }
 
 /** Arco elíptico de SVG → lista de cúbicas [c1, c2, fin] (algoritmo de la especificación SVG, apéndice F.6). */
@@ -317,7 +317,7 @@ function arcToCubics(p0, rx, ry, rotation, large, clockwise, p) {
 export function transformVertices(vertices, m) {
   const scale = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
   return vertices.map((v) => {
-    const { entrada: entry, salida: output } = tangents(v);
+    const { in: entry, out: output } = tangents(v);
     /** @param {number[]} p */
     const linear = ([x, y]) => [m[0] * x + m[2] * y, m[1] * x + m[3] * y];
     const extra = v.radius ? { radius: r2(v.radius * scale) } : {};
@@ -328,11 +328,11 @@ export function transformVertices(vertices, m) {
 /** Anclas y extremos de las tangentes en coordenadas absolutas (para dibujar las manijas del editor). */
 export function handles(vertices) {
   return vertices.map((v) => {
-    const { entrada: entry, salida: output } = tangents(v);
+    const { in: entry, out: output } = tangents(v);
     return {
       anchor: [v.x, v.y],
-      entrada: length(entry) > 0.01 ? [v.x + entry[0], v.y + entry[1]] : null,
-      salida: length(output) > 0.01 ? [v.x + output[0], v.y + output[1]] : null,
+      in: length(entry) > 0.01 ? [v.x + entry[0], v.y + entry[1]] : null,
+      out: length(output) > 0.01 ? [v.x + output[0], v.y + output[1]] : null,
     };
   });
 }
@@ -340,8 +340,8 @@ export function handles(vertices) {
 function cubicSpan(vertices, i) {
   const a = vertices[i];
   const b = vertices[(i + 1) % vertices.length];
-  const ta = tangents(a).salida;
-  const tb = tangents(b).entrada;
+  const ta = tangents(a).out;
+  const tb = tangents(b).in;
   return [[a.x, a.y], [a.x + ta[0], a.y + ta[1]], [b.x + tb[0], b.y + tb[1]], [b.x, b.y]];
 }
 
@@ -377,10 +377,10 @@ export function splitSpan(vertices, i, t) {
   const withTangent = (v, which, point) => {
     const t2 = tangents(v);
     t2[which] = [point[0] - v.x, point[1] - v.y];
-    return withBone(v, vertexFromTangents(v.x, v.y, t2.entrada, t2.salida));
+    return withBone(v, vertexFromTangents(v.x, v.y, t2.in, t2.out));
   };
-  result[i] = withTangent(vertices[i], 'salida', a);
-  result[j] = withTangent(vertices[j], 'entrada', c);
+  result[i] = withTangent(vertices[i], 'out', a);
+  result[j] = withTangent(vertices[j], 'in', c);
   const created = withBone(vertices[i], vertexFromTangents(half[0], half[1], [ab[0] - half[0], ab[1] - half[1]], [bc[0] - half[0], bc[1] - half[1]]));
   result.splice(i + 1, 0, created);
   return result;

@@ -24,10 +24,10 @@ export function mountHistory(list) {
         .slice(0, 40)
         .map((e) => {
           const li = document.createElement('li');
-          li.className = `${e.origin}${reverted.has(e.n) ? ' revertida' : ''}`;
-          li.innerHTML = `<span class="quien">${e.origin === 'ai' ? 'AI' : e.origin === 'system' ? 'System' : 'You'}</span><span class="hora"></span><span class="nota"></span>`;
-          li.querySelector('.hora').textContent = new Date(e.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          li.querySelector('.nota').textContent = e.note;
+          li.className = `${e.origin}${reverted.has(e.n) ? ' reverted' : ''}`;
+          li.innerHTML = `<span class="who">${e.origin === 'ai' ? 'AI' : e.origin === 'system' ? 'System' : 'You'}</span><span class="clock-time"></span><span class="note"></span>`;
+          li.querySelector('.clock-time').textContent = new Date(e.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          li.querySelector('.note').textContent = e.note;
           li.title = `${e.note}\n${e.ops.length} operations`;
           return li;
         }),

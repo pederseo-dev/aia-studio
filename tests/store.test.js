@@ -20,13 +20,13 @@ async function withStore(fn) {
 
 test('deshacer y rehacer van por origen', () =>
   withStore(async (a) => {
-    await a.crear('robot', { name: 'Robot' }, { origin: 'ai' });
+    await a.create('robot', { name: 'Robot' }, { origin: 'ai' });
     await a.applyOps('robot', [{ op: 'create', type: 'rect', id: 'torso' }], { origin: 'ai', note: 'torso' });
     await a.applyOps('robot', [{ op: 'set', target: 'torso', props: { fill: '#ff0000' } }], { origin: 'user', note: 'rojo' });
     await a.applyOps('robot', [{ op: 'create', type: 'ellipse', id: 'head' }], { origin: 'ai', note: 'cabeza' });
 
     // La IA deshace lo suyo; el retoque del usuario se mantiene.
-    let { doc, entrada: entry } = await a.undo('robot', 'ai');
+    let { doc, in: entry } = await a.undo('robot', 'ai');
     assert.deepEqual(doc.objects.map((o) => o.id), ['torso']);
     assert.equal(doc.objects[0].fill, '#ff0000');
     assert.deepEqual({ ...entry, lote: entry.lote.map((o) => o.op) }, { n: 4, note: 'cabeza', ops: 1, lote: ['create'] });
@@ -46,7 +46,7 @@ test('deshacer y rehacer van por origen', () =>
 
 test('deshacer se niega si un lote posterior del otro origen toc처 lo mismo', () =>
   withStore(async (a) => {
-    await a.crear('robot', {}, { origin: 'user' });
+    await a.create('robot', {}, { origin: 'user' });
     await a.applyOps('robot', [{ op: 'create', type: 'rect', id: 'r' }], { origin: 'ai', note: 'crear' });
     await a.applyOps('robot', [{ op: 'set', target: 'r', props: { x: 10 } }], { origin: 'ai', note: 'ai x' });
     await a.applyOps('robot', [{ op: 'set', target: 'r', props: { x: 20 } }], { origin: 'user', note: 'user x' });
@@ -68,7 +68,7 @@ test('deshacer se niega si un lote posterior del otro origen toc처 lo mismo', ()
 
 test('deshacer la creaci처n de un contenedor se niega si el otro origen le meti처 algo o lo renombr처', () =>
   withStore(async (a) => {
-    await a.crear('robot', {}, { origin: 'user' });
+    await a.create('robot', {}, { origin: 'user' });
     await a.applyOps('robot', [{ op: 'create', type: 'group', id: 'head' }], { origin: 'ai' });
     await a.applyOps('robot', [{ op: 'create', type: 'rect', id: 'face', parent: 'head' }], { origin: 'user', note: 'cara' });
     await assert.rejects(a.undo('robot', 'ai'), /head\.children \(changed by the user/);
@@ -78,12 +78,12 @@ test('deshacer la creaci처n de un contenedor se niega si el otro origen le meti�
 
 test('listar y errores de documento', () =>
   withStore(async (a) => {
-    await a.crear('b', { name: 'Bee' }, { origin: 'user' });
-    await a.crear('a', {}, { origin: 'user' });
+    await a.create('b', { name: 'Bee' }, { origin: 'user' });
+    await a.create('a', {}, { origin: 'user' });
     assert.deepEqual(await a.list(), [{ id: 'a', name: 'Sin nombre' }, { id: 'b', name: 'Bee' }].map((d) => (d.id === 'a' ? { id: 'a', name: 'a' } : d)));
-    await assert.rejects(a.crear('a', {}, { origin: 'user' }), /Ya existe/);
+    await assert.rejects(a.create('a', {}, { origin: 'user' }), /Ya existe/);
     await a.applyOps('b', [{ op: 'create', type: 'rect', id: 'r' }], { origin: 'user' });
-    const copy = await a.crear('c', { name: 'Bee 2' }, { origin: 'ai', copyFrom: 'b' });
+    const copy = await a.create('c', { name: 'Bee 2' }, { origin: 'ai', copyFrom: 'b' });
     assert.deepEqual(copy.objects.map((o) => o.id), ['r']);
     assert.equal(copy.meta.name, 'Bee 2');
     assert.deepEqual((await a.history('c')).entries.map((e) => e.note), ['copy of b']);
@@ -93,7 +93,7 @@ test('listar y errores de documento', () =>
 
 test('en una pose, deshacer compara y restaura por objeto y propiedad, no la pose entera', () =>
   withStore(async (a) => {
-    await a.crear('cara', {}, { origin: 'user' });
+    await a.create('cara', {}, { origin: 'user' });
     await a.applyOps('cara', [{ op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'rect', id: 'q' }, { op: 'create', type: 'pose', id: 'po' }], { origin: 'ai', note: 'base' });
     await a.applyOps('cara', [{ op: 'set', target: 'po', props: { values: { r: { x: 1 } } } }], { origin: 'ai', note: 'ai r' });
     await a.applyOps('cara', [{ op: 'set', target: 'po', props: { values: { r: { x: 1 }, q: { y: 2 } } } }], { origin: 'user', note: 'user q' });
@@ -109,16 +109,16 @@ test('en una pose, deshacer compara y restaura por objeto y propiedad, no la pos
 
 test('eliminar borra el documento y su historial, y avisa si no existe', () =>
   withStore(async (a) => {
-    await a.crear('borrame', {}, { origin: 'user' });
-    await a.eliminar('borrame');
+    await a.create('borrame', {}, { origin: 'user' });
+    await a.delete('borrame');
     assert.deepEqual(await a.list(), []);
     await assert.rejects(a.read('borrame'), /No existe/);
-    await assert.rejects(a.eliminar('borrame'), /No existe el documento "borrame"/);
+    await assert.rejects(a.delete('borrame'), /No existe el documento "borrame"/);
   }));
 
 test('en un clip, deshacer compara y restaura por pista, no el clip entero', () =>
   withStore(async (a) => {
-    await a.crear('clip', {}, { origin: 'user' });
+    await a.create('clip', {}, { origin: 'user' });
     await a.applyOps('clip', [{ op: 'create', type: 'rect', id: 'r' }, { op: 'create', type: 'animation', id: 'c', props: { usage: 'puppet' } }], { origin: 'ai', note: 'base' });
     const r = [{ t: 0, value: 1 }, { t: 1, value: 2 }];
     await a.applyOps('clip', [{ op: 'set', target: 'c', props: { tracks: { r: { x: r } } } }], { origin: 'ai', note: 'ai r.x' });
@@ -136,7 +136,7 @@ test('leer migra una escena vieja que anima params: pasa a Puppet una sola vez, 
   const folder = await mkdtemp(path.join(tmpdir(), 'aia-'));
   try {
     const a = createStore({ schema, folder });
-    await a.crear('viejo', { name: 'Viejo' }, { origin: 'user' });
+    await a.create('viejo', { name: 'Viejo' }, { origin: 'user' });
     await a.applyOps('viejo', [{ op: 'create', type: 'param', id: 'happiness' }, { op: 'create', type: 'animation', id: 'escena', props: { usage: 'puppet', duration: 1, tracks: { happiness: { value: [{ t: 0, value: 1 }] } } } }], { origin: 'user', note: 'clip' });
     // Como lo dejaba la versi처n de antes: una escena con pista de param (hoy no valida).
     const file = path.join(folder, 'viejo', 'document.json');

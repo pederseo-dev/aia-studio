@@ -46,7 +46,7 @@ export function mountInspector(root) {
     context = { others };
 
     root.replaceChildren(others.length ? severalTitle(obj, others) : obj ? title(obj, kind) : Object.assign(document.createElement('h2'), { textContent: 'Artboard' }));
-    if (others.length && !properties.length) root.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: 'No properties in common.' }));
+    if (others.length && !properties.length) root.append(Object.assign(document.createElement('p'), { className: 'help', textContent: 'No properties in common.' }));
     const pose = activePose();
     if (pose && obj && !others.length && !kind.resource) poseSection(obj, kind, pose);
 
@@ -63,8 +63,8 @@ export function mountInspector(root) {
         if (pair) {
           inPair.add(pair[0]);
           const row = document.createElement('div');
-          row.className = 'par';
-          const name = Object.assign(document.createElement('span'), { className: 'nombre-par', textContent: PAIR_NAMES[prop] ?? prop });
+          row.className = 'pair';
+          const name = Object.assign(document.createElement('span'), { className: 'name-pair', textContent: PAIR_NAMES[prop] ?? prop });
           row.append(name, field(target, data, prop, p, PAIR_LETTERS[prop]), field(target, data, pair[0], pair[1], PAIR_LETTERS[pair[0]]));
           root.append(row);
         } else {
@@ -85,7 +85,7 @@ export function mountInspector(root) {
     if (!animatable.length) return;
     const clip = openedClip();
     const title = clip ? `Clip “${clip.id}” at ${+state.time.toFixed(3)} s` : `Pose “${pose.id}”`;
-    root.append(Object.assign(document.createElement('h3'), { className: 'en-pose', textContent: title }));
+    root.append(Object.assign(document.createElement('h3'), { className: 'in-pose', textContent: title }));
     // En un clip, «fijado» es lo que tiene pista; el valor es el que se ve en el tiempo del playhead.
     const fixed = clip ? Object.fromEntries(Object.keys(clip.tracks?.[obj.id] ?? {}).map((k) => [k, pose.values?.[obj.id]?.[k]])) : (pose.values?.[obj.id] ?? {});
     const fromBone = obj.type === 'bone' ? boneValues(schema, obj, pose) : null;
@@ -97,7 +97,7 @@ export function mountInspector(root) {
       if (pair) {
         inPair.add(pair[0]);
         const row = document.createElement('div');
-        row.className = 'par';
+        row.className = 'pair';
         row.append(poseField(obj, pose, k, p, value(k), k in fixed), poseField(obj, pose, pair[0], pair[1], value(pair[0]), pair[0] in fixed));
         root.append(row);
       } else {
@@ -105,12 +105,12 @@ export function mountInspector(root) {
       }
     }
     const help = clip ? 'Changing a value keys it at the playhead (autokey); ↺ removes that keyframe. Below is the setup (the rest pose).' : 'Below is the setup (the rest pose).';
-    root.append(Object.assign(document.createElement('p'), { className: 'ayuda', textContent: help }));
+    root.append(Object.assign(document.createElement('p'), { className: 'help', textContent: help }));
   }
 
   function poseField(obj, pose, k, p, value, fixed) {
     const div = document.createElement('div');
-    div.className = `campo${fixed ? '' : ' por-defecto'}`;
+    div.className = `field${fixed ? '' : ' default'}`;
     div.dataset.prop = `pose.${k}`;
     const label = Object.assign(document.createElement('label'), { textContent: LABELS[k] ?? k });
     const inClip = !!openedClip();
@@ -121,7 +121,7 @@ export function mountInspector(root) {
       execute(change(v), `${editingName(pose.id)}: ${obj.id}.${k}`, { group: `pose:${pose.id}.${obj.id}.${k}` });
     };
     const control = CONTROLS[p.type]({ p, value, preview: (v) => preview(change(v)), commit, div, label, target: obj.id });
-    const reset = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: inClip ? 'Remove the keyframe at the playhead' : 'Remove from pose (back to setup)' });
+    const reset = Object.assign(document.createElement('button'), { type: 'button', className: 'reset', textContent: '↺', title: inClip ? 'Remove the keyframe at the playhead' : 'Remove from pose (back to setup)' });
     reset.addEventListener('click', () => execute(poseOps(state.doc, pose.id, obj.id, { [k]: undefined }), `${editingName(pose.id)}: ${obj.id}.${k} ${inClip ? 'key removed' : 'from setup'}`));
     div.append(label, control, reset);
     return div;
@@ -132,9 +132,9 @@ export function mountInspector(root) {
 
   function severalTitle(obj, others) {
     const div = document.createElement('div');
-    div.className = 'titulo-varios';
+    div.className = 'several-title';
     const names = [obj, ...others].map((o) => o.id);
-    div.innerHTML = `<h2>${names.length} objects</h2><p class="ayuda"></p>`;
+    div.innerHTML = `<h2>${names.length} objects</h2><p class="help"></p>`;
     div.querySelector('p').textContent = names.join(', ');
     div.title = `Primary: ${obj.id}. Changes apply to all.`;
     return div;
@@ -142,7 +142,7 @@ export function mountInspector(root) {
 
   function title(obj, kind) {
     const div = document.createElement('div');
-    div.className = 'campo';
+    div.className = 'field';
     div.dataset.prop = '__id';
     div.innerHTML = `<label title="${kind.help.replace(/"/g, '&quot;')}">${kind.name}</label><input type="text" aria-label="Id"><span></span>`;
     const input = div.querySelector('input');
@@ -159,19 +159,19 @@ export function mountInspector(root) {
 
   function field(target, data, prop, p, labelText) {
     const isObject = target !== 'meta';
-    const origin = isObject ? valueOrigin(state.doc, data, prop) : data[prop] !== undefined ? 'propio' : 'defecto';
+    const origin = isObject ? valueOrigin(state.doc, data, prop) : data[prop] !== undefined ? 'own' : 'defecto';
     const value = isObject ? effectiveValue(schema, state.doc, data, prop) : (data[prop] ?? p.default);
     const { others } = context;
     const targets = [target, ...others.map((o) => o.id)];
     const mixed = others.some((o) => JSON.stringify(effectiveValue(schema, state.doc, o, prop)) !== JSON.stringify(value));
     const div = document.createElement('div');
-    div.className = `campo${origin === 'defecto' ? ' por-defecto' : origin === 'estilo' ? ' por-defecto por-estilo' : ''}${mixed ? ' mixto' : ''}`;
+    div.className = `field${origin === 'defecto' ? ' default' : origin === 'style' ? ' default by-style' : ''}${mixed ? ' mixed' : ''}`;
     div.dataset.prop = prop;
     const label = document.createElement('label');
     label.textContent = labelText ?? prop;
-    const whence = origin === 'estilo' ? `\nFrom style "${data.style}".` : '';
+    const whence = origin === 'style' ? `\nFrom style "${data.style}".` : '';
     label.title = `${prop}: ${p.help ?? ''}${p.default !== undefined ? `\nDefault: ${JSON.stringify(p.default)}` : ''}${whence}${mixed ? `\nMixed values: showing ${target}.` : ''}`;
-    const reset = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '↺', title: 'Reset to default' });
+    const reset = Object.assign(document.createElement('button'), { type: 'button', className: 'reset', textContent: '↺', title: 'Reset to default' });
     const name = others.length ? `${targets.length} objects` : target;
 
     // El tamaño del lienzo cambia con el dibujo centrado, como la herramienta Artboard y Project Settings.
@@ -203,7 +203,7 @@ const CONTROLS = {
     const readInput = () => {
       const v = input.value === '' ? NaN : Number(input.value);
       const error = validateValue(p, v);
-      div.classList.toggle('invalido', !!error);
+      div.classList.toggle('invalid', !!error);
       input.title = error ?? '';
       return error ? null : v;
     };
@@ -215,7 +215,7 @@ const CONTROLS = {
       const v = readInput();
       if (v == null) {
         input.value = value;
-        div.classList.remove('invalido');
+        div.classList.remove('invalid');
         return preview(null);
       }
       commit(v);
@@ -229,7 +229,7 @@ const CONTROLS = {
     });
 
     // Arrastrar sobre el nombre cambia el valor: Shift = fino, Alt = grueso.
-    label.classList.add('arrastrable');
+    label.classList.add('draggable');
     label.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       label.setPointerCapture(e.pointerId);
@@ -324,7 +324,7 @@ const CONTROLS = {
     box.className = 'color vertices';
     const button = Object.assign(document.createElement('button'), { type: 'button', textContent: state.editing === target ? 'Done' : 'Edit points' });
     button.title = 'Or double-click the path, or press Enter';
-    button.addEventListener('click', () => setState(state.editing === target ? { editing: null, vertex: null } : { editing: target, selection: target, selected: [target], vertex: null, tool: 'seleccionar' }));
+    button.addEventListener('click', () => setState(state.editing === target ? { editing: null, vertex: null } : { editing: target, selection: target, selected: [target], vertex: null, tool: 'select' }));
     const summary = document.createElement('span');
     const curved = value.filter((v) => (v.mode ?? 'straight') !== 'straight').length;
     summary.textContent = `${value.length} points${curved ? `, ${curved} curved` : ''}`;
@@ -335,7 +335,7 @@ const CONTROLS = {
   // Una pose se edita en el lienzo: aquí se resume y se activa.
   pose({ value, target }) {
     const box = document.createElement('div');
-    box.className = 'resumen-pose';
+    box.className = 'summary-pose';
     const list = document.createElement('ul');
     for (const [bone, fields] of Object.entries(value)) {
       const li = document.createElement('li');
@@ -353,7 +353,7 @@ const CONTROLS = {
   // Las pistas de un clip se editan en la timeline: aquí solo se resumen.
   tracks({ value }) {
     const list = document.createElement('ul');
-    list.className = 'resumen-pose';
+    list.className = 'summary-pose';
     for (const [id, fields] of Object.entries(value ?? {})) {
       const li = document.createElement('li');
       li.textContent = `${id}: ${Object.entries(fields).map(([k, keys]) => `${k} (${keys.length} keys)`).join(', ')}`;
@@ -366,18 +366,18 @@ const CONTROLS = {
   // Paradas de un degradado: color, offset y quitar; más un botón para agregar.
   stops({ value, commit }) {
     const list = document.createElement('div');
-    list.className = 'lista-paradas';
+    list.className = 'stops-list';
     const change = (i, changes) => commit(value.map((s, j) => (j === i ? { ...s, ...changes } : s)).sort((a, b) => a.offset - b.offset));
     value.forEach((s, i) => {
       const row = document.createElement('div');
-      row.className = 'parada';
+      row.className = 'stop';
       const color = Object.assign(document.createElement('input'), { type: 'color', value: s.color.length === 4 ? '#' + [...s.color.slice(1)].map((d) => d + d).join('') : s.color.slice(0, 7) });
       color.addEventListener('change', () => change(i, { color: color.value }));
       const offset = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 1, step: 0.05, value: s.offset, title: 'Position, 0 to 1' });
       offset.addEventListener('change', () => change(i, { offset: Math.min(1, Math.max(0, Number(offset.value) || 0)) }));
       const opacity = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 1, step: 0.1, value: s.opacity ?? 1, title: 'Opacity' });
       opacity.addEventListener('change', () => change(i, { opacity: Math.min(1, Math.max(0, Number(opacity.value))) }));
-      const remove = Object.assign(document.createElement('button'), { type: 'button', className: 'restablecer', textContent: '×', title: 'Remove stop' });
+      const remove = Object.assign(document.createElement('button'), { type: 'button', className: 'reset', textContent: '×', title: 'Remove stop' });
       remove.style.visibility = value.length > 1 ? 'visible' : 'hidden';
       remove.addEventListener('click', () => commit(value.filter((_, j) => j !== i)));
       row.append(color, offset, opacity, remove);
@@ -392,10 +392,10 @@ const CONTROLS = {
   // El archivo de una capa image: miniatura, nombre, cambiarlo por otro y volver a su tamaño natural.
   asset({ value, target }) {
     const box = document.createElement('div');
-    box.className = 'campo-asset';
+    box.className = 'field-asset';
     const thumbnail = Object.assign(document.createElement('img'), { src: assetUrl(value), alt: '' });
-    thumbnail.addEventListener('error', () => box.classList.add('falta'), { once: true });
-    const name = Object.assign(document.createElement('span'), { className: 'nombre-asset', textContent: value, title: `${value} (missing from the document's assets if crossed out)` });
+    thumbnail.addEventListener('error', () => box.classList.add('missing'), { once: true });
+    const name = Object.assign(document.createElement('span'), { className: 'name-asset', textContent: value, title: `${value} (missing from the document's assets if crossed out)` });
     const file = Object.assign(document.createElement('input'), { type: 'file', hidden: true, accept: 'image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg' });
     file.addEventListener('change', () => {
       const [chosen] = imagesOnly(file.files);
@@ -406,7 +406,7 @@ const CONTROLS = {
     const natural = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Original size', title: 'Set width and height to the file’s own size' });
     natural.addEventListener('click', () => naturalSize(target));
     const buttons = document.createElement('div');
-    buttons.className = 'botones-asset';
+    buttons.className = 'buttons-asset';
     buttons.append(change, natural);
     box.append(thumbnail, name, buttons, file);
     return box;

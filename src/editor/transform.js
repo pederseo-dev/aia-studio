@@ -103,7 +103,7 @@ export function createTransform(ctx) {
     const xs = points.map((p) => p[0]);
     const ys = points.map((p) => p[1]);
     const [x0, y0, x1, y1] = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
-    return { corners: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], centro: [(x0 + x1) / 2, (y0 + y1) / 2], x0, y0, x1, y1 };
+    return { corners: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], center: [(x0 + x1) / 2, (y0 + y1) / 2], x0, y0, x1, y1 };
   }
 
   const several = () => state.selected.length > 1;
@@ -116,7 +116,7 @@ export function createTransform(ctx) {
     if (state.selected.some((id) => locked(state.doc, id))) {
       for (const id of state.selected) {
         const corners = cornersOf(ctx.element(id));
-        if (corners) ctx.overlay.append(ctx.crear('polygon', { class: 'seleccion secundaria', points: corners.map((p) => p.join(',')).join(' ') }, 'Locked: unlock it in Layers to edit it on the canvas'));
+        if (corners) ctx.overlay.append(ctx.create('polygon', { class: 'selection secondary', points: corners.map((p) => p.join(',')).join(' ') }, 'Locked: unlock it in Layers to edit it on the canvas'));
       }
       return;
     }
@@ -130,31 +130,31 @@ export function createTransform(ctx) {
     const [px, py] = [m.e, m.f];
     const movable = !state.pose && ['group', 'path', 'rect', 'ellipse', 'image'].includes(obj.type);
     ctx.overlay.append(
-      ctx.crear('circle', { class: movable ? 'pivote manija' : 'pivote', 'data-manija': movable ? 'pivote' : '', cx: px, cy: py, r: 5 }, movable ? 'Move the pivot without moving the drawing' : 'Pivot'),
+      ctx.create('circle', { class: movable ? 'pivot handle' : 'pivot', 'data-handle': movable ? 'pivot' : '', cx: px, cy: py, r: 5 }, movable ? 'Move the pivot without moving the drawing' : 'Pivot'),
     );
   }
 
   function drawSeveral() {
     const lists = state.selected.map((id) => cornersOf(ctx.element(id))).filter(Boolean);
-    for (const corners of lists) ctx.overlay.append(ctx.crear('polygon', { class: 'seleccion secundaria', points: corners.map((p) => p.join(',')).join(' ') }));
+    for (const corners of lists) ctx.overlay.append(ctx.create('polygon', { class: 'selection secondary', points: corners.map((p) => p.join(',')).join(' ') }));
     const box = enclosing(lists);
     if (!box) return;
     boxHandles(box.corners);
-    ctx.overlay.append(ctx.crear('circle', { class: 'pivote', cx: box.centro[0], cy: box.centro[1], r: 4 }, `${state.selected.length} objects: rotate and scale from the center`));
+    ctx.overlay.append(ctx.create('circle', { class: 'pivot', cx: box.center[0], cy: box.center[1], r: 4 }, `${state.selected.length} objects: rotate and scale from the center`));
   }
 
   function boxHandles(corners) {
-    ctx.overlay.append(ctx.crear('polygon', { class: 'seleccion', points: corners.map((p) => p.join(',')).join(' ') }));
+    ctx.overlay.append(ctx.create('polygon', { class: 'selection', points: corners.map((p) => p.join(',')).join(' ') }));
     // Manija de rotar: por encima del borde superior.
     const top = [(corners[0][0] + corners[1][0]) / 2, (corners[0][1] + corners[1][1]) / 2];
     const side = [corners[0][0] - corners[3][0], corners[0][1] - corners[3][1]];
     const l = Math.hypot(...side) || 1;
     const rotate = [top[0] + (side[0] / l) * 26, top[1] + (side[1] / l) * 26];
-    ctx.overlay.append(ctx.crear('line', { class: 'seleccion', x1: top[0], y1: top[1], x2: rotate[0], y2: rotate[1] }));
-    ctx.overlay.append(ctx.crear('circle', { class: 'manija', 'data-manija': 'rotar', cx: rotate[0], cy: rotate[1], r: 5 }, 'Rotate (Shift: 15° steps)'));
+    ctx.overlay.append(ctx.create('line', { class: 'selection', x1: top[0], y1: top[1], x2: rotate[0], y2: rotate[1] }));
+    ctx.overlay.append(ctx.create('circle', { class: 'handle', 'data-handle': 'rotate', cx: rotate[0], cy: rotate[1], r: 5 }, 'Rotate (Shift: 15° steps)'));
     const help = several() ? 'Scale the set from its center' : 'Scale from the pivot (Shift: proportional)';
     corners.forEach(([x, y], i) => {
-      ctx.overlay.append(ctx.crear('rect', { class: 'manija', 'data-manija': `escalar-${i}`, x: x - 4, y: y - 4, width: 8, height: 8 }, help));
+      ctx.overlay.append(ctx.create('rect', { class: 'handle', 'data-handle': `scale${i}`, x: x - 4, y: y - 4, width: 8, height: 8 }, help));
     });
   }
 
@@ -209,7 +209,7 @@ export function createTransform(ctx) {
   function marquee(e, add) {
     const base = add ? [...state.selected] : [];
     const s0 = ctx.screenPoint(e);
-    const frame = ctx.crear('rect', { class: 'recuadro' });
+    const frame = ctx.create('rect', { class: 'marquee' });
     // Cajas de las formas visibles (no contenedores: se elige lo que se ve, como con el clic).
     const shapes = [...ctx.documentG.querySelectorAll('[data-id]')]
       .filter((el) => !['group', 'skeleton', 'switch'].includes(findObject(state.doc, el.dataset.id)?.type) && !locked(state.doc, el.dataset.id))
@@ -242,7 +242,7 @@ export function createTransform(ctx) {
   function handle(e, kind) {
     if (roots().length > 1) return multiHandle(e, kind);
     const id = state.selection;
-    if (state.pose && (kind === 'pivote' || !isFree(state.doc, id))) return;
+    if (state.pose && (kind === 'pivot' || !isFree(state.doc, id))) return;
     const doc = seen();
     const obj = findObject(doc, id);
     const parent = multiply(ctx.cameraMatrix(), worldMatrix(doc, schema, obj.parent ?? null));
@@ -255,7 +255,7 @@ export function createTransform(ctx) {
     let ops = null;
     const finish = (note) => () => (ops ? save(ops, note) : preview(null));
 
-    if (kind === 'rotar') {
+    if (kind === 'rotate') {
       const direction = directionOf(parent);
       const angle = (p) => Math.atan2(p[1] - pivot[1], p[0] - pivot[0]) * DEGREES;
       const a0 = angle(ctx.screenPoint(e));
@@ -271,7 +271,7 @@ export function createTransform(ctx) {
       );
     }
 
-    if (kind === 'escalar-libre') {
+    if (kind === 'scale-free') {
       // Herramienta Escalar: arrastrar en cualquier lugar escala de forma proporcional según la distancia al pivote.
       const distance = (p) => Math.hypot(p[0] - pivot[0], p[1] - pivot[1]);
       const d0 = Math.max(distance(ctx.screenPoint(e)), 8);
@@ -286,7 +286,7 @@ export function createTransform(ctx) {
       );
     }
 
-    if (kind.startsWith('escalar')) {
+    if (kind.startsWith('scale')) {
       // Coordenadas del objeto girado pero sin su escala: así el cociente da la escala nueva.
       const frame = invert(multiply(parent, localMatrix(schema, { ...obj, scaleX: 1, scaleY: 1 })));
       const p0 = apply(frame, ...ctx.screenPoint(e));
@@ -307,7 +307,7 @@ export function createTransform(ctx) {
       );
     }
 
-    if (kind === 'pivote') {
+    if (kind === 'pivot') {
       // Mueve el pivote y compensa el contenido (hijos o vértices) para que el dibujo no se mueva.
       const parentInverse = invert(parent);
       const linear = invert([...localMatrix(schema, obj).slice(0, 4), 0, 0]);
@@ -347,7 +347,7 @@ export function createTransform(ctx) {
     const ids = roots();
     const box = enclosing(ids.map((id) => cornersOf(ctx.element(id))).filter(Boolean));
     if (!box) return;
-    const c = box.centro;
+    const c = box.center;
     const doc = seen();
     const objects = ids.map((id) => {
       const obj = findObject(doc, id);
@@ -360,9 +360,9 @@ export function createTransform(ctx) {
       return { x: round(x), y: round(y) };
     };
     let ops = null;
-    const note = `${kind === 'rotar' ? 'rotate' : 'scale'} ${objects.length} objects`;
+    const note = `${kind === 'rotate' ? 'rotate' : 'scale'} ${objects.length} objects`;
 
-    if (kind === 'rotar') {
+    if (kind === 'rotate') {
       const angle = (p) => Math.atan2(p[1] - c[1], p[0] - c[0]) * DEGREES;
       const a0 = angle(ctx.screenPoint(e));
       return ctx.drag(
@@ -382,7 +382,7 @@ export function createTransform(ctx) {
       );
     }
 
-    if (kind.startsWith('escalar')) {
+    if (kind.startsWith('scale')) {
       const distance = (p) => Math.hypot(p[0] - c[0], p[1] - c[1]);
       const d0 = Math.max(distance(ctx.screenPoint(e)), 8);
       return ctx.drag(
@@ -408,7 +408,7 @@ export function createTransform(ctx) {
     const g = e.target.closest('[data-id]');
     if (g && ctx.documentG.contains(g) && !state.selected.includes(g.dataset.id)) select(g.dataset.id);
     if (!state.selection) return;
-    handle(e, tool === 'rotar' ? 'rotar' : 'escalar-libre');
+    handle(e, tool === 'rotate' ? 'rotate' : 'scale-free');
   }
 
   return { draw, selectAndMove, handle, withTool };

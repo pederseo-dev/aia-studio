@@ -53,13 +53,13 @@ export function mountPoses(root, list, newButton, deleteButton) {
     if (root.hidden) return;
     const poses = doc.objects.filter((o) => o.type === 'pose');
     if (!poses.length) {
-      list.innerHTML = '<p class="ayuda">No poses yet. A pose is a still shape of the puppet (happy, eyes closed, mouth O…). Create one with + above, change it on the canvas, then blend it with a parameter.</p>';
+      list.innerHTML = '<p class="help">No poses yet. A pose is a still shape of the puppet (happy, eyes closed, mouth O…). Create one with + above, change it on the canvas, then blend it with a parameter.</p>';
       return;
     }
     list.replaceChildren(
       ...poses.map((pose) => {
         const open = state.pose === pose.id;
-        const row = Object.assign(document.createElement('button'), { type: 'button', className: `pose-fila${open ? ' abierta' : ''}`, disabled: state.live });
+        const row = Object.assign(document.createElement('button'), { type: 'button', className: `pose-row${open ? ' open' : ''}`, disabled: state.live });
         const params = poseParams(doc, pose.id);
         row.innerHTML = '<b></b><small></small>';
         row.querySelector('b').textContent = pose.id;
@@ -92,7 +92,7 @@ export function mountBanner(el) {
     /** @type {[string, string, () => void] | null} */
     let button;
     if (state.live) {
-      [className, text] = ['vivo', '<b>● Live</b>: the puppet as the app sees it. Nothing is saved.'];
+      [className, text] = ['live', '<b>● Live</b>: the puppet as the app sees it. Nothing is saved.'];
       button = ['■ Stop Live', 'Turn Live off and go back to editing', toggleLive];
     } else if (open?.type === 'animation') {
       [className, text] = ['clip', `Editing clip <b></b> at ${+state.time.toFixed(2)} s: every change is a keyframe at the playhead.`];
@@ -104,7 +104,7 @@ export function mountBanner(el) {
       [className, text] = ['params', 'Previewing <b>parameters</b>: the canvas shows the poses they blend. To change a pose, open it under Poses.'];
       button = null; // Reset está en la barra de Puppet, arriba de Clips
     }
-    el.className = `cartel-${className}`;
+    el.className = `banner${className}`;
     el.innerHTML = `<span>${text}</span>`;
     if (className === 'clip' || className === 'pose') el.querySelector('span b').textContent = open.id;
     if (!button) return;

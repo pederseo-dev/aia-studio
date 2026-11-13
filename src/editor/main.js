@@ -25,31 +25,31 @@ import {
 
 const $ = (s) => document.querySelector(s);
 // Íconos fijos del HTML: data-icono los pone al principio del elemento y data-flecha es la flecha de un desplegable.
-for (const el of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-icono]'))) el.insertAdjacentHTML('afterbegin', ICONOS[el.dataset.icono]);
+for (const el of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-icon]'))) el.insertAdjacentHTML('afterbegin', ICONOS[el.dataset.icon]);
 for (const el of document.querySelectorAll('[data-flecha]')) el.innerHTML = FLECHA;
 
-mountTree($('#arbol'), $('#recursos'));
+mountTree($('#tree'), $('#resources'));
 mountInspector($('#inspector'));
-mountHistory($('#entradas'));
-const canvas = mountCanvas($('#lienzo'));
-mountOptions($('#opciones'), { projectSettings: () => showSettings(), group: () => groupSelection(), switch: () => newSwitch(), esqueleto: () => newSkeleton(), bind: () => bindSelection(), bindAll: bindByProximity });
-mountParameters($('#parametros'), $('#nuevo-param'), $('#borrar-param'));
-mountModes($('#modos'));
-mountClips($('#clips'), $('#lista-clips'), $('#nuevo-clip'), $('#live'), $('#ver-manifiesto'), $('#borrar-clip'));
-mountPoses($('#seccion-poses'), $('#lista-poses'), $('#nueva-pose'), $('#borrar-pose'));
+mountHistory($('#entries'));
+const canvas = mountCanvas($('#canvas'));
+mountOptions($('#options'), { projectSettings: () => showSettings(), group: () => groupSelection(), switch: () => newSwitch(), skeleton: () => newSkeleton(), bind: () => bindSelection(), bindAll: bindByProximity });
+mountParameters($('#parameters'), $('#new-param'), $('#delete-param'));
+mountModes($('#modes'));
+mountClips($('#clips'), $('#list-clips'), $('#new-clip'), $('#live'), $('#show-manifest'), $('#delete-clip'));
+mountPoses($('#section-poses'), $('#list-poses'), $('#new-pose'), $('#delete-pose'));
 $('#reset-params').addEventListener('click', resetParams);
-mountBanner($('#cartel'));
+mountBanner($('#banner'));
 
 // Clips, Parameters y Poses (Puppet) se pliegan con la flecha del título; se recuerda lo que elija el usuario.
-for (const section of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-plegable]'))) {
-  const key = `aia:plegado:${section.dataset.plegable}`;
-  const button = section.querySelector('.plegar-seccion');
+for (const section of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-foldable]'))) {
+  const key = `aia:folded:${section.dataset.foldable}`;
+  const button = section.querySelector('.fold-section');
   const fold = (folded) => {
-    section.classList.toggle('plegada', folded);
+    section.classList.toggle('folded', folded);
     button.setAttribute('aria-expanded', String(!folded));
   };
   button.addEventListener('click', () => {
-    const folded = !section.classList.contains('plegada');
+    const folded = !section.classList.contains('folded');
     try {
       localStorage.setItem(key, folded ? '1' : '0');
     } catch {}
@@ -64,7 +64,7 @@ mountTimeline($('#timeline'));
 // Abajo, la timeline ocupa todo el panel (Design no tiene). Los params son del muñeco: el panel Parameters, a la
 // derecha, está solo en Puppet. Una escena de Animate no anima params; keya los valores mismos.
 function drawParameters() {
-  $('#seccion-parametros').hidden = state.mode !== 'puppet';
+  $('#parameters-section').hidden = state.mode !== 'puppet';
 }
 subscribe((c) => {
   if ('mode' in c || 'doc' in c) drawParameters();
@@ -75,7 +75,7 @@ drawParameters();
 
 // History plegable: en Animate y Puppet arranca plegado para dejarle lugar al inspector y a los paneles de animación.
 // Lo que elija el usuario se recuerda por modo.
-const historyKey = () => `aia:historial-plegado:${state.mode}`;
+const historyKey = () => `aia:folded-history:${state.mode}`;
 function foldedHistory() {
   try {
     const saved = localStorage.getItem(historyKey());
@@ -84,11 +84,11 @@ function foldedHistory() {
   return state.mode !== 'design';
 }
 function foldHistory(folded) {
-  document.body.classList.toggle('historial-plegado', folded);
-  $('#plegar-historial').setAttribute('aria-expanded', String(!folded));
+  document.body.classList.toggle('folded-history', folded);
+  $('#fold-history').setAttribute('aria-expanded', String(!folded));
 }
-$('#plegar-historial').addEventListener('click', () => {
-  const folded = !document.body.classList.contains('historial-plegado');
+$('#fold-history').addEventListener('click', () => {
+  const folded = !document.body.classList.contains('folded-history');
   try {
     localStorage.setItem(historyKey(), folded ? '1' : '0');
   } catch {}
@@ -99,34 +99,34 @@ foldHistory(foldedHistory());
 
 // Layers plegable (abierto por defecto), como Assets; se recuerda lo que elija el usuario.
 function foldLayers(folded) {
-  document.body.classList.toggle('capas-plegado', folded);
-  $('#plegar-capas').setAttribute('aria-expanded', String(!folded));
+  document.body.classList.toggle('folded-layers', folded);
+  $('#fold-layers').setAttribute('aria-expanded', String(!folded));
 }
-$('#plegar-capas').addEventListener('click', () => {
-  const folded = !document.body.classList.contains('capas-plegado');
+$('#fold-layers').addEventListener('click', () => {
+  const folded = !document.body.classList.contains('folded-layers');
   try {
-    localStorage.setItem('aia:capas-plegado', folded ? '1' : '0');
+    localStorage.setItem('aia:folded-layers', folded ? '1' : '0');
   } catch {}
   foldLayers(folded);
 });
 try {
-  foldLayers(localStorage.getItem('aia:capas-plegado') === '1');
+  foldLayers(localStorage.getItem('aia:folded-layers') === '1');
 } catch {}
 
 // Assets plegable (abierto por defecto); se recuerda lo que elija el usuario.
 function foldResources(folded) {
-  document.body.classList.toggle('recursos-plegado', folded);
-  $('#plegar-recursos').setAttribute('aria-expanded', String(!folded));
+  document.body.classList.toggle('folded-resources', folded);
+  $('#fold-resources').setAttribute('aria-expanded', String(!folded));
 }
-$('#plegar-recursos').addEventListener('click', () => {
-  const folded = !document.body.classList.contains('recursos-plegado');
+$('#fold-resources').addEventListener('click', () => {
+  const folded = !document.body.classList.contains('folded-resources');
   try {
-    localStorage.setItem('aia:recursos-plegado', folded ? '1' : '0');
+    localStorage.setItem('aia:folded-resources', folded ? '1' : '0');
   } catch {}
   foldResources(folded);
 });
 try {
-  foldResources(localStorage.getItem('aia:recursos-plegado') === '1');
+  foldResources(localStorage.getItem('aia:folded-resources') === '1');
 } catch {}
 
 // ---------- Menús desplegables (menú principal, zoom, grupos de herramientas) ----------
@@ -138,9 +138,9 @@ function toggleMenu(menu, button) {
   menu.hidden = false;
   button?.setAttribute('aria-expanded', 'true');
   // Posición fija junto al desplegable: así un panel con overflow (la jerarquía) no recorta el menú.
-  const box = (menu.closest('.desplegable') ?? button).getBoundingClientRect();
+  const box = (menu.closest('.dropdown') ?? button).getBoundingClientRect();
   const width = menu.offsetWidth;
-  const left = menu.classList.contains('derecha') ? box.right - width : box.left;
+  const left = menu.classList.contains('right') ? box.right - width : box.left;
   menu.style.left = `${Math.max(4, Math.min(left, innerWidth - width - 4))}px`;
   menu.style.top = `${box.bottom + 4}px`;
 }
@@ -152,18 +152,18 @@ function closeMenus() {
 }
 
 document.addEventListener('pointerdown', (e) => {
-  if (!(/** @type {Element} */ (e.target)).closest('.desplegable')) closeMenus();
+  if (!(/** @type {Element} */ (e.target)).closest('.dropdown')) closeMenus();
 });
 
 // ---------- Menú principal ----------
 
 const ACTIONS = {
-  nuevo: () => newDocument(),
-  abrir: showOpen,
-  copiar: () => newDocument(state.id),
-  importar: () => $('#archivo-svg').click(),
-  cerrar: () => closeTab(state.id),
-  eliminar: async () => {
+  new: () => newDocument(),
+  open: showOpen,
+  copy: () => newDocument(state.id),
+  import: () => $('#svg-file').click(),
+  close: () => closeTab(state.id),
+  delete: async () => {
     const d = state.documents.find((x) => x.id === state.id);
     if (!confirm(`Delete “${d?.name ?? state.id}” and all its history? This can’t be undone.`)) return;
     try {
@@ -173,8 +173,8 @@ const ACTIONS = {
       notify(err.message, true);
     }
   },
-  atajos: () => $('#dialogo-atajos').showModal(),
-  ajustes: () => showSettings(),
+  shortcuts: () => $('#shortcuts-dialog').showModal(),
+  settings: () => showSettings(),
 };
 
 // ---------- Project Settings (como File → Project Settings de Moho) ----------
@@ -182,22 +182,22 @@ const ACTIONS = {
 /** Diálogo con las propiedades del documento. El tamaño cambia con el dibujo centrado, igual que la herramienta Artboard. */
 function showSettings() {
   if (!state.doc) return;
-  const f = $('#form-ajustes').elements;
+  const f = $('#form-settings').elements;
   const meta = (p) => readMeta(schema, state.doc, p);
   f.name.value = meta('name');
   f.width.value = meta('width');
   f.height.value = meta('height');
   f.fps.value = meta('fps');
   const background = meta('background');
-  f.transparente.checked = background == null;
+  f.transparent.checked = background == null;
   f.background.value = background ?? schema.meta.properties.background.default;
   f.background.disabled = background == null;
-  $('#dialogo-ajustes').showModal();
+  $('#settings-dialog').showModal();
 }
-$('#form-ajustes').elements.transparente.addEventListener('change', (e) => ($('#form-ajustes').elements.background.disabled = e.target.checked));
-$('#form-ajustes [data-cerrar]').addEventListener('click', () => $('#dialogo-ajustes').close());
-$('#form-ajustes').addEventListener('submit', () => {
-  const f = $('#form-ajustes').elements;
+$('#form-settings').elements.transparent.addEventListener('change', (e) => ($('#form-settings').elements.background.disabled = e.target.checked));
+$('#form-settings [data-close]').addEventListener('click', () => $('#settings-dialog').close());
+$('#form-settings').addEventListener('submit', () => {
+  const f = $('#form-settings').elements;
   const doc = state.doc;
   if (!doc) return;
   const meta = (p) => readMeta(schema, doc, p);
@@ -207,55 +207,55 @@ $('#form-ajustes').addEventListener('submit', () => {
   const props = {};
   const name = f.name.value.trim();
   if (name && name !== meta('name')) props.name = name;
-  const background = f.transparente.checked ? null : f.background.value;
+  const background = f.transparent.checked ? null : f.background.value;
   if (background !== meta('background')) props.background = background;
   if (Number(f.fps.value) !== meta('fps')) props.fps = Number(f.fps.value);
   if (Object.keys(props).length) ops.push({ op: 'set', target: 'meta', props });
   if (ops.length) execute(ops, 'project settings');
 });
 
-$('#menu-boton').addEventListener('click', () => toggleMenu($('#menu'), $('#menu-boton')));
+$('#menu-button').addEventListener('click', () => toggleMenu($('#menu'), $('#menu-button')));
 $('#menu').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-accion]');
+  const b = e.target.closest('[data-action]');
   if (!b || b.disabled) return;
   closeMenus();
-  ACTIONS[b.dataset.accion]();
+  ACTIONS[b.dataset.action]();
 });
-$('#nueva-pestana').addEventListener('click', () => newDocument());
+$('#tab-new').addEventListener('click', () => newDocument());
 
 function showOpen() {
-  const list = $('#lista-documentos');
+  const list = $('#documents-list');
   list.replaceChildren(
     ...state.documents.map((d) => {
       const li = document.createElement('li');
-      li.innerHTML = '<button type="button"><span class="nombre"></span><span class="id"></span></button>';
-      li.querySelector('.nombre').textContent = d.name;
+      li.innerHTML = '<button type="button"><span class="name"></span><span class="id"></span></button>';
+      li.querySelector('.name').textContent = d.name;
       li.querySelector('.id').textContent = state.tabs.includes(d.id) ? `${d.id} · open` : d.id;
       li.querySelector('button').addEventListener('click', () => {
-        $('#dialogo-abrir').close();
+        $('#dialog-open').close();
         open(d.id);
       });
       return li;
     }),
   );
-  if (!state.documents.length) list.innerHTML = '<li class="ayuda">No files yet.</li>';
-  $('#dialogo-abrir').showModal();
+  if (!state.documents.length) list.innerHTML = '<li class="help">No files yet.</li>';
+  $('#dialog-open').showModal();
 }
 
 // ---------- Pestañas ----------
 
 function drawTabs() {
-  $('#pestanas').replaceChildren(
+  $('#tabs').replaceChildren(
     ...state.tabs.map((id) => {
       const d = state.documents.find((x) => x.id === id);
       const tab = document.createElement('div');
-      tab.className = `pestana${id === state.id ? ' activa' : ''}`;
+      tab.className = `tab${id === state.id ? ' active' : ''}`;
       tab.setAttribute('role', 'tab');
       tab.setAttribute('aria-selected', String(id === state.id));
       tab.title = id;
-      tab.innerHTML = '<span class="titulo"></span><button type="button" class="cerrar" title="Close tab (the document is not deleted)">×</button>';
-      tab.querySelector('.titulo').textContent = d?.name ?? id;
-      tab.addEventListener('click', (e) => ((/** @type {Element} */ (e.target)).closest('.cerrar') ? closeTab(id) : id !== state.id && open(id)));
+      tab.innerHTML = '<span class="title"></span><button type="button" class="close" title="Close tab (the document is not deleted)">×</button>';
+      tab.querySelector('.title').textContent = d?.name ?? id;
+      tab.addEventListener('click', (e) => ((/** @type {Element} */ (e.target)).closest('.close') ? closeTab(id) : id !== state.id && open(id)));
       // Clic con la rueda también cierra, como en el navegador.
       tab.addEventListener('auxclick', (e) => e.button === 1 && closeTab(id));
       return tab;
@@ -266,37 +266,37 @@ function drawTabs() {
 // ---------- Grupos de herramientas ----------
 
 const GROUPS = {
-  transformar: [
-    { id: 'seleccionar', name: 'Move', shortcut: 'V' },
-    { id: 'rotar', name: 'Rotate', shortcut: 'T' },
-    { id: 'escalar', name: 'Scale', shortcut: 'S' },
+  transform: [
+    { id: 'select', name: 'Move', shortcut: 'V' },
+    { id: 'rotate', name: 'Rotate', shortcut: 'T' },
+    { id: 'scale', name: 'Scale', shortcut: 'S' },
   ],
-  lienzo: [{ id: 'artboard', name: 'Artboard', shortcut: 'A' }],
-  crear: [
+  canvas: [{ id: 'artboard', name: 'Artboard', shortcut: 'A' }],
+  create: [
     { id: 'path', name: 'Pen', shortcut: 'P' },
     { id: 'rect', name: 'Rectangle', shortcut: 'R' },
     { id: 'ellipse', name: 'Ellipse', shortcut: 'E' },
   ],
-  esqueleto: [
-    { id: 'hueso', name: 'Add Bone', shortcut: 'B', icon: 'agregarHueso' },
-    { id: 'manipular', name: 'Manipulate Bones', shortcut: 'M' },
-    { id: 'reparentar', name: 'Reparent Bone', icon: 'reparentar' },
-    { id: 'enlazarCapa', name: 'Bind Layer', shortcut: 'L' },
-    { id: 'enlazarPuntos', name: 'Bind Points' },
+  skeleton: [
+    { id: 'bone', name: 'Add Bone', shortcut: 'B', icon: 'addBone' },
+    { id: 'manipulate', name: 'Manipulate Bones', shortcut: 'M' },
+    { id: 'reparent', name: 'Reparent Bone', icon: 'reparent' },
+    { id: 'bindLayer', name: 'Bind Layer', shortcut: 'L' },
+    { id: 'bindPoints', name: 'Bind Points' },
   ],
 };
-const lastInGroup = { transformar: 'seleccionar', lienzo: 'artboard', crear: 'path', esqueleto: 'hueso' };
+const lastInGroup = { transform: 'select', canvas: 'artboard', create: 'path', skeleton: 'bone' };
 const SHORTCUTS = Object.fromEntries(Object.values(GROUPS).flat().filter((h) => h.shortcut).map((h) => [h.shortcut.toLowerCase(), h.id]));
 
 function drawGroups() {
   for (const [group, tools] of Object.entries(GROUPS)) {
-    const box = document.querySelector(`[data-grupo="${group}"]`);
+    const box = document.querySelector(`[data-group="${group}"]`);
     const active = tools.find((h) => h.id === state.tool);
     if (active) lastInGroup[group] = active.id;
     const visible = tools.find((h) => h.id === lastInGroup[group]);
-    box.classList.toggle('activo', !!active);
-    box.innerHTML = `<button type="button" class="principal" title="${visible.name}${visible.shortcut ? ` (${visible.shortcut})` : ''}" aria-label="${visible.name}">${ICONOS[visible.icon ?? visible.id]}</button>${tools.length > 1 ? `<button type="button" class="elegir" aria-haspopup="menu" title="More tools">${FLECHA}</button><div class="menu" role="menu" hidden></div>` : ''}`;
-    box.querySelector('.principal').addEventListener('click', () => setState({ tool: visible.id }));
+    box.classList.toggle('active', !!active);
+    box.innerHTML = `<button type="button" class="main" title="${visible.name}${visible.shortcut ? ` (${visible.shortcut})` : ''}" aria-label="${visible.name}">${ICONOS[visible.icon ?? visible.id]}</button>${tools.length > 1 ? `<button type="button" class="choose" aria-haspopup="menu" title="More tools">${FLECHA}</button><div class="menu" role="menu" hidden></div>` : ''}`;
+    box.querySelector('.main').addEventListener('click', () => setState({ tool: visible.id }));
     // Una herramienta sola (Artboard) no lleva menú.
     if (tools.length === 1) continue;
     const menu = box.querySelector('.menu');
@@ -304,15 +304,15 @@ function drawGroups() {
       const b = document.createElement('button');
       b.type = 'button';
       b.setAttribute('role', 'menuitem');
-      b.className = h.id === state.tool ? 'marcado' : '';
-      b.innerHTML = `<span class="con-icono">${ICONOS[h.icon ?? h.id]}${h.name}</span>${h.shortcut ? `<kbd>${h.shortcut}</kbd>` : ''}`;
+      b.className = h.id === state.tool ? 'marked' : '';
+      b.innerHTML = `<span class="with-icon">${ICONOS[h.icon ?? h.id]}${h.name}</span>${h.shortcut ? `<kbd>${h.shortcut}</kbd>` : ''}`;
       b.addEventListener('click', () => {
         closeMenus();
         setState({ tool: h.id });
       });
       menu.append(b);
     }
-    box.querySelector('.elegir').addEventListener('click', (e) => toggleMenu(menu, e.currentTarget));
+    box.querySelector('.choose').addEventListener('click', (e) => toggleMenu(menu, e.currentTarget));
   }
 }
 
@@ -323,7 +323,7 @@ $('#menu-zoom').addEventListener('click', (e) => {
   const b = e.target.closest('[data-zoom]');
   if (!b) return;
   closeMenus();
-  if (b.dataset.zoom === 'ajustar') canvas.adjust();
+  if (b.dataset.zoom === 'adjust') canvas.adjust();
   else canvas.setZoom(Number(b.dataset.zoom));
 });
 
@@ -335,11 +335,11 @@ subscribe((c) => {
   // Con Artboard, lo elegido es el lienzo: el inspector muestra sus propiedades.
   if ('tool' in c && state.tool === 'artboard' && state.selected.length) select(null);
   if ('id' in c) {
-    for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('[data-requiere-doc]'))) b.disabled = !state.id;
-    $('#lienzo .sin-documento')?.toggleAttribute('hidden', !!state.id);
+    for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('[data-requires-doc]'))) b.disabled = !state.id;
+    $('#canvas .no-document')?.toggleAttribute('hidden', !!state.id);
   }
-  if ('selection' in c || 'doc' in c) $('#borrar').disabled = $('#duplicar').disabled = !state.selected.length;
-  if ('selection' in c || 'doc' in c) $('#borrar-recurso').disabled = !selectedResources().length;
+  if ('selection' in c || 'doc' in c) $('#delete').disabled = $('#duplicate').disabled = !state.selected.length;
+  if ('selection' in c || 'doc' in c) $('#delete-resource').disabled = !selectedResources().length;
   // Si algo de la selección desapareció (por ejemplo, la IA borró el objeto), se quita.
   if ('doc' in c && state.doc && state.selected.some((id) => !findObject(state.doc, id))) {
     const remain = state.selected.filter((id) => findObject(state.doc, id));
@@ -347,26 +347,26 @@ subscribe((c) => {
   }
 });
 
-$('#borrar').addEventListener('click', deleteSelection);
-$('#borrar-recurso').addEventListener('click', deleteResources);
+$('#delete').addEventListener('click', deleteSelection);
+$('#delete-resource').addEventListener('click', deleteResources);
 // Grupo, switch y skeleton: un solo botón (carpeta con +) que abre el menú para elegir qué crear.
 const CONTAINERS = {
   group: () => (state.selected.length > 1 ? groupSelection() : newGroup()),
   switch: () => newSwitch(),
   skeleton: () => newSkeleton(),
-  image: () => $('#archivo-imagen').click(),
+  image: () => $('#image-file').click(),
 };
-$('#nuevo-grupo').addEventListener('click', (e) => toggleMenu($('#crear-grupo .menu'), e.currentTarget));
-$('#crear-grupo .menu').addEventListener('click', (e) => {
-  const kind = e.target.closest('[data-tipo]')?.dataset.tipo;
+$('#group-new').addEventListener('click', (e) => toggleMenu($('#create-group .menu'), e.currentTarget));
+$('#create-group .menu').addEventListener('click', (e) => {
+  const kind = e.target.closest('[data-type]')?.dataset.type;
   if (!kind) return;
   closeMenus();
   CONTAINERS[kind]();
 });
-$('#duplicar').addEventListener('click', duplicateSelection);
-$('#nuevo-estilo').addEventListener('click', () => newResource('style', 'style', { fill: '#c8c2d4', stroke: '#2b2135' }));
-$('#nuevo-degradado').addEventListener('click', () => newResource('linear_gradient', 'gradient'));
-$('#archivo-imagen').addEventListener('change', (e) => {
+$('#duplicate').addEventListener('click', duplicateSelection);
+$('#style-new').addEventListener('click', () => newResource('style', 'style', { fill: '#c8c2d4', stroke: '#2b2135' }));
+$('#gradient-new').addEventListener('click', () => newResource('linear_gradient', 'gradient'));
+$('#image-file').addEventListener('change', (e) => {
   const files = imagesOnly(e.target.files);
   e.target.value = '';
   addImages(files);
@@ -378,7 +378,7 @@ document.addEventListener('paste', (e) => {
   e.preventDefault();
   addImages(files);
 });
-$('#archivo-svg').addEventListener('change', async (e) => {
+$('#svg-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   e.target.value = '';
   if (!file || !state.doc) return;
@@ -531,12 +531,12 @@ async function newDocument(copyFrom) {
   const name = prompt(copyFrom ? 'Name of the copy:' : 'New file name:', current ? `${current.name} (copy)` : '')?.trim();
   if (!name) return;
   const base = name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-  const root = /^[a-z]/.test(base) ? base : `doc_${base || 'nuevo'}`;
+  const root = /^[a-z]/.test(base) ? base : `doc_${base || 'new'}`;
   const ids = new Set(state.documents.map((d) => d.id));
   let id = root;
   for (let n = 2; ids.has(id); n++) id = `${root}_${n}`;
   try {
-    await api.crear(id, { name: name }, copyFrom);
+    await api.create(id, { name: name }, copyFrom);
     await loadDocuments();
     await open(id);
   } catch (e) {
@@ -600,7 +600,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Escape') {
     if (state.editing) return exitEditing();
-    return state.tool !== 'seleccionar' ? setState({ tool: 'seleccionar' }) : select(null);
+    return state.tool !== 'select' ? setState({ tool: 'select' }) : select(null);
   }
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (state.editing) return canvas.points.deleteVertex();
@@ -657,7 +657,7 @@ import.meta.hot?.on('aia:history', ({ id }) => id === state.id && refreshHistory
 
 // ---------- Inicio ----------
 
-setState({ tool: 'seleccionar', id: null });
+setState({ tool: 'select', id: null });
 await loadDocuments();
 const requested = new URLSearchParams(location.search).get('doc');
 const remembered = savedTabs();

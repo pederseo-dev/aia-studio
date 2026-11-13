@@ -8,88 +8,88 @@
     <link rel="stylesheet" href="/src/editor/styles.css" />
   </head>
   <body>
-    <header id="cabecera">
+    <header id="header">
       <!-- Fila 1: logo y pestañas de documentos abiertos -->
-      <div id="fila-pestanas">
-        <strong class="marca"><img src="/logo.svg" alt="" width="18" height="18" />aia-studio</strong>
-        <div id="pestanas" role="tablist" aria-label="Open documents"></div>
-        <button id="nueva-pestana" type="button" class="icono" title="New file" aria-label="New file" data-icono="agregar"></button>
-        <span id="aviso" role="status"></span>
+      <div id="tabs-row">
+        <strong class="mark"><img src="/logo.svg" alt="" width="18" height="18" />aia-studio</strong>
+        <div id="tabs" role="tablist" aria-label="Open documents"></div>
+        <button id="tab-new" type="button" class="icon" title="New file" aria-label="New file" data-icon="add"></button>
+        <span id="notice" role="status"></span>
       </div>
 
       <!-- Fila 2: menú, herramientas agrupadas, deshacer y zoom -->
-      <div id="barra" role="toolbar" aria-label="Tools">
-        <div class="desplegable">
-          <button id="menu-boton" type="button" class="icono" aria-haspopup="menu" aria-expanded="false" title="Menu" aria-label="Menu" data-icono="menu"></button>
+      <div id="bar" role="toolbar" aria-label="Tools">
+        <div class="dropdown">
+          <button id="menu-button" type="button" class="icon" aria-haspopup="menu" aria-expanded="false" title="Menu" aria-label="Menu" data-icon="menu"></button>
           <div id="menu" class="menu" role="menu" hidden>
-            <button type="button" role="menuitem" data-accion="nuevo">New file…</button>
-            <button type="button" role="menuitem" data-accion="abrir">Open…</button>
-            <button type="button" role="menuitem" data-accion="copiar" data-requiere-doc>Make a copy…</button>
+            <button type="button" role="menuitem" data-action="new">New file…</button>
+            <button type="button" role="menuitem" data-action="open">Open…</button>
+            <button type="button" role="menuitem" data-action="copy" data-requires-doc>Make a copy…</button>
             <hr />
-            <button type="button" role="menuitem" data-accion="importar" data-requiere-doc>Import SVG…</button>
+            <button type="button" role="menuitem" data-action="import" data-requires-doc>Import SVG…</button>
             <hr />
-            <button type="button" role="menuitem" data-accion="ajustes" data-requiere-doc>Project Settings…</button>
+            <button type="button" role="menuitem" data-action="settings" data-requires-doc>Project Settings…</button>
             <hr />
-            <button type="button" role="menuitem" data-accion="cerrar" data-requiere-doc>Close tab <kbd>Alt+W</kbd></button>
-            <button type="button" role="menuitem" data-accion="eliminar" data-requiere-doc class="peligro">Delete document…</button>
+            <button type="button" role="menuitem" data-action="close" data-requires-doc>Close tab <kbd>Alt+W</kbd></button>
+            <button type="button" role="menuitem" data-action="delete" data-requires-doc class="danger">Delete document…</button>
             <hr />
-            <button type="button" role="menuitem" data-accion="atajos">Keyboard shortcuts</button>
+            <button type="button" role="menuitem" data-action="shortcuts">Keyboard shortcuts</button>
           </div>
         </div>
-        <span class="separador"></span>
-        <div class="grupo-herramientas desplegable" data-grupo="transformar"></div>
-        <div class="grupo-herramientas desplegable" data-grupo="lienzo"></div>
-        <div class="grupo-herramientas desplegable" data-grupo="crear"></div>
-        <div class="grupo-herramientas desplegable" data-grupo="esqueleto"></div>
-        <span class="separador"></span>
+        <span class="separator"></span>
+        <div class="tools-group dropdown" data-group="transform"></div>
+        <div class="tools-group dropdown" data-group="canvas"></div>
+        <div class="tools-group dropdown" data-group="create"></div>
+        <div class="tools-group dropdown" data-group="skeleton"></div>
+        <span class="separator"></span>
         <!-- Opciones de la herramienta y lo seleccionado (como la barra de opciones de Moho); las llena opciones.js -->
-        <div id="opciones" class="opciones" hidden></div>
-        <span class="espaciador"></span>
-        <div id="modos" role="tablist" aria-label="Mode">
-          <button type="button" role="tab" data-modo="design">Design</button>
-          <button type="button" role="tab" data-modo="animate">Animate</button>
-          <button type="button" role="tab" data-modo="puppet">Puppet</button>
+        <div id="options" class="options" hidden></div>
+        <span class="spacer"></span>
+        <div id="modes" role="tablist" aria-label="Mode">
+          <button type="button" role="tab" data-mode="design">Design</button>
+          <button type="button" role="tab" data-mode="animate">Animate</button>
+          <button type="button" role="tab" data-mode="puppet">Puppet</button>
         </div>
-        <span class="separador"></span>
-        <div class="desplegable">
+        <span class="separator"></span>
+        <div class="dropdown">
           <button id="zoom" type="button" title="Zoom (Ctrl + wheel)" aria-haspopup="menu">100%</button>
-          <div id="menu-zoom" class="menu derecha" role="menu" hidden>
-            <button type="button" role="menuitem" data-zoom="ajustar">Fit to window <kbd>F</kbd></button>
+          <div id="menu-zoom" class="menu right" role="menu" hidden>
+            <button type="button" role="menuitem" data-zoom="adjust">Fit to window <kbd>F</kbd></button>
             <button type="button" role="menuitem" data-zoom="0.5">50%</button>
             <button type="button" role="menuitem" data-zoom="1">100% <kbd>1</kbd></button>
             <button type="button" role="menuitem" data-zoom="2">200%</button>
           </div>
         </div>
       </div>
-      <input id="archivo-svg" type="file" accept=".svg,image/svg+xml" hidden />
-      <input id="archivo-imagen" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg" multiple hidden />
+      <input id="svg-file" type="file" accept=".svg,image/svg+xml" hidden />
+      <input id="image-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg" multiple hidden />
     </header>
 
-    <dialog id="dialogo-abrir">
+    <dialog id="dialog-open">
       <h2>Open file</h2>
-      <ul id="lista-documentos" class="lista-dialogo"></ul>
+      <ul id="documents-list" class="dialog-list"></ul>
       <form method="dialog"><button>Close</button></form>
     </dialog>
 
-    <dialog id="dialogo-ajustes">
+    <dialog id="settings-dialog">
       <h2>Project Settings</h2>
-      <form id="form-ajustes" method="dialog" class="form-ajustes">
+      <form id="form-settings" method="dialog" class="form-settings">
         <label>Name <input name="name" type="text" required /></label>
         <label>Width <input name="width" type="number" min="1" step="1" required /></label>
         <label>Height <input name="height" type="number" min="1" step="1" required /></label>
-        <p class="ayuda">Resizing keeps the drawing centered. You can also drag the artboard with the Artboard tool (<kbd>A</kbd>).</p>
-        <label>Background <span class="fila-fondo"><input name="background" type="color" /><label class="casilla"><input name="transparente" type="checkbox" /> Transparent</label></span></label>
-        <label>Frame rate <span class="fila-fondo"><input name="fps" type="number" min="1" max="120" step="1" required /> fps</span></label>
-        <div class="botones">
-          <button type="button" value="cancelar" data-cerrar>Cancel</button>
-          <button type="submit" value="ok" class="principal">OK</button>
+        <p class="help">Resizing keeps the drawing centered. You can also drag the artboard with the Artboard tool (<kbd>A</kbd>).</p>
+        <label>Background <span class="background-row"><input name="background" type="color" /><label class="checkbox"><input name="transparent" type="checkbox" /> Transparent</label></span></label>
+        <label>Frame rate <span class="background-row"><input name="fps" type="number" min="1" max="120" step="1" required /> fps</span></label>
+        <div class="buttons">
+          <button type="button" value="cancelar" data-close>Cancel</button>
+          <button type="submit" value="ok" class="main">OK</button>
         </div>
       </form>
     </dialog>
 
-    <dialog id="dialogo-atajos">
+    <dialog id="shortcuts-dialog">
       <h2>Keyboard shortcuts</h2>
-      <table class="atajos">
+      <table class="shortcuts">
         <tr><th colspan="2">Transform</th></tr>
         <tr><td><kbd>V</kbd></td><td>Move (select and drag)</td></tr>
         <tr><td><kbd>T</kbd></td><td>Rotate around the pivot (Shift: 15° steps)</td></tr>
@@ -124,90 +124,90 @@
       <form method="dialog"><button>Close</button></form>
     </dialog>
 
-    <main id="espacio">
-      <aside id="panel-objetos" class="panel">
-        <div class="cabecera">
-          <h2><button id="plegar-capas" type="button" class="plegar-seccion" aria-expanded="true" aria-controls="arbol" title="Collapse or expand the layers">Layers<span data-flecha></span></button></h2>
-          <div id="crear-grupo" class="grupo-herramientas desplegable">
-            <button id="nuevo-grupo" type="button" class="principal icono" aria-haspopup="menu" aria-expanded="false" title="New group, switch, skeleton or image layer" aria-label="New layer" data-icono="carpetaMas"></button>
+    <main id="space">
+      <aside id="objects-panel" class="panel">
+        <div class="header">
+          <h2><button id="fold-layers" type="button" class="fold-section" aria-expanded="true" aria-controls="tree" title="Collapse or expand the layers">Layers<span data-flecha></span></button></h2>
+          <div id="create-group" class="tools-group dropdown">
+            <button id="group-new" type="button" class="main icon" aria-haspopup="menu" aria-expanded="false" title="New group, switch, skeleton or image layer" aria-label="New layer" data-icon="folderPlus"></button>
             <div class="menu" role="menu" hidden>
-              <button type="button" role="menuitem" data-tipo="group" title="Container: its children move together. With several selected, groups them"><span class="con-icono" data-icono="group">Group</span><kbd>G</kbd></button>
-              <button type="button" role="menuitem" data-tipo="switch" title="Group that shows one child at a time (mouths, visemes). With something selected, wraps it as variants"><span class="con-icono" data-icono="switch">Switch</span><kbd>Shift+G</kbd></button>
-              <button type="button" role="menuitem" data-tipo="skeleton" title="Bone layer (as in Moho): holds the bones and the drawing they move. With something selected, wraps it"><span class="con-icono" data-icono="skeleton">Skeleton</span><kbd>K</kbd></button>
-              <button type="button" role="menuitem" data-tipo="image" title="Image layer from a PNG, JPG, WebP or SVG file (kept whole; to edit an SVG’s shapes use Import SVG). You can also drop or paste images on the canvas"><span class="con-icono" data-icono="image">Image…</span></button>
+              <button type="button" role="menuitem" data-type="group" title="Container: its children move together. With several selected, groups them"><span class="with-icon" data-icon="group">Group</span><kbd>G</kbd></button>
+              <button type="button" role="menuitem" data-type="switch" title="Group that shows one child at a time (mouths, visemes). With something selected, wraps it as variants"><span class="with-icon" data-icon="switch">Switch</span><kbd>Shift+G</kbd></button>
+              <button type="button" role="menuitem" data-type="skeleton" title="Bone layer (as in Moho): holds the bones and the drawing they move. With something selected, wraps it"><span class="with-icon" data-icon="skeleton">Skeleton</span><kbd>K</kbd></button>
+              <button type="button" role="menuitem" data-type="image" title="Image layer from a PNG, JPG, WebP or SVG file (kept whole; to edit an SVG’s shapes use Import SVG). You can also drop or paste images on the canvas"><span class="with-icon" data-icon="image">Image…</span></button>
             </div>
           </div>
-          <button id="duplicar" type="button" class="icono" title="Duplicate selection with its children (Ctrl+D)" data-icono="duplicar"></button>
-          <button id="borrar" type="button" class="icono" title="Delete selection (Del)" data-icono="borrar"></button>
+          <button id="duplicate" type="button" class="icon" title="Duplicate selection with its children (Ctrl+D)" data-icon="duplicate"></button>
+          <button id="delete" type="button" class="icon" title="Delete selection (Del)" data-icon="delete"></button>
         </div>
-        <ul id="arbol" class="arbol" role="tree" aria-multiselectable="true"></ul>
-        <div class="cabecera cabecera-recursos">
-          <h2><button id="plegar-recursos" type="button" class="plegar-seccion" aria-expanded="true" aria-controls="recursos" title="Collapse or expand the assets">Assets<span data-flecha></span></button></h2>
-          <button id="nuevo-estilo" type="button" class="icono" title="New shared style: several shapes take their fill and stroke from it" data-icono="estilo"></button>
-          <button id="nuevo-degradado" type="button" class="icono" title="New linear gradient to use in fillGradient" data-icono="degradado"></button>
-          <button id="borrar-recurso" type="button" class="icono" title="Delete selected asset (Del). Shapes that used it keep their own colors" aria-label="Delete asset" data-icono="borrar" disabled></button>
+        <ul id="tree" class="tree" role="tree" aria-multiselectable="true"></ul>
+        <div class="header resources-header">
+          <h2><button id="fold-resources" type="button" class="fold-section" aria-expanded="true" aria-controls="resources" title="Collapse or expand the assets">Assets<span data-flecha></span></button></h2>
+          <button id="style-new" type="button" class="icon" title="New shared style: several shapes take their fill and stroke from it" data-icon="style"></button>
+          <button id="gradient-new" type="button" class="icon" title="New linear gradient to use in fillGradient" data-icon="gradient"></button>
+          <button id="delete-resource" type="button" class="icon" title="Delete selected asset (Del). Shapes that used it keep their own colors" aria-label="Delete asset" data-icon="delete" disabled></button>
         </div>
-        <ul id="recursos" class="arbol"></ul>
-        <section id="historial">
-          <h2><button id="plegar-historial" type="button" class="plegar-seccion" aria-expanded="true" aria-controls="entradas" title="Collapse or expand the history">History<span data-flecha></span></button></h2>
-          <ol id="entradas"></ol>
+        <ul id="resources" class="tree"></ul>
+        <section id="history">
+          <h2><button id="fold-history" type="button" class="fold-section" aria-expanded="true" aria-controls="entries" title="Collapse or expand the history">History<span data-flecha></span></button></h2>
+          <ol id="entries"></ol>
         </section>
       </aside>
 
-      <section id="lienzo" tabindex="-1" aria-label="Canvas">
+      <section id="canvas" tabindex="-1" aria-label="Canvas">
         <!-- Puppet: qué se está editando o viendo (pose, clip, parámetros o Live), con el botón para salir -->
-        <div id="cartel" role="status" hidden></div>
-        <div class="sin-documento">
+        <div id="banner" role="status" hidden></div>
+        <div class="no-document">
           <p>No file is open.</p>
-          <p class="ayuda">Create one with <b>+</b>, open one from the <b>☰ → Open…</b> menu, or ask the AI.</p>
+          <p class="help">Create one with <b>+</b>, open one from the <b>☰ → Open…</b> menu, or ask the AI.</p>
         </div>
-        <svg id="vista">
-          <g id="camara"><g id="documento"></g></g>
-          <g id="superposicion"></g>
+        <svg id="view">
+          <g id="camera"><g id="document"></g></g>
+          <g id="overlay"></g>
         </svg>
       </section>
 
-      <aside id="panel-derecho" class="panel">
+      <aside id="right-panel" class="panel">
         <!-- Puppet: lo que se hace con todo el muñeco (no con una lista): volver los params al inicio, Live y AI view -->
-        <div id="barra-puppet" role="toolbar" aria-label="Puppet">
+        <div id="bar-puppet" role="toolbar" aria-label="Puppet">
           <button id="reset-params" type="button" title="Put every parameter back to its initial value">Reset</button>
           <button id="live" type="button" class="live" aria-pressed="false">▶ Live</button>
-          <button id="ver-manifiesto" type="button" title="AI view: what the app’s AI will know about this puppet (parameters, clips, what each one overrides, problems)">AI view</button>
+          <button id="show-manifest" type="button" title="AI view: what the app’s AI will know about this puppet (parameters, clips, what each one overrides, problems)">AI view</button>
         </div>
-        <section id="clips" class="seccion-puppet" data-plegable="clips" hidden>
-          <div class="cabecera">
-            <h2><button type="button" class="plegar-seccion" aria-expanded="true" title="Collapse or expand the clips">Clips<span data-flecha></span></button></h2>
-            <button id="nuevo-clip" type="button" class="icono" title="New clip: a short animation the app or its AI triggers (wave, blink, idle)" aria-label="New clip" data-icono="agregar"></button>
-            <button id="borrar-clip" type="button" class="icono" title="Delete the selected or open clip (undo brings it back)" aria-label="Delete clip" data-icono="borrar" disabled></button>
+        <section id="clips" class="section-puppet" data-foldable="clips" hidden>
+          <div class="header">
+            <h2><button type="button" class="fold-section" aria-expanded="true" title="Collapse or expand the clips">Clips<span data-flecha></span></button></h2>
+            <button id="new-clip" type="button" class="icon" title="New clip: a short animation the app or its AI triggers (wave, blink, idle)" aria-label="New clip" data-icon="add"></button>
+            <button id="delete-clip" type="button" class="icon" title="Delete the selected or open clip (undo brings it back)" aria-label="Delete clip" data-icon="delete" disabled></button>
           </div>
-          <div id="lista-clips"></div>
+          <div id="list-clips"></div>
         </section>
-        <section id="seccion-poses" class="seccion-puppet" data-plegable="poses" hidden>
-          <div class="cabecera">
-            <h2><button type="button" class="plegar-seccion" aria-expanded="true" title="Collapse or expand the poses: still shapes of the puppet that parameters blend">Poses<span data-flecha></span></button></h2>
-            <button id="nueva-pose" type="button" class="icono" title="New pose: a still shape of the puppet (happy, eyes closed, mouth O…) that a parameter can blend in" aria-label="New pose" data-icono="agregar"></button>
-            <button id="borrar-pose" type="button" class="icono" title="Delete the selected or open pose (undo brings it back)" aria-label="Delete pose" data-icono="borrar" disabled></button>
+        <section id="section-poses" class="section-puppet" data-foldable="poses" hidden>
+          <div class="header">
+            <h2><button type="button" class="fold-section" aria-expanded="true" title="Collapse or expand the poses: still shapes of the puppet that parameters blend">Poses<span data-flecha></span></button></h2>
+            <button id="new-pose" type="button" class="icon" title="New pose: a still shape of the puppet (happy, eyes closed, mouth O…) that a parameter can blend in" aria-label="New pose" data-icon="add"></button>
+            <button id="delete-pose" type="button" class="icon" title="Delete the selected or open pose (undo brings it back)" aria-label="Delete pose" data-icon="delete" disabled></button>
           </div>
-          <div id="lista-poses"></div>
+          <div id="list-poses"></div>
         </section>
-        <section id="seccion-parametros" class="seccion-puppet" data-plegable="parametros" hidden>
-          <div class="cabecera">
-            <h2><button type="button" class="plegar-seccion" aria-expanded="true" title="Collapse or expand the parameters: controls that blend poses">Parameters<span data-flecha></span></button></h2>
-            <button id="nuevo-param" type="button" class="icono" title="New parameter: a control (happy, turn, mouth…) that blends poses through drivers" aria-label="New parameter" data-icono="agregar"></button>
-            <button id="borrar-param" type="button" class="icono" title="Delete the selected parameter and its drivers (undo brings them back)" aria-label="Delete parameter" data-icono="borrar" disabled></button>
+        <section id="parameters-section" class="section-puppet" data-foldable="parameters" hidden>
+          <div class="header">
+            <h2><button type="button" class="fold-section" aria-expanded="true" title="Collapse or expand the parameters: controls that blend poses">Parameters<span data-flecha></span></button></h2>
+            <button id="new-param" type="button" class="icon" title="New parameter: a control (happy, turn, mouth…) that blends poses through drivers" aria-label="New parameter" data-icon="add"></button>
+            <button id="delete-param" type="button" class="icon" title="Delete the selected parameter and its drivers (undo brings them back)" aria-label="Delete parameter" data-icon="delete" disabled></button>
           </div>
-          <div id="parametros"></div>
+          <div id="parameters"></div>
         </section>
         <!-- El inspector se pliega con la flecha del título, en todos los modos; se recuerda lo que elija el usuario -->
-        <div id="seccion-inspector" class="seccion-plegable" data-plegable="inspector">
-          <div class="cabecera">
-            <h2><button type="button" class="plegar-seccion" aria-expanded="true" title="Collapse or expand the inspector">Inspector<span data-flecha></span></button></h2>
+        <div id="section-inspector" class="foldable-section" data-foldable="inspector">
+          <div class="header">
+            <h2><button type="button" class="fold-section" aria-expanded="true" title="Collapse or expand the inspector">Inspector<span data-flecha></span></button></h2>
           </div>
           <section id="inspector"></section>
         </div>
       </aside>
 
-      <footer id="linea-de-tiempo" class="panel">
+      <footer id="timeline-area" class="panel">
         <div id="timeline"></div>
       </footer>
     </main>

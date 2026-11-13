@@ -29,7 +29,7 @@ import { toggleSelection, notify, docVisible, execute, schema, state, freeId, pr
 const round = (v, d = 10) => Math.round(v * d) / d;
 
 /** Herramientas del grupo de huesos (con cualquiera de ellas, los huesos se pueden tocar en el lienzo). */
-export const BONE_TOOLS = ['hueso', 'manipular', 'reparentar', 'enlazarCapa', 'enlazarPuntos'];
+export const BONE_TOOLS = ['bone', 'manipulate', 'reparent', 'bindLayer', 'bindPoints'];
 
 // Un color por hueso (como en Rive), para ver qué puntos y qué dibujo siguen a cuál.
 const COLORS = ['#ff6b6b', '#ffa94d', '#e9d94a', '#69db7c', '#3bc9db', '#5c9dff', '#b197fc', '#f783ac'];
@@ -56,7 +56,7 @@ export function reparentPlan(doc = state.doc) {
 
 /** El hueso al que enlaza Bind Layer: el elegido, con esa herramienta activa (y fuera de una pose). */
 export function boneToBind(doc = state.doc) {
-  return state.tool === 'enlazarCapa' && !state.pose ? (chosenBone(doc)?.id ?? null) : null;
+  return state.tool === 'bindLayer' && !state.pose ? (chosenBone(doc)?.id ?? null) : null;
 }
 const DEGREES = 180 / Math.PI;
 
@@ -113,7 +113,7 @@ export function notifyLoose(ops) {
 
 export function createBones(ctx) {
   const active = () => BONE_TOOLS.includes(state.tool) || !!state.pose;
-  const adjusting = () => state.tool === 'manipular' || !!state.pose;
+  const adjusting = () => state.tool === 'manipulate' || !!state.pose;
   const isBone = (id) => findObject(state.doc, id)?.type === 'bone';
 
   // ---------- Dibujo ----------
@@ -124,7 +124,7 @@ export function createBones(ctx) {
     if (!bones.length) return;
     const { posed } = evaluateInPose(doc, schema, viewedPose(doc));
     const camera = ctx.cameraMatrix();
-    const layer = ctx.crear('g', { class: `huesos${active() ? ' activos' : ''}` });
+    const layer = ctx.create('g', { class: `bones${active() ? ' active' : ''}` });
     const chosen = chosenBone(doc);
     for (const h of bones) {
       const m = multiply(camera, posed.get(h.id));
@@ -133,19 +133,19 @@ export function createBones(ctx) {
       const length = Math.hypot(t[0] - o[0], t[1] - o[1]);
       // El padre y los hijos del hueso elegido, marcados para ver la cadena.
       // Con Reparent Bone y varios elegidos, el principal es el padre que se va a usar: se marca distinto.
-      const reparenting = state.tool === 'reparentar' && state.selected.length > 1;
-      const kinship = reparenting ? (h.id === state.selection ? ' padre-nuevo' : '') : chosen && h.id === chosen.parent ? ' padre' : chosen && h.parent === chosen.id ? ' hijo' : '';
-      const className = `hueso${state.selected.includes(h.id) ? ' seleccionado' : ''}${h.id === state.selection ? ' principal' : ''}${kinship}`;
+      const reparenting = state.tool === 'reparent' && state.selected.length > 1;
+      const kinship = reparenting ? (h.id === state.selection ? ' new-parent' : '') : chosen && h.id === chosen.parent ? ' parent' : chosen && h.parent === chosen.id ? ' child' : '';
+      const className = `bone${state.selected.includes(h.id) ? ' selected' : ''}${h.id === state.selection ? ' main' : ''}${kinship}`;
       const color = { style: `--c: ${boneColor(doc, h.id)}` };
       // Unión punteada cuando el hueso no nace en la punta de su padre.
       const parent = h.parent && findObject(doc, h.parent);
       if (parent?.type === 'bone') {
         const mp = multiply(camera, posed.get(parent.id));
         const tip = apply(mp, read(schema, parent, 'length'), 0);
-        if (Math.hypot(tip[0] - o[0], tip[1] - o[1]) > 2) layer.append(ctx.crear('line', { class: 'union-hueso', x1: tip[0], y1: tip[1], x2: o[0], y2: o[1] }));
+        if (Math.hypot(tip[0] - o[0], tip[1] - o[1]) > 2) layer.append(ctx.create('line', { class: 'union-bone', x1: tip[0], y1: tip[1], x2: o[0], y2: o[1] }));
       }
       if (length < 4) {
-        layer.append(ctx.crear('circle', { class: className, 'data-hueso': h.id, cx: o[0], cy: o[1], r: 4, ...color }, h.id));
+        layer.append(ctx.create('circle', { class: className, 'data-bone': h.id, cx: o[0], cy: o[1], r: 4, ...color }, h.id));
         continue;
       }
       // Forma de rombo alargado, como en Moho: ancho cerca del origen, en punta hacia el final.
@@ -153,20 +153,20 @@ export function createBones(ctx) {
       const width = Math.min(9, Math.max(3, length * 0.12));
       const q = [o[0] + dx * length * 0.2, o[1] + dy * length * 0.2];
       const points = [o, [q[0] - dy * width, q[1] + dx * width], t, [q[0] + dy * width, q[1] - dx * width]];
-      layer.append(ctx.crear('polygon', { class: className, 'data-hueso': h.id, points: points.map((p) => p.join(',')).join(' '), ...color }, h.id));
+      layer.append(ctx.create('polygon', { class: className, 'data-bone': h.id, points: points.map((p) => p.join(',')).join(' '), ...color }, h.id));
     }
     // Reparent Bone: la jerarquía entera, una línea de cada hueso a la mitad de su padre.
-    if (state.tool === 'reparentar' && !state.pose) {
+    if (state.tool === 'reparent' && !state.pose) {
       for (const h of bones) {
         const parent = findObject(doc, h.parent);
         if (parent?.type !== 'bone') continue;
         const o = apply(multiply(camera, posed.get(h.id)), 0, 0);
         const p = apply(multiply(camera, posed.get(parent.id)), read(schema, parent, 'length') / 2, 0);
-        layer.prepend(ctx.crear('line', { class: 'linea-padre', x1: o[0], y1: o[1], x2: p[0], y2: p[1] }, `${h.id} hangs from ${parent.id}`));
+        layer.prepend(ctx.create('line', { class: 'parent-line', x1: o[0], y1: o[1], x2: p[0], y2: p[1] }, `${h.id} hangs from ${parent.id}`));
       }
     }
     ctx.overlay.append(layer);
-    if (state.tool === 'enlazarPuntos' && !state.pose) drawPoints(doc);
+    if (state.tool === 'bindPoints' && !state.pose) drawPoints(doc);
 
     // Lo que mueve el hueso elegido, marcado en el dibujo.
     const marked = chosen?.id;
@@ -178,7 +178,7 @@ export function createBones(ctx) {
         if (!m || !box || (!box.width && !box.height)) continue;
         const p = (x, y) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f].join(',');
         const points = [p(box.x, box.y), p(box.x + box.width, box.y), p(box.x + box.width, box.y + box.height), p(box.x, box.y + box.height)].join(' ');
-        ctx.overlay.append(ctx.crear('polygon', { class: 'enlazado', points: points }, `${o.id} follows ${marked}`));
+        ctx.overlay.append(ctx.create('polygon', { class: 'bound', points: points }, `${o.id} follows ${marked}`));
       }
     }
 
@@ -189,9 +189,9 @@ export function createBones(ctx) {
       const m = multiply(camera, posed.get(sel.id));
       const [ox, oy] = apply(m, 0, 0);
       const [tx, ty] = apply(m, read(schema, sel, 'length'), 0);
-      if (adjusting()) ctx.overlay.append(ctx.crear('circle', { class: 'manija', 'data-manija': 'hueso-origen', cx: ox, cy: oy, r: 5 }, state.pose ? 'Offset the bone in the pose' : 'Move the bone origin'));
+      if (adjusting()) ctx.overlay.append(ctx.create('circle', { class: 'handle', 'data-handle': 'bone-origin', cx: ox, cy: oy, r: 5 }, state.pose ? 'Offset the bone in the pose' : 'Move the bone origin'));
       const title = state.pose ? 'Rotate the bone' : adjusting() ? 'Direction and length (Shift: 15° steps)' : 'Drag: chain a new bone from this tip';
-      if (adjusting() || state.tool === 'hueso') ctx.overlay.append(ctx.crear('circle', { class: `manija${adjusting() ? '' : ' manija-encadenar'}`, 'data-manija': 'hueso-punta', cx: tx, cy: ty, r: 5 }, title));
+      if (adjusting() || state.tool === 'bone') ctx.overlay.append(ctx.create('circle', { class: `handle${adjusting() ? '' : ' handle-chain'}`, 'data-handle': 'bone-tip', cx: tx, cy: ty, r: 5 }, title));
     }
   }
 
@@ -200,14 +200,14 @@ export function createBones(ctx) {
     const skeleton = activeSkeleton(doc);
     if (!skeleton) return;
     const camera = ctx.cameraMatrix();
-    const layer = ctx.crear('g', { class: 'puntos-hueso' });
+    const layer = ctx.create('g', { class: 'bone-points' });
     for (const path of doc.objects.filter((o) => o.type === 'path' && skeletonOf(doc, o.id) === skeleton)) {
       const m = multiply(camera, worldMatrix(doc, schema, path.id));
       read(schema, path, 'vertices').forEach((v, i) => {
         const [x, y] = apply(m, v.x, v.y);
-        const attributes = { class: `punto-hueso${v.bone ? '' : ' libre'}`, 'data-punto': `${path.id}:${i}`, cx: x, cy: y, r: 4 };
+        const attributes = { class: `bone-point${v.bone ? '' : ' free'}`, 'data-point': `${path.id}:${i}`, cx: x, cy: y, r: 4 };
         if (v.bone) attributes.style = `--c: ${boneColor(doc, v.bone)}`;
-        layer.append(ctx.crear('circle', attributes, `${path.id} point ${i}${v.bone ? ` → ${v.bone}` : ' (follows the shape)'}`));
+        layer.append(ctx.create('circle', attributes, `${path.id} point ${i}${v.bone ? ` → ${v.bone}` : ' (follows the shape)'}`));
       });
     }
     ctx.overlay.append(layer);
@@ -281,7 +281,7 @@ export function createBones(ctx) {
     let ops = null;
     const finish = (what) => () => (ops ? execute(ops, note(id, what)) : preview(null));
 
-    if (kind === 'hueso-origen') {
+    if (kind === 'bone-origin') {
       const inverse = invert(parent);
       return ctx.drag(
         e,
@@ -294,7 +294,7 @@ export function createBones(ctx) {
       );
     }
 
-    if (kind === 'hueso-punta') {
+    if (kind === 'bone-tip') {
       // En la pose, la punta solo gira. Con Add Bone encadena uno nuevo; con Manipulate cambia dirección y largo.
       if (state.pose) return rotate(e, id);
       if (!adjusting()) return create(e);
@@ -318,14 +318,14 @@ export function createBones(ctx) {
 
   /** Add Bone en el montaje: un clic en un hueso lo elige; arrastrar en vacío crea uno. */
   function pointerdown(e) {
-    const id = e.target.closest('[data-hueso]')?.dataset.hueso;
+    const id = e.target.closest('[data-bone]')?.dataset.bone;
     if (id) return select(id);
     create(e);
   }
 
   /** Manipulate Bones en el montaje: arrastrar un hueso lo gira; Ctrl + clic lo suma o lo quita; un clic en vacío suelta la selección. */
   function pointerdownManipulate(e) {
-    const id = e.target.closest('[data-hueso]')?.dataset.hueso;
+    const id = e.target.closest('[data-bone]')?.dataset.bone;
     if (!id) return boneMarquee(e, e.ctrlKey || e.metaKey || e.shiftKey);
     if (e.ctrlKey || e.metaKey) return toggleSelection(id);
     select(id);
@@ -358,7 +358,7 @@ export function createBones(ctx) {
       })
       .filter(Boolean);
     const s0 = ctx.screenPoint(e);
-    const box = ctx.crear('rect', { class: 'recuadro' });
+    const box = ctx.create('rect', { class: 'marquee' });
     let moved = false;
     ctx.drag(
       e,
@@ -383,7 +383,7 @@ export function createBones(ctx) {
     );
   }
 
-  const touchedBone = (e) => e.target.closest('[data-hueso]')?.dataset.hueso ?? null;
+  const touchedBone = (e) => e.target.closest('[data-bone]')?.dataset.bone ?? null;
 
   /**
    * Reparent Bone: el clic solo selecciona (Shift/Ctrl + clic suma o quita; clic en vacío suelta todo). El cambio lo
@@ -414,7 +414,7 @@ export function createBones(ctx) {
   function pointerdownBindPoints(e) {
     const doc = state.doc;
     const touched = touchedBone(e);
-    const point = e.target.closest('[data-punto]')?.dataset.punto;
+    const point = e.target.closest('[data-point]')?.dataset.point;
     if (touched && !point) return select(touched);
     const bone = chosenBone(doc);
     if (!bone) return notify('Bind Points: first click the bone the points should follow', true);
@@ -425,7 +425,7 @@ export function createBones(ctx) {
     }
     // Recuadro.
     const s0 = ctx.screenPoint(e);
-    const box = ctx.crear('rect', { class: 'recuadro', x: s0[0], y: s0[1], width: 0, height: 0 });
+    const box = ctx.create('rect', { class: 'marquee', x: s0[0], y: s0[1], width: 0, height: 0 });
     ctx.overlay.append(box);
     let s1 = s0;
     ctx.drag(
@@ -475,7 +475,7 @@ export function createBones(ctx) {
 
   /** Con una pose activa: se gira el hueso tocado, o el hueso del dibujo tocado. */
   function pointerdownPose(e) {
-    let id = e.target.closest('[data-hueso]')?.dataset.hueso;
+    let id = e.target.closest('[data-bone]')?.dataset.bone;
     if (!id) {
       const g = e.target.closest('[data-id]');
       if (!g || !ctx.documentG.contains(g)) return boneMarquee(e, e.ctrlKey || e.metaKey || e.shiftKey, true);
@@ -526,7 +526,7 @@ export function createBones(ctx) {
     const chained = parentTip && Math.hypot(s0[0] - parentTip[0], s0[1] - parentTip[1]) < 10;
     const start = chained ? parentTip : s0;
     const local0 = chained ? [read(schema, parent, 'length'), 0] : apply(inverse, ...s0);
-    const draft = ctx.crear('line', { class: 'borrador-hueso', x1: start[0], y1: start[1], x2: start[0], y2: start[1] });
+    const draft = ctx.create('line', { class: 'bone-draft', x1: start[0], y1: start[1], x2: start[0], y2: start[1] });
     ctx.overlay.append(draft);
     let end = null;
 

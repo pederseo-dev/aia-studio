@@ -18,7 +18,7 @@ export const state = {
   selected: [], // todos los elegidos (incluye el principal)
   editing: null, // id del path cuyos puntos se están editando
   vertex: null, // índice del vértice seleccionado en la edición de puntos
-  tool: 'seleccionar',
+  tool: 'select',
   mode: 'design', // 'design' (dibujo y rig), 'animate' (timeline de escena) o 'puppet' (controles y clips del muñeco)
   // Lo que se ve y se edita encima del montaje: una pose o un clip (animation, en `tiempo`). Lo que se cambia va a la
   // pose o, en un clip, a un keyframe en el tiempo del playhead (autokey). null = el montaje.
@@ -55,13 +55,13 @@ async function request(filePath, body) {
 
 export const api = {
   list: () => request(''),
-  crear: (id, meta, copyFrom) => request('', { id, meta, copyFrom }),
+  create: (id, meta, copyFrom) => request('', { id, meta, copyFrom }),
   read: (id) => request(`/${id}`),
   history: (id) => request(`/${id}/history`),
   applyOps: (id, ops, note) => request(`/${id}/ops`, { ops, note }),
   undo: (id) => request(`/${id}/undo`, {}),
   redo: (id) => request(`/${id}/redo`, {}),
-  eliminar: async (id) => {
+  delete: async (id) => {
     const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error((await res.json()).error);
   },
@@ -71,7 +71,7 @@ export const api = {
 
 let timer;
 export function notify(text, isError = false) {
-  const notice = /** @type {HTMLElement} */ (document.querySelector('#aviso'));
+  const notice = /** @type {HTMLElement} */ (document.querySelector('#notice'));
   notice.textContent = text;
   notice.title = text;
   notice.classList.toggle('error', isError);
@@ -85,9 +85,32 @@ export async function loadDocuments() {
   setState({ documents: await api.list() });
 }
 
+// ---------- Remembered preferences (localStorage) ----------
+
+// Keys from before the code moved to English: copied once to the new ones, so open tabs and folded panels survive.
+const LEGACY_KEYS = [
+  ['aia-studio.pestanas', 'aia-studio.tabs'],
+  ['aia:capas-plegado', 'aia:folded-layers'],
+  ['aia:recursos-plegado', 'aia:folded-resources'],
+  ['aia:plegado:clips', 'aia:folded:clips'],
+  ['aia:plegado:poses', 'aia:folded:poses'],
+  ['aia:plegado:parametros', 'aia:folded:parameters'],
+  ['aia:plegado:inspector', 'aia:folded:inspector'],
+  ...['design', 'animate', 'puppet'].map((mode) => [`aia:historial-plegado:${mode}`, `aia:folded-history:${mode}`]),
+];
+try {
+  for (const [old, current] of LEGACY_KEYS) {
+    const value = localStorage.getItem(old);
+    if (value !== null && localStorage.getItem(current) === null) localStorage.setItem(current, value);
+    localStorage.removeItem(old);
+  }
+} catch {
+  // localStorage can be unavailable (private mode): the preferences are a convenience.
+}
+
 // ---------- Pestañas ----------
 
-const TABS_KEY = 'aia-studio.pestanas';
+const TABS_KEY = 'aia-studio.tabs';
 
 /** Pestañas recordadas de la última vez (solo las que siguen existiendo). Es una comodidad: si falla, no pasa nada. */
 export function savedTabs() {
@@ -144,7 +167,7 @@ export async function deleteDocument(id) {
   deletedHere.add(id);
   setTimeout(() => deletedHere.delete(id), 5000);
   await closeTab(id);
-  await api.eliminar(id);
+  await api.delete(id);
   await loadDocuments();
 }
 

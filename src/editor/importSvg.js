@@ -37,7 +37,7 @@ function clean(svg) {
 function convert(root, { doc, parent, name }) {
   const used = new Set(doc.objects.map((o) => o.id));
   const freeId = (base) => {
-    const clean = base.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^[^a-z]+/, '').slice(0, 30) || 'forma';
+    const clean = base.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^[^a-z]+/, '').slice(0, 30) || 'shape';
     let id = clean;
     for (let n = 2; used.has(id); n++) id = `${clean}_${n}`;
     used.add(id);

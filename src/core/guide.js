@@ -309,7 +309,7 @@ cortos que se disparan, uno por botón). Los dos últimos usan el mismo recurso,
   \`undo\` va por pista. Un momento con solo \`t\` y \`ease\` cambia la curva de los keyframes que ya hay en ese tiempo.
   Para alargar un clip basta con \`duration\`.
 - \`ease\` va en el keyframe y vale para el tramo que **sale** de él. Curvas con nombre:
-${CURVE_DESCRIPTIONS.map(([name, que]) => `  - \`${name}\`: ${que}.`).join('\n')}
+${CURVE_DESCRIPTIONS.map(([name, meaning]) => `  - \`${name}\`: ${meaning}.`).join('\n')}
   O \`[x1, y1, x2, y2]\` (cubic-bezier de CSS) si ninguna sirve. Prefiere una con nombre antes que adivinar números: para
   «vuelve de golpe al final del tramo», \`ease-in-expo\`; para «llega y rebota un poco», \`ease-out-back\`. El \`active\` de
   un switch, los booleanos y los textos cambian de golpe.

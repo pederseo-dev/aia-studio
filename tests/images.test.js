@@ -120,7 +120,7 @@ test('una image se pega a un hueso y se anima en poses y clips como las demás c
 
 test('almacén: guarda assets (reusa los iguales, renombra los distintos), los sirve, avisa los que faltan y los copia', () =>
   withStore(async (a, folder) => {
-    await a.crear('doc', { width: 200, height: 200 }, { origin: 'user' });
+    await a.create('doc', { width: 200, height: 200 }, { origin: 'user' });
     const red = png(10, 10);
     assert.deepEqual(await a.saveAsset('doc', 'Sol.PNG', red), { src: 'sol.png', naturalWidth: 10, naturalHeight: 10, format: 'png', reused: false });
     assert.deepEqual(await a.saveAsset('doc', 'otro.png', red), { src: 'sol.png', naturalWidth: 10, naturalHeight: 10, format: 'png', reused: true });
@@ -141,7 +141,7 @@ test('almacén: guarda assets (reusa los iguales, renombra los distintos), los s
     assert.deepEqual([...images.keys()], ['sol.png']);
 
     // Una copia del documento lleva sus assets.
-    await a.crear('copia', {}, { origin: 'user', copyFrom: 'doc' });
+    await a.create('copia', {}, { origin: 'user', copyFrom: 'doc' });
     assert.deepEqual(await a.listAssets('copia'), ['sol.png', 'sol_2.png']);
     assert.ok(Buffer.from(red).equals(await readFile(path.join(folder, 'copia', 'assets', 'sol.png'))));
   }));
