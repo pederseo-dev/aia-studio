@@ -54,6 +54,8 @@ Not yet: exporting the character for use inside other apps (a JS runtime, video 
 
 ## Getting started
 
+Requires Node.js 20.19+ or 22.12+.
+
 ```bash
 npm install
 npm run dev        # editor at http://localhost:5173
@@ -101,3 +103,8 @@ aia-studio is built by two, working together:
 
 The rigging, runtime and live puppet ideas come from studying Moho, Rive and Adobe Character Animator; aia-studio is
 not affiliated with any of them.
+
+## License
+
+[MIT](LICENSE). The code is free to use, change and build into your own apps, commercial ones included. What you
+draw and animate with aia-studio is yours.

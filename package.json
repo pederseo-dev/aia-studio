@@ -2,6 +2,15 @@
   "name": "aia-studio",
   "private": true,
   "version": "0.1.0",
+  "description": "A drawing, animation and character-building tool made for AI first, fully editable by a human (HTML, CSS, JS and SVG).",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pederseo-dev/aia-studio.git"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
