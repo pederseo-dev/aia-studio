@@ -11,8 +11,31 @@ import { valueOrigin, effectiveValue } from '../core/styles.js';
 import { openedClip, editingName, poseOps, activePose } from './editing.js';
 import { execute, schema, state, setState, preview, select, subscribe } from './state.js';
 import { replaceImage, imagesOnly, naturalSize, assetUrl } from './images.js';
+import { sameTime } from '../core/curves.js';
 
-const GROUP_ORDER = ['General', 'Image', 'Shape', 'Transform', 'Appearance', 'Gradient', 'Canvas', 'Time'];
+const GROUP_ORDER = ['General', 'Image', 'Transform', 'Shape', 'Appearance', 'Gradient', 'Canvas', 'Time'];
+// As in Rive, the pivot goes with the transform (in the schema it is a property of the shape).
+const GROUP_OF = { originX: 'Transform', originY: 'Transform' };
+// Visibility and lock live in Layers (eye and padlock), not repeated here.
+const HIDDEN = new Set(['visible', 'locked']);
+// Readable name of a property: strokeWidth → «Stroke width», repeat_min → «Repeat min»; a few by hand.
+const NAMES = { src: 'File', fps: 'FPS', r: 'Radius' };
+const humanize = (prop) =>
+  NAMES[prop] ??
+  prop
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/^./, (c) => c.toUpperCase())
+    .replace(/ ([A-Z])(?=[a-z])/g, (_, c) => ` ${c.toLowerCase()}`);
+// Collapsed sections, remembered by name.
+const FOLDED_KEY = 'aia:inspector-folded';
+const folded = new Set((() => {
+  try {
+    return JSON.parse(localStorage.getItem(FOLDED_KEY) ?? '[]');
+  } catch {
+    return [];
+  }
+})());
 const PAIRS = { x: 'y', scaleX: 'scaleY', width: 'height', originX: 'originY', x1: 'y1', x2: 'y2', cx: 'cy' };
 // In a pair row, the row name goes in the label column and each half only carries its letter (as in Rive).
 const PAIR_NAMES = { x: 'Position', scaleX: 'Scale', width: 'Size', originX: 'Pivot', x1: 'Start', x2: 'End', cx: 'Center' };
@@ -40,22 +63,43 @@ export function mountInspector(root) {
     // The Live settings belong to Puppet clips (a scene is not triggered), and the auto wait, only with auto repeat.
     const fromLive = ([prop, p]) =>
       obj?.type !== 'animation' || others.length || p.group !== 'Live' || (read(schema, obj, 'usage') === 'puppet' && (!prop.startsWith('repeat_') || read(schema, obj, 'auto') === 'repeat'));
-    const properties = Object.entries(kind.properties).filter(common).filter(fromLive);
-    context = { others };
+    const properties = Object.entries(kind.properties).filter(common).filter(fromLive).filter(([prop]) => !(obj && HIDDEN.has(prop)));
+    // In a pose or a clip (Animate, Puppet) the same sections show the values there, as in Rive: each animatable
+    // property gets its key diamond and what is changed goes to the pose or is keyed at the playhead; the rest is
+    // setup only (edited in Design).
+    const pose = activePose();
+    context = { others, posing: pose && obj && !kind.resource ? posingInfo(obj, pose, !others.length) : null };
 
     root.replaceChildren(others.length ? severalTitle(obj, others) : obj ? title(obj, kind) : Object.assign(document.createElement('h2'), { textContent: 'Artboard' }));
     if (others.length && !properties.length) root.append(Object.assign(document.createElement('p'), { className: 'help', textContent: 'No properties in common.' }));
-    const pose = activePose();
-    if (pose && obj && !others.length && !kind.resource) poseSection(obj, kind, pose);
+    if (context.posing) posingBanner(context.posing);
 
-    const groups = Map.groupBy(properties, ([, p]) => p.group ?? 'Other');
+    const groups = Map.groupBy(properties, ([prop, p]) => GROUP_OF[prop] ?? p.group ?? 'Other');
     const names = [...groups.keys()].sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99));
     for (const name of names) {
-      root.append(Object.assign(document.createElement('h3'), { textContent: name }));
+      // Collapsible section title, as in Rive (▾ open, ▸ collapsed).
+      const closed = folded.has(name);
+      const heading = Object.assign(document.createElement('h3'), { className: `section${closed ? ' folded' : ''}`, textContent: name, title: closed ? 'Expand' : 'Collapse' });
+      heading.addEventListener('click', () => {
+        if (folded.has(name)) folded.delete(name);
+        else folded.add(name);
+        try {
+          localStorage.setItem(FOLDED_KEY, JSON.stringify([...folded]));
+        } catch {}
+        draw();
+      });
+      root.append(heading);
+      if (closed) continue;
       const props = groups.get(name);
       const inPair = new Set();
       for (const [prop, p] of props) {
         if (inPair.has(prop)) continue;
+        // Fill and stroke: one row each (none / solid / gradient), as in Rive.
+        if (prop === 'fillGradient' && props.some(([q]) => q === 'fill') && !context.posing) continue;
+        if ((prop === 'fill' || prop === 'stroke') && p.type === 'color' && !context.posing) {
+          root.append(paintRow(target, data, prop, p, prop === 'fill' ? props.find(([q]) => q === 'fillGradient') : null));
+          continue;
+        }
         // Pairs (x/y, width/height, scale) in a single row, as in Rive.
         const pair = PAIRS[prop] && props.find(([q]) => q === PAIRS[prop]);
         if (pair) {
@@ -65,8 +109,9 @@ export function mountInspector(root) {
           const name = Object.assign(document.createElement('span'), { className: 'name-pair', textContent: PAIR_NAMES[prop] ?? prop });
           row.append(name, field(target, data, prop, p, PAIR_LETTERS[prop]), field(target, data, pair[0], pair[1], PAIR_LETTERS[pair[0]]));
           root.append(row);
+          if (prop === 'scaleX' && obj && obj.type !== 'bone') root.append(flipRow(target, data));
         } else {
-          root.append(field(target, data, prop, p));
+          root.append(field(target, data, prop, p, humanize(prop)));
         }
       }
     }
@@ -75,42 +120,32 @@ export function mountInspector(root) {
   }
 
   /**
-   * With an active pose, what is animatable in the object in that pose: what the pose sets looks normal and the rest
-   * (which stays as in the setup), dimmed. Changing a field adds it to the pose; ↺ removes it.
+   * What the object looks like in the pose or clip: `fixed` = what the pose sets (in a clip, what has a track) and
+   * `value(k)` = the value seen (at the playhead time, in a clip).
    */
-  function poseSection(obj, kind, pose) {
-    const animatable = Object.entries(kind.properties).filter(([, p]) => p.animatable);
-    if (!animatable.length) return;
+  function posingInfo(obj, pose, single) {
     const clip = openedClip();
-    const title = clip ? `Clip “${clip.id}” at ${+state.time.toFixed(3)} s` : `Pose “${pose.id}”`;
-    root.append(Object.assign(document.createElement('h3'), { className: 'in-pose', textContent: title }));
-    // In a clip, «set» is what has a track; the value is the one seen at the playhead time.
     const fixed = clip ? Object.fromEntries(Object.keys(clip.tracks?.[obj.id] ?? {}).map((k) => [k, pose.values?.[obj.id]?.[k]])) : (pose.values?.[obj.id] ?? {});
     const fromBone = obj.type === 'bone' ? boneValues(schema, obj, pose) : null;
     const value = (k) => (fromBone ? fromBone[k] : (pose.values?.[obj.id]?.[k] ?? effectiveValue(schema, state.doc, obj, k)));
-    const inPair = new Set();
-    for (const [k, p] of animatable) {
-      if (inPair.has(k)) continue;
-      const pair = PAIRS[k] && animatable.find(([q]) => q === PAIRS[k]);
-      if (pair) {
-        inPair.add(pair[0]);
-        const row = document.createElement('div');
-        row.className = 'pair';
-        row.append(poseField(obj, pose, k, p, value(k), k in fixed), poseField(obj, pose, pair[0], pair[1], value(pair[0]), pair[0] in fixed));
-        root.append(row);
-      } else {
-        root.append(poseField(obj, pose, k, p, value(k), k in fixed));
-      }
-    }
-    const help = clip ? 'Changing a value keys it at the playhead (autokey); ↺ removes that keyframe. Below is the setup (the rest pose).' : 'Below is the setup (the rest pose).';
+    return { obj, pose, clip, fixed, value, single };
+  }
+
+  function posingBanner({ pose, clip, single }) {
+    root.append(Object.assign(document.createElement('h3'), { className: 'in-pose', textContent: clip ? `Clip “${clip.id}” at ${+state.time.toFixed(3)} s` : `Pose “${pose.id}”` }));
+    const help = !single
+      ? 'Select a single object to animate its values.'
+      : clip
+        ? 'Changing a value keys it at the playhead (autokey); ◇ keys it as it is, ◆ removes that keyframe. Dimmed fields are setup only (Design).'
+        : 'Changing a value sets it in the pose; ◇ sets it as it is, ◆ takes it out (back to setup). Dimmed fields are setup only (Design).';
     root.append(Object.assign(document.createElement('p'), { className: 'help', textContent: help }));
   }
 
-  function poseField(obj, pose, k, p, value, fixed) {
+  function poseField(obj, pose, k, p, value, fixed, labelText) {
     const div = document.createElement('div');
     div.className = `field${fixed ? '' : ' default'}`;
-    div.dataset.prop = `pose.${k}`;
-    const label = Object.assign(document.createElement('label'), { textContent: LABELS[k] ?? k });
+    div.dataset.prop = k;
+    const label = Object.assign(document.createElement('label'), { textContent: labelText ?? LABELS[k] ?? humanize(k) });
     const inClip = !!openedClip();
     label.title = inClip ? `${k} in the clip${fixed ? '' : ' (no track yet: uses the setup value)'}` : `${k} in the pose${fixed ? '' : ' (not set by the pose: uses the setup value)'}`;
     const change = (v) => poseOps(state.doc, pose.id, obj.id, { [k]: v });
@@ -119,14 +154,110 @@ export function mountInspector(root) {
       execute(change(v), `${editingName(pose.id)}: ${obj.id}.${k}`, { group: `pose:${pose.id}.${obj.id}.${k}` });
     };
     const control = CONTROLS[p.type]({ p, value, preview: (v) => preview(change(v)), commit, div, label, target: obj.id });
-    const reset = Object.assign(document.createElement('button'), { type: 'button', className: 'reset', textContent: '↺', title: inClip ? 'Remove the keyframe at the playhead' : 'Remove from pose (back to setup)' });
-    reset.addEventListener('click', () => execute(poseOps(state.doc, pose.id, obj.id, { [k]: undefined }), `${editingName(pose.id)}: ${obj.id}.${k} ${inClip ? 'key removed' : 'from setup'}`));
-    div.append(label, control, reset);
+    // Key diamond, as in Rive: ◆ = a keyframe at the playhead (or set by the pose), click removes it; ◇ = none here,
+    // click keys the current value as it is (a hold, without having to change it).
+    const keys = inClip ? (openedClip().tracks?.[obj.id]?.[k] ?? []) : [];
+    const on = inClip ? keys.some((c) => sameTime(c.t, state.time)) : fixed;
+    const key = Object.assign(document.createElement('button'), {
+      type: 'button',
+      className: `reset key-toggle${on ? ' on' : keys.length ? ' animated' : ''}`,
+      textContent: on ? '◆' : '◇',
+      title: inClip
+        ? on ? 'Remove the keyframe at the playhead' : `Key ${k} at the playhead with its current value${keys.length ? '' : ' (adds its track to the timeline)'}`
+        : on ? 'Remove from pose (back to setup)' : `Set ${k} in the pose with its current value`,
+    });
+    key.addEventListener('click', () =>
+      on
+        ? execute(poseOps(state.doc, pose.id, obj.id, { [k]: undefined }), `${editingName(pose.id)}: ${obj.id}.${k} ${inClip ? 'key removed' : 'from setup'}`)
+        : execute(change(value), `${editingName(pose.id)}: key ${obj.id}.${k}`),
+    );
+    div.append(label, control, key);
     return div;
   }
 
   // What the field needs to know about a multiple selection (built on every draw).
   let context = { others: [] };
+
+  /**
+   * Flip H / V: inverts the scale (around the pivot). In the setup, of all the selected objects; in a pose or clip, of
+   * the object there (it goes to the pose or is keyed at the playhead).
+   */
+  function flipRow(target, data) {
+    const row = document.createElement('div');
+    row.className = 'pair flip';
+    const { posing } = context;
+    const targets = [target, ...context.others.map((o) => o.id)];
+    const flip = (prop) => {
+      const which = `flip ${prop === 'scaleX' ? 'horizontal' : 'vertical'}`;
+      if (posing) return execute(poseOps(state.doc, posing.pose.id, target, { [prop]: -posing.value(prop) }), `${editingName(posing.pose.id)}: ${which} ${target}`);
+      const ops = targets.map((t) => ({ op: 'set', target: t, props: { [prop]: -effectiveValue(schema, state.doc, findObject(state.doc, t), prop) } }));
+      execute(ops, `${which} ${targets.length > 1 ? `${targets.length} objects` : target}`);
+    };
+    const button = (text, title, prop) => {
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: text, title, disabled: !!posing && !posing.single });
+      b.addEventListener('click', () => flip(prop));
+      return b;
+    };
+    row.append(
+      Object.assign(document.createElement('span'), { className: 'name-pair', textContent: 'Flip' }),
+      button('Horizontal', 'Mirror left ↔ right around the pivot (inverts Scale X)', 'scaleX'),
+      button('Vertical', 'Mirror top ↕ bottom around the pivot (inverts Scale Y)', 'scaleY'),
+    );
+    return row;
+  }
+
+  /**
+   * Fill or stroke in one row, as in Rive: the kind (None, Solid and, for the fill, Gradient) and next to it the color
+   * or the gradient.
+   */
+  function paintRow(target, data, prop, p, gradientEntry) {
+    const [gradientProp, gp] = gradientEntry ?? [];
+    const { others } = context;
+    const targets = [target, ...others.map((o) => o.id)];
+    const name = others.length ? `${targets.length} objects` : target;
+    const color = effectiveValue(schema, state.doc, data, prop);
+    const gradient = gradientProp ? effectiveValue(schema, state.doc, data, gradientProp) : null;
+    const kind = gradient ? 'gradient' : color == null ? 'none' : 'solid';
+    const origin = valueOrigin(state.doc, data, prop);
+    const own = origin !== 'default' || (gradientProp && valueOrigin(state.doc, data, gradientProp) !== 'default');
+    const mixed = others.some((o) => effectiveValue(schema, state.doc, o, prop) !== color || (gradientProp && effectiveValue(schema, state.doc, o, gradientProp) !== gradient));
+    const div = document.createElement('div');
+    div.className = `field paint${own ? '' : ' default'}${origin === 'style' ? ' by-style' : ''}${mixed ? ' mixed' : ''}`;
+    div.dataset.prop = prop;
+    const label = Object.assign(document.createElement('label'), { textContent: humanize(prop) });
+    label.title = `${prop}${gradientProp ? ` / ${gradientProp}` : ''}: ${p.help ?? ''}${origin === 'style' ? `\nFrom style "${data.style}".` : ''}${mixed ? `\nMixed values: showing ${target}.` : ''}`;
+    const set = (props) => execute(targets.map((t) => ({ op: 'set', target: t, props })), `${name}.${prop}`, { group: `${targets.join()}.${prop}` });
+
+    const box = document.createElement('div');
+    box.className = 'color';
+    const select = document.createElement('select');
+    select.title = gradientProp ? 'None, a solid color or a gradient' : 'None or a solid color';
+    const gradients = gradientProp ? state.doc.objects.filter((o) => !gp.refTypes || gp.refTypes.includes(o.type)) : [];
+    select.append(new Option('None', 'none'), new Option('Solid', 'solid'));
+    if (gradientProp) {
+      const option = new Option(gradients.length ? 'Gradient' : 'Gradient (none yet)', 'gradient');
+      option.disabled = !gradients.length;
+      select.append(option);
+    }
+    select.value = kind;
+    select.addEventListener('change', () => {
+      const props = select.value === 'none' ? { [prop]: null } : select.value === 'solid' ? { [prop]: color ?? p.default ?? '#888888' } : { [gradientProp]: gradients[0].id };
+      if (gradientProp && select.value !== 'gradient') props[gradientProp] = null;
+      set(props);
+    });
+    box.append(select);
+    if (kind === 'solid') {
+      const swatch = CONTROLS.color({ p: { ...p, nullable: false }, value: color, preview: (v) => preview(targets.map((t) => ({ op: 'set', target: t, props: { [prop]: v } }))), commit: (v) => set({ [prop]: v }) });
+      box.append(...swatch.children);
+    } else if (kind === 'gradient') {
+      const which = document.createElement('select');
+      for (const g of gradients) which.append(new Option(g.id, g.id, false, g.id === gradient));
+      which.addEventListener('change', () => set({ [gradientProp]: which.value }));
+      box.append(which);
+    }
+    div.append(label, box, document.createElement('span'));
+    return div;
+  }
 
   function severalTitle(obj, others) {
     const div = document.createElement('div');
@@ -156,6 +287,9 @@ export function mountInspector(root) {
   }
 
   function field(target, data, prop, p, labelText) {
+    const { posing } = context;
+    // In a pose or clip, an animatable property of the (single) object is edited there, with its key diamond.
+    if (posing?.single && p.animatable) return poseField(posing.obj, posing.pose, prop, p, posing.value(prop), prop in posing.fixed, labelText);
     const isObject = target !== 'meta';
     const origin = isObject ? valueOrigin(state.doc, data, prop) : data[prop] !== undefined ? 'own' : 'default';
     const value = isObject ? effectiveValue(schema, state.doc, data, prop) : (data[prop] ?? p.default);
@@ -169,7 +303,6 @@ export function mountInspector(root) {
     label.textContent = labelText ?? prop;
     const whence = origin === 'style' ? `\nFrom style "${data.style}".` : '';
     label.title = `${prop}: ${p.help ?? ''}${p.default !== undefined ? `\nDefault: ${JSON.stringify(p.default)}` : ''}${whence}${mixed ? `\nMixed values: showing ${target}.` : ''}`;
-    const reset = Object.assign(document.createElement('button'), { type: 'button', className: 'reset', textContent: '↺', title: 'Reset to default' });
     const name = others.length ? `${targets.length} objects` : target;
 
     // The canvas size changes with the drawing centered, like the Artboard tool and Project Settings.
@@ -178,14 +311,20 @@ export function mountInspector(root) {
       size
         ? artboardOps(state.doc, schema, prop === 'width' ? v : readMeta(schema, state.doc, 'width'), prop === 'height' ? v : readMeta(schema, state.doc, 'height'))
         : targets.map((t) => ({ op: 'set', target: t, props: { [prop]: v } }));
-    reset.addEventListener('click', () => execute(size ? change(p.default) : targets.map((t) => ({ op: 'unset', target: t, props: [prop] })), `${name}.${prop} reset`));
     // Several changes in a row to the same property (field arrows, typing and correcting) are a single step.
     const commit = (v) => {
       if (Object.is(v, value) && !mixed) return preview(null);
       execute(change(v), `${name}.${prop}`, { group: `${targets.join()}.${prop}` });
     };
     const control = CONTROLS[p.type]({ p, value, preview: (v) => preview(change(v)), commit, div, label, target });
-    div.append(label, control, reset);
+    // The third column stays (where the key diamond goes in a pose or clip), so the rows line up.
+    div.append(label, control, document.createElement('span'));
+    // In a pose or clip what is not animated there is setup only: shown dimmed, edited in Design.
+    if (posing) {
+      div.classList.add('setup-only');
+      div.title = posing.single ? 'Setup only: edit it in Design' : 'Select a single object to animate its values';
+      for (const el of div.querySelectorAll('input, select, button')) /** @type {HTMLInputElement} */ (el).disabled = true;
+    }
     return div;
   }
 }
@@ -229,6 +368,7 @@ const CONTROLS = {
     // Dragging over the name changes the value: Shift = fine, Alt = coarse.
     label.classList.add('draggable');
     label.addEventListener('pointerdown', (e) => {
+      if (input.disabled) return;
       e.preventDefault();
       label.setPointerCapture(e.pointerId);
       const x0 = e.clientX;

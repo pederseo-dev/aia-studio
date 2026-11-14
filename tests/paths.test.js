@@ -104,3 +104,24 @@ test('shared styles and gradients', () => {
   assert.throws(() => op(doc, { op: 'create', type: 'style', id: 's2', parent: 'face' }), /cannot have children|goes at the root/);
   assert.throws(() => op(doc, { op: 'set', target: 'skin_shade', props: { stops: [{ offset: 1, color: '#fff' }, { offset: 0, color: '#000' }] } }), /order of offset/);
 });
+
+test('weldEnds closes an open path keeping index 0, and vertexMorphs finds poses and clips with its points', async () => {
+  const { weldEnds, vertexMorphs } = await import('../src/core/paths.js');
+  const v = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 1, y: 1 }];
+  // Last dropped on the first: the last goes away.
+  assert.deepEqual(weldEnds(v, 3), v.slice(0, 3));
+  // First dropped on the last: the last one's data takes index 0, the middle ones keep their indices.
+  assert.deepEqual(weldEnds(v, 0), [v[3], v[1], v[2]]);
+  assert.equal(weldEnds(v, 1), null);
+  assert.equal(weldEnds(v.slice(0, 2), 1), null);
+  const doc = {
+    objects: [
+      { id: 'p', type: 'path' },
+      { id: 'po', type: 'pose', values: { p: { vertices: v } } },
+      { id: 'other', type: 'pose', values: { p: { x: 3 } } },
+      { id: 'clip', type: 'animation', tracks: { p: { vertices: [{ t: 0, value: v }] } } },
+    ],
+  };
+  assert.deepEqual(vertexMorphs(doc, 'p'), ['po', 'clip']);
+  assert.deepEqual(vertexMorphs(doc, 'nothing'), []);
+});

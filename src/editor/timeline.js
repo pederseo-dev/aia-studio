@@ -72,7 +72,8 @@ function stop() {
 
 /** Space (a tap, without panning): play or pause the open scene or clip. */
 export function togglePlayback() {
-  if (state.mode === 'design' || !openedClip()) return;
+  // With Live on, the puppet plays by itself (and there is no play button).
+  if (state.mode === 'design' || state.live || !openedClip()) return;
   if (state.playing) stop();
   else startPlayback();
 }
@@ -82,7 +83,7 @@ export function togglePlayback() {
 export function mountModes(buttons) {
   for (const b of buttons.querySelectorAll('[data-mode]')) {
     b.title = MODES[b.dataset.mode];
-    b.addEventListener('click', () => changeMode(b.dataset.mode));
+    b.addEventListener('click', () => changeMode(b.dataset.mode, { createScene: true }));
   }
   subscribe((c) => {
     if (!('mode' in c) && !('id' in c)) return;
@@ -92,15 +93,19 @@ export function mountModes(buttons) {
   document.body.dataset.mode = state.mode;
 }
 
-export function changeMode(mode) {
+/**
+ * `createScene`: only when the user clicks Animate. Opening or switching documents while in Animate must not write
+ * into them (a Puppet-only avatar, a document the AI is building).
+ */
+export function changeMode(mode, { createScene = false } = {}) {
   stop();
   const doc = state.doc;
   if (mode === 'design') return setState({ mode, pose: null, params: null, editing: null, vertex: null });
   if (mode === 'animate') {
-    // The first scene is opened. Like Rive's "Timeline 1", a document without scenes gets one, so you can animate
-    // straight away; more scenes are made with + on the timeline.
+    // The first scene is opened. Like Rive's "Timeline 1", clicking Animate in a document without scenes creates one,
+    // so you can animate straight away; more scenes are made with + on the timeline.
     let id = doc?.objects.find((o) => o.type === 'animation' && read(schema, o, 'usage') === 'animate')?.id ?? null;
-    if (doc && !id && !state.live) {
+    if (createScene && doc && !id && !state.live) {
       let n = 1;
       while (findObject(doc, `scene_${n}`)) n++;
       const created = `scene_${n}`;

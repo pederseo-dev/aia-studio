@@ -194,7 +194,8 @@ export function mountCanvas(container) {
   // Space held + drag pans; a tap (no pan while it was held) plays or pauses the timeline.
   let panned = false;
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && !(/** @type {Element} */ (e.target)).closest('input, select, textarea')) {
+    // Not in fields, on buttons (Space presses them) or with a dialog open.
+    if (e.code === 'Space' && !(/** @type {Element} */ (e.target)).closest?.('input, select, textarea, button, dialog') && !document.querySelector('dialog[open]')) {
       if (!space) panned = false;
       space = true;
       e.preventDefault();
@@ -203,7 +204,6 @@ export function mountCanvas(container) {
   window.addEventListener('keyup', (e) => {
     if (e.code !== 'Space' || !space) return;
     space = false;
-    // preventDefault: a focused button is not clicked by the same Space as well.
     e.preventDefault();
     if (!panned) togglePlayback();
   });

@@ -176,7 +176,7 @@ test('taking a variant a pose uses out of a switch names both ways out', () => {
     { op: 'create', type: 'rect', id: 'm_o', parent: 'mouth' },
     { op: 'create', type: 'pose', id: 'o', props: { values: { mouth: { active: 'm_o' } } } },
   ).doc;
-  assert.throws(() => op(doc, { op: 'move', target: 'm_o', parent: null }), /Pose "o" makes switch mouth show "m_o".*remove only mouth's active from pose "o".*Puppet → View → Pose: o, select mouth and click ↺ next to active.*set_pose with remove: \["mouth\.active"\].*or keep "m_o" inside mouth/);
+  assert.throws(() => op(doc, { op: 'move', target: 'm_o', parent: null }), /Pose "o" makes switch mouth show "m_o".*remove only mouth's active from pose "o".*Puppet → View → Pose: o, select mouth and click ◆ next to active.*set_pose with remove: \["mouth\.active"\].*or keep "m_o" inside mouth/);
 });
 
 test('move with keepPosition leaves the object in the same place on screen, and can be undone', () => {

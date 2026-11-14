@@ -165,7 +165,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
   min-height: 0;
   display: grid;
   /* minmax(0, …): a long text in the center does not stretch the grid or push the right panel. */
-  grid-template-columns: 210px minmax(0, 1fr) 264px;
+  grid-template-columns: 210px minmax(0, 1fr) 300px;
   grid-template-rows: minmax(0, 1fr) auto;
   /* Like Moho: the right panel runs to the bottom; the timeline sits under the left panel and the canvas. */
   grid-template-areas: "objects canvas right" "time time right";
@@ -355,10 +355,36 @@ body.folded-layers #fold-layers .ico-arrow { transform: rotate(-90deg); }
   font-weight: 600;
   color: var(--soft);
 }
-.field { display: grid; grid-template-columns: 92px minmax(0, 1fr) 20px; align-items: center; gap: 6px; margin-bottom: 3px; }
+/* Section titles with more contrast and a separator, collapsible (▾ / ▸), as in Rive. */
+#inspector h3.section {
+  margin: 10px -8px 6px;
+  padding: 6px 8px 0;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+}
+#inspector h3.section::after { content: '▾'; color: var(--soft); font-weight: 400; }
+#inspector h3.section.folded::after { content: '▸'; }
+#inspector h3.section:hover::after { color: var(--text); }
+.pair.flip button { padding: 2px 4px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.field.paint .color select { flex: none; width: 60px; }
+.field.paint .color select + select { flex: 1; min-width: 0; }
+/* Key diamond of each property in a clip or pose: always visible; ◆ keyed here, ◇ not (brighter if it has a track). */
+.field .reset.key-toggle { visibility: visible; color: var(--soft); font-size: 13px; }
+/* In a pose or clip, what is not animated there is setup only (edited in Design). */
+.field.setup-only { opacity: 0.45; }
+.field .key-toggle.animated { color: var(--text); }
+.field .key-toggle.on { color: var(--pose); }
+.field .key-toggle:hover { color: var(--text); }
+.field { display: grid; grid-template-columns: 84px minmax(0, 1fr) 20px; align-items: center; gap: 6px; margin-bottom: 3px; }
 /* Pairs in one row (x/y, width/height, scale), as in Rive's inspector */
-/* The pair row uses the same columns as a single field: name (92px) | two halves | and each half, its letter. */
-.pair { display: grid; grid-template-columns: 92px minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 6px; margin-bottom: 3px; }
+/* The pair row uses the same columns as a single field: name (84px) | two halves | and each half, its letter. */
+.pair { display: grid; grid-template-columns: 84px minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 6px; margin-bottom: 3px; }
 .pair .name-pair { color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pair .field { grid-template-columns: 12px minmax(0, 1fr) 14px; gap: 3px; margin-bottom: 0; }
 .pair .field > label { color: var(--faint); }
@@ -383,7 +409,6 @@ body.folded-layers #fold-layers .ico-arrow { transform: rotate(-90deg); }
 .field-asset .buttons-asset { display: flex; flex-wrap: wrap; gap: 4px; }
 .field-asset .buttons-asset button { white-space: nowrap; padding-inline: 6px; }
 /* The file does not go back «to its default value»: it is changed with Replace… */
-#inspector .field:has(.field-asset) .reset { visibility: hidden; }
 .field.default input:not([type=checkbox]):not([type=color]), .field.default select { color: var(--faint); }
 .field .reset { border: none; background: none; padding: 0; color: var(--soft); visibility: hidden; }
 .field:not(.default) .reset { visibility: visible; }
@@ -487,7 +512,8 @@ body[data-mode="design"] #timeline-area { display: none; }
 .track-row.empty .track-name { color: var(--faint); }
 .track-row.group { border-top: 1px solid var(--border); }
 .track-row.group .track-name { color: var(--text); }
-.track-row.group.main .track-name { color: var(--accent); font-weight: 600; }.track-row .fold { flex: none; width: 16px; background: none; border: none; color: var(--soft); padding: 0; font-size: 11px; }
+.track-row.group.main .track-name { color: var(--accent); font-weight: 600; }
+.track-row .fold { flex: none; width: 16px; background: none; border: none; color: var(--soft); padding: 0; font-size: 11px; }
 .track-row .fold:hover { color: var(--text); }
 .track-row.channel .label { padding-left: 14px; }
 .track-row .pin-channel { flex: none; background: none; border: none; color: var(--pose); padding: 0 4px; font-size: 11px; }

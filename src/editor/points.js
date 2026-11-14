@@ -6,8 +6,8 @@ import { findObject } from '../core/document.js';
 import { read } from '../core/schema.js';
 import { apply, invert, worldMatrix, multiply } from '../core/geometry.js';
 import { applyPose } from '../core/blend.js';
-import { withBone, splitSpan, handles, sampleSpan, tangents, vertexFromTangents } from '../core/paths.js';
-import { docVisible, execute, schema, state, setState, preview } from './state.js';
+import { withBone, splitSpan, handles, sampleSpan, tangents, vertexFromTangents, weldEnds, vertexMorphs } from '../core/paths.js';
+import { docVisible, execute, notify, schema, state, setState, preview } from './state.js';
 import { editingName, poseOps, activePose } from './editing.js';
 
 const NEAR_OUTLINE = 8; // px
@@ -100,16 +100,22 @@ export function createPoints(ctx) {
    * Only in the setup: a pose or a clip keeps the point count. Returns true if it welded.
    */
   function weld(obj, vertices, i) {
-    const last = vertices.length - 1;
-    if (!state.autoWeld || state.pose || read(schema, obj, 'closed') || vertices.length < 3 || (i !== 0 && i !== last)) return false;
-    const j = i === 0 ? last : 0;
+    if (!state.autoWeld || state.pose || read(schema, obj, 'closed')) return false;
+    const welded = weldEnds(vertices, i);
+    if (!welded) return false;
+    const j = i === 0 ? vertices.length - 1 : 0;
     const m = matrix();
     const a = apply(m, vertices[i].x, vertices[i].y);
     const b = apply(m, vertices[j].x, vertices[j].y);
     if (Math.hypot(a[0] - b[0], a[1] - b[1]) > WELD_DISTANCE) return false;
-    const welded = vertices.filter((_, k) => k !== i);
+    // A morph (poses or clips with this path's points) needs the same point count: the point is only moved.
+    const morphs = vertexMorphs(state.doc, state.editing);
+    if (morphs.length) {
+      notify(`Not welded: ${morphs.join(', ')} store${morphs.length === 1 ? 's' : ''} the points of ${state.editing}, and welding would change the point count and break the morph.`, true);
+      return false;
+    }
     execute([{ op: 'set', target: state.editing, props: { vertices: welded, closed: true } }], `weld end points of ${state.editing}`);
-    setState({ vertex: i === 0 ? welded.length - 1 : 0 });
+    setState({ vertex: 0 });
     return true;
   }
 

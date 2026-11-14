@@ -386,6 +386,22 @@ export function splitSpan(vertices, i, t) {
   return result;
 }
 
+/**
+ * Welds the end points of an open path (Auto-weld): end point `i` (0 or the last) was dropped on the other end. The
+ * point that stayed keeps its data and the path closes; index 0 stays the first point, so the other indices don't
+ * shift. Returns null if `i` is not an end point or there are fewer than 3 points.
+ */
+export function weldEnds(vertices, i) {
+  const last = vertices.length - 1;
+  if (vertices.length < 3 || (i !== 0 && i !== last)) return null;
+  return i === last ? vertices.slice(0, last) : [vertices[last], ...vertices.slice(1, last)];
+}
+
+/** Poses and clips that store the points of a path (a morph): changing its point count would break them. */
+export function vertexMorphs(doc, id) {
+  return doc.objects.filter((o) => (o.type === 'pose' && o.values?.[id]?.vertices) || (o.type === 'animation' && o.tracks?.[id]?.vertices?.length)).map((o) => o.id);
+}
+
 /** Errors of a vertex (empty list if it is fine). */
 export function vertexErrors(v) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return ['must be an object { x, y, ... }'];
