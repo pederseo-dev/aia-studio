@@ -57,4 +57,25 @@ export const TYPE_ICON = {
   pose: ICONS.pose, param: ICONS.param, driver: ICONS.driver, animation: ICONS.animation,
 };
 
+// Icon of each timeline channel (by its name in the timeline), so the label column stays narrow as in Moho; the
+// tooltip says the rest.
+export const CHANNEL_ICON = {
+  allKeys: stroke('<path d="M2.5 12 5 9.5 7.5 12 5 14.5zM9.5 12 12 9.5 14.5 12 12 14.5zM16.5 12 19 9.5 21.5 12 19 14.5z"/>'),
+  Position: stroke('<path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/>'),
+  Rotation: ICONS.rotate,
+  Scale: ICONS.scale,
+  // Half checkerboard, like the transparent background.
+  Opacity: stroke('<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M12 4h4v4h-4zM16 8h4v4h-4zM12 12h4v4h-4zM16 16h4v4h-4z" fill="currentColor" stroke="none"/>'),
+  Visible: stroke('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>'),
+  Fill: stroke('<circle cx="12" cy="12" r="7.5" fill="currentColor"/>'),
+  Stroke: stroke('<circle cx="12" cy="12" r="7" stroke-width="3"/>'),
+  'Stroke width': stroke('<path d="M4 6h16" stroke-width="1"/><path d="M4 11.5h16" stroke-width="2.2"/><path d="M4 18h16" stroke-width="3.6"/>'),
+  Points: stroke('<path d="M4.5 18 10 7l5 8 4.5-9"/><circle cx="4.5" cy="18" r="1.6" fill="currentColor"/><circle cx="10" cy="7" r="1.6" fill="currentColor"/><circle cx="15" cy="15" r="1.6" fill="currentColor"/><circle cx="19.5" cy="6" r="1.6" fill="currentColor"/>'),
+  Switch: ICONS.switch,
+  Width: stroke('<path d="M4 5v14M20 5v14M7 12h10M10 9l-3 3 3 3M14 9l3 3-3 3"/>'),
+  Height: stroke('<path d="M5 4h14M5 20h14M12 7v10M9 10l3-3 3 3M9 14l3 3 3-3"/>'),
+  'Corner radius': stroke('<path d="M5 20v-8a7 7 0 0 1 7-7h7"/><path d="M5 8.5V5h3.5" stroke-dasharray="1.5 2.2"/>'),
+  Value: ICONS.param,
+};
+
 export const ARROW = `<svg class="ico-arrow" viewBox="0 0 10 10" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5"/></svg>`;

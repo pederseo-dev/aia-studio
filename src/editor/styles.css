@@ -167,7 +167,8 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 12px; }
   /* minmax(0, …): a long text in the center does not stretch the grid or push the right panel. */
   grid-template-columns: 210px minmax(0, 1fr) 264px;
   grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas: "objects canvas right" "time time time";
+  /* Like Moho: the right panel runs to the bottom; the timeline sits under the left panel and the canvas. */
+  grid-template-areas: "objects canvas right" "time time right";
 }
 .panel { background: var(--panel); overflow-y: auto; }
 #objects-panel { grid-area: objects; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
@@ -453,14 +454,15 @@ body[data-mode="design"] #timeline-area { display: none; }
 .short-field input[type="number"] { width: 64px; }
 .time-bar .description { flex: 1; min-width: 160px; }
 .tracks { position: relative; padding: 0 8px 6px; user-select: none; touch-action: none; }
-.track-row { display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: center; height: 20px; }
-.track-row .label { display: flex; align-items: center; min-width: 0; padding-right: 6px; }
-.track-row .track-name { flex: 1; min-width: 0; text-align: left; background: none; border: none; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; font-size: 11px; }
+/* Narrow label column, as in Moho: icons, with the names in the tooltips (Layers already says what you are editing). */
+.track-row { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; height: 20px; }
+.track-row .label { display: flex; align-items: center; min-width: 0; padding-right: 2px; }
+.track-row .track-name { flex: 1; min-width: 0; display: flex; align-items: center; text-align: left; background: none; border: none; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; font-size: 11px; }
+.track-row .track-name .ico { width: 15px; height: 15px; flex: none; }
 .track-row .remove-track { flex: none; background: none; border: none; color: var(--faint); padding: 0 4px; visibility: hidden; }
 .track-row:hover .remove-track { visibility: visible; }
 .track-row .remove-track:hover { color: var(--error); }
 .notice-drivers { color: var(--ai); cursor: help; }
-.poses-param { color: var(--soft); font-size: 11px; cursor: help; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .curve-shape { width: 36px; height: 20px; flex: 0 0 auto; overflow: visible; vertical-align: middle; margin-left: 4px; }
 .curve-shape line { stroke: var(--border); stroke-width: 1; }
 .curve-shape polyline { fill: none; stroke: var(--params); stroke-width: 1.5; }
@@ -484,10 +486,9 @@ body[data-mode="design"] #timeline-area { display: none; }
 .track-row.empty .track-name { color: var(--faint); }
 .track-row.group { border-top: 1px solid var(--border); }
 .track-row.group .track-name { color: var(--text); }
-.track-row.group.main .track-name { color: var(--accent); font-weight: 600; }
-.track-row .fold { flex: none; width: 16px; background: none; border: none; color: var(--soft); padding: 0; font-size: 11px; }
+.track-row.group.main .track-name { color: var(--accent); font-weight: 600; }.track-row .fold { flex: none; width: 16px; background: none; border: none; color: var(--soft); padding: 0; font-size: 11px; }
 .track-row .fold:hover { color: var(--text); }
-.track-row.channel .label { padding-left: 16px; }
+.track-row.channel .label { padding-left: 14px; }
 .track-row .pin-channel { flex: none; background: none; border: none; color: var(--pose); padding: 0 4px; font-size: 11px; }
 .track-row.empty .pin-channel { color: var(--faint); }
 .track-row .pin-channel:hover { color: var(--text); }

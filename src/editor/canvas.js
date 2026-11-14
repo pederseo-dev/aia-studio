@@ -13,6 +13,7 @@ import { openedClip, variantsToShow } from './editing.js';
 import { createPen } from './pen.js';
 import { createPoints } from './points.js';
 import { createTransform, isFree } from './transform.js';
+import { togglePlayback } from './timeline.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const round = (v) => Math.round(v * 10) / 10;
@@ -190,13 +191,22 @@ export function mountCanvas(container) {
     { passive: false },
   );
 
+  // Space held + drag pans; a tap (no pan while it was held) plays or pauses the timeline.
+  let panned = false;
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space' && !(/** @type {Element} */ (e.target)).closest('input, select, textarea')) {
+      if (!space) panned = false;
       space = true;
       e.preventDefault();
     }
   });
-  window.addEventListener('keyup', (e) => e.code === 'Space' && (space = false));
+  window.addEventListener('keyup', (e) => {
+    if (e.code !== 'Space' || !space) return;
+    space = false;
+    // preventDefault: a focused button is not clicked by the same Space as well.
+    e.preventDefault();
+    if (!panned) togglePlayback();
+  });
 
   // Follows the pointer until it is released.
   function drag(e, move, release) {
@@ -271,6 +281,7 @@ export function mountCanvas(container) {
 
   function pan(e) {
     e.preventDefault();
+    panned = true;
     container.classList.add('panning');
     const start = { x: e.clientX - camera.x, y: e.clientY - camera.y };
     drag(

@@ -5,7 +5,7 @@
 // becomes a keyframe at the playhead time (autokey, see poseOps in editing.js).
 
 import { askText } from './ask.js';
-import { ICONS } from './icons.js';
+import { ICONS, TYPE_ICON, CHANNEL_ICON } from './icons.js';
 import { clipWarnings, scaleTime, isScene, moveKey, putKey, removeKey, roundTime, localTime, keyTimes, valueToSave, setupValues } from '../core/animation.js';
 import { CURVE_NAMES, applyCurve, curveError, sameTime } from '../core/curves.js';
 import { findObject, subtree } from '../core/document.js';
@@ -70,6 +70,13 @@ function stop() {
   if (state.playing) setState({ playing: false });
 }
 
+/** Space (a tap, without panning): play or pause the open scene or clip. */
+export function togglePlayback() {
+  if (state.mode === 'design' || !openedClip()) return;
+  if (state.playing) stop();
+  else startPlayback();
+}
+
 // ---------- Modes ----------
 
 export function mountModes(buttons) {
@@ -90,9 +97,17 @@ export function changeMode(mode) {
   const doc = state.doc;
   if (mode === 'design') return setState({ mode, pose: null, params: null, editing: null, vertex: null });
   if (mode === 'animate') {
-    // The first scene is opened, if there is one.
-    const scene = doc?.objects.find((o) => o.type === 'animation' && read(schema, o, 'usage') === 'animate');
-    return setState({ mode, pose: scene?.id ?? null, params: null, time: 0, editing: null, vertex: null });
+    // The first scene is opened. Like Rive's "Timeline 1", a document without scenes gets one, so you can animate
+    // straight away; more scenes are made with + on the timeline.
+    let id = doc?.objects.find((o) => o.type === 'animation' && read(schema, o, 'usage') === 'animate')?.id ?? null;
+    if (doc && !id && !state.live) {
+      let n = 1;
+      while (findObject(doc, `scene_${n}`)) n++;
+      const created = `scene_${n}`;
+      execute([{ op: 'create', type: 'animation', id: created, props: { usage: 'animate', duration: 5 } }], `create scene ${created}`);
+      if (findObject(state.doc, created)) id = created;
+    }
+    return setState({ mode, pose: id, params: null, time: 0, editing: null, vertex: null });
   }
   // Puppet: the blend of the params is seen; clips are opened from the library on the right.
   setState({ mode, pose: null, params: state.params ?? {}, time: 0, editing: null, vertex: null });
@@ -587,8 +602,8 @@ export function mountTimeline(root) {
   });
 
   /**
-   * The ruler, a row with all the clip's keyframes and, as in Moho, the channels of the selection: all the
-   * animatable ones, also those that have no keyframes yet (◇ keys them at the playhead).
+   * The ruler, a row with all the clip's keyframes and, as in Moho, the channels of the selection: the basic ones
+   * (also without keyframes yet: ◇ keys them at the playhead) and any other that has keyframes.
    */
   function tracks(clip) {
     const duration = read(schema, clip, 'duration');
@@ -610,7 +625,7 @@ export function mountTimeline(root) {
     body.append(rule);
 
     // All the clip's keyframes, in gray: to see the rhythm and where there is something (click = move the playhead there).
-    const all = row('All keys', 'Every keyframe of the clip, of any object. Click one to move the playhead there.');
+    const all = row('All keys', 'All keys: every keyframe of the clip, of any object. Click one to move the playhead there.', CHANNEL_ICON.allKeys);
     all.classList.add('summary');
     for (const t of keyTimes(clip)) {
       const diamond = Object.assign(document.createElement('span'), { className: 'key summary', title: `Keyframes at ${n(t)} s. Click to go there; drag to move the whole moment (every keyframe at ${n(t)} s).` });
@@ -635,10 +650,11 @@ export function mountTimeline(root) {
       body.append(help);
     }
     for (const obj of objs) {
-      const channels = channelsOf(obj);
+      // The basic channels always; the rest only once they have keys (changing them in Animate keys them).
+      const channels = channelsOf(obj).filter((c) => BASIC_CHANNELS.has(c.name) || c.props.some((p) => clip.tracks?.[obj.id]?.[p]?.length));
       const open = openGroup(obj.id, objs.length);
       // The object's row: ▸/▾ collapses, the name makes it the main one, and on the lane all its keyframes together.
-      const head = row(obj.id, `${obj.id} (${obj.type})`);
+      const head = row(obj.id, `${obj.id} (${obj.type}). Click to make it the main one.`, TYPE_ICON[obj.type]);
       head.classList.add('group');
       if (obj.id === state.selection) head.classList.add('main');
       const arrow = button(open ? '▾' : '▸', open ? `Collapse ${obj.id}` : `Expand ${obj.id} to see its channels`, () => {
@@ -667,20 +683,20 @@ export function mountTimeline(root) {
   /** A channel row (Position, Rotation…) of an object: ◇/◆ to key it, × to delete it and its keyframes. */
   function channelRow(clip, obj, channel, left) {
     const withTrack = channel.props.some((p) => clip.tracks?.[obj.id]?.[p]?.length);
-    const f = row(channel.name, `${obj.id}: ${channel.props.join(', ')}`);
+    let title = `${obj.id} · ${channel.name} (${channel.props.join(', ')})`;
+    // A param moves all the poses of its drivers (also those not seen in the timeline): its tooltip says which.
+    if (obj.type === 'param') {
+      const poses = state.doc.objects.filter((o) => o.type === 'driver' && o.param === obj.id && findObject(state.doc, o.pose)?.type === 'pose');
+      const detail = poses.map((d) => `${d.pose} (driver ${d.id}): ${Object.keys(findObject(state.doc, d.pose).values ?? {}).join(', ') || 'empty'}`).join('\n');
+      title += poses.length ? `\nAnimating ${obj.id} moves these poses (they all add up):\n${detail}` : `\n${obj.id} has no driver: animating it moves nothing`;
+    }
+    const f = row(channel.name, title, CHANNEL_ICON[channel.name]);
     f.classList.add('channel');
     if (!withTrack) f.classList.add('empty');
     const pin = button(withTrack ? '◆' : '◇', `Key ${obj.id} ${channel.name} at the playhead`, () => pinChannel(clip, obj, channel), 'pin-channel');
     const remove = button('×', `Delete the whole ${channel.name} track of ${obj.id} (all its keyframes)`, () => deleteChannel(clip, obj.id, channel), 'remove-track');
     if (!withTrack) remove.hidden = true;
     f.label.append(pin, remove);
-    // A param moves all the poses of its drivers (also those not seen in the timeline): it is said alongside.
-    if (obj.type === 'param') {
-      const poses = state.doc.objects.filter((o) => o.type === 'driver' && o.param === obj.id && findObject(state.doc, o.pose)?.type === 'pose');
-      const text = poses.length ? `→ ${poses.map((d) => d.pose).join(', ')}` : '→ no driver';
-      const detail = poses.map((d) => `${d.pose} (driver ${d.id}): ${Object.keys(findObject(state.doc, d.pose).values ?? {}).join(', ') || 'empty'}`).join('\n');
-      f.label.append(Object.assign(document.createElement('span'), { className: 'poses-param', textContent: text, title: poses.length ? `Animating ${obj.id} moves these poses (they all add up):\n${detail}` : `${obj.id} has no driver: animating it moves nothing` }));
-    }
     for (const t of channelTimes(clip, obj.id, channel.props)) {
       const keys = keysIn(clip, obj.id, channel.props, t);
       const diamond = document.createElement('span');
@@ -714,13 +730,18 @@ export function mountTimeline(root) {
     return body;
   }
 
-  /** A timeline row: label on the left and lane on the right. */
-  function row(text, title) {
+  /** A timeline row: label on the left (an icon, as in Moho, with the name in the tooltip) and lane on the right. */
+  function row(text, title, icon) {
     const div = document.createElement('div');
     div.className = 'track-row';
     const label = document.createElement('span');
     label.className = 'label';
-    label.append(Object.assign(document.createElement('span'), { className: 'track-name', textContent: text, title: title }));
+    const name = Object.assign(document.createElement('span'), { className: 'track-name', title });
+    if (icon) {
+      name.innerHTML = icon;
+      name.setAttribute('aria-label', text);
+    } else name.textContent = text;
+    label.append(name);
     const lane = document.createElement('div');
     lane.className = 'lane';
     div.append(label, lane);
@@ -850,6 +871,8 @@ export function mountTimeline(root) {
 // Channels as in Moho: position (x, y) and scale (scaleX, scaleY) go together in one row; a param, its value.
 /** @type {[string, string[]][]} */
 const JOINED = [['Position', ['x', 'y']], ['Rotation', ['rotation']], ['Scale', ['scaleX', 'scaleY']]];
+// Channels shown even without keys; the others appear in the timeline once they have a key.
+const BASIC_CHANNELS = new Set(['Position', 'Rotation', 'Scale', 'Points', 'Switch', 'Value']);
 const CHANNEL_LABELS = { opacity: 'Opacity', visible: 'Visible', fill: 'Fill', stroke: 'Stroke', strokeWidth: 'Stroke width', vertices: 'Points', active: 'Switch', width: 'Width', height: 'Height', length: 'Length', cornerRadius: 'Corner radius' };
 
 function channelsOf(obj) {
