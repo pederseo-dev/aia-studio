@@ -6,7 +6,7 @@ import { read, readMeta } from '../core/schema.js';
 import { bindingsByProximity, boneOf, distributeBetweenBones } from '../core/skeleton.js';
 import { switchParams } from '../core/blend.js';
 import { artboardOps } from '../core/artboard.js';
-import { notify, execute, schema, state, setState, select, selectSeveral, subscribe } from './state.js';
+import { notify, execute, schema, state, setState, setAutoWeld, select, selectSeveral, subscribe } from './state.js';
 import { boneColor, activeSkeleton, reparentPlan } from './bones.js';
 import { chooseVariant, poseOps, variantOf, variantsToShow } from './editing.js';
 
@@ -92,6 +92,12 @@ export function mountOptions(root, actions) {
 
     if (state.editing) {
       const parts = [text('Points: drag anchors and tangents (Alt breaks them), double-click an anchor = straight or curved, click the outline to add, <kbd>Del</kbd> deletes.')];
+      // Auto-weld, a named checkbox as in Moho's tool options.
+      const weld = Object.assign(document.createElement('label'), { className: 'option-check', title: 'Drop an end point of an open path on its other end to weld them and close the path' });
+      const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: state.autoWeld });
+      check.addEventListener('change', () => setAutoWeld(check.checked));
+      weld.append(check, ' Auto-weld');
+      parts.push(weld);
       parts.push(...pointBones(doc));
       parts.push(button('Done', 'Exit point editing (Enter)', () => setState({ editing: null, vertex: null }), 'main'));
       return parts;

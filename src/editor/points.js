@@ -1,6 +1,6 @@
 // Point editing of a path: drag anchors and tangents, double click on an anchor to toggle straight/curved,
 // click on the outline to add a vertex and Delete to remove the selected one. Alt while dragging a tangent
-// splits it from the other (cusp).
+// splits it from the other (cusp). With Auto-weld, an end point dropped on the other end closes the path.
 
 import { findObject } from '../core/document.js';
 import { read } from '../core/schema.js';
@@ -11,6 +11,7 @@ import { docVisible, execute, schema, state, setState, preview } from './state.j
 import { editingName, poseOps, activePose } from './editing.js';
 
 const NEAR_OUTLINE = 8; // px
+const WELD_DISTANCE = 10; // px on screen between the dropped end point and the other end
 
 export function createPoints(ctx) {
   // With an active pose the pose's vertices are edited (the morph); without a pose, the setup's.
@@ -43,7 +44,7 @@ export function createPoints(ctx) {
       ctx.overlay.append(
         ctx.create(
           'rect',
-          { class: `handle anchor${i === state.vertex ? ' active' : ''}${vertices[i].bone ? ' with-bone' : ''}`, 'data-handle': `anchor${i}`, x: a[0] - 4.5, y: a[1] - 4.5, width: 9, height: 9 },
+          { class: `handle anchor${i === state.vertex ? ' active' : ''}${vertices[i].bone ? ' with-bone' : ''}`, 'data-handle': `anchor-${i}`, x: a[0] - 4.5, y: a[1] - 4.5, width: 9, height: 9 },
           `Vertex ${i}${vertices[i].bone ? `, follows ${vertices[i].bone}` : ''} (double-click: straight/curved)`,
         ),
       );
@@ -86,8 +87,30 @@ export function createPoints(ctx) {
         change = created;
         preview(vertexOps(created));
       },
-      () => (change ? save(change, which === 'anchor' ? 'move vertex' : 'adjust curve') : preview(null)),
+      () => {
+        if (!change) return preview(null);
+        if (which === 'anchor' && weld(obj, change, i)) return;
+        save(change, which === 'anchor' ? 'move vertex' : 'adjust curve');
+      },
     );
+  }
+
+  /**
+   * Auto-weld (as in Moho): an end point of an open path dropped on its other end merges with it and the path closes.
+   * Only in the setup: a pose or a clip keeps the point count. Returns true if it welded.
+   */
+  function weld(obj, vertices, i) {
+    const last = vertices.length - 1;
+    if (!state.autoWeld || state.pose || read(schema, obj, 'closed') || vertices.length < 3 || (i !== 0 && i !== last)) return false;
+    const j = i === 0 ? last : 0;
+    const m = matrix();
+    const a = apply(m, vertices[i].x, vertices[i].y);
+    const b = apply(m, vertices[j].x, vertices[j].y);
+    if (Math.hypot(a[0] - b[0], a[1] - b[1]) > WELD_DISTANCE) return false;
+    const welded = vertices.filter((_, k) => k !== i);
+    execute([{ op: 'set', target: state.editing, props: { vertices: welded, closed: true } }], `weld end points of ${state.editing}`);
+    setState({ vertex: i === 0 ? welded.length - 1 : 0 });
+    return true;
   }
 
   /** Click on the canvas outside the handles. Returns true if it handled it (adding a vertex). */

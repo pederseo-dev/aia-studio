@@ -313,6 +313,7 @@ body.folded-layers #fold-layers .ico-arrow { transform: rotate(-90deg); }
 .options > .text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .options .text b { color: var(--text); font-weight: 600; }
 .options kbd { font-size: 11px; }
+.options .option-check { display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; cursor: pointer; }
 .options button, .options select { padding: 2px 8px; font-size: 12px; }
 .options button.main { border-color: var(--accent); color: var(--text); }
 .options.in-pose { border-color: var(--pose); }

@@ -18,6 +18,9 @@ export const state = {
   selected: [], // all the picked ones (includes the main one)
   editing: null, // id of the path whose points are being edited
   vertex: null, // index of the selected vertex in point editing
+  // Auto-weld (as in Moho): dropping an end point of an open path on its other end closes it. On by default; the
+  // choice is remembered.
+  autoWeld: readFlag('aia:auto-weld', true),
   tool: 'select',
   mode: 'design', // 'design' (drawing and rig), 'animate' (scene timeline) or 'puppet' (puppet controls and clips)
   // What is seen and edited on top of the setup: a pose or a clip (animation, at `time`). What is changed goes to the
@@ -33,6 +36,22 @@ export const state = {
   liveState: null,
   history: { entries: [], user: { undo: false, redo: false } },
 };
+
+/** A remembered on/off editor preference (localStorage can fail: then the default). */
+function readFlag(key, fallback) {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved === null ? fallback : saved === '1';
+  } catch {
+    return fallback;
+  }
+}
+export function setAutoWeld(value) {
+  try {
+    localStorage.setItem('aia:auto-weld', value ? '1' : '0');
+  } catch {}
+  setState({ autoWeld: value });
+}
 
 const listeners = new Set();
 export const subscribe = (fn) => listeners.add(fn);
