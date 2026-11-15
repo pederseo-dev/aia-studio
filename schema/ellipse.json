@@ -1,6 +1,6 @@
 {
   "name": "ellipse",
-  "extends": "shape",
+  "extends": "painted",
   "description": "Ellipse with its pivot at x/y; centered by default (originX/originY move the pivot within the shape). With width = height it is a circle.",
   "help": "Ellipse with its pivot at x/y; centered by default (originX/originY move the pivot).",
   "properties": {

@@ -1,13 +1,14 @@
 // Option bar over the canvas (like Moho's): says what can be done with the tool and the selection, and offers as
 // buttons the actions that have a shortcut, so knowing the shortcuts is not needed to discover what comes next.
 
-import { findObject, skeletonOf, bonesOf } from '../core/document.js';
+import { findObject, skeletonOf, bonesOf, children } from '../core/document.js';
 import { read, readMeta } from '../core/schema.js';
-import { bindingsByProximity, boneOf, distributeBetweenBones } from '../core/skeleton.js';
+import { bindingsByProximity, boneOf } from '../core/skeleton.js';
+import { planBindPoints } from '../core/bindPoints.js';
 import { switchParams } from '../core/blend.js';
 import { artboardOps } from '../core/artboard.js';
-import { notify, execute, schema, state, setState, setAutoWeld, select, selectSeveral, subscribe } from './state.js';
-import { boneColor, activeSkeleton, reparentPlan } from './bones.js';
+import { notify, execute, schema, state, setState, setAutoWeld, drawingLayer, select, subscribe } from './state.js';
+import { boneColor, activeSkeleton, reparentPlan, bindablePoints, bindLayer, bindPicked } from './bones.js';
 import { chooseVariant, poseOps, variantOf, variantsToShow } from './editing.js';
 
 /**
@@ -26,7 +27,7 @@ const SIZES = [
 
 export function mountOptions(root, actions) {
   subscribe((c) => {
-    if (['doc', 'selection', 'tool', 'pose', 'params', 'editing', 'vertex', 'id', 'mode'].some((k) => k in c) || ('time' in c && !state.playing)) draw();
+    if (['doc', 'selection', 'tool', 'pose', 'params', 'editing', 'vertex', 'id', 'mode', 'bindTarget', 'bindPicked'].some((k) => k in c) || ('time' in c && !state.playing)) draw();
   });
 
   const button = (text, title, onClick, className = '') => {
@@ -36,6 +37,8 @@ export function mountOptions(root, actions) {
   };
   const text = (html) => Object.assign(document.createElement('span'), { className: 'text', innerHTML: html });
   const code = (id) => `<b>${id}</b>`;
+  // Where the drawing tools put the next shape: the active vector layer, or a new one (as in Moho).
+  const intoLayer = () => (drawingLayer() ? `It goes into layer ${code(drawingLayer())}.` : 'It goes into a new vector layer (select one to draw into it).');
 
   function draw() {
     const doc = state.doc;
@@ -125,10 +128,10 @@ export function mountOptions(root, actions) {
           ...(bones.length ? [] : [button('Add Bone', 'Create bones (B)', () => setState({ tool: 'bone' }), 'main')]),
         ];
       case 'path':
-        return [text('Pen: click = straight point, click and drag = curved, click the first point = close, <kbd>Enter</kbd> = finish open.')];
+        return [text(`Pen: click = straight point, click and drag = curved, click the first point = close, <kbd>Enter</kbd> = finish open. ${intoLayer()}`)];
       case 'rect':
       case 'ellipse':
-        return [text(`Drag to draw ${state.tool === 'rect' ? 'a rectangle' : 'an ellipse'}; <kbd>Shift</kbd> = ${state.tool === 'rect' ? 'square' : 'circle'}.`)];
+        return [text(`Drag to draw ${state.tool === 'rect' ? 'a rectangle' : 'an ellipse'}; <kbd>Shift</kbd> = ${state.tool === 'rect' ? 'square' : 'circle'}. ${intoLayer()}`)];
       case 'rotate':
       case 'scale':
         return [text(`${state.tool === 'rotate' ? 'Rotate' : 'Scale'}: drag anywhere; the selection ${state.tool === 'rotate' ? 'rotates' : 'scales'} around its pivot.`)];
@@ -146,6 +149,11 @@ export function mountOptions(root, actions) {
       return parts;
     }
 
+    if (sel?.type === 'vector') {
+      const shapes = children(doc, sel.id).filter((o) => o.type === 'shape').length;
+      return [text(`Vector layer ${code(sel.id)}: ${shapes} shape${shapes === 1 ? '' : 's'}. Draw more with the Pen (P), Rectangle (R) or Ellipse (E); double-click a shape to pick it.`)];
+    }
+    if (sel?.type === 'shape') return [text(`Shape ${code(sel.id)} of ${code(sel.parent)}: drag it to move its points, the corners scale, the top handle rotates, the pivot can be dragged; drag a point to deform it. <kbd>Esc</kbd> goes back to the layer.`), button(`Go to ${sel.parent}`, `Select the vector layer ${sel.parent} (Esc)`, () => select(sel.parent))];
     if (sel?.type === 'switch') return switchOptions(doc, sel);
     if (sel?.type === 'skeleton') return skeletonOptions(doc, sel);
 
@@ -168,14 +176,14 @@ export function mountOptions(root, actions) {
         parts.push(button('Go to bone', `Select ${sel.bone}`, () => select(sel.bone)));
       } else if (bone) {
         parts.push(text(`Follows ${code(bone)} through its group.`));
-      } else if (sel.vertices?.some((v) => v.bone)) {
+      } else if (bindablePoints(sel).some(([, v]) => v.bone)) {
         // Point binding: how many points each bone follows, with its color.
         const count = {};
-        for (const v of sel.vertices) if (v.bone) count[v.bone] = (count[v.bone] ?? 0) + 1;
+        for (const [, v] of bindablePoints(sel)) if (v.bone) count[v.bone] = (count[v.bone] ?? 0) + 1;
         const list = Object.entries(count).map(([h, n]) => `<b style="color:${boneColor(doc, h)}">${h}</b> ${n}`).join(', ');
         parts.push(text(`Its points follow bones: ${list}.`));
         parts.push(button('Bind Points', 'Bind Points tool: pick a bone, then click or box the points', () => setState({ tool: 'bindPoints' })));
-        parts.push(button('Unbind points', 'Points go back to following the shape', () => execute([{ op: 'set', target: sel.id, props: { vertices: sel.vertices.map(({ bone, ...v }) => v) } }], `unbind points of ${sel.id}`)));
+        parts.push(button('Unbind points', 'Points go back to following the layer', () => execute(planBindPoints(doc, schema, sel.id, undefined, { release: true }).ops, `unbind points of ${sel.id}`)));
       } else {
         const skeleton = skeletonOf(doc, sel.id);
         if (skeleton && bonesOf(doc, skeleton).length) {
@@ -248,7 +256,14 @@ export function mountOptions(root, actions) {
     const bones = skeleton ? bonesOf(doc, skeleton) : [];
     if (!bones.length) return [];
     const vertices = read(schema, path, 'vertices');
-    const save = (created, note) => execute([{ op: 'set', target: path.id, props: { vertices: created } }], `${note} in ${path.id}`);
+    // The same plan as the AI's bind_points.
+    const save = (bones, options, note) => {
+      try {
+        execute(planBindPoints(doc, schema, path.id, bones, options).ops, `${note} in ${path.id}`);
+      } catch (e) {
+        notify(e.message, true);
+      }
+    };
     const parts = [];
     if (state.vertex != null && vertices[state.vertex]) {
       const i = state.vertex;
@@ -256,23 +271,14 @@ export function mountOptions(root, actions) {
       const select = document.createElement('select');
       select.append(new Option(`(the shape’s${boneOf(doc, path.id) ? `: ${boneOf(doc, path.id)}` : ''})`, ''), ...bones.map((h) => new Option(h.id, h.id)));
       select.value = vertices[i].bone ?? '';
-      select.addEventListener('change', () => {
-        const { bone, ...rest } = vertices[i];
-        save(vertices.map((v, j) => (j === i ? (select.value ? { ...rest, bone: select.value } : rest) : v)), `point ${i} ${select.value ? `to ${select.value}` : 'unbound'}`);
-      });
+      select.addEventListener('change', () => save(select.value ? [select.value] : undefined, { points: [String(i)], release: !select.value }, `point ${i} ${select.value ? `to ${select.value}` : 'unbound'}`));
       label.append(select);
       parts.push(label);
     }
     parts.push(
-      button('Distribute among bones', `Each point follows the nearest bone of ${skeleton}: the path bends with the chain in poses`, () => {
-        try {
-          save(distributeBetweenBones(doc, schema, path.id), 'distribute points among bones');
-        } catch (e) {
-          notify(e.message, true);
-        }
-      }),
+      button('Distribute among bones', `Each point follows the nearest bone of ${skeleton}: the path bends with the chain in poses`, () => save(undefined, {}, 'distribute points among bones')),
     );
-    if (vertices.some((v) => v.bone)) parts.push(button('Remove bones', 'Points go back to following the shape’s bone', () => save(vertices.map(({ bone, ...v }) => v), 'unbind points')));
+    if (vertices.some((v) => v.bone)) parts.push(button('Remove bones', 'Points go back to following the shape’s bone', () => save(undefined, { release: true }, 'unbind points')));
     return parts;
   }
 
@@ -378,6 +384,9 @@ export function mountOptions(root, actions) {
     return parts;
   }
 
+  /** How many points (of vector layers and paths) follow a bone. */
+  const pointsFollowing = (doc, bone) => doc.objects.reduce((t, o) => t + bindablePoints(o).filter(([, v]) => v.bone === bone).length, 0);
+
   /** Reparent Bone, Bind Layer and Bind Points: what to do depending on whether there is a picked bone. */
   function bindingOptions(doc, bone) {
     const h = bone && code(bone.id);
@@ -390,15 +399,27 @@ export function mountOptions(root, actions) {
       if (bindingsByProximity(doc, schema, skeleton).length) parts.push(button('Bind all by proximity', `Bind every unbound drawing of ${skeleton} to its nearest bone`, () => actions.bindAll(skeleton)));
       return parts;
     }
-    if (!bone) return [text('Bind Points: click a bone, then click points of its skeleton’s paths, or drag a box around them. They take the bone’s color. Alt unbinds.')];
-    const n = doc.objects.reduce((t, o) => t + (o.type === 'path' ? (o.vertices ?? []).filter((v) => v.bone === bone.id).length : 0), 0);
-    return [text(`Bind Points → <b style="color:${boneColor(doc, bone.id)}">${bone.id}</b>: click a point to bind or unbind it, or drag a box to bind all inside (Alt + box: unbind). ${n} point${n === 1 ? '' : 's'} follow it; white points follow their shape.`)];
+    return bindPointsOptions(doc, bone);
+  }
+
+  /** Bind Points: which layer, how many points are picked, and the buttons that bind or release them. */
+  function bindPointsOptions(doc, bone) {
+    const layer = bindLayer(doc);
+    if (!layer) return [text('Bind Points: pick the vector layer whose points you bind (in Layers, or click its drawing).')];
+    const picked = state.bindPicked.length;
+    const to = bone ? ` → <b style="color:${boneColor(doc, bone.id)}">${bone.id}</b>` : '';
+    const step = !picked ? 'click points (Shift adds), or drag a box (Shift adds, Alt removes).' : bone ? `${picked} picked: press Space or Bind.` : `${picked} picked: now click the bone they should follow, then Space.`;
+    const parts = [text(`Bind Points in ${code(layer.id)}${to}: ${step} White points follow the layer.`)];
+    if (picked && bone) parts.push(button(`Bind ${picked}`, `The ${picked} picked point${picked === 1 ? '' : 's'} follow ${bone.id} (Space)`, () => bindPicked(bone.id), 'main'));
+    if (picked && state.bindPicked.some((k) => new Map(bindablePoints(layer)).get(k)?.bone)) parts.push(button('Unbind', 'The picked points go back to following the layer', () => bindPicked(null)));
+    parts.push(button('All', `Pick every point of ${layer.id}`, () => setState({ bindPicked: bindablePoints(layer).map(([k]) => k) })));
+    return parts;
   }
 
   function boneOptions(doc, bone) {
     const bound = doc.objects.filter((o) => o.bone === bone.id);
     const poses = doc.objects.filter((o) => o.type === 'pose');
-    const points = doc.objects.reduce((t, o) => t + (o.type === 'path' ? (o.vertices ?? []).filter((v) => v.bone === bone.id).length : 0), 0);
+    const points = pointsFollowing(doc, bone.id);
     const moved = [bound.length && `${bound.length} object${bound.length === 1 ? '' : 's'}`, points && `${points} point${points === 1 ? '' : 's'}`].filter(Boolean);
     const binding = moved.length ? `It moves ${moved.join(' and ')}, only in poses.` : 'Nothing is bound to it yet.';
     const summary =
@@ -411,7 +432,7 @@ export function mountOptions(root, actions) {
       text(summary),
       kinship(doc, bone),
       button('Bind Layer', 'Bind Layer tool: click drawing to make it follow this bone (L)', () => setState({ tool: 'bindLayer' }), bound.length ? '' : 'main'),
-      button('Bind Points', 'Bind Points tool: click or box points of a path to make them follow this bone', () => setState({ tool: 'bindPoints' })),
+      button('Bind Points', 'Bind Points tool: click or box points of a vector layer to make them follow this bone', () => setState({ tool: 'bindPoints' })),
     ];
     const skeleton = skeletonOf(doc, bone.id);
     if (skeleton && bindingsByProximity(doc, schema, skeleton).length) {

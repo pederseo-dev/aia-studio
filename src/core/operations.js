@@ -16,9 +16,11 @@
 
 import { expandFromTo } from './skeleton.js';
 import { read, suggest } from './schema.js';
-import { apply, invert, worldMatrix } from './geometry.js';
+import { apply, invert, localMatrix, worldMatrix } from './geometry.js';
 import { parseD } from './paths.js';
-import { ValidationError, ID, findObject, idError, children, subtree, validate } from './document.js';
+import { addD, dropUnused, mapBones, shiftPoints, withoutBones } from './mesh.js';
+import { transformPointsOf } from './meshTransform.js';
+import { ValidationError, findObject, idError, children, subtree, validate } from './document.js';
 
 const STRUCTURE = new Set(['id', 'type', 'parent']);
 
@@ -43,12 +45,16 @@ export function applyOperations(doc, ops, schema) {
   return { doc: next, inverses, warnings: warnings.filter((a) => !previous.has(a)) };
 }
 
-/** Merges consecutive `set`s on the same target into one (the last value wins). */
+/**
+ * Merges consecutive `set`s on the same target into one (the last value wins). A `transformPoints` is relative (each
+ * one moves from where the previous left), so those are kept apart.
+ */
 export function compact(ops) {
   const result = [];
   for (const op of ops) {
     const previous = result.at(-1);
-    if (op.op === 'set' && previous?.op === 'set' && previous.target === op.target) {
+    const relative = (o) => o.props?.transformPoints !== undefined;
+    if (op.op === 'set' && previous?.op === 'set' && previous.target === op.target && !relative(op) && !relative(previous)) {
       result[result.length - 1] = { ...previous, props: { ...previous.props, ...op.props } };
     } else {
       result.push(op);
@@ -111,7 +117,8 @@ function insert(doc, obj, parent, index) {
 /** Sugar for the AI: a path accepts `d` (SVG path data with a single subpath) and is saved as vertices. */
 function expandD(kind, props) {
   if (props?.d === undefined) return props;
-  if (!kind?.properties.vertices) throw new Error(`"d" only works on types with vertices (path), not on ${kind?.name ?? 'meta'}`);
+  if (kind?.name === 'shape') throw new Error('a shape is changed by moving the points of its layer: in a pose or keyframe, give the layer’s "points" ({ p3: { x, y } }) instead of "d"');
+  if (!kind?.properties.vertices) throw new Error(`"d" only works on types with vertices (path) and on shapes of a vector layer, not on ${kind?.name ?? 'meta'}`);
   const subpaths = parseD(props.d);
   if (subpaths.length !== 1) throw new Error(`d has ${subpaths.length} subpaths; create one path for each`);
   const { d, ...rest } = props;
@@ -158,7 +165,7 @@ function expandPose(doc, schema, kind, props) {
       rest = withoutD; // whether it is closed or open is decided by the setup
     }
     for (const [k, p] of Object.entries(targetType.properties)) {
-      if (p.type === 'vertices' && Array.isArray(rest[k]) && rest[k].some((v) => v?.bone !== undefined)) rest = { ...rest, [k]: rest[k].map(({ bone, ...v }) => v) };
+      if (rest[k] !== undefined && withoutBones(p, rest[k]) !== rest[k]) rest = { ...rest, [k]: withoutBones(p, rest[k]) };
     }
     values[id] = rest;
   }
@@ -196,6 +203,11 @@ function expandTracks(doc, schema, kind, props) {
   const tracks = {};
   for (const [id, fields] of Object.entries(props.tracks)) {
     const targetType = schema.types.get(findObject(doc, id)?.type);
+    if (targetType?.properties.points && fields && typeof fields === 'object' && Array.isArray(fields.points)) {
+      // As in poses, the points of a keyframe do not keep `bone`.
+      tracks[id] = { ...fields, points: fields.points.map((c) => (c && typeof c === 'object' && c.value ? { ...c, value: withoutBones(targetType.properties.points, c.value) } : c)) };
+      continue;
+    }
     if (!targetType?.properties.vertices || !fields || typeof fields !== 'object') {
       tracks[id] = fields;
       continue;
@@ -222,6 +234,163 @@ function expandBone(doc, schema, kind, parent, props, current) {
   return expandFromTo(doc, schema, parent, props, current);
 }
 
+/**
+ * Removes from a vector layer the curves among `candidates` that no shape in `keep` uses, and the points no curve
+ * uses any more; and takes those points and curves out of the poses and keyframes that moved them, so nothing
+ * points to them. Mutates `doc`; returns the inverses of the poses and clips it touched (the caller restores the
+ * layer itself).
+ */
+function pruneLayer(doc, schema, layer, candidates, keep) {
+  const before = { points: read(schema, layer, 'points') ?? {}, curves: read(schema, layer, 'curves') ?? {} };
+  const mesh = dropUnused(before.points, before.curves, candidates, keep);
+  const gone = { points: Object.keys(before.points).filter((id) => !(id in mesh.points)), curves: Object.keys(before.curves).filter((id) => !(id in mesh.curves)) };
+  if (!gone.points.length && !gone.curves.length) return [];
+  layer.points = mesh.points;
+  layer.curves = mesh.curves;
+  const without = (map, ids) => Object.fromEntries(Object.entries(map ?? {}).filter(([id]) => !ids.includes(id)));
+  const clean = (fields) => {
+    const out = { ...fields };
+    for (const k of ['points', 'curves']) {
+      if (!out[k]) continue;
+      out[k] = without(out[k], gone[k]);
+      if (!Object.keys(out[k]).length) delete out[k];
+    }
+    return out;
+  };
+  const inverses = [];
+  for (const o of doc.objects) {
+    const f = o.type === 'pose' ? o.values?.[layer.id] : null;
+    if (f && (f.points || f.curves)) {
+      const cleaned = clean(f);
+      if (JSON.stringify(cleaned) === JSON.stringify(f)) continue;
+      inverses.push({ op: 'set', target: o.id, props: { values: structuredClone(o.values) } });
+      const values = { ...o.values, [layer.id]: cleaned };
+      if (!Object.keys(cleaned).length) delete values[layer.id];
+      o.values = values;
+    }
+    const track = o.type === 'animation' ? o.tracks?.[layer.id] : null;
+    if (track && (Array.isArray(track.points) || Array.isArray(track.curves))) {
+      const cleaned = { ...track };
+      for (const k of ['points', 'curves']) {
+        if (!Array.isArray(track[k])) continue;
+        const keys = track[k].map((c) => ({ ...c, value: without(c.value, gone[k]) })).filter((c) => Object.keys(c.value).length);
+        if (keys.length) cleaned[k] = keys;
+        else delete cleaned[k];
+      }
+      if (JSON.stringify(cleaned) === JSON.stringify(track)) continue;
+      inverses.push({ op: 'set', target: o.id, props: { tracks: structuredClone(o.tracks) } });
+      const tracks = { ...o.tracks, [layer.id]: cleaned };
+      if (!Object.keys(cleaned).length) delete tracks[layer.id];
+      o.tracks = tracks;
+    }
+  }
+  return inverses;
+}
+
+/**
+ * Sugar for the AI: a shape accepts `d` (an SVG path, any number of subpaths). Its subpaths are added to the mesh
+ * of its vector layer as new curves (welded where a point falls on an existing one) and the shape fills them. On a
+ * `set`, they replace the shape's curves, and the old ones no other shape uses leave the layer. Returns the props
+ * without `d` and the inverse that restores the layer.
+ */
+function expandShapeD(doc, schema, props, parentId, shapeId, current = null) {
+  if (props?.d === undefined) return { props, inverses: [] };
+  const layer = parentId != null ? findObject(doc, parentId) : null;
+  if (layer?.type !== 'vector') throw new Error(`a shape goes inside a vector layer${layer ? ` (its parent "${layer.id}" is a ${layer.type})` : ''}: create a vector and pass it as parent`);
+  if (typeof props.d !== 'string') throw new Error('d must be an SVG path (text)');
+  const { d, ...rest } = props;
+  const before = { points: read(schema, layer, 'points') ?? {}, curves: read(schema, layer, 'curves') ?? {} };
+  const added = addD(before.points, before.curves, d);
+  const inverses = restoreLayer(layer);
+  layer.points = added.points;
+  layer.curves = added.curves;
+  if (current) {
+    // The old curves no other shape uses leave the layer (and the poses and keyframes that moved them).
+    const others = new Set(children(doc, layer.id).filter((o) => o.id !== shapeId).flatMap((o) => o.curves ?? []));
+    inverses.push(...pruneLayer(doc, schema, layer, current.curves ?? [], others));
+  }
+  return { props: { ...rest, curves: [...(current ? [] : (rest.curves ?? [])), ...added.ids] }, inverses };
+}
+
+/**
+ * Sugar for the AI and the editor: a vector layer accepts `pivot: [x, y]` (in its parent's coordinates, like x/y). It
+ * moves the pivot without moving the drawing: x/y change and its points shift the other way, in the setup and in
+ * the poses and keyframes that move them (they are absolute, in the layer's coordinates). Returns the props without
+ * `pivot` and the inverses of the poses and clips it touched.
+ */
+function expandPivot(doc, schema, obj, props) {
+  if (props?.pivot === undefined) return { props, inverses: [] };
+  if (obj.type !== 'vector') throw new Error(`"pivot" only works on vector layers (vector), not on ${obj.type}`);
+  const p = props.pivot;
+  if (!Array.isArray(p) || p.length !== 2 || !p.every((v) => typeof v === 'number' && Number.isFinite(v))) throw new Error('pivot must be [x, y] (numbers, in the parent\'s coordinates)');
+  const { pivot, ...rest } = props;
+  const [x0, y0] = [read(schema, obj, 'x'), read(schema, obj, 'y')];
+  // The move of the pivot measured in the layer's own frame (it may be rotated or scaled).
+  const [dx, dy] = apply(invert([...localMatrix(schema, obj).slice(0, 4), 0, 0]), p[0] - x0, p[1] - y0);
+  const shifted = { ...rest, x: Math.round(p[0] * 100) / 100 || 0, y: Math.round(p[1] * 100) / 100 || 0 };
+  if (rest.points === undefined) shifted.points = shiftPoints(read(schema, obj, 'points'), -dx, -dy);
+  // Poses and clips: their points shift like the setup's, and their x/y of the layer (absolute, in the parent's
+  // coordinates) move with the pivot.
+  const [px, py] = [p[0] - x0, p[1] - y0];
+  const r = (v) => Math.round(v * 100) / 100 || 0;
+  const fields = (f) => {
+    const out = { ...f };
+    if (f.points) out.points = shiftPoints(f.points, -dx, -dy);
+    if (typeof f.x === 'number') out.x = r(f.x + px);
+    if (typeof f.y === 'number') out.y = r(f.y + py);
+    return out;
+  };
+  const touches = (f) => f && (f.points || typeof f.x === 'number' || typeof f.y === 'number');
+  const inverses = [];
+  for (const o of doc.objects) {
+    if (o.type === 'pose' && touches(o.values?.[obj.id])) {
+      inverses.push({ op: 'set', target: o.id, props: { values: structuredClone(o.values) } });
+      o.values = { ...o.values, [obj.id]: fields(o.values[obj.id]) };
+    }
+    const track = o.type === 'animation' ? o.tracks?.[obj.id] : null;
+    if (track && ['points', 'x', 'y'].some((k) => Array.isArray(track[k]))) {
+      inverses.push({ op: 'set', target: o.id, props: { tracks: structuredClone(o.tracks) } });
+      const shiftedTrack = { ...track };
+      if (Array.isArray(track.points)) shiftedTrack.points = track.points.map((k) => ({ ...k, value: shiftPoints(k.value, -dx, -dy) }));
+      if (Array.isArray(track.x)) shiftedTrack.x = track.x.map((k) => (typeof k.value === 'number' ? { ...k, value: r(k.value + px) } : k));
+      if (Array.isArray(track.y)) shiftedTrack.y = track.y.map((k) => (typeof k.value === 'number' ? { ...k, value: r(k.value + py) } : k));
+      o.tracks = { ...o.tracks, [obj.id]: shiftedTrack };
+    }
+  }
+  return { props: shifted, inverses };
+}
+
+/** The inverse that brings a layer's mesh back to how it is now. */
+function restoreLayer(layer) {
+  const previous = {};
+  const created = [];
+  for (const k of ['points', 'curves']) {
+    if (k in layer) previous[k] = structuredClone(layer[k]);
+    else created.push(k);
+  }
+  const inverses = [];
+  if (Object.keys(previous).length) inverses.push({ op: 'set', target: layer.id, props: previous });
+  if (created.length) inverses.push({ op: 'unset', target: layer.id, props: created });
+  return inverses;
+}
+
+/**
+ * Sugar for the AI and the editor, as Moho's Transform Points: a vector layer accepts
+ * `transformPoints: { shape | points, translate, rotate, scale, origin }`. It moves, rotates (degrees) and scales
+ * the points of a shape (or a list of point ids) around `origin` (default: the center of their box), in the layer's
+ * coordinates, with their tangents. It changes the setup; welded points move the other shapes too.
+ */
+function expandTransformPoints(doc, schema, obj, props) {
+  if (props?.transformPoints === undefined) return props;
+  if (obj.type === 'shape') throw new Error(`"transformPoints" goes on the shape's layer: { "op": "set", "target": "${obj.parent}", "props": { "transformPoints": { "shape": "${obj.id}", ... } } }`);
+  if (obj.type !== 'vector') throw new Error(`"transformPoints" only works on vector layers (vector), not on ${obj.type}`);
+  if (props.pivot !== undefined) throw new Error('pivot and transformPoints go in separate operations (two sets in the same batch)');
+  if (props.points !== undefined || props.curves !== undefined) throw new Error('transformPoints changes points and curves itself: do not pass them in the same set');
+  const { transformPoints, ...rest } = props;
+  const setup = { points: read(schema, obj, 'points') ?? {}, curves: read(schema, obj, 'curves') ?? {} };
+  return { ...rest, ...transformPointsOf(doc, obj, transformPoints, setup) };
+}
+
 function checkProps(props) {
   if (!props || typeof props !== 'object' || Array.isArray(props)) throw new Error('props must be an object { property: value }');
   for (const [k, v] of Object.entries(props)) {
@@ -244,15 +413,20 @@ function applyOne(doc, op, schema) {
       }
       const parent = container(doc, op.parent, schema);
       if (op.props !== undefined) checkProps(op.props);
-      const props = expandTracks(doc, schema, op.type, expandPose(doc, schema, op.type, expandBone(doc, schema, op.type, parent, expandD(kind, op.props)))) ?? {};
+      for (const k of ['pivot', 'transformPoints']) if (op.props?.[k] !== undefined) throw new Error(`"${k}" changes an existing layer: create ${op.id} first and use "${k}" in a later set`);
+      const shape = op.type === 'shape' ? expandShapeD(doc, schema, op.props, parent, op.id) : { props: op.props, inverses: [] };
+      const props = expandTracks(doc, schema, op.type, expandPose(doc, schema, op.type, expandBone(doc, schema, op.type, parent, expandD(kind, shape.props)))) ?? {};
       insert(doc, { id: op.id, type: op.type, parent: parent, ...structuredClone(props) }, parent, op.index);
-      return [{ op: 'delete', target: op.id }];
+      return [{ op: 'delete', target: op.id }, ...shape.inverses];
     }
 
     case 'set': {
       checkProps(op.props);
       const obj = op.target === 'meta' ? doc.meta : target(doc, op.target);
-      const props = op.target === 'meta' ? op.props : expandTracks(doc, schema, obj.type, expandPose(doc, schema, obj.type, expandBone(doc, schema, obj.type, obj.parent ?? null, expandD(schema.types.get(obj.type), op.props), obj)));
+      // transformPoints first: it checks the props as they were given (pivot adds points of its own).
+      const given = op.target === 'meta' ? op.props : expandTransformPoints(doc, schema, obj, op.props);
+      const shape = obj.type === 'shape' ? expandShapeD(doc, schema, given, obj.parent ?? null, obj.id, obj) : op.target === 'meta' ? { props: given, inverses: [] } : expandPivot(doc, schema, obj, given);
+      const props = op.target === 'meta' ? op.props : expandTracks(doc, schema, obj.type, expandPose(doc, schema, obj.type, expandBone(doc, schema, obj.type, obj.parent ?? null, expandD(schema.types.get(obj.type), shape.props), obj)));
       const previous = {};
       const created = [];
       for (const [k, v] of Object.entries(props)) {
@@ -263,7 +437,7 @@ function applyOne(doc, op, schema) {
       const inverses = [];
       if (Object.keys(previous).length) inverses.push({ op: 'set', target: op.target, props: previous });
       if (created.length) inverses.push({ op: 'unset', target: op.target, props: created });
-      return inverses;
+      return [...inverses, ...shape.inverses];
     }
 
     case 'unset': {
@@ -286,6 +460,18 @@ function applyOne(doc, op, schema) {
       const removed = [];
       doc.objects.forEach((o, pos) => ids.has(o.id) && removed.push({ pos, obj: o }));
       doc.objects = doc.objects.filter((o) => !ids.has(o.id));
+      // A deleted shape takes along the curves (and points) of its layer that no other shape uses, as they would be
+      // invisible and unreachable; the poses and keyframes that moved them let them go too.
+      const pruned = [];
+      for (const { obj: shape } of removed) {
+        const layer = shape.type === 'shape' && !ids.has(shape.parent) ? findObject(doc, shape.parent) : null;
+        if (layer?.type !== 'vector') continue;
+        const keep = new Set(children(doc, layer.id).flatMap((o) => o.curves ?? []));
+        const restore = restoreLayer(layer);
+        const mesh = JSON.stringify([layer.points, layer.curves]);
+        const poses = pruneLayer(doc, schema, layer, shape.curves ?? [], keep);
+        if (JSON.stringify([layer.points, layer.curves]) !== mesh) pruned.push(...restore, ...poses);
+      }
       // What pointed to something deleted (a style, a bone) is released; undo binds it again.
       const rebind = [];
       for (const o of doc.objects) {
@@ -294,9 +480,9 @@ function applyOne(doc, op, schema) {
           if (p.type === 'ref' && ids.has(o[prop])) {
             previous[prop] = o[prop];
             delete o[prop];
-          } else if (p.type === 'vertices' && o[prop]?.some((v) => ids.has(v.bone))) {
+          } else if (mapBones(p, o[prop], (bone) => (ids.has(bone) ? undefined : bone)) !== o[prop]) {
             previous[prop] = structuredClone(o[prop]);
-            o[prop] = o[prop].map(({ bone, ...v }) => (bone === undefined || ids.has(bone) ? v : { ...v, bone }));
+            o[prop] = mapBones(p, o[prop], (bone) => (ids.has(bone) ? undefined : bone));
           } else if ((p.type === 'pose' || p.type === 'tracks') && o[prop]) {
             const clean = (p.type === 'pose' ? mapPose : mapTracks)(doc, schema, o[prop], (id) => (ids.has(id) ? null : id));
             if (JSON.stringify(clean) !== JSON.stringify(o[prop])) {
@@ -307,7 +493,8 @@ function applyOne(doc, op, schema) {
         }
         if (Object.keys(previous).length) rebind.push({ op: 'set', target: o.id, props: previous });
       }
-      return [{ op: '_restore', root: op.target, entries: removed }, ...rebind];
+      // The pruning ran before the release of references, so its inverse goes after theirs.
+      return [{ op: '_restore', root: op.target, entries: removed }, ...rebind, ...pruned];
     }
 
     case '_restore': {
@@ -366,7 +553,7 @@ function applyOne(doc, op, schema) {
           if (p.type === 'ref' && o[prop] === previous) o[prop] = op.id;
           if (p.type === 'pose' && o[prop]) o[prop] = mapPose(doc, schema, o[prop], (id) => (id === previous ? op.id : id));
           if (p.type === 'tracks' && o[prop]) o[prop] = mapTracks(doc, schema, o[prop], (id) => (id === previous ? op.id : id));
-          if (p.type === 'vertices' && o[prop]?.some((v) => v.bone === previous)) o[prop] = o[prop].map((v) => (v.bone === previous ? { ...v, bone: op.id } : v));
+          if (o[prop] !== undefined) o[prop] = mapBones(p, o[prop], (bone) => (bone === previous ? op.id : bone));
         }
       }
       return [{ op: 'rename', target: op.id, id: previous }];
@@ -396,7 +583,7 @@ function applyOne(doc, op, schema) {
           for (const [prop, p] of Object.entries(schema.types.get(c.type)?.properties ?? {})) {
             if (p.type === 'ref' && map.has(c[prop])) c[prop] = map.get(c[prop]);
             // When copying a whole skeleton, the vertices bound per point follow the copied bones.
-            if (p.type === 'vertices' && c[prop]?.some((v) => map.has(v.bone))) c[prop] = c[prop].map((v) => (map.has(v.bone) ? { ...v, bone: map.get(v.bone) } : v));
+            if (c[prop] !== undefined) c[prop] = mapBones(p, c[prop], (bone) => map.get(bone) ?? bone);
           }
           return c;
         });

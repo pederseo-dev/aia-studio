@@ -47,8 +47,11 @@ export function mountTree(root, resourcesRoot) {
 
   const selectionClass = (id) => (id === state.selection ? ' selected main' : state.selected.includes(id) ? ' selected' : '');
 
-  /** Rows of the child layers of `parent`, with the front ones at the top. Bones are not layers: they do not appear. */
-  const layers = (doc, parent) => children(doc, parent).filter((o) => !isResource(o) && o.type !== 'bone');
+  /**
+   * Rows of the child layers of `parent`, with the front ones at the top. Bones are not layers: they do not appear.
+   * Neither are the shapes of a vector layer, as in Moho: they are picked on the canvas.
+   */
+  const layers = (doc, parent) => children(doc, parent).filter((o) => !isResource(o) && o.type !== 'bone' && o.type !== 'shape');
 
   function branch(doc, parent, level) {
     return layers(doc, parent)
@@ -222,7 +225,7 @@ export function mountTree(root, resourcesRoot) {
     if (!dragged || !row || containsA(draggedIds(), row.dataset.id)) return;
     e.preventDefault();
     cleanMarks();
-    row.classList.add(`release${zone(e, row)}`);
+    row.classList.add(`release-${zone(e, row)}`);
   });
 
   root.addEventListener('dragleave', (e) => {

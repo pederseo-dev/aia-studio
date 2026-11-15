@@ -13,6 +13,7 @@ import { evaluateClip } from './animation.js';
 import { read } from './schema.js';
 import { effectiveValue } from './styles.js';
 import { blendColor, blendPoses, blendVertices, paramValues } from './blend.js';
+import { blendCurves, blendPoints } from './mesh.js';
 
 /** Seeded random number generator (mulberry32): the same script gives the same strip. */
 function random(seed) {
@@ -199,6 +200,8 @@ export function createLive(doc, schema, { params = {}, seed = 1, auto = true } =
       if (kind === 'number' && typeof v === 'number' && typeof current === 'number') return current + (v - current) * w;
       if (kind === 'color') return blendColor(current, v, w);
       if (kind === 'vertices' && Array.isArray(current) && Array.isArray(v)) return blendVertices(current, v, w);
+      if (kind === 'points') return blendPoints(current, v, w);
+      if (kind === 'curves') return blendCurves(current, v, w);
       return w >= 0.5 ? v : undefined;
     };
     /** A layer (what a clip sets, or the blend of the bases) on top of what there is, with its weight. */

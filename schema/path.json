@@ -1,10 +1,10 @@
 {
   "name": "path",
-  "extends": "shape",
+  "extends": "painted",
   "description": "Freeform shape made of vertices with curves. The vertices are in the path's own coordinates: the path's x/y is its pivot. When creating or changing a path you can also pass \"d\" with an SVG path (a single subpath) and it is converted to vertices.",
   "help": "Free shape made of curved vertices, in the coordinates of the path itself (its x/y is the pivot).",
   "properties": {
-    "vertices": { "type": "vertices", "default": [], "animatable": true, "group": "Shape", "help": "List of vertices. Edit them with the Points tool.", "description": "List of vertices. See the «Vertices» section of the guide." },
+    "vertices": { "type": "vertices", "default": [], "animatable": true, "group": "Shape", "help": "List of vertices. Edit them on the canvas: double click the path (or Enter).", "description": "List of vertices. See the «Vertices» section of the guide." },
     "closed": { "type": "boolean", "default": true, "animatable": false, "group": "Shape", "help": "Joins the last vertex to the first one.", "description": "If true, the last vertex is joined to the first one." }
   }
 }

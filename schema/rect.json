@@ -1,6 +1,6 @@
 {
   "name": "rect",
-  "extends": "shape",
+  "extends": "painted",
   "description": "Rectangle with its pivot at x/y; centered by default (originX/originY move the pivot within the shape).",
   "help": "Rectangle with its pivot at x/y; centered by default (originX/originY move the pivot).",
   "properties": {

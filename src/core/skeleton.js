@@ -16,6 +16,10 @@ import { applyPose } from './blend.js';
 // operations.js also imports this file: the cycle is safe because only functions are used, when called.
 import { applyOperations } from './operations.js';
 import { tangents } from './paths.js';
+import { mapBones } from './mesh.js';
+
+/** Is the object bound per point (a path's vertices or a vector layer's points with bone)? */
+export const boundPerPoint = (o) => !!(o.vertices?.some((v) => v.bone) || Object.values(o.points ?? {}).some((pt) => pt?.bone));
 
 export const POSE_FIELDS = ['x', 'y', 'rotation', 'scaleX', 'scaleY'];
 
@@ -60,7 +64,7 @@ export function evaluateSkeleton(doc, schema, pose = null) {
   const bones = doc.objects.filter((o) => o.type === 'bone');
   const rest = new Map();
   const posed = pose ? new Map() : rest;
-  // Frame of the root bones: the skeleton's (or the document, for a loose bone of an unmigrated document).
+  // Frame of the root bones: the skeleton's (identity if there is none).
   const rootFrame = (skeleton, withPose, resolve) => {
     if (!skeleton) return IDENTITY;
     const frame = worldMatrix(doc, schema, skeleton.id);
@@ -146,8 +150,9 @@ const nearest = (segments, p) =>
   );
 
 /**
- * Automatic per-point binding: each vertex of the path follows the nearest bone (in the setup) among the given ones,
- * or among all those of its skeleton. Returns the new vertices.
+ * Automatic per-point binding: each vertex of the path (or point of a vector layer) follows the nearest bone (in the
+ * setup) among the given ones, or among all those of its skeleton. Returns the new vertices (a list) or points (a
+ * map by id).
  */
 export function distributeBetweenBones(doc, schema, pathId, ids = null) {
   const path = findObject(doc, pathId);
@@ -163,7 +168,9 @@ export function distributeBetweenBones(doc, schema, pathId, ids = null) {
   const { rest } = evaluateSkeleton(doc, schema);
   const segments = bones.map((h) => segment(schema, h, rest));
   const world = worldMatrix(doc, schema, pathId);
-  return read(schema, path, 'vertices').map((v) => ({ ...v, bone: nearest(segments, apply(world, v.x, v.y)).id }));
+  const bind = (v) => ({ ...v, bone: nearest(segments, apply(world, v.x, v.y)).id });
+  if (path.type === 'vector') return Object.fromEntries(Object.entries(read(schema, path, 'points')).map(([id, pt]) => [id, bind(pt)]));
+  return read(schema, path, 'vertices').map(bind);
 }
 
 /**
@@ -187,6 +194,8 @@ export function boxOf(doc, schema, id) {
       const [w, h] = [read(schema, o, 'width'), read(schema, o, 'height')];
       const [x0, y0] = [-w * read(schema, o, 'originX'), -h * read(schema, o, 'originY')];
       for (const [x, y] of [[x0, y0], [x0 + w, y0], [x0, y0 + h], [x0 + w, y0 + h]]) add(m, x, y);
+    } else if (o.type === 'vector') {
+      for (const pt of Object.values(read(schema, o, 'points'))) add(m, pt.x, pt.y);
     } else if (o.type === 'path') {
       for (const v of read(schema, o, 'vertices')) {
         const { in: entry, out: output } = tangents(v);
@@ -221,7 +230,7 @@ export function bindingsByProximity(doc, schema, skeletonId) {
   if (!bones.length) throw new Error(`skeleton "${skeletonId}" has no bones: create them before binding`);
   const { rest } = evaluateSkeleton(doc, schema);
   const segments = bones.map((h) => segment(schema, h, rest));
-  const byPoint = (o) => o.vertices?.some((v) => v.bone);
+  const byPoint = boundPerPoint;
   const boundInside = (id) => doc.objects.some((o) => (o.bone || byPoint(o)) && insideOf(doc, o.id, id));
   const bindings = [];
   const walk = (parentId) => {
@@ -252,8 +261,8 @@ export function releaseForeignBindings(doc, schema) {
     const foreign = (bone) => findObject(doc, bone)?.type === 'bone' && skeletonOf(doc, bone) !== own;
     if ('bone' in props && o.bone && foreign(o.bone)) ops.push({ op: 'unset', target: o.id, props: ['bone'] });
     for (const [prop, p] of Object.entries(props)) {
-      if (p.type !== 'vertices' || !o[prop]?.some((v) => v.bone && foreign(v.bone))) continue;
-      ops.push({ op: 'set', target: o.id, props: { [prop]: o[prop].map(({ bone, ...v }) => (bone && !foreign(bone) ? { ...v, bone } : v)) } });
+      const released = mapBones(p, o[prop], (bone) => (foreign(bone) ? undefined : bone));
+      if (released !== o[prop]) ops.push({ op: 'set', target: o.id, props: { [prop]: released } });
     }
   }
   return ops;

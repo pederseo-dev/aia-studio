@@ -8,6 +8,7 @@ import { clipPose } from '../core/animation.js';
 import { applyPose, blendPoses } from '../core/blend.js';
 import { IDENTITY, invert, localMatrix, worldMatrix, multiply } from '../core/geometry.js';
 import { transformVertices, verticesAD } from '../core/paths.js';
+import { curveVertices } from '../core/mesh.js';
 
 const n = (v) => +v.toFixed(3);
 const attribute = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -17,6 +18,8 @@ const resourceId = (id) => `aia-${id}`;
 // Bones are not drawn in the character: the editor shows them in its overlay.
 export const DRAW = {
   bone: null,
+  // Shapes are drawn by their vector layer (they have no transform of their own).
+  shape: null,
   group: () => '',
   switch: () => '',
   skeleton: () => '',
@@ -35,6 +38,27 @@ export const DRAW = {
   path: (v) => {
     const d = verticesAD(v('vertices'), v('closed'));
     return d ? `<path d="${d}"${paint(v)} stroke-linejoin="round" stroke-linecap="round"/>` : '';
+  },
+  // Vector layer: each shape, in order, fills and strokes its curves. The curves are drawn as path vertices, so
+  // per-point binding deforms them with the same code (`v.deform`, in a pose).
+  vector: (v) => {
+    const points = v('points');
+    const curves = v('curves');
+    const deform = v.deform ?? ((vertices) => vertices);
+    const drawn = new Map();
+    const d = (id) => {
+      if (!drawn.has(id)) drawn.set(id, curves[id] ? verticesAD(deform(curveVertices(points, curves[id])), curves[id].closed ?? false) : '');
+      return drawn.get(id);
+    };
+    return children(v.doc, v.obj.id)
+      .filter((o) => o.type === 'shape')
+      .map((o) => {
+        const sv = reader(v.doc, v.schema, o, v.assets);
+        const path = (sv('curves') ?? []).map(d).join('');
+        if (!path || !sv('visible')) return '';
+        return `<path data-id="${o.id}" d="${path}" fill-rule="${sv('fillRule')}"${paint(sv)} stroke-linejoin="round" stroke-linecap="round"/>`;
+      })
+      .join('');
   },
   // The href is decided by the view (`assets`): a server URL in the editor; with nothing, the file name (the MCP
   // replaces it with the bytes when converting to PNG). Stretched to width × height, like a rect.
@@ -74,7 +98,8 @@ function transform(v) {
   return parts.length ? ` transform="${parts.join(' ')}"` : '';
 }
 
-const reader = (doc, schema, obj, assets = null) => Object.assign((prop) => effectiveValue(schema, doc, obj, prop), { doc, assets });
+/** @returns {any} */
+const reader = (doc, schema, obj, assets = null) => Object.assign((prop) => effectiveValue(schema, doc, obj, prop), { doc, schema, obj, assets });
 
 /**
  * With a pose, an object that follows a different bone than its parent gets a full matrix: the one that leaves it
@@ -90,7 +115,8 @@ function transformInPose(doc, schema, obj, v, ctx) {
 
 /**
  * Per-point binding: in a pose, each vertex with `bone` moves (with its tangents) according to the delta of its
- * bone, instead of the shape's. So a single path bends following a chain of bones (a tail, an arm).
+ * bone, instead of the layer's. So a single vector layer (or loose path) bends following a chain of bones (a tail,
+ * an arm).
  */
 function verticesInPose(doc, schema, obj, vertices, delta, ctx) {
   if (!vertices.some((vt) => vt.bone)) return vertices;
@@ -111,8 +137,9 @@ function node(doc, schema, obj, ctx) {
   if (ctx.skeleton && obj.type === 'path') {
     const base = v;
     const deformed = verticesInPose(doc, schema, obj, base('vertices'), delta, ctx);
-    v = Object.assign((prop) => (prop === 'vertices' ? deformed : base(prop)), { doc: base.doc, assets: base.assets });
+    v = Object.assign((prop) => (prop === 'vertices' ? deformed : base(prop)), { doc: base.doc, schema, obj, assets: base.assets });
   }
+  if (ctx.skeleton && obj.type === 'vector') v.deform = (vertices) => verticesInPose(doc, schema, obj, vertices, delta, ctx);
   const attributes = [
     ` data-id="${obj.id}"`,
     transformAttr,

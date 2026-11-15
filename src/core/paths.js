@@ -419,3 +419,19 @@ export function vertexErrors(v) {
   }
   return errors;
 }
+
+/**
+ * Morph between two vertex lists of the same length: anchors and tangents are interpolated. The result has no
+ * `bone`: the per-point binding belongs to the setup (`applyPose` sets it), like in Moho.
+ */
+export function blendVertices(a, b, w) {
+  if (a.length !== b.length) return (w >= 0.5 ? b : a).map(({ bone, ...v }) => v);
+  const lerp = (p, q) => [p[0] + (q[0] - p[0]) * w, p[1] + (q[1] - p[1]) * w];
+  return a.map((goes, i) => {
+    const vb = b[i];
+    const [ta, tb] = [tangents(goes), tangents(vb)];
+    const [x, y] = lerp([goes.x, goes.y], [vb.x, vb.y]);
+    const radius = (goes.radius ?? 0) + ((vb.radius ?? 0) - (goes.radius ?? 0)) * w;
+    return vertexFromTangents(x, y, lerp(ta.in, tb.in), lerp(ta.out, tb.out), radius ? { radius: Math.round(radius * 100) / 100 } : {});
+  });
+}

@@ -4,7 +4,6 @@ import { loadSchema } from '../server/schema.js';
 import { findObject, createDocument, skeletonOf, validate } from '../src/core/document.js';
 import { deltaOf, bindingsByProximity, evaluateInPose, evaluateSkeleton, opsToReparent, reparentSeveral, tipOf, distributeBetweenBones, releaseForeignBindings } from '../src/core/skeleton.js';
 import { apply, multiply } from '../src/core/geometry.js';
-import { migrateToSkeletons } from '../src/core/migration.js';
 import { applyOperations } from '../src/core/operations.js';
 import { svgDocument } from '../src/render/svg.js';
 
@@ -227,77 +226,6 @@ test('bind all by proximity: each unbound piece goes to the nearest bone, withou
   ]);
   assert.throws(() => bindingsByProximity(op(createDocument(), { op: 'create', type: 'skeleton', id: 's' }), schema, 's'), /has no bones/);
   assert.throws(() => bindingsByProximity(doc, schema, 'hand'), /is not a skeleton/);
-});
-
-// A document from before the bone layer model: bones at the root and the group `cat` bound to one of them.
-function oldDocument({ withRotation = false } = {}) {
-  return {
-    format: createDocument().format,
-    meta: { name: 'Viejo' },
-    objects: [
-      { id: 'cat', type: 'group', parent: null, x: 300, y: 400, ...(withRotation ? { rotation: 30, scaleX: 2, scaleY: 2 } : {}), bone: 'body_bone' },
-      { id: 'torso', type: 'rect', parent: 'cat', width: 80, height: 120 },
-      { id: 'head', type: 'group', parent: 'cat', y: -100, bone: 'head_bone' },
-      { id: 'face', type: 'ellipse', parent: 'head' },
-      { id: 'tail', type: 'path', parent: 'cat', closed: false, vertices: [{ x: 40, y: 40, bone: 'tail_bone' }, { x: 80, y: 40, bone: 'tail_bone' }] },
-      { id: 'body_bone', type: 'bone', parent: null, x: 300, y: 460, rotation: -90, length: 120, minAngle: -100 },
-      { id: 'head_bone', type: 'bone', parent: 'body_bone', x: 120, length: 60 },
-      { id: 'tail_bone', type: 'bone', parent: 'body_bone', x: 20, y: 40, rotation: 90, length: 40 },
-      { id: 'nod', type: 'pose', parent: null, values: { body_bone: { rotation: -80, x: 310 }, head_bone: { rotation: 20 } } },
-    ],
-  };
-}
-
-test('migration: the root group becomes the skeleton and nothing moves, neither in the setup nor in the poses', () => {
-  for (const withRotation of [false, true]) {
-    const old = oldDocument({ withRotation });
-    assert.ok(validate(old, schema).errors.some((e) => /body_bone: a bone cannot be at the root/.test(e)));
-    const { doc, changes } = migrateToSkeletons(old, schema);
-    assert.deepEqual(validate(doc, schema).errors, []);
-    assert.match(changes[0], /Group cat is now a Skeleton/);
-    assert.equal(findObject(doc, 'cat').type, 'skeleton');
-    assert.equal(findObject(doc, 'cat').bone, undefined);
-    assert.equal(findObject(doc, 'body_bone').parent, 'cat');
-    // What body_bone inherited through cat it now has on its own; what had its own keeps it.
-    assert.deepEqual(['torso', 'head', 'tail'].map((id) => findObject(doc, id).bone), ['body_bone', 'head_bone', 'body_bone']);
-    // The bones stay where they were on screen, in the setup and in the pose.
-    for (const pose of [null, 'nod']) {
-      const before = evaluateSkeleton(old, schema, pose && findObject(old, pose));
-      const after = evaluateSkeleton(doc, schema, pose && findObject(doc, pose));
-      for (const id of ['body_bone', 'head_bone', 'tail_bone']) assert.ok(before.posed.get(id).every((v, i) => Math.abs(v - after.posed.get(id)[i]) < 1e-4), `${id} in ${pose}`);
-    }
-    assert.equal(svgDocument(doc, schema).length > 0, true);
-    // Migrating again changes nothing.
-    assert.deepEqual(migrateToSkeletons(doc, schema).changes, []);
-  }
-  // Without rotation, the root bone only shifts into cat's frame.
-  const { doc } = migrateToSkeletons(oldDocument(), schema);
-  assert.deepEqual([findObject(doc, 'body_bone').x, findObject(doc, 'body_bone').y, findObject(doc, 'body_bone').rotation], [0, 60, -90]);
-  assert.deepEqual(findObject(doc, 'nod').values.body_bone, { rotation: -80, x: 10, y: 60 });
-});
-
-test('migration: a loose bound drawing at the root goes to a new skeleton without changing the draw order', () => {
-  const old = {
-    format: createDocument().format,
-    meta: {},
-    objects: [
-      { id: 'fondo', type: 'rect', parent: null },
-      { id: 'a', type: 'ellipse', parent: null, bone: 'b1' },
-      { id: 'medio', type: 'rect', parent: null },
-      { id: 'c', type: 'ellipse', parent: null, bone: 'b2' },
-      { id: 'frente', type: 'rect', parent: null },
-      { id: 'b1', type: 'bone', parent: null, x: 10 },
-      { id: 'b2', type: 'bone', parent: 'b1' },
-      { id: 'b3', type: 'bone', parent: null },
-    ],
-  };
-  const { doc, changes } = migrateToSkeletons(old, schema);
-  assert.deepEqual(validate(doc, schema).errors, []);
-  assert.match(changes[0], /New Skeleton skeleton with the bones and a, medio, c/);
-  assert.deepEqual(doc.objects.filter((o) => o.parent == null).map((o) => o.id), ['fondo', 'skeleton', 'frente']);
-  assert.deepEqual(doc.objects.filter((o) => o.parent === 'skeleton').map((o) => o.id), ['a', 'medio', 'c', 'b1', 'b3']);
-  assert.equal(findObject(doc, 'b1').x, 10);
-  assert.equal(svgDocument(doc, schema), svgDocument(old, schema).replace('<g data-id="a">', '<g data-id="skeleton"><g data-id="a">').replace('<g data-id="frente">', '</g><g data-id="frente">'));
 });
 
 test('reparenting a bone does not move it in the setup nor in the poses that set it, and respects its skeleton', () => {

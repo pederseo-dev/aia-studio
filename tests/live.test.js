@@ -165,7 +165,7 @@ test('the manifest warns about the param an auto clip drives and lists its param
   const m = manifest(doc, schema);
   assert.deepEqual(m.auto[0].animatesParams, ['blinking']);
   assert.deepEqual(m.params.find((p) => p.id === 'blinking').drivenBy, ['blink']);
-  assert.match(manifestText(m), /blinking .*\[driven by auto blink: don't set it\]/);
+  assert.match(manifestText(m), /blinking .*\[also animated by the auto clip blink: while it plays, it overrides what the app set\]/);
   assert.match(m.problems.join('\n'), /params without description: blinking/);
   // live with times (before, "time and times need animation") and the auto repetition, which falls between frames.
   assert.equal(previewError({ live: [], times: [1] }), null);

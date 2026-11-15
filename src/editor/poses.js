@@ -105,7 +105,7 @@ export function mountBanner(el) {
       [className, text] = ['params', 'Previewing <b>parameters</b>: the canvas shows the poses they blend. To change a pose, open it under Poses.'];
       button = null; // Reset is in the Puppet bar, above Clips
     }
-    el.className = `banner${className}`;
+    el.className = `banner-${className}`;
     el.innerHTML = `<span>${text}</span>`;
     if (className === 'clip' || className === 'pose') el.querySelector('span b').textContent = open.id;
     if (!button) return;

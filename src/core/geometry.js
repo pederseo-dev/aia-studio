@@ -36,8 +36,9 @@ export function apply(m, ...point) {
   return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 }
 
-/** translate(x, y) · rotate(rotation) · scale(scaleX, scaleY) */
+/** translate(x, y) · rotate(rotation) · scale(scaleX, scaleY). Without a transform (a shape of a vector layer), the identity. */
 export function localMatrix(schema, obj) {
+  if (!('x' in (schema.types.get(obj.type)?.properties ?? {}))) return IDENTITY;
   const r = (read(schema, obj, 'rotation') * Math.PI) / 180;
   const sx = read(schema, obj, 'scaleX');
   const sy = read(schema, obj, 'scaleY');

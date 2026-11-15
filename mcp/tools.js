@@ -5,13 +5,39 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { findObject, children, bonesOf } from '../src/core/document.js';
 import { IMAGE_MAX, planAddImage, planReplaceImage } from '../src/core/images.js';
-import { evaluateSkeleton, planProximityBinding, boneOf, limitAngle, tipOf, reparentBone, distributeBetweenBones } from '../src/core/skeleton.js';
+import { evaluateSkeleton, planProximityBinding, boneOf, limitAngle, tipOf, reparentBone, boundPerPoint } from '../src/core/skeleton.js';
 import { apply } from '../src/core/geometry.js';
+import { shapePointIds } from '../src/core/mesh.js';
 import { read, readMeta, suggest } from '../src/core/schema.js';
 import { switchParams, driverWeight, paramValues } from '../src/core/blend.js';
 import { summarizeOperations } from '../src/core/operations.js';
 import { svgDocument } from '../src/render/svg.js';
 import { previewError, trackLines, planClipView, planLiveView, clipSummary } from './animation.js';
+
+const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * A shape's line in the tree: its points with where they are (in the layer's coordinates), the ones welded with
+ * other shapes, its curves and its paint. The point ids are what poses, keyframes and transformPoints name.
+ * @param {any} doc @param {any} schema @param {any} shape
+ */
+function shapeDetail(doc, schema, shape) {
+  const layer = findObject(doc, shape.parent);
+  const points = (layer && read(schema, layer, 'points')) ?? {};
+  const curves = (layer && read(schema, layer, 'curves')) ?? {};
+  const ids = shapePointIds(curves, shape.curves);
+  const others = children(doc, shape.parent).filter((o) => o.type === 'shape' && o.id !== shape.id);
+  const welded = (id) => others.filter((o) => shapePointIds(curves, o.curves).includes(id)).map((o) => o.id);
+  const r = (v) => Math.round(v * 10) / 10;
+  const list = ids.map((id) => {
+    const p = points[id];
+    const shared = welded(id);
+    return `${id} (${p ? `${r(p.x)}, ${r(p.y)}` : '?'})${p?.bone ? ` → ${p.bone}` : ''}${shared.length ? ` welded with ${shared.join(', ')}` : ''}`;
+  });
+  const curveList = (shape.curves ?? []).map((c) => `${c}${curves[c]?.closed ? '' : ' open'}`).join(', ') || 'none';
+  const paint = shape.style ? `style ${shape.style}` : `fill ${shape.fill ?? read(schema, shape, 'fill')}`;
+  return `[points ${list.join(', ') || 'none'}; curves ${curveList}; ${paint}${shape.stroke ? `, stroke ${shape.stroke}` : ''}]`;
+}
 
 /**
  * Readable tree of the document: one line per object, indented by hierarchy, from back to front. `tracks`: true
@@ -27,9 +53,11 @@ export function treeOutline(doc, schema, { tracks = true } = {}) {
       let detail = '';
       if (o.bone) detail = ` → bone ${o.bone}`;
       // Drawing of a skeleton that follows no bone: in poses it stays still.
-      else if (findObject(doc, o.parent)?.type === 'skeleton' && o.type !== 'bone' && !boneOf(doc, o.id) && !o.vertices?.some((v) => v.bone)) detail = ' (no bone: stays still in the poses)';
+      else if (findObject(doc, o.parent)?.type === 'skeleton' && o.type !== 'bone' && !boneOf(doc, o.id) && !boundPerPoint(o)) detail = ' (no bone: stays still in the poses)';
       if (o.type === 'skeleton') detail += ` [${bonesOf(doc, o.id).length} bones]`;
       if (o.type === 'image') detail += ` [${read(schema, o, 'src')}, ${r(read(schema, o, 'width'))}×${r(read(schema, o, 'height'))}]`;
+      if (o.type === 'vector') detail += ` [${count(Object.keys(o.points ?? {}).length, 'point')}, ${count(Object.keys(o.curves ?? {}).length, 'curve')}]`;
+      if (o.type === 'shape') detail += ` ${shapeDetail(doc, schema, o)}`;
       if (o.type === 'pose') detail = ` [${Object.keys(o.values ?? {}).join(', ') || 'empty'}]`;
       if (o.type === 'animation') detail = ` ${clipSummary(schema, o)}`;
       if (o.type === 'switch') {
@@ -46,7 +74,8 @@ export function treeOutline(doc, schema, { tracks = true } = {}) {
         const m = rest.get(o.id);
         const [ox, oy] = apply(m, 0, 0);
         const [px, py] = tipOf(schema, o, m);
-        detail = ` from (${r(ox)}, ${r(oy)}) to (${r(px)}, ${r(py)}), ${r((Math.atan2(m[1], m[0]) * 180) / Math.PI)}° on screen`;
+        // The stored rotation (relative to the parent, what poses and keyframes write) and the angle on screen.
+        detail = ` from (${r(ox)}, ${r(oy)}) to (${r(px)}, ${r(py)}), rotation ${Math.round(read(schema, o, 'rotation') * 10) / 10} (${r((Math.atan2(m[1], m[0]) * 180) / Math.PI)}° on screen)`;
       }
       // The user's lock and hidden layers: the AI sees them so it does not change, by mistake, what the user protected.
       if (o.locked) detail += ' (locked by the user)';
@@ -78,15 +107,8 @@ export function poseClamps(doc, schema, values) {
   });
 }
 
-/** bind_points: the batch and the split "bone [indices]". */
-export function planBindPoints(doc, schema, path, bones) {
-  if (findObject(doc, path)?.type !== 'path') throw new Error(`"${path}" is not a path`);
-  const vertices = distributeBetweenBones(doc, schema, path, bones);
-  const count = {};
-  vertices.forEach((v, i) => (count[v.bone] ??= []).push(i));
-  const distribution = Object.entries(count).map(([h, indices]) => `${h} [${indices.join(', ')}]`).join('; ');
-  return { ops: [{ op: 'set', target: path, props: { vertices } }], distribution };
-}
+// bind_points: the same function the editor's Bind Points uses.
+export { planBindPoints } from '../src/core/bindPoints.js';
 
 /** bind_by_proximity: the batch (empty if there is nothing to bind) and the split "bone ← pieces". */
 export function planBindByProximity(doc, schema, skeleton) {

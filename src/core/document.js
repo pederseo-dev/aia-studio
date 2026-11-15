@@ -3,6 +3,7 @@
 
 import { FORMAT } from './format.js';
 import { read, suggest, validateValue } from './schema.js';
+import { boundEntries, curvePointIds, isMeshType, meshValueError } from './mesh.js';
 
 export const ID = /^[a-z][a-z0-9_]*$/;
 // "meta" names the document properties in set/unset (target: "meta"): no object can be called that.
@@ -118,9 +119,13 @@ export function validate(doc, schema) {
     }
     if (kind.resource && o.parent != null) errors.push(`${o.id}: it is an asset (${o.type}) and goes at the root (parent: null)`);
     else if (o.parent == null && kind.requiresParent) {
-      const skeletons = doc.objects.filter((x) => x.type === 'skeleton').map((x) => x.id);
-      const track = skeletons.length ? ` Skeletons in the document: ${skeletons.join(', ')}.` : ' First create a skeleton (the bone layer, which also contains the drawing it moves) and put the bone inside it.';
-      errors.push(`${o.id}: a ${o.type} cannot be at the root: it goes inside ${kind.parentTypes.join(' or ')}.${track} (Documents from before skeletons are converted with npm run migrate.)`);
+      // Where it can go: a skeleton for a bone, a vector layer for a shape.
+      const home = kind.parentTypes[0];
+      const label = home === 'vector' ? 'Vector layers' : 'Skeletons';
+      const homes = doc.objects.filter((x) => x.type === home).map((x) => x.id);
+      const first = home === 'skeleton' ? ' First create a skeleton (the bone layer, which also contains the drawing it moves) and put the bone inside it.' : ` First create a ${home} and put the ${o.type} inside it.`;
+      const track = homes.length ? ` ${label} in the document: ${homes.join(', ')}.` : first;
+      errors.push(`${o.id}: a ${o.type} cannot be at the root: it goes inside ${kind.parentTypes.join(' or ')}.${track}`);
     } else if (o.parent != null) {
       const parent = findObject(doc, o.parent);
       if (!parent) errors.push(`${o.id}: parent "${o.parent}" does not exist.${suggest(o.parent, ids)}`);
@@ -137,15 +142,16 @@ export function validate(doc, schema) {
       if (p.type !== 'ref' || o[prop] == null) continue;
       errors.push(...referenceErrors(doc, o, prop, p, o[prop], o.id));
     }
-    // Vertices bound to a bone (per-point binding) name bones of their skeleton.
+    // Vertices and mesh points bound to a bone (per-point binding) name bones of their skeleton.
     for (const [prop, p] of Object.entries(kind.properties)) {
-      if (p.type !== 'vertices' || !Array.isArray(o[prop])) continue;
-      o[prop].forEach((v, i) => {
-        if (v?.bone == null) return;
-        const error = bindingError(doc, o.id, v.bone, `${o.id}.${prop}[${i}].bone`);
+      for (const [suffix, bone] of boundEntries(p, o[prop])) {
+        const error = bindingError(doc, o.id, bone, `${o.id}.${prop}${suffix}.bone`);
         if (error) errors.push(error);
-      });
+      }
     }
+    errors.push(...meshErrors(doc, schema, o, kind));
+    // A shape without curves draws nothing and cannot be picked on the canvas.
+    if (kind.properties.curves?.refScope === 'layerCurves' && !o.curves?.length) warnings.push(`${o.id}: the shape has no curves, so it draws nothing. Create it with "d", or give it curves of its layer.`);
     // Poses name objects that exist and animatable properties of theirs, with valid values.
     for (const [prop, p] of Object.entries(kind.properties)) {
       if (p.type !== 'pose' || !o[prop] || typeof o[prop] !== 'object' || Array.isArray(o[prop])) continue;
@@ -162,7 +168,7 @@ export function validate(doc, schema) {
             errors.push(`${o.id}.${prop}.${id}.${k}: ${target.type} has no animatable "${k}". Animatable: ${animatable.join(', ')}.${suggest(k, animatable)}`);
             continue;
           }
-          const error = validateValue(props[k], v);
+          const error = validateValue(props[k], v) ?? (isMeshType(props[k].type) ? meshValueError(props[k].type, read(schema, target, k), v) : null);
           if (error) errors.push(`${o.id}.${prop}.${id}.${k} ${error}`);
           else if (props[k].type === 'ref') errors.push(...referenceErrors(doc, target, k, props[k], v, `${o.id}.${prop}.${id}`, { pose: o.id }));
         }
@@ -233,7 +239,36 @@ export function animatedValueError(doc, schema, target, prop) {
   const props = schema.types.get(target.type)?.properties ?? {};
   const animatable = Object.keys(props).filter((k) => props[k].animatable);
   if (!props[prop]?.animatable) return `${target.type} has no animatable "${prop}". Animatable: ${animatable.join(', ') || 'none'}.${suggest(prop, animatable)}`;
-  return (v) => validateValue(props[prop], v);
+  return (v) => validateValue(props[prop], v) ?? (isMeshType(props[prop].type) ? meshValueError(props[prop].type, read(schema, target, prop), v) : null);
+}
+
+/**
+ * Consistency of a vector layer and its shapes: every curve goes through points of its layer, and every shape names
+ * curves of its layer.
+ */
+function meshErrors(doc, schema, o, kind) {
+  const errors = [];
+  if (kind.properties.curves?.type === 'curves' && kind.properties.points?.type === 'points') {
+    const points = read(schema, o, 'points') ?? {};
+    const known = Object.keys(points);
+    for (const [id, curve] of Object.entries(read(schema, o, 'curves') ?? {})) {
+      const missing = [...new Set(curvePointIds(curve).filter((p) => typeof p === 'string' && !(p in points)))];
+      if (!missing.length) continue;
+      // The usual cause: a `set` of points with only the moved ones (set replaces the whole map; poses and
+      // keyframes are the ones that take only what they move).
+      const track = ` A set of ${o.id}.points replaces the whole map: send every point (read them with get_document), or remove curve ${id} in the same batch.`;
+      errors.push(`${o.id}.curves.${id}: ${missing.map((p) => `"${p}"`).join(', ')} ${missing.length > 1 ? 'are' : 'is'} not in ${o.id}.points (${known.join(', ') || 'none'}).${track}`);
+    }
+  }
+  for (const [prop, p] of Object.entries(kind.properties)) {
+    if (p.refScope !== 'layerCurves' || !Array.isArray(o[prop])) continue;
+    const layer = o.parent ? findObject(doc, o.parent) : null;
+    if (!layer) continue; // the parent errors are reported elsewhere
+    const curves = Object.keys(read(schema, layer, 'curves') ?? {});
+    const missing = o[prop].filter((c) => !curves.includes(c));
+    if (missing.length) errors.push(`${o.id}.${prop}: ${missing.map((c) => `"${c}"`).join(', ')} ${missing.length > 1 ? 'are not curves' : 'is not a curve'} of layer ${layer.id} (${curves.join(', ') || 'none'}).${suggest(missing[0], curves)} A shape cannot change layer (its curves belong to its layer): to have it in another one, create it there with "d" and delete this one.`);
+  }
+  return errors;
 }
 
 /**

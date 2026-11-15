@@ -22,7 +22,7 @@ import { onServer } from './serverEvents.js';
 import { mountConnectAi, showConnectAi } from './connectAi.js';
 import {
   open, addTab, api, notify, deletedHere, loadDocuments, closeTab, undo, execute, deleteDocument,
-  sendPending, schema, state, setState, hasPending, freeId, keepPosition, parentForNew,
+  sendPending, schema, state, setState, hasPending, freeId, keepPosition, parentForNew, pickable,
   savedTabs, refreshHistory, redo, selectionRoots, select, selectSeveral, subscribe,
 } from './state.js';
 
@@ -353,8 +353,9 @@ subscribe((c) => {
 
 $('#delete').addEventListener('click', deleteSelection);
 $('#delete-resource').addEventListener('click', deleteResources);
-// Group, switch and skeleton: a single button (folder with +) that opens the menu to choose what to create.
+// Vector, group, switch, skeleton and image: a single button (folder with +) that opens the menu to choose what to create.
 const CONTAINERS = {
+  vector: () => newVector(),
   group: () => (state.selected.length > 1 ? groupSelection() : newGroup()),
   switch: () => newSwitch(),
   skeleton: () => newSkeleton(),
@@ -414,6 +415,8 @@ function duplicateSelection() {
   for (let n = 2; ids.some((id) => findObject(state.doc, `${id}_${suffix}`)); n++) suffix = `copy${n}`;
   const ops = roots.map((id) => {
     const obj = findObject(state.doc, id);
+    // A shape has no position of its own (it is drawn by its layer's points): its copy stays on top of it.
+    if (!('x' in schema.types.get(obj.type).properties)) return { op: 'duplicate', target: id, suffix: suffix };
     return { op: 'duplicate', target: id, suffix: suffix, props: { x: read(schema, obj, 'x') + 20, y: read(schema, obj, 'y') + 20 } };
   });
   execute(ops, `duplicate ${nameOf(roots)}`);
@@ -445,6 +448,15 @@ function newGroup(kind = 'group') {
   select(id);
 }
 
+/** Vector layer: an empty one, next to the selection (or inside the selected group). The drawing tools draw into it. */
+function newVector() {
+  if (!state.doc) return;
+  const id = freeId('layer');
+  execute([{ op: 'create', type: 'vector', id, parent: parentForNew() }], `create ${id}`);
+  select(id);
+  notify('Vector layer: draw in it with the Pen (P), Rectangle (R) or Ellipse (E); every shape stays in this layer');
+}
+
 /**
  * Switch (Shift+G): puts the selection in a new switch (each object is a variant; the first one is seen) or, with no
  * selection, creates an empty one. Later variants are added by dragging them inside or drawing with it selected.
@@ -471,8 +483,8 @@ function newSkeleton() {
  * of the one furthest in front; otherwise, it goes to the root. The objects do not move on screen.
  */
 function groupSelection(kind = 'group') {
-  // Bones are not grouped: they live in their skeleton.
-  const roots = selectionRoots().filter((id) => !schema.types.get(findObject(state.doc, id).type).resource && findObject(state.doc, id).type !== 'bone');
+  // Bones are not grouped: they live in their skeleton. A shape cannot leave its vector layer: its layer is wrapped.
+  const roots = [...new Set(selectionRoots().map(pickable))].filter((id) => !schema.types.get(findObject(state.doc, id).type).resource && findObject(state.doc, id).type !== 'bone');
   if (!roots.length) return;
   const parents = new Set(roots.map((id) => findObject(state.doc, id).parent ?? null));
   const parent = parents.size === 1 ? [...parents][0] : null;
@@ -604,7 +616,10 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Escape') {
     if (state.editing) return exitEditing();
-    return state.tool !== 'select' ? setState({ tool: 'select' }) : select(null);
+    if (state.tool !== 'select') return setState({ tool: 'select' });
+    // A picked shape goes back to its vector layer.
+    const picked = state.selection && findObject(state.doc, state.selection);
+    return select(picked?.type === 'shape' ? picked.parent : null);
   }
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (state.editing) return canvas.points.deleteVertex();
@@ -615,10 +630,12 @@ window.addEventListener('keydown', (e) => {
   const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   // Locked layers (picked from Layers) are not moved: the lock protects them on the canvas and from the keyboard.
   const roots = selectionRoots().filter((id) => !locked(state.doc, id));
-  // In a pose, the arrows do not move the setup.
-  if (arrows[e.key] && roots.length && !state.pose) {
+  // In a pose, the arrows do not move the setup (a picked shape's points do move, inside the pose).
+  if (arrows[e.key] && roots.length && (!state.pose || canvas.shapePoints.active())) {
     e.preventDefault();
     const [dx, dy] = arrows[e.key].map((d) => d * (e.shiftKey ? 10 : 1));
+    // A picked shape: its points move (it has no position of its own).
+    if (canvas.shapePoints.nudge(dx, dy)) return;
     const ops = roots.map((id) => {
       const obj = findObject(state.doc, id);
       return { op: 'set', target: id, props: { x: read(schema, obj, 'x') + dx, y: read(schema, obj, 'y') + dy } };

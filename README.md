@@ -41,9 +41,11 @@ web technology.
 
 ## What you can do today
 
-- **Draw:** paths with the pen and point editing, rectangles, ellipses, groups, shared styles, linear and radial
-  gradients, image layers (PNG, JPG, WebP, SVG) and SVG import.
-- **Rig:** skeletons with bones (add, manipulate, reparent), drawing bound by layer or by point, and paths that bend
+- **Draw:** vector layers as in Moho (any number of shapes over a mesh of welded points; the pen, rectangle and
+  ellipse draw into the active one), groups, shared styles, linear and radial gradients, image layers (PNG, JPG,
+  WebP, SVG) and SVG import. On vector layers a picked shape's points can be moved, rotated and scaled (as Moho's
+  Transform Points); tangents, welding and deleting points are coming.
+- **Rig:** skeletons with bones (add, manipulate, reparent), drawing bound by layer or by point, and layers that bend
   along a chain of bones.
 - **Expressions:** poses, params with drivers that blend them, and switch layers for variants such as mouths.
 - **Animate:** scenes with a timeline, keyframes, named easing curves and loops.

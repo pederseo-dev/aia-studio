@@ -19,13 +19,13 @@ export function mountHistory(list) {
 
     list.replaceChildren(
       ...entries
-        .filter((e) => e.kind === 'change' || e.kind === 'create' || e.kind === 'migration')
+        .filter((e) => e.kind === 'change' || e.kind === 'create')
         .reverse()
         .slice(0, 40)
         .map((e) => {
           const li = document.createElement('li');
           li.className = `${e.origin}${reverted.has(e.n) ? ' reverted' : ''}`;
-          li.innerHTML = `<span class="who">${e.origin === 'ai' ? 'AI' : e.origin === 'system' ? 'System' : 'You'}</span><span class="clock-time"></span><span class="note"></span>`;
+          li.innerHTML = `<span class="who">${e.origin === 'ai' ? 'AI' : 'You'}</span><span class="clock-time"></span><span class="note"></span>`;
           li.querySelector('.clock-time').textContent = new Date(e.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           li.querySelector('.note').textContent = e.note;
           li.title = `${e.note}\n${e.ops.length} operations`;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import fs, { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os, { tmpdir } from 'node:os';
 import path from 'node:path';
 import { loadSchema } from '../server/schema.js';
@@ -31,8 +31,11 @@ test('undo and redo go by origin', () =>
     assert.equal(doc.objects[0].fill, '#ff0000');
     assert.deepEqual({ ...entry, batch: entry.batch.map((o) => o.op) }, { n: 4, note: 'cabeza', ops: 1, batch: ['create'] });
 
-    ({ doc } = await a.redo('robot', 'ai'));
+    let redone;
+    ({ doc, in: redone } = await a.redo('robot', 'ai'));
     assert.deepEqual(doc.objects.map((o) => o.id), ['torso', 'head']);
+    // A redo names the batch it brings back (#4), not the undo entry it reverts.
+    assert.equal(redone.n, 4);
 
     ({ doc } = await a.undo('robot', 'user'));
     assert.equal(doc.objects[0].fill, undefined);
@@ -130,62 +133,3 @@ test('in a clip, undo compares and restores per track, not the whole clip', () =
     await a.applyOps('clip', [{ op: 'set', target: 'c', props: { tracks: { r: { x: [{ t: 0, value: 5 }], y: [{ t: 0.5, value: 9 }] } } } }], { origin: 'user', note: 'user r.x' });
     await assert.rejects(a.undo('clip', 'ai'), /c\.tracks\.r\.x \(changed by the user/);
   }));
-
-test('reading migrates an old scene that animates params: it becomes Puppet only once, with one history entry', async () => {
-  const { readFile, writeFile } = await import('node:fs/promises');
-  const folder = await mkdtemp(path.join(tmpdir(), 'aia-'));
-  try {
-    const a = createStore({ schema, folder });
-    await a.create('viejo', { name: 'Viejo' }, { origin: 'user' });
-    await a.applyOps('viejo', [{ op: 'create', type: 'param', id: 'happiness' }, { op: 'create', type: 'animation', id: 'escena', props: { usage: 'puppet', duration: 1, tracks: { happiness: { value: [{ t: 0, value: 1 }] } } } }], { origin: 'user', note: 'clip' });
-    // As the previous version left it: a scene with a param track (it does not validate today).
-    const file = path.join(folder, 'viejo', 'document.json');
-    const old = JSON.parse(await readFile(file, 'utf8'));
-    old.objects.find((o) => o.id === 'escena').usage = 'animate';
-    await writeFile(file, JSON.stringify(old));
-    const [d1, d2] = await Promise.all([a.read('viejo'), a.read('viejo')]);
-    assert.equal(d1.objects.find((o) => o.id === 'escena').usage, 'puppet');
-    assert.equal(d2.objects.find((o) => o.id === 'escena').usage, 'puppet');
-    const { entries } = await a.history('viejo');
-    assert.equal(entries.filter((e) => e.kind === 'migration').length, 1);
-    assert.match(entries.at(-1).note, /Scene "escena" animated parameters/);
-    // And it accepts operations again.
-    await a.applyOps('viejo', [{ op: 'set', target: 'escena', props: { duration: 2 } }], { origin: 'user' });
-    assert.match(await readFile(file, 'utf8'), /"usage": "puppet"/);
-  } finally {
-    await rm(folder, { recursive: true, force: true });
-  }
-});
-
-test('old on-disk format: Spanish personajes/, documento.json and historial.jsonl move to the new one once', async () => {
-  const { migrateLegacyFolder, entryFromLegacy } = await import('../server/store.js');
-  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'aia-legacy-'));
-  try {
-    const old = path.join(base, 'personajes', 'gato');
-    await fs.mkdir(old, { recursive: true });
-    await fs.writeFile(path.join(old, 'documento.json'), JSON.stringify(createDocument({ name: 'Gato' })));
-    const lines = [
-      { n: 1, fecha: '2026-01-01T00:00:00Z', origen: 'ai', tipo: 'crear', nota: 'document created', ops: [], inversas: [] },
-      { n: 2, fecha: '2026-01-01T00:00:01Z', origen: 'user', tipo: 'deshacer', ref: 1, nota: 'undo: x', ops: [], inversas: [] },
-    ];
-    await fs.writeFile(path.join(old, 'historial.jsonl'), lines.map((l) => JSON.stringify(l) + '\n').join(''));
-    const folder = path.join(base, 'documents');
-    migrateLegacyFolder(folder);
-    migrateLegacyFolder(folder); // repeatable
-    const dir = path.join(folder, 'gato');
-    assert.deepEqual((await fs.readdir(dir)).sort(), ['document.json', 'history.jsonl']);
-    const entries = (await fs.readFile(path.join(dir, 'history.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
-    assert.deepEqual(entries[1], { n: 2, date: '2026-01-01T00:00:01Z', origin: 'user', kind: 'undo', ref: 1, note: 'undo: x', ops: [], inverses: [] });
-    // The store reads what was migrated: undo and redo keep working on those entries.
-    const a = createStore({ schema, folder });
-    assert.equal((await a.read('gato')).meta.name, 'Gato');
-    assert.deepEqual((await a.history('gato')).entries.map((e) => `${e.origin}:${e.kind}`), ['ai:create', 'user:undo']);
-    // A new entry stays the same.
-    assert.deepEqual(entryFromLegacy(entries[0]), entries[0]);
-    // If personajes/ shows up again next to documents/, it is not migrated: a warning says so.
-    await fs.mkdir(path.join(base, 'personajes', 'perro'), { recursive: true });
-    assert.match(migrateLegacyFolder(folder) ?? '', /Both .*personajes.* exist: the old folder is not migrated/);
-  } finally {
-    await fs.rm(base, { recursive: true, force: true });
-  }
-});

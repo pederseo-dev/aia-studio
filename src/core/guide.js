@@ -37,8 +37,8 @@ aia-studio is a 2D vector animation editor: characters, objects, icons, scenes o
 - Coordinates as in SVG: origin at the top left, **Y grows downward**. Units in px.
 - Angles in **degrees**; positive = clockwise.
 - Each object is drawn in its parent's coordinate system: \`x\`/\`y\` are relative to the parent.
-- Shapes (\`rect\`, \`ellipse\`) are **centered** on their \`x\`/\`y\`, unless \`originX\`/\`originY\` (fractions from
-  0 to 1) put the pivot elsewhere: \`originY: 1\` = pivot on the bottom edge.
+- Loose shapes (\`rect\`, \`ellipse\`) and images are **centered** on their \`x\`/\`y\`, unless \`originX\`/\`originY\`
+  (fractions from 0 to 1) put the pivot elsewhere: \`originY: 1\` = pivot on the bottom edge.
 - Drawing order: among siblings, the last ones in the list end up **on top**.
 
 ## Document
@@ -68,7 +68,7 @@ fix and retry.
 
 | Operation | Shape | What it does |
 | --- | --- | --- |
-| \`create\` | \`{ "op": "create", "type": "rect", "id": "eye_l", "parent": "head", "props": { ... }, "index": 0 }\` | Creates an object. \`parent\` and \`index\` are optional. |
+| \`create\` | \`{ "op": "create", "type": "rect", "id": "eye_l", "parent": "face", "props": { ... }, "index": 0 }\` | Creates an object. \`parent\` and \`index\` are optional. |
 | \`set\` | \`{ "op": "set", "target": "eye_l", "props": { "x": 10, "fill": "#ffffff" } }\` | Changes properties. \`target: "meta"\` changes the document. |
 | \`unset\` | \`{ "op": "unset", "target": "eye_l", "props": ["x"] }\` | Resets properties to their default value. |
 | \`delete\` | \`{ "op": "delete", "target": "head" }\` | Deletes the object **and all its children**. |
@@ -82,10 +82,86 @@ the new parent is somewhere else). With \`keepPosition: true\` it stays where it
 the editor (the position is kept, not the rotation or the scale). For bones use \`reparent_bone\`.
 To copy a whole document, use \`create_document\` with \`copy_from\`.
 
+## Vector layers (\`vector\` + \`shape\`)
+
+The usual way to draw, as in Moho: a \`vector\` layer holds a **mesh** of points and curves, and any number of
+\`shape\` children fill and stroke curves of that mesh. One layer per part that moves on its own (head, arm, tail);
+inside it, as many shapes as the part needs (skin, eye, outline…). Shapes have no transform: they move with their
+points, and with the layer (its \`x\`/\`y\`, rotation, scale, \`bone\`).
+
+The easiest way is to create each shape with \`d\` (an SVG path in the layer's coordinates, any number of subpaths):
+its points and curves are added to the layer and the shape fills them.
+
+\`\`\`json
+[
+  { "op": "create", "type": "vector", "id": "face", "parent": "body", "props": { "x": 0, "y": -120 } },
+  { "op": "create", "type": "shape", "id": "skin", "parent": "face", "props": { "d": "M-60 0 C-60 -80 60 -80 60 0 C60 60 -60 60 -60 0 Z", "fill": "#f2c7a5", "stroke": "#3a2a4d", "strokeWidth": 3 } },
+  { "op": "create", "type": "shape", "id": "eye_l", "parent": "face", "props": { "d": "M14 -20 A8 8 0 1 1 30 -20 A8 8 0 1 1 14 -20 Z", "fill": "#3a2a4d" } }
+]
+\`\`\`
+
+The tree of \`get_document\` (and the answer of \`apply_ops\`) lists, for each shape, its points with where they are
+and which are welded with other shapes: \`- eye_l (shape) [points p5 (14, -20), p6 (30, -20); curves c2; fill #3a2a4d]\`.
+Those ids are what poses, keyframes and \`transformPoints\` name. What is stored is the mesh of the layer and the
+curves each shape uses (the JSON of \`get_document\` has it whole, tangents included):
+
+\`\`\`js
+{ "id": "face", "type": "vector", "points": { "p1": { "x": -60, "y": 0 }, "p2": { "x": 60, "y": 0 } },
+  "curves": { "c1": { "closed": true, "points": [{ "p": "p1", "mode": "asymmetric", "angle": -90, "inDist": 60, "outDist": 80 },
+                                                 { "p": "p2", "mode": "asymmetric", "angle": 90, "inDist": 80, "outDist": 60 }] } } }
+{ "id": "skin", "type": "shape", "parent": "face", "curves": ["c1"], "fill": "#f2c7a5" }
+\`\`\`
+
+- **Pivot:** the layer's \`x\`/\`y\` is its pivot (it rotates and scales around it) and the points are relative to it.
+  Put the pivot at the joint (the neck for a head) and draw around (0, 0). To move the pivot later without moving
+  the drawing, \`set\` the layer with \`"pivot": [x, y]\` (in its parent's coordinates, like \`x\`/\`y\`): its points
+  shift the other way, also in the poses and keyframes that move them. A rectangle is
+  \`"d": "M-40 -20 H40 V20 H-40 Z"\`.
+- **Points** (\`points\`): \`{ point_id: { x, y } }\`, in the layer's coordinates. \`d\` names them \`p1\`, \`p2\`…; you can
+  write the mesh yourself with \`set\` and give them names (\`chin\`, \`ear_tip\`), which makes poses easier to read.
+  In the setup, \`set\` of \`points\` or \`curves\` **replaces the whole map**: to move one point, read the map, change it
+  and send it whole (only poses and keyframes list just what they move).
+- **Curves** (\`curves\`): \`{ curve_id: { closed, points: [entries] } }\`. An entry is a point id (a corner) or
+  \`{ "p": "chin", "mode": "mirrored", "angle": 0, "dist": 20 }\` with the tangents of that point on this curve (the
+  same fields as a path vertex, see «Vertices», without \`x\`/\`y\`).
+- **Transform points** (as Moho's Transform Points): to move, rotate or scale a shape (or some points) without
+  rewriting the map, \`set\` the layer with
+  \`"transformPoints": { "shape": "eye_l", "translate": [10, 0], "rotate": 15, "scale": [1.2, 1.2], "origin": [20, -20] }\`
+  (or \`"points": ["p1", "p2"]\` instead of \`shape\`). Scale and rotation (degrees) go around \`origin\` (by default,
+  the center of the points' box), then the translation; all in the layer's coordinates. Tangents turn and scale with
+  the points. Welded points move the other shapes too. To deform, move a single point the same way. In a \`set\` it
+  changes the setup; in the values of \`set_pose\` and \`set_keys\` it writes a pose or a keyframe, **relative to the
+  setup** (writing it twice gives the same): \`{ "face": { "transformPoints": { "shape": "lid_l", "scale": [1, 0.1] } } }\`
+  closes an eyelid without listing its points.
+- **Welded points:** a point used by two curves joins them: moving it moves both shapes (an arm and its sleeve, the
+  outline and the fill). \`d\` reuses an existing point when a new one falls exactly on it.
+- **Shapes** (\`shape\`): \`curves\` lists the curves it fills and strokes. With several, the inner ones cut holes
+  (\`fillRule: "evenodd"\`, the default). \`fill: null\` and a \`stroke\` give a line (an open curve works too). The order
+  of the shapes in the layer is the drawing order. \`set\` with \`d\` replaces the curves of a shape, and deleting a
+  shape takes its curves along: the curves no other shape uses leave the layer, with their points, and the poses
+  and keyframes that moved them let them go. A shape cannot change layer: create it again with \`d\` in the other one.
+- **Poses and keyframes** move points: they list **only the points they move**, and the rest stay as in the setup:
+  \`{ "face": { "points": { "chin": { "x": 0, "y": 70 } } } }\` (or with \`transformPoints\`, above). A second
+  \`set_pose\` (or a second moment of \`set_keys\` at the same time) **adds** its points to the ones already there, point
+  by point; \`remove: ["face.points.chin"]\` takes one out. They can also bend curves (\`curves\` with the same points as
+  in the setup, changing only the tangents). In a clip, put the same points in every key of the track.
+- **Poses that move the same points add up**, like numbers: each moves its points by (its place − the setup's) ×
+  its weight. So eyes that close (a pose that flattens the eyelid and the pupil to the eye's middle line) and pupils
+  that look aside (a pose that shifts the pupil) combine: closed and looking gives a flat pupil shifted aside, on the
+  closed lid. Recipe for a blink with pupils: in \`eyes_closed\`, scale both the lid and the pupil to the eye's middle
+  line (\`transformPoints\` with \`scale: [1, 0.05]\` and \`origin\` on that line); do not hide the pupil with
+  \`visible\` (a boolean switches at once at weight 0.5).
+- **Bones per point:** each point accepts \`"bone"\` (of its skeleton). \`bind_points\` with the layer's id distributes
+  its points among the nearest bones; with \`shape\` or \`points\` it binds only those (and with a single bone in
+  \`bones\`, all of them to it): \`{ "path": "face", "shape": "jaw", "bones": ["jaw_bone"] }\`. \`release: true\` unbinds
+  them. See «Bones and poses».
+
 ## Free-form shapes (\`path\`)
 
-The easiest is to pass an SVG path in \`d\` (a single subpath, any command: M L H V C S Q T A Z) and the
-editor converts it to vertices:
+A loose \`path\` (with its own transform) still works, but for drawings prefer vector layers.
+
+The easiest is to pass an SVG path in \`d\` (a single subpath, any command: M L H V C S Q T A Z) and it is
+converted to vertices:
 
 \`\`\`json
 { "op": "create", "type": "path", "id": "ear_l", "parent": "head", "props": { "d": "M-60 -150 C-80 -220 -20 -200 -30 -150 Z", "fill": "#3a2a4d" } }
@@ -165,7 +241,7 @@ use them by id.
 As in Moho, the skeleton lives in a **bone layer**: a \`skeleton\`. It is a container like \`group\` that holds
 inside, in drawing order, **the drawing the skeleton moves** and, separately, **its bones**. \`bone\`s can only
 be inside a \`skeleton\` (root bones) or inside another \`bone\` of the same skeleton: never at the root nor in a
-\`group\`. The drawing doesn't go inside the bones: it is **bound** with the \`bone\` property (of any shape or
+\`group\`. The drawing doesn't go inside the bones: it is **bound** with the \`bone\` property (of any layer or
 group), so the drawing order stays free (an arm can go behind the torso even though its bone is a child of the torso).
 
 - **Skeleton first.** Create a \`skeleton\` (for example \`rig\`) and draw inside it, or move the existing drawing in
@@ -197,12 +273,12 @@ group), so the drawing order stays free (an arm can go behind the torso even tho
   only when a pose moves it. Moving, rotating or scaling the skeleton moves the drawing and the bones together.
 - Bind at the highest level that makes sense: the group \`head\` to the bone \`head_bone\`, and the group's children follow it
   without binding them one by one. A child with its own \`bone\` follows its own.
-- **Parts that bend** (tail, flexible arm, long neck): there's no need to split the drawing. A single \`path\`
-  can follow several bones **per point**: each vertex accepts \`"bone": "tail_2_bone"\` (of its skeleton) and, in a
-  pose, moves with its tangents according to that bone. \`bind_points\` distributes the vertices among the nearest bones
-  of its skeleton (or of a list). Vertices without \`bone\` follow the shape's bone (or its group's). Put
-  vertices near each joint so the curve bends well.
-- **Per-point binding belongs to the setup**, as in Moho: a pose that changes a path's shape (\`vertices\` or
+- **Parts that bend** (tail, flexible arm, long neck): there's no need to split the drawing. A vector layer (or a
+  \`path\`) can follow several bones **per point**: each point of its mesh (or vertex of the path) accepts
+  \`"bone": "tail_2_bone"\` (of its skeleton) and, in a pose, moves with its tangents according to that bone.
+  \`bind_points\` distributes the points among the nearest bones of its skeleton (or of a list). Points without
+  \`bone\` follow the layer's bone (or its group's). Put points near each joint so the curve bends well.
+- **Per-point binding belongs to the setup**, as in Moho: a pose that changes a loose path's shape (\`vertices\` or
   \`d\`) doesn't store \`bone\` in its vertices; when applied, vertex i follows the bone of vertex i in the setup. So
   the pose should have the same vertices, in the same order. To change which bone a point follows,
   change the setup.
@@ -210,6 +286,11 @@ group), so the drawing order stays free (an arm can go behind the torso even tho
   setup: in \`values\`, \`{ object_id: { property: value } }\`. It is created with \`set_pose\` (or with \`apply_ops\`) and
   viewed with \`render_preview\` passing \`pose\`. A bone's \`minAngle\`/\`maxAngle\` limit its rotation in
   poses. A pose isn't limited to bones: see the next section.
+- **A bone's \`rotation\` is relative to its parent bone** (what poses and keyframes write); the tree of
+  \`get_document\` gives both, \`rotation -170.8 (99° on screen)\`. Write angles close to the stored one, or relative
+  to the setup with \`"+=n"\` in \`set_pose\` and \`set_keys\`: \`{ "upper_arm_l_bone": { "rotation": "-=110" } }\`. An
+  angle that ends up far from the setup's (189 instead of -171) looks the same alone but turns almost a full circle
+  when blended or tweened.
 - Bones don't show in the character's image: to check where they ended up, use \`render_preview\` with
   \`bones: true\` (and \`pose\`, to see them posed).
 
@@ -290,7 +371,9 @@ active and with what weight.
 The editor has three modes: **Design** (drawing and rig), **Animate** (a scene timeline to export to video,
 Lottie or SVG) and **Puppet** (the puppet ready for an app or its AI to drive live: params, poses and short
 clips that get triggered, one per button). The last two use the same asset, \`animation\` (a clip), with
-\`usage\` \`animate\` or \`puppet\`.
+\`usage\` \`animate\` or \`puppet\`. When the user opens Animate on a document without scenes, the editor creates an
+empty 5 s scene (\`scene_1\`, origin "user" in the history): it is the user's working scene, so use it for their scene
+(or leave it) rather than treating it as a finished touch-up.
 
 - **Tracks** (\`tracks\`): \`{ object_id: { property: [ { "t": 0, "value": 0 }, { "t": 0.4, "value": -60, "ease": "ease-out" } ] } }\`,
   with the same shape as a pose's \`values\`: **absolute** values, as in the setup. Any animatable
@@ -320,9 +403,9 @@ ${CURVE_DESCRIPTIONS.map(([name, meaning]) => `  - \`${name}\`: ${meaning}.`).jo
   \`active\`, booleans and strings change abruptly.
 - Order in a **Puppet** clip: setup → clip at that time → drivers add their poses on top (the clip's params
   override the outside ones). In an Animate scene there are no drivers: only setup → clip.
-  **Numbers add up** (a bone keyed at 10 with an active driver that adds 30 shows at 40; \`set_keys\` and
-  \`render_preview\` warn about it). What **doesn't add up** (a switch's \`active\`, colors, vertices, booleans) is
-  decided by the clip's track if it has one; otherwise, by the drivers.
+  **Numbers and the points of vector layers add up** (a bone keyed at 10 with an active driver that adds 30 shows at
+  40; for numbers, \`set_keys\` and \`render_preview\` warn about it; for points, check with \`render_preview\`). What **doesn't add up** (a switch's \`active\`, colors, the
+  vertices of a loose path, booleans) is decided by the clip's track if it has one; otherwise, by the drivers.
 - **If a param chooses the variant** (visemes, mouths, eyes): in a **Puppet** clip, animate the **param**
   (\`params: { "viseme": "o" }\`) and not the switch's \`active\`; that way the clip uses the same pieces as the app and combines
   with its drivers (an enum param always has an active option: its drivers are always in play). In a
@@ -334,7 +417,9 @@ ${CURVE_DESCRIPTIONS.map(([name, meaning]) => `  - \`${name}\`: ${meaning}.`).jo
   exist. If a scene has param tracks (a clip that went from Puppet to Animate), remove them with \`set_keys\` and
   \`remove\` or with \`delete_keys\` and \`targets\`. \`delete_keys\` removes keyframes and \`move_keys\` moves them in time (with their value and curve).
   A number in \`values\` can be **relative to the setup**: \`{ "head_bone": { "rotation": "+=14" } }\` is 14° more than in
-  the setup (\`"-=0.3"\` subtracts); the absolute value is stored. Check the
+  the setup (\`"-=0.3"\` subtracts); the absolute value is stored (the same in \`set_pose\`). A vector layer takes
+  \`transformPoints\` (see «Vector layers»). The \`ease\` of a moment shapes the stretch that **leaves** it, toward
+  the next keyframe: on the last moment it does nothing. Check the
   motion with \`render_preview\` and \`animation\` + \`times\` (a frame strip in a single image) or \`time\` (one
   frame). \`get_document\` lists each track of a clip with its keyframes (\`t = value curve\`), to read it without the JSON.
   In a document with many clips, \`get_document\` with \`json: false\` and \`clips: ["wave"]\` gives the tree with the tracks
@@ -408,8 +493,8 @@ ${types}
 ## How to work well
 
 1. **Check the history** (\`get_history\`, with \`origin: "user"\` to see only the user's) before editing an existing
-   document. Each entry has \`origin\` (\`"ai"\`, \`"user"\` or \`"system"\`), \`kind\` (\`"create"\`, \`"change"\`, \`"undo"\`,
-   \`"redo"\`, \`"migration"\`) and \`note\`. The user's entries are hand tweaks: respect them and don't overwrite them.
+   document. Each entry has \`origin\` (\`"ai"\` or \`"user"\`), \`kind\` (\`"create"\`, \`"change"\`, \`"undo"\` or
+   \`"redo"\`) and \`note\`. The user's entries are hand tweaks: respect them and don't overwrite them.
    In the \`get_document\` tree, a layer marked "(locked by the user)" is one the user protected (\`locked\`): don't
    change it or its children unless the user asks for it, and don't unlock it.
 2. **Use groups as joints.** A group's \`x\`/\`y\` is its pivot: for a head to rotate from the
@@ -423,6 +508,7 @@ ${types}
    only yours and leaves theirs.
 6. To check a small detail, \`render_preview\` accepts \`region\` (a crop of the document) besides \`pose\`.
 7. \`delete_document\` deletes a whole document (from the \`documents/\` folder) and can't be undone: use it only if the user asks.
-8. There's no SVG importer for the AI: pass each shape as the \`d\` of a \`path\` (one path per subpath).
+8. There's no SVG importer for the AI: pass each shape as the \`d\` of a \`shape\` inside a vector layer (holes
+   included: a \`d\` with several subpaths is one shape).
 `;
 }

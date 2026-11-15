@@ -7,10 +7,10 @@ import { locked, findObject, children } from '../core/document.js';
 import { read } from '../core/schema.js';
 import { apply, invert, localMatrix, worldMatrix, multiply } from '../core/geometry.js';
 import { transformVertices } from '../core/paths.js';
-import { boneOf } from '../core/skeleton.js';
+import { boneOf, boundPerPoint } from '../core/skeleton.js';
 import { applyPose } from '../core/blend.js';
 import { editingName, poseOps, activePose } from './editing.js';
-import { toggleSelection, execute, schema, state, preview, selectionRoots, select, selectSeveral } from './state.js';
+import { toggleSelection, execute, schema, state, preview, selectionRoots, select, selectSeveral, pickable } from './state.js';
 
 const round = (v, d = 10) => Math.round(v * d) / d;
 const DEGREES = 180 / Math.PI;
@@ -22,7 +22,7 @@ const IN_POSE = ['x', 'y', 'rotation', 'scaleX', 'scaleY'];
 /** What follows no bone (neither by layer nor by points): in a pose it is transformed as in the setup. */
 export function isFree(doc, id) {
   const o = findObject(doc, id);
-  return !!o && o.type !== 'bone' && o.type !== 'skeleton' && !boneOf(doc, id) && !(o.vertices ?? []).some((v) => v.bone);
+  return !!o && o.type !== 'bone' && o.type !== 'skeleton' && !boneOf(doc, id) && !boundPerPoint(o);
 }
 
 export function createTransform(ctx) {
@@ -125,10 +125,12 @@ export function createTransform(ctx) {
     if (!el) return;
     const obj = findObject(state.doc, state.selection);
     const corners = cornersOf(el);
+    // A shape has no transform of its own: its points get the box and handles (shapePoints.js).
+    if (obj.type === 'shape') return;
     if (corners) boxHandles(corners);
     const m = el.getCTM();
     const [px, py] = [m.e, m.f];
-    const movable = !state.pose && ['group', 'path', 'rect', 'ellipse', 'image'].includes(obj.type);
+    const movable = !state.pose && ['group', 'vector', 'path', 'rect', 'ellipse', 'image'].includes(obj.type);
     ctx.overlay.append(
       ctx.create('circle', { class: movable ? 'pivot handle' : 'pivot', 'data-handle': movable ? 'pivot' : '', cx: px, cy: py, r: 5 }, movable ? 'Move the pivot without moving the drawing' : 'Pivot'),
     );
@@ -164,7 +166,8 @@ export function createTransform(ctx) {
     const g = e.target.closest('[data-id]');
     const add = e.ctrlKey || e.metaKey || e.shiftKey;
     if (!g || !ctx.documentG.contains(g)) return marquee(e, add);
-    const id = g.dataset.id;
+    // A shape picks its vector layer (the layer is what moves); a double click picks the shape.
+    const id = pickable(g.dataset.id);
     // Ctrl or Shift + click: adds or removes without moving.
     if (add) return toggleSelection(id);
     // Click on something already in a multiple selection: all of them move; if there was no drag, only that one stays.
@@ -212,7 +215,7 @@ export function createTransform(ctx) {
     const frame = ctx.create('rect', { class: 'marquee' });
     // Boxes of the visible shapes (not containers: what is seen is picked, as with the click).
     const shapes = [...ctx.documentG.querySelectorAll('[data-id]')]
-      .filter((el) => !['group', 'skeleton', 'switch'].includes(findObject(state.doc, el.dataset.id)?.type) && !locked(state.doc, el.dataset.id))
+      .filter((el) => !['group', 'skeleton', 'switch', 'shape'].includes(findObject(state.doc, el.dataset.id)?.type) && !locked(state.doc, el.dataset.id))
       .map((el) => ({ id: el.dataset.id, box: enclosing([cornersOf(el) ?? []]) }))
       .filter((f) => f.box);
     let moved = false;
@@ -317,7 +320,9 @@ export function createTransform(ctx) {
           const [x, y] = apply(parentInverse, ...ctx.screenPoint(ev)).map((v) => round(v));
           const [dx, dy] = apply(linear, x - x0, y - y0);
           ops = [{ op: 'set', target: id, props: { x, y } }];
-          if (obj.type === 'path') {
+          // A vector layer: the same `pivot` the AI uses (the core shifts its points, also in poses and clips).
+          if (obj.type === 'vector') ops = [{ op: 'set', target: id, props: { pivot: [x, y] } }];
+          else if (obj.type === 'path') {
             ops[0].props.vertices = transformVertices(read(schema, obj, 'vertices'), [1, 0, 0, 1, -dx, -dy]);
           } else if (obj.type === 'rect' || obj.type === 'ellipse' || obj.type === 'image') {
             // The shape shifts inside its frame: the pivot moves to another fraction of the width and the height.

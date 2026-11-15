@@ -183,6 +183,8 @@ in the document turned out confusing. We moved to Moho's model:
   "migration" entry in the history that stops undo, because earlier inverses refer to the old frame.
   `gato_rig`, `gato_expresiones` and `test_4` were migrated and look the same in the setup, the poses and the param
   blends (compared pixel by pixel; the only differences are antialiasing, due to the old SVG's rounding).
+  Removed on 2026-11-14 with the other migrations (old on-disk format, scenes with params, Spanish localStorage
+  keys): while the project is in development, old documents are not kept.
 
 Notes on what was built (before the switch to the bone layer):
 - `bone` with `x`, `y`, `rotation`, scale, `length`, `independentAngle` and limits `minAngle`/`maxAngle`. Bones
@@ -348,6 +350,46 @@ app with an LLM, the LLM decides the state).
 - ✅ MCP: `add_image` (local path or URL) and `render_preview` with images. resvg doesn't read WebP: in the AI's
   preview a WebP comes out as a gray box with a cross and the text says so. Guide up to date.
 
+## Vector layers as in Moho (started 2026-11-14)
+
+Decided with the user on 2026-11-14 (documents in progress are not kept: we start from zero). Drawing lives in a
+`vector` layer with a mesh of points (by id, so the AI names them without indices) and curves; its `shape` children
+fill and stroke curves, without a transform of their own. A point used by two curves welds them. Loose
+`path`/`rect`/`ellipse` stay for now and leave in step 6.
+
+1. ✅ Core and AI: `vector` and `shape` types (`points` and `curves` property types), render with fill rule (holes),
+   `d` on a shape adds its subpaths to the layer (welding on coinciding points; `set` replaces its curves and drops
+   the unused ones), poses and keyframes that list only the points or curves they move, per-point bones on the mesh
+   (`bind_points` with a layer, delete/rename/duplicate/release), guide and tree for the AI. The abstract `shape` of
+   the loose shapes is now `painted`.
+2. ✅ Editor basics (2026-11-14): «Vector» in the new-layer menu; Layers shows the vector layer (its shapes are not
+   rows); the pen, rectangle and ellipse draw a shape into the active layer, or create one (`layer_N`) with its pivot
+   at the shape's center, writing the same `create shape` with `d` as the AI; a click picks the layer, a double click
+   the shape (only its outline, its fill and stroke in the inspector); moving the layer's pivot is the `pivot` sugar
+   the AI also has (points shift in the setup, poses and clips); deleting a shape takes its unused curves and
+   points along. Checked by the new `ai-parity` agent and the auditor.
+3. Points tool on the mesh: multi-selection across shapes, transform points, weld, delete, curvature.
+   ✅ First part (2026-11-14): a double click picks a shape and the selection tool works on its points, as Moho's
+   Transform Points: a box with a margin, drag inside to move, corners to scale (Shift: proportional), top handle to
+   rotate (Shift: 15°), a movable pivot (editor state), each point draggable alone, arrows nudge, Esc back to the
+   layer. Everything is the `transformPoints` sugar the AI also has. The vector layer and its shape have their own
+   icons. Still to do: selecting points across shapes, tangents/curvature, weld, delete a point.
+4. Shapes over curves: Create Shape from selected points/curves, holes, order, Auto-fill/Auto-stroke.
+5. Bones and timeline: per-point binding from the editor, point channels.
+   ✅ Bind Points on vector layers (2026-11-14), as in Moho: it shows only the picked layer's points, they are picked
+   (click, Shift, box) and Space or «Bind» binds them to the picked bone.
+   ✅ Transform Points in poses and keyframes (2026-11-14): `transformPoints` and `"+="` in the values of `set_pose`
+   and `set_keys`, relative to the setup; in the editor, a picked shape's box works in an open pose or clip too
+   (only the moved points go into the pose, or a keyframe at the playhead). `bind_points` takes `shape` or `points`
+   (and `release`), to bind only some points as the editor's Bind Points does.
+   ✅ What a new AI found building a whole character over the MCP (the `character-test` agent, 10/10 tasks, 1
+   rejection): poses and keyframes merge points id by id (a second `set_pose` no longer drops the first one's
+   points; `remove` takes one point); poses that move the same points add up like numbers; the tree lists each
+   shape's points with coordinates and welds, and a bone's stored rotation; guide recipes for poses on the same
+   points (blink with pupils), the editor's default scene and an ease on the last keyframe (`set_keys` warns);
+   redo names the batch it brings back; the manifest and the live view say more about auto clips.
+6. SVG import into vector layers, and removal of loose `path`/`rect`/`ellipse`.
+
 ## Phase 7: export and use
 
 - **Priority: `.aia` + JS runtime** (`src/core` + `src/render`, no dependencies) with a manifest for the app's
@@ -370,14 +412,8 @@ Weight-based deformation (at most 4 bones per vertex), two-bone IK, copy-transfo
 factor and delay, secondary dynamics, morph between shapes with the same number of vertices, and image meshes (an image that
 deforms with several bones) in a canvas layer.
 
-**Vector layer with a shared mesh, as in Moho** (decided on 2026-11-12, for later). Today each shape is
-an object with its own vertices and the `group` acts as the layer. The idea is a vector layer with a shared
-point mesh: shapes are fills and strokes over those points, and two shapes can share welded points (an
-arm and its sleeve move together without binding twice). It's the biggest of the three changes debated:
-it touches vertices, `bind_points`, poses, timeline, render, the Points tool and the SVG importer. We need to think about how the
-AI names a mesh point without depending on the index, which is fragile. Before that, two smaller steps are worth doing:
-Layers that tells groups (layers) apart from shapes (folded children), and `path` with several subpaths and a fill rule
-for shapes with a hole, as in Rive.
+**Vector layer with a shared mesh, as in Moho** (decided on 2026-11-12, for later): started on 2026-11-14, see
+«Vector layers as in Moho».
 - ✅ MCP parity (2026-11-13 audit): `add_image` with `replace` (shared `planReplaceImage`, as the editor's
   Replace…); `get_document` lists the files in `assets/` with their natural size and which layers use them (to reuse
   them or go back to the original size); a layer that fails does not leave its file in `assets/`.

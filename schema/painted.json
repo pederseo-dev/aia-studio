@@ -1,0 +1,14 @@
+{
+  "name": "painted",
+  "abstract": true,
+  "extends": "transformable",
+  "description": "Loose shape with its own transform, fill and stroke (rect, ellipse, path). For drawings, prefer a vector layer (vector) with shapes inside.",
+  "help": "Loose shape with its own transform, fill and stroke.",
+  "properties": {
+    "style": { "type": "ref", "refTypes": ["style"], "default": null, "nullable": true, "group": "Appearance", "help": "Shared style. Appearance properties the shape does not set itself come from it.", "description": "Shared style. Appearance properties the shape does not set itself are taken from it." },
+    "fill": { "type": "color", "default": "#c8c2d4", "nullable": true, "animatable": true, "group": "Appearance", "help": "Fill color. Empty = no fill.", "description": "Fill color. null = no fill." },
+    "fillGradient": { "type": "ref", "refTypes": ["linear_gradient", "radial_gradient"], "default": null, "nullable": true, "group": "Appearance", "help": "Fill gradient (a linear or radial gradient). When set, it replaces fill.", "description": "Fill gradient (id of a linear_gradient or radial_gradient). When set, it replaces fill." },
+    "stroke": { "type": "color", "default": null, "nullable": true, "animatable": true, "group": "Appearance", "help": "Stroke color. Empty = no stroke.", "description": "Stroke color. null = no stroke." },
+    "strokeWidth": { "type": "number", "default": 2, "min": 0, "animatable": true, "group": "Appearance", "help": "Stroke width in px.", "description": "Stroke width in px." }
+  }
+}

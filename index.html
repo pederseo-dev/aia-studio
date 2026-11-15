@@ -102,12 +102,15 @@
         <tr><td><kbd>R</kbd> / <kbd>E</kbd></td><td>Rectangle / ellipse (Shift: square or circle)</td></tr>
         <tr><td><kbd>G</kbd></td><td>New empty group</td></tr>
         <tr><td><kbd>Shift+G</kbd></td><td>Switch: wraps the selection as variants (no selection: an empty one)</td></tr>
-        <tr><th colspan="2">Skeleton</th></tr>
         <tr><td>Drop or <kbd>Ctrl+V</kbd> an image</td><td>New image layer (PNG, JPG, WebP, SVG)</td></tr>
+        <tr><th colspan="2">Skeleton</th></tr>
         <tr><td><kbd>B</kbd></td><td>Bone: drag on empty space to create (child of the selected one; from its tip, chained), drag a bone to rotate it</td></tr>
         <tr><td><kbd>Ctrl+B</kbd></td><td>Bind the selection to the selected bone (no bone: unbind)</td></tr>
+        <tr><td>Bind Points</td><td>Pick a vector layer, pick its points (click, Shift, box), click a bone, then <kbd>Space</kbd></td></tr>
         <tr><td>In a pose</td><td>Dragging a bone or its bound artwork rotates the bone; a free shape gets the move, rotate and scale handles. In a clip, it's keyed at the playhead</td></tr>
         <tr><th colspan="2">Editing</th></tr>
+        <tr><td>Double click a shape</td><td>Pick it inside its vector layer (Transform Points): drag to move, corners scale, top handle rotates, each point drags alone. In a pose or clip it goes into the pose</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Back from the picked shape to its layer</td></tr>
         <tr><td><kbd>Enter</kbd></td><td>Edit the points of the selected path</td></tr>
         <tr><td>Click · <kbd>Ctrl</kbd>/<kbd>Shift</kbd> + click</td><td>Select · add or remove (in Layers, Shift = range)</td></tr>
         <tr><td>Drag on empty space</td><td>Marquee select (Ctrl/Shift: add)</td></tr>
@@ -132,8 +135,9 @@
         <div class="header">
           <h2><button id="fold-layers" type="button" class="fold-section" aria-expanded="true" aria-controls="tree" title="Collapse or expand the layers">Layers<span data-arrow></span></button></h2>
           <div id="create-group" class="tools-group dropdown">
-            <button id="group-new" type="button" class="main icon" aria-haspopup="menu" aria-expanded="false" title="New group, switch, skeleton or image layer" aria-label="New layer" data-icon="folderPlus"></button>
+            <button id="group-new" type="button" class="main icon" aria-haspopup="menu" aria-expanded="false" title="New vector, group, switch, skeleton or image layer" aria-label="New layer" data-icon="folderPlus"></button>
             <div class="menu" role="menu" hidden>
+              <button type="button" role="menuitem" data-type="vector" title="Vector layer (as in Moho): holds any number of shapes. The Pen, Rectangle and Ellipse draw into the selected one"><span class="with-icon" data-icon="vector">Vector</span></button>
               <button type="button" role="menuitem" data-type="group" title="Container: its children move together. With several selected, groups them"><span class="with-icon" data-icon="group">Group</span><kbd>G</kbd></button>
               <button type="button" role="menuitem" data-type="switch" title="Group that shows one child at a time (mouths, visemes). With something selected, wraps it as variants"><span class="with-icon" data-icon="switch">Switch</span><kbd>Shift+G</kbd></button>
               <button type="button" role="menuitem" data-type="skeleton" title="Bone layer (as in Moho): holds the bones and the drawing they move. With something selected, wraps it"><span class="with-icon" data-icon="skeleton">Skeleton</span><kbd>K</kbd></button>

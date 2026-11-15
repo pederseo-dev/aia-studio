@@ -7,6 +7,7 @@ import { findObject } from '../src/core/document.js';
 import { read, suggest } from '../src/core/schema.js';
 import { effectiveValue } from '../src/core/styles.js';
 import { parseD } from '../src/core/paths.js';
+import { resolveValues } from '../src/core/poseValues.js';
 import { svgDocument, svgStrip } from '../src/render/svg.js';
 import { runScript } from '../src/core/live.js';
 
@@ -54,9 +55,6 @@ function poseValues(doc, k, i) {
   return remain;
 }
 
-/** "+=14" or "-=2.5": a value relative to the setup one (numeric properties only). */
-const RELATIVE = /^([+-])=\s*(\d+(?:\.\d+)?|\.\d+)$/;
-
 /**
  * What a set_keys moment sets: with `setup`, the setup of everything the clip already animates (and of what the
  * moment's pose brings); then the values of its pose (filtered with only or except), values (with "d" converted and
@@ -68,22 +66,7 @@ function momentValues(doc, schema, tracks, k, i) {
   // With setup, the pose only says which properties go back to the setup (its values are not copied).
   if (k.setup) values = setupValues(doc, schema, tracks, fromPose);
   else if (fromPose) values = fromPose;
-  for (const [id, fields] of Object.entries(k.values ?? {})) {
-    const own = { ...fields };
-    for (const [prop, v] of Object.entries(own)) {
-      const m = typeof v === 'string' && v.match(RELATIVE);
-      if (!m) {
-        if (typeof v === 'string' && /^\s*[+-]=/.test(v)) {
-          throw new Error(`keys[${i}].values.${id}.${prop}: "${v}" is not a relative value: write "+=n" or "-=n" with a positive number n (for example "+=140" or "-=140")`);
-        }
-        continue;
-      }
-      const obj = findObject(doc, id);
-      if (!obj || obj.type === 'param' || schema.types.get(obj.type)?.properties[prop]?.type !== 'number') {
-        throw new Error(`keys[${i}].values.${id}.${prop}: "${v}" (relative to the setup) only works on number properties of objects${obj ? '' : ` and there is no object "${id}"`}`);
-      }
-      own[prop] = Math.round((effectiveValue(schema, doc, obj, prop) + (m[1] === '-' ? -1 : 1) * Number(m[2])) * 1e6) / 1e6;
-    }
+  for (const [id, own] of Object.entries(resolveValues(doc, schema, k.values ?? {}, `keys[${i}].values`))) {
     if (own.d !== undefined) {
       if (findObject(doc, id)?.type !== 'path') throw new Error(`keys[${i}].values.${id}.d: "d" only works on paths`);
       const subpaths = parseD(own.d);
@@ -168,7 +151,10 @@ export function planSetKeys(doc, schema, animation, { keys = [], usage, duration
   for (const k of LIVE_PROPS) if (live[k] !== undefined) props[k] = live[k];
   if (duration !== undefined || final !== requested || !existing) props.duration = final;
   const ops = existing ? [{ op: 'set', target: animation, props }] : [{ op: 'create', type: 'animation', id: animation, props }];
-  return { ops, duration: final, extendedFrom: final > requested ? requested : null };
+  // An ease shapes the stretch that leaves its keyframe: on the clip's last keyframe there is none (a common slip).
+  const lastEase = keys.filter((k) => k?.ease !== undefined && k.ease !== 'linear' && sameTime(k.t, last)).map((k) => n(k.t));
+  const warnings = lastEase.length ? [`the ease at t ${lastEase[0]} s does nothing: it is the last keyframe, and an ease shapes the stretch that leaves its keyframe. To soften the arrival, put the ease on the moment before`] : [];
+  return { ops, duration: final, extendedFrom: final > requested ? requested : null, warnings };
 }
 
 /**
@@ -373,7 +359,12 @@ export function planLiveView(doc, schema, { live, times, until, auto, params, re
   });
   const paramsEnd = withValue.length ? `\nParams in the last frame (blended with the clips): ${withValue.join(', ')}` : '';
   const distribution = times?.length ? '' : ` (every ${n(step)} s until ${n(end)} s${step > 0.25 ? '; to look closer, pass times or a shorter until' : ''})`;
-  const autos = frames.repeats.length ? `\nAuto repeat clips that played (they may fall between frames): ${frames.repeats.map((r) => `${r.clip} ${n(r.from)}–${n(r.to)} s`).join(', ')}` : '';
+  const repeating = doc.objects.filter((o) => o.type === 'animation' && read(schema, o, 'usage') === 'puppet' && read(schema, o, 'auto') === 'repeat').map((o) => o.id);
+  const autos = frames.repeats.length
+    ? `\nAuto repeat clips that played (they may fall between frames): ${frames.repeats.map((r) => `${r.clip} ${n(r.from)}–${n(r.to)} s`).join(', ')}`
+    : repeating.length && auto !== false
+      ? `\nAuto repeat clips that did not play before ${n(end)} s: ${repeating.join(', ')} (they wait repeat_min…repeat_max seconds; pass a longer until to see them)`
+      : '';
   const apagados = auto === false ? '\nAuto layers off (auto: false).' : '';
   const text = `Live (as the app would see it), ${frames.length} frames${distribution}:\n${lines.join('\n')}${paramsEnd}${autos}${apagados}`;
   return { svg, width: frames.length === 1 ? 600 : 1000, text };

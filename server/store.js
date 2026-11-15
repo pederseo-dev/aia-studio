@@ -4,10 +4,8 @@
 // per origin: the AI undoes only its own and the user only theirs.
 
 import fs from 'node:fs/promises';
-import { existsSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { ValidationError, createDocument, validate } from '../src/core/document.js';
-import { migrateScenesWithParams } from '../src/core/migration.js';
 import { applyOperations } from '../src/core/operations.js';
 import { ASSET_FILE } from '../src/core/schema.js';
 import { IMAGE_FORMATS, usedAssets, readImage, assetMime, assetName, freeName } from '../src/core/images.js';
@@ -131,66 +129,7 @@ function common(a, b) {
   return output;
 }
 
-// ---------- Old on-disk format ----------
-// Until the translation stage (2026-11) documents lived in personajes/<id>/documento.json, with the history in
-// historial.jsonl and its fields in Spanish. They are moved to the new format once, when the store is created; it is
-// repeatable and does not touch what is already migrated.
-
-const KIND_FROM_LEGACY = { crear: 'create', cambio: 'change', migracion: 'migration', deshacer: 'undo', rehacer: 'redo' };
-
-/** An old history entry with its fields in English (new ones stay the same). */
-export function entryFromLegacy(e) {
-  if (!('fecha' in e) && !('origen' in e) && !('tipo' in e)) return e;
-  const { fecha, origen, tipo, nota, inversas, ...rest } = e;
-  const entry = { ...rest, date: fecha, origin: origen, kind: KIND_FROM_LEGACY[tipo] ?? tipo };
-  if (nota !== undefined) entry.note = nota;
-  if (inversas !== undefined) entry.inverses = inversas;
-  // The previous field order: n, date, origin, kind, [ref], note, ops, inverses.
-  const { n, date, origin, kind, ref, note, ops, inverses, ...extra } = entry;
-  return Object.fromEntries(Object.entries({ n, date, origin, kind, ref, note, ops, inverses, ...extra }).filter(([, v]) => v !== undefined));
-}
-
-/**
- * Moves `folder` (and the old personajes/ folder next to it, if `folder` does not exist yet) to the new format.
- * Returns a warning when both folders exist: personajes/ is then left as it is, and someone has to merge it by hand.
- * @returns {string | null}
- */
-export function migrateLegacyFolder(folder) {
-  const legacy = path.join(path.dirname(path.resolve(folder)), 'personajes');
-  let warning = null;
-  if (existsSync(folder) && existsSync(legacy) && readdirSync(legacy).length) {
-    warning = `Both ${legacy} (old format) and ${path.resolve(folder)} exist: the old folder is not migrated. Move its documents into the new one by hand (they are migrated on the next start).`;
-  }
-  if (!existsSync(folder) && existsSync(legacy)) {
-    try {
-      renameSync(legacy, folder);
-    } catch (e) {
-      // Another process (the editor or the MCP) may have moved it first.
-      if (!existsSync(folder)) throw e;
-    }
-  }
-  if (!existsSync(folder)) return warning;
-  for (const d of readdirSync(folder, { withFileTypes: true })) {
-    if (!d.isDirectory()) continue;
-    const dir = path.join(folder, d.name);
-    const pair = (old, current) => [path.join(dir, old), path.join(dir, current)];
-    const [oldDoc, newDoc] = pair('documento.json', 'document.json');
-    if (existsSync(oldDoc) && !existsSync(newDoc)) renameSync(oldDoc, newDoc);
-    const [oldHistory, newHistory] = pair('historial.jsonl', 'history.jsonl');
-    if (existsSync(oldHistory) && !existsSync(newHistory)) {
-      const lines = readFileSync(oldHistory, 'utf8').split('\n').filter((l) => l.trim());
-      writeFileSync(`${newHistory}.tmp`, lines.map((l) => JSON.stringify(entryFromLegacy(JSON.parse(l))) + '\n').join(''));
-      renameSync(`${newHistory}.tmp`, newHistory);
-      unlinkSync(oldHistory);
-    }
-  }
-  return warning;
-}
-
 export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
-  const warning = migrateLegacyFolder(folder);
-  // On stderr: the MCP uses stdout for the protocol.
-  if (warning) console.error(warning);
   // This process's writes are queued so they do not overwrite each other.
   /** @type {Promise<any>} */
   let row = Promise.resolve();
@@ -235,24 +174,9 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
       if (e.code === 'ENOENT') throw new Error(`There is no document "${id}"`);
       throw e;
     }
-    return migrateOnRead(id, doc);
+    return doc;
   }
 
-  // Format migrations done automatically on read (see src/core/migration.js): saved once, with a
-  // "migration" entry in the history. One promise per document, so two reads at once do not migrate twice.
-  const migrating = new Map();
-  async function migrateOnRead(id, doc) {
-    const { doc: migrated, changes } = migrateScenesWithParams(doc, schema);
-    if (!changes.length) return doc;
-    if (!migrating.has(id)) {
-      migrating.set(id, (async () => {
-        await write(id, migrated);
-        await record(id, { origin: 'system', kind: 'migration', note: changes.join(' '), ops: [], inverses: [] });
-      })().finally(() => migrating.delete(id)));
-    }
-    await migrating.get(id);
-    return migrated;
-  }
 
   async function write(id, doc) {
     // Temp file + rename: nobody ever reads a half-written file.
@@ -283,12 +207,6 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     const undo = [];
     const redo = [];
     for (const e of entries) {
-      // A format migration (from any origin) cuts the stacks: the inverses from before no longer fit.
-      if (e.kind === 'migration') {
-        undo.length = 0;
-        redo.length = 0;
-        continue;
-      }
       if (e.origin !== origin) continue;
       if (e.kind === 'change') {
         undo.push(e.n);
@@ -313,7 +231,6 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
     const own = touched(entry);
     const standing = new Map(); // origin → Map(n → entry)
     for (const e of entries.slice(entry.n)) {
-      if (e.kind === 'migration') return []; // the migration already cut the stacks
       if (e.origin === entry.origin || !['change', 'undo', 'redo'].includes(e.kind)) continue;
       const fromOrigin = standing.get(e.origin) ?? standing.set(e.origin, new Map()).get(e.origin);
       // Undoing a batch (or redoing an undo) that is also later: they cancel each other out.
@@ -350,10 +267,12 @@ export function createStore({ schema, folder = DOCUMENTS_FOLDER }) {
       throw new Error(`Can't ${kind === 'undo' ? 'undo' : 'redo'}: the document changed afterwards and it no longer fits.\n${e.message}`);
     }
     await write(id, result.doc);
-    // The user sees the note in the history: in English (old Spanish prefixes are cleaned up too).
-    const note = entry.note?.replace(/^(deshacer|rehacer|undo|redo): /, '') ?? '';
+    const note = entry.note?.replace(/^(undo|redo): /, '') ?? '';
     await record(id, { origin, kind, ref: entry.n, note: `${kind === 'undo' ? 'undo' : 'redo'}: ${note}`, ops: inverses, inverses: result.inverses });
-    return { doc: result.doc, in: { n: entry.n, note, ops: entry.ops.length, batch: entry.ops } };
+    // The batch it acts on, as the AI and the user know it: an undo entry (what a redo reverts) points to the change.
+    let original = entry;
+    while (original.kind !== 'change' && original.ref && entries[original.ref - 1]) original = entries[original.ref - 1];
+    return { doc: result.doc, in: { n: original.n, note, ops: entry.ops.length, batch: entry.ops } };
   }
 
   return {

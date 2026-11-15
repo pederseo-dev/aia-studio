@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { findObject } from '../src/core/document.js';
 import { opsToSetPose } from '../src/core/blend.js';
+import { resolveValues } from '../src/core/poseValues.js';
 import { guideForAI } from '../src/core/guide.js';
 import { summarizeOperations } from '../src/core/operations.js';
 import { DOCUMENTS_FOLDER, createStore } from '../server/store.js';
@@ -304,20 +305,25 @@ server.registerTool(
   'bind_points',
   {
     description:
-      'Bind by point: each vertex of the path follows the closest bone (in the setup) from the given list, ' +
-      'or from all those of the skeleton containing the path. That way a single path bends with a chain of bones (tail, ' +
-      'arm, neck). Each vertex gets a "bone"; it can be touched up afterwards with set.',
+      'Bind by point: each point of a vector layer (or vertex of a path) follows the closest bone (in the setup) from the ' +
+      'given list, or from all those of the skeleton containing it. That way a single drawing bends with a chain of bones ' +
+      '(tail, arm, neck). Each point gets a "bone". To bind only some points of a vector layer (as the editor\'s Bind ' +
+      'Points), pass points or shape; with a single bone in bones they all follow it: { "path": "face", "shape": "jaw", ' +
+      '"bones": ["jaw_bone"] }. release: true takes the bone off those points instead.',
     inputSchema: {
       id,
-      path: z.string().describe('id of the path'),
-      bones: z.array(z.string()).optional().describe('bones of its skeleton to distribute among (by default, all of its skeleton)'),
+      path: z.string().describe('id of the vector layer (or path)'),
+      bones: z.array(z.string()).optional().describe('bones of its skeleton to distribute among (by default, all of its skeleton); one bone = all the points follow it'),
+      points: z.array(z.string()).optional().describe('only these points of the vector layer (ids, as the tree lists them)'),
+      shape: z.string().optional().describe('only the points of this shape of the vector layer'),
+      release: z.boolean().optional().describe('true = those points stop following bones (they follow the layer)'),
       note: z.string().optional().describe('what it does, for the history'),
     },
   },
-  safe(async ({ id, path, bones, note }) => {
-    const { ops, distribution } = planBindPoints(await store.read(id), schema, path, bones);
+  safe(async ({ id, path, bones, points, shape, release, note }) => {
+    const { ops, distribution } = planBindPoints(await store.read(id), schema, path, bones, { points, shape, release });
     await store.applyOps(id, ops, { origin: ORIGIN, note: note ?? `distribute ${path} among bones` });
-    return text(`Vertices of ${path} per bone: ${distribution}. Check it with render_preview and a pose.`);
+    return text(`Points of ${path} per bone: ${distribution}. Check it with render_preview and a pose.`);
   }),
 );
 
@@ -378,27 +384,30 @@ server.registerTool(
     description:
       'Creates or updates a named pose (pose asset) without touching the setup, and returns how it looks. A pose sets ' +
       'animatable properties of any object: bones, vertices of a mouth (also with "d"), colors, opacity, ' +
-      'the active child of a switch... By default it adds to what the pose already had; an object with {} leaves the pose ' +
-      'entirely; remove takes out only some properties (["mouth.active"]) without touching the rest of that object.',
+      'the active child of a switch, points of a vector layer... By default it adds to what the pose already had (a vector ' +
+      'layer\'s points and curves, point by point); an object with {} leaves the pose entirely; remove takes out only some ' +
+      'properties (["mouth.active"], or one point: "face.points.p3") without touching the rest of that object. A number ' +
+      'can be relative to the setup ("+=14", "-=0.3"), and a vector layer takes transformPoints (relative to the setup).',
     inputSchema: {
       id,
       pose: z.string().describe('id of the pose, for example "happy", "look_up" or "viseme_o"'),
       values: z
         .record(z.string(), z.record(z.string(), z.any()))
         .optional()
-        .describe('{ object_id: { property: value } }, for example { "head_bone": { "rotation": -10 }, "mouth": { "active": "mouth_o" } }'),
+        .describe('{ object_id: { property: value } }, for example { "head_bone": { "rotation": "-=10" }, "mouth": { "active": "mouth_o" }, "face": { "transformPoints": { "shape": "lid_l", "scale": [1, 0.1] } } }'),
       replace: z.boolean().optional().describe('true = the pose keeps only these values'),
       remove: z
         .array(z.string())
         .optional()
-        .describe('properties that leave the pose, as "object.property" (for example "mouth.active"); an id alone takes out the whole object. Applied before values'),
+        .describe('properties that leave the pose, as "object.property" (for example "mouth.active") or one point or curve of a vector layer ("face.points.p3"); an id alone takes out the whole object. Applied before values'),
       note: z.string().optional().describe('what it does, for the history'),
       width: z.number().int().min(64).max(2048).optional().describe('width of the preview'),
       show_bones: z.boolean().optional().describe('true = the preview shows the skeleton'),
     },
   },
   safe(async ({ id, pose, values, replace, remove, note, width, show_bones }) => {
-    const ops = opsToSetPose(await store.read(id), pose, values ?? {}, replace, remove ?? []);
+    const current = await store.read(id);
+    const ops = opsToSetPose(current, pose, resolveValues(current, schema, values ?? {}, `values`), replace, remove ?? []);
     const { doc, warnings } = await store.applyOps(id, ops, { origin: ORIGIN, note: note ?? `pose ${pose}` });
     const saved = findObject(doc, pose).values;
     const list = Object.entries(saved).map(([h, c]) => `${h} ${JSON.stringify(c, (k, v) => (k === 'vertices' ? `(${v.length} vertices)` : v))}`).join(', ') || 'empty';
@@ -412,7 +421,7 @@ const moment = z.object({
   values: z
     .record(z.string(), z.record(z.string(), z.any()))
     .optional()
-    .describe('{ object_id: { property: value } } absolute, as in set_pose (a path accepts "d"); for example { "arm_r_bone": { "rotation": -60 }, "tail": { "opacity": 0.5 } }. A number can be relative to the setup with a text "+=n" or "-=n": { "head_bone": { "rotation": "+=14" } } = 14° more than in the setup. In a puppet clip, if a param chooses a variant (visemes), animate the param in params and not the switch\'s active; in a scene (animate), key the active'),
+    .describe('{ object_id: { property: value } } absolute, as in set_pose (a path accepts "d"); for example { "arm_r_bone": { "rotation": -60 }, "tail": { "opacity": 0.5 } }. A number can be relative to the setup with a text "+=n" or "-=n": { "head_bone": { "rotation": "+=14" } } = 14° more than in the setup. A vector layer takes transformPoints, relative to the setup: { "face": { "transformPoints": { "shape": "mouth", "scale": [1, 1.4] } } }. In a puppet clip, if a param chooses a variant (visemes), animate the param in params and not the switch\'s active; in a scene (animate), key the active'),
   params: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])).optional().describe('only in a puppet clip: { param_id: value } at that moment, for example { "happiness": 1, "viseme": "o" }; its drivers add the poses. A scene (animate) doesn\'t animate params nor has drivers: copy the pose with pose or key the values'),
   pose: z.string().optional().describe('id of a pose: copies its values as keyframes at that moment (values overrides them); with only or except, just a part'),
   only: z.array(z.string()).optional().describe('with pose: copy only this from the pose ("object.property" or an id), for example ["eye_l", "eye_r", "mouth.active"]'),
@@ -463,6 +472,7 @@ server.registerTool(
     const plan = planSetKeys(await store.read(id), schema, animation, { keys, usage, duration, loop, description, remove, ...live });
     const { doc, warnings } = await store.applyOps(id, plan.ops, { origin: ORIGIN, note: note ?? `animation ${animation}` });
     const notes = [...warnings];
+    notes.push(...plan.warnings);
     if (plan.extendedFrom != null) notes.push(`duration went from ${plan.extendedFrom} to ${plan.duration} s so the keyframes fit`);
     notes.push(...rotationWarnings(doc, schema, findObject(doc, animation)));
     // The clip view already lists which poses each animated param moves (planClipView).

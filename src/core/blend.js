@@ -3,12 +3,18 @@
 //
 // - Numbers (rotation, position, opacity...): the differences from the setup are added, each one by its weight.
 // - Colors and vertices: they are interpolated toward the value of each pose, in order.
+// - Mesh points and curves (vector layers): the same, point by point and curve by curve; what a pose does not list
+//   stays as it was.
 // - What cannot be interpolated (the active child of a switch, booleans, texts): the pose with weight ≥ 0.5 wins.
 
 import { findObject } from './document.js';
 import { read } from './schema.js';
 import { effectiveValue } from './styles.js';
-import { tangents, vertexFromTangents } from './paths.js';
+import { blendVertices } from './paths.js';
+
+// The vertex morph lives with the vertices (paths.js); it is re-exported here, where the other blends are.
+export { blendVertices };
+import { blendCurves, isMeshType, overSetup } from './mesh.js';
 
 /** Value of each param: the requested one or, if not, its initial value. Enums hold a text; the rest, a number. */
 export function paramValues(doc, schema, requested = {}) {
@@ -58,8 +64,6 @@ export function driverWeight(doc, schema, driver, value) {
 
 // ---------- Interpolation by property kind ----------
 
-const withoutBone = (vertices) => vertices.map(({ bone, ...v }) => v);
-
 /**
  * Vertices of a pose with the setup's per-point binding: vertex i takes the `bone` of vertex i of the setup (and
  * the extra ones, none). Whatever an old pose saved in `bone` is ignored.
@@ -82,20 +86,32 @@ export function blendColor(a, b, w) {
   return `#${hex.slice(0, 3).join('')}${c[3] === 255 ? '' : hex[3]}`;
 }
 
+
 /**
- * Morph between two vertex lists of the same length: anchors and tangents are interpolated. The result has no
- * `bone`: the per-point binding belongs to the setup (`applyPose` sets it), like in Moho.
+ * Mesh points add up like numbers: each pose moves each of its points by w × (its place − the setup's), so two poses
+ * that move the same point combine (eyes closing while the pupils look aside) instead of pulling it in turns.
  */
-export function blendVertices(a, b, w) {
-  if (a.length !== b.length) return withoutBone(w >= 0.5 ? b : a);
-  const lerp = (p, q) => [p[0] + (q[0] - p[0]) * w, p[1] + (q[1] - p[1]) * w];
-  return a.map((goes, i) => {
-    const vb = b[i];
-    const [ta, tb] = [tangents(goes), tangents(vb)];
-    const [x, y] = lerp([goes.x, goes.y], [vb.x, vb.y]);
-    const radius = (goes.radius ?? 0) + ((vb.radius ?? 0) - (goes.radius ?? 0)) * w;
-    return vertexFromTangents(x, y, lerp(ta.in, tb.in), lerp(ta.out, tb.out), radius ? { radius: Math.round(radius * 100) / 100 } : {});
-  });
+function addPointDeltas(a, target, w) {
+  if (!target || typeof target !== 'object') return;
+  a.deltas ??= {};
+  for (const [id, q] of Object.entries(target)) {
+    const s = a.base?.[id];
+    if (!s || typeof q?.x !== 'number' || typeof q?.y !== 'number') continue;
+    const d = (a.deltas[id] ??= [0, 0]);
+    d[0] += w * (q.x - s.x);
+    d[1] += w * (q.y - s.y);
+  }
+}
+
+/** The points of a blend: where they start (the clip's or the setup's) plus the sum of the poses' moves. */
+function pointsWithDeltas(a) {
+  const result = { ...(a.from ?? {}) };
+  const r = (v) => Math.round(v * 100) / 100;
+  for (const [id, [dx, dy]] of Object.entries(a.deltas ?? {})) {
+    const start = a.from?.[id] ?? a.base?.[id];
+    if (start) result[id] = { ...start, x: r(start.x + dx), y: r(start.y + dy) };
+  }
+  return result;
 }
 
 /**
@@ -133,13 +149,15 @@ export function blendPoses(doc, schema, requested = {}, base = {}) {
         if (p.type === 'number') a.sum += w * (target - a.base);
         else if (p.type === 'color') a.value = blendColor(a.value, target, w);
         else if (p.type === 'vertices') a.value = blendVertices(a.value, target, w);
+        else if (p.type === 'points') addPointDeltas(a, target, w);
+        else if (p.type === 'curves') a.value = blendCurves(a.value, target, w);
         else if (w >= 0.5) a.value = target;
       }
     }
   }
   const values = structuredClone(base);
   for (const a of accumulated.values()) {
-    (values[a.id] ??= {})[a.prop] = a.kind === 'number' ? a.from + a.sum : a.value;
+    (values[a.id] ??= {})[a.prop] = a.kind === 'number' ? a.from + a.sum : a.kind === 'points' ? pointsWithDeltas(a) : a.value;
   }
   return { id: null, type: 'pose', values, params };
 }
@@ -147,7 +165,7 @@ export function blendPoses(doc, schema, requested = {}, base = {}) {
 /**
  * The document with the values of a pose applied to the objects that are not bones (bones are moved by the
  * skeleton, with their delta). It is used for drawing and so the editor reads what is seen. The pose's vertices
- * keep the setup's per-point binding.
+ * and mesh points keep the setup's per-point binding.
  */
 export function applyPose(doc, schema, pose) {
   if (!pose?.values || !Object.keys(pose.values).length) return doc;
@@ -159,6 +177,8 @@ export function applyPose(doc, schema, pose) {
       const posed = { ...o, ...fields };
       for (const [prop, p] of Object.entries(schema.types.get(o.type)?.properties ?? {})) {
         if (p.type === 'vertices' && Array.isArray(fields[prop])) posed[prop] = withSetupBinding(fields[prop], o[prop]);
+        // A pose lists only the points and curves it moves: the rest of the mesh is the setup's.
+        if (isMeshType(p.type) && fields[prop] !== undefined) posed[prop] = overSetup(p.type, read(schema, o, prop), fields[prop]);
       }
       return posed;
     }),
@@ -177,14 +197,21 @@ export function applyPose(doc, schema, pose) {
  * @param {Record<string, Record<string, any>>} [existing] @param {Record<string, Record<string, any>>} [values]
  * @param {boolean} [replace] @param {string[]} [remove]
  */
+/** Properties whose value is a map by id (a vector layer's points and curves): a pose merges them id by id. */
+const MESH_MAPS = ['points', 'curves'];
+
 export function mergePose(existing, values = {}, replace = false, remove = []) {
   const valueMap = replace ? {} : structuredClone(existing ?? {});
   for (const name of remove) {
-    const [object, prop, ...extra] = String(name).split('.');
-    if (!object || extra.length || prop === '') throw new Error(`remove: "${name}" should be "object.property" (for example "mouth.active") or an object id`);
+    const [object, prop, key, ...extra] = String(name).split('.');
+    const meshKey = MESH_MAPS.includes(prop);
+    if (!object || extra.length || prop === '' || (key !== undefined && (!meshKey || !key))) throw new Error(`remove: "${name}" should be "object.property" (for example "mouth.active"), an object id, or one point or curve of a vector layer ("face.points.p3")`);
     if (prop === undefined) delete valueMap[object];
     else if (valueMap[object]) {
-      delete valueMap[object][prop === 'd' ? 'vertices' : prop];
+      if (key !== undefined && valueMap[object][prop]) {
+        delete valueMap[object][prop][key];
+        if (!Object.keys(valueMap[object][prop]).length) delete valueMap[object][prop];
+      } else if (key === undefined) delete valueMap[object][prop === 'd' ? 'vertices' : prop];
       if (!Object.keys(valueMap[object]).length) delete valueMap[object];
     }
   }
@@ -195,6 +222,8 @@ export function mergePose(existing, values = {}, replace = false, remove = []) {
       continue;
     }
     const together = { ...previous, ...fields };
+    // The points and curves of a vector layer are added one by one (by id) to those the pose already had.
+    for (const k of MESH_MAPS) if (fields[k] && previous?.[k] && typeof fields[k] === 'object') together[k] = { ...previous[k], ...fields[k] };
     for (const [k, v] of Object.entries(together)) if (v === undefined) delete together[k];
     if (Object.keys(together).length) valueMap[object] = together;
     else delete valueMap[object];

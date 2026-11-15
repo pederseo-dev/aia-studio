@@ -12,8 +12,10 @@
 //   drawn.
 // - Bind Layer (L): click on a bone and then on the drawing (or its row in Layers) so it follows it whole; another
 //   click releases it. Alt + click takes the group that contains it.
-// - Bind Points: click on a bone and then on points of the paths of its skeleton (or a marquee around them) so they
-//   follow that bone; Alt releases. Each bone has a color and its points are painted with it.
+// - Bind Points (as in Moho): it works on one layer, the vector layer (or path) picked last. Its points are picked
+//   like with point selection (click, Shift + click adds or removes, a box; Shift + box adds, Alt + box removes);
+//   then a click on a bone picks it and Space (or «Bind» in the bar) binds the picked points to it. Each bone has a
+//   color and its points are painted with it.
 //
 // In the setup those adjustments change the rest pose. With an active pose, any tool poses: dragging a bone (or the
 // drawing bound to it) rotates it within the pose and the origin offsets it.
@@ -23,8 +25,9 @@ import { read } from '../core/schema.js';
 import { evaluateInPose, evaluateSkeleton, boneOf, limitAngle, childFrame, reasonNotToBind, opsToReleaseOnMove, planProximityBinding, planReparentBones, boneValues } from '../core/skeleton.js';
 import { apply, invert, worldMatrix, multiply } from '../core/geometry.js';
 import { applyPose } from '../core/blend.js';
+import { bindablePoints as pointsOf, planBindPoints } from '../core/bindPoints.js';
 import { editingName, poseOps, activePose, viewedPose } from './editing.js';
-import { toggleSelection, notify, docVisible, execute, schema, state, freeId, preview, select, selectSeveral } from './state.js';
+import { toggleSelection, notify, docVisible, execute, schema, state, freeId, preview, select, selectSeveral, pickable, setState, subscribe } from './state.js';
 
 const round = (v, d = 10) => Math.round(v * d) / d;
 
@@ -33,6 +36,40 @@ export const BONE_TOOLS = ['bone', 'manipulate', 'reparent', 'bindLayer', 'bindP
 
 // One color per bone (as in Rive), to see which points and which drawing follow which.
 const COLORS = ['#ff6b6b', '#ffa94d', '#e9d94a', '#69db7c', '#3bc9db', '#5c9dff', '#b197fc', '#f783ac'];
+
+/** The points of a drawing that can each follow a bone: [key, { x, y, bone? }] (see src/core/bindPoints.js). */
+export const bindablePoints = (o) => pointsOf(schema, o);
+
+/** The layer Bind Points works on (see state.bindTarget), if it still exists and is not locked. */
+export function bindLayer(doc = state.doc) {
+  const o = state.bindTarget && findObject(doc, state.bindTarget);
+  return o && (o.type === 'vector' || o.type === 'path') && !locked(doc, o.id) ? o : null;
+}
+
+// Picking a vector layer, a shape of one or a path makes it the layer of Bind Points; picking a bone keeps it, so the
+// points stay picked while the bone is chosen. Another document starts over.
+subscribe((c) => {
+  if ('id' in c) return setState({ bindTarget: null, bindPicked: [] });
+  if (!('selection' in c) || !state.doc) return;
+  const id = pickable(state.selection);
+  const o = id && findObject(state.doc, id);
+  if ((o?.type === 'vector' || o?.type === 'path') && o.id !== state.bindTarget) setState({ bindTarget: o.id, bindPicked: [] });
+});
+
+/** Binds the picked points of the Bind Points layer to `bone`, or releases them (null). */
+export function bindPicked(bone) {
+  const layer = bindLayer();
+  const keys = layer ? state.bindPicked.filter((k) => new Map(bindablePoints(layer)).has(k)) : [];
+  if (!layer || !keys.length) return notify('Bind Points: pick points first (click or drag a box around them)', true);
+  const n = keys.length;
+  const note = bone ? `bind ${n} point${n === 1 ? '' : 's'} of ${layer.id} to ${bone}` : `unbind ${n} point${n === 1 ? '' : 's'} of ${layer.id}`;
+  // The same plan as the AI's bind_points (one bone: all the picked points follow it).
+  try {
+    execute(planBindPoints(state.doc, schema, layer.id, bone ? [bone] : undefined, { points: keys, release: !bone }).ops, note);
+  } catch (e) {
+    notify(e.message, true);
+  }
+}
 
 export function boneColor(doc, id) {
   const i = doc.objects.filter((o) => o.type === 'bone').findIndex((h) => h.id === id);
@@ -196,21 +233,22 @@ export function createBones(ctx) {
     }
   }
 
-  /** Bind Points: the points of the active skeleton's paths, with the color of the bone they follow. */
+  /** The points of the Bind Points layer on screen: [key, point, [x, y]]. */
+  function pointsOnScreen(doc, o) {
+    const m = multiply(ctx.cameraMatrix(), worldMatrix(doc, schema, o.id));
+    return bindablePoints(o).map(([key, v]) => [key, v, apply(m, v.x, v.y)]);
+  }
+
+  /** Bind Points: the points of its layer only, with the color of the bone they follow; the picked ones, ringed. */
   function drawPoints(doc) {
-    const skeleton = activeSkeleton(doc);
-    if (!skeleton) return;
-    const camera = ctx.cameraMatrix();
+    const o = bindLayer(doc);
+    if (!o) return;
+    const picked = new Set(state.bindPicked);
     const layer = ctx.create('g', { class: 'bone-points' });
-    // Points of locked paths are not shown: they cannot be bound from the canvas.
-    for (const path of doc.objects.filter((o) => o.type === 'path' && skeletonOf(doc, o.id) === skeleton && !locked(doc, o.id))) {
-      const m = multiply(camera, worldMatrix(doc, schema, path.id));
-      read(schema, path, 'vertices').forEach((v, i) => {
-        const [x, y] = apply(m, v.x, v.y);
-        const attributes = { class: `bone-point${v.bone ? '' : ' free'}`, 'data-point': `${path.id}:${i}`, cx: x, cy: y, r: 4 };
-        if (v.bone) attributes.style = `--c: ${boneColor(doc, v.bone)}`;
-        layer.append(ctx.create('circle', attributes, `${path.id} point ${i}${v.bone ? ` → ${v.bone}` : ' (follows the shape)'}`));
-      });
+    for (const [key, v, [x, y]] of pointsOnScreen(doc, o)) {
+      const attributes = { class: `bone-point${v.bone ? '' : ' free'}${picked.has(key) ? ' picked' : ''}`, 'data-point': key, cx: x, cy: y, r: picked.has(key) ? 5 : 4 };
+      if (v.bone) attributes.style = `--c: ${boneColor(doc, v.bone)}`;
+      layer.append(ctx.create('circle', attributes, `${o.id} point ${key}${v.bone ? ` → ${v.bone}` : ' (follows the layer)'}`));
     }
     ctx.overlay.append(layer);
   }
@@ -405,26 +443,34 @@ export function createBones(ctx) {
     if (!g || !ctx.documentG.contains(g)) return;
     const bone = boneToBind();
     if (!bone) return notify('Bind Layer: first click the bone the drawing should follow', true);
-    const obj = findObject(state.doc, g.dataset.id);
+    // A shape is drawn by its vector layer: the layer is what follows the bone.
+    const obj = findObject(state.doc, pickable(g.dataset.id));
     toggleBinding(e.altKey && obj.parent && findObject(state.doc, obj.parent)?.type !== 'skeleton' ? obj.parent : obj.id, bone);
   }
 
   /**
-   * Bind Points: click on a bone picks it; click on a point binds it to that bone (or releases it if it was already
-   * its own); dragging makes a marquee and binds all the points inside (with Alt, releases them).
+   * Bind Points: a click on a point picks it (Shift: adds or removes it); a click on a bone picks the bone; a click on
+   * another drawing makes its layer the one to bind; dragging on empty space picks the points inside a box (Shift
+   * adds, Alt removes). Space or the bar's «Bind» binds them.
    */
   function pointerdownBindPoints(e) {
     const doc = state.doc;
-    const touched = touchedBone(e);
     const point = e.target.closest('[data-point]')?.dataset.point;
-    if (touched && !point) return select(touched);
-    const bone = chosenBone(doc);
-    if (!bone) return notify('Bind Points: first click the bone the points should follow', true);
-    if (point) {
-      const [pathId, i] = [point.slice(0, point.lastIndexOf(':')), Number(point.slice(point.lastIndexOf(':') + 1))];
-      const v = read(schema, findObject(doc, pathId), 'vertices')[i];
-      return savePoints(new Map([[pathId, new Map([[i, e.altKey || v.bone === bone.id ? null : bone.id]])]]), bone.id);
+    if (point !== undefined) {
+      const picked = new Set(e.shiftKey ? state.bindPicked : []);
+      if (e.shiftKey && picked.has(point)) picked.delete(point);
+      else picked.add(point);
+      return setState({ bindPicked: [...picked] });
     }
+    const touched = touchedBone(e);
+    if (touched) return select(touched);
+    const g = e.target.closest('[data-id]');
+    if (g && ctx.documentG.contains(g)) {
+      const o = findObject(doc, pickable(g.dataset.id));
+      if (o && (o.type === 'vector' || o.type === 'path') && o.id !== state.bindTarget) return setState({ bindTarget: o.id, bindPicked: [] });
+    }
+    const layer = bindLayer(doc);
+    if (!layer) return notify('Bind Points: pick the vector layer whose points you bind (in Layers, or click its drawing)', true);
     // Marquee.
     const s0 = ctx.screenPoint(e);
     const box = ctx.create('rect', { class: 'marquee', x: s0[0], y: s0[1], width: 0, height: 0 });
@@ -439,40 +485,24 @@ export function createBones(ctx) {
       },
       (ev) => {
         box.remove();
-        if (Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) < 4) return;
+        const adding = e.shiftKey || ev.shiftKey;
+        const removing = e.altKey || ev.altKey;
+        // A click on empty space (no box) drops the picked points.
+        if (Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) < 4) {
+          if (!adding && !removing) setState({ bindPicked: [] });
+          return;
+        }
         const [x0, x1] = [Math.min(s0[0], s1[0]), Math.max(s0[0], s1[0])];
         const [y0, y1] = [Math.min(s0[1], s1[1]), Math.max(s0[1], s1[1])];
-        const camera = ctx.cameraMatrix();
-        const skeleton = skeletonOf(doc, bone.id);
-        const changes = new Map();
-        for (const path of doc.objects.filter((o) => o.type === 'path' && skeletonOf(doc, o.id) === skeleton && !locked(doc, o.id))) {
-          const m = multiply(camera, worldMatrix(doc, schema, path.id));
-          read(schema, path, 'vertices').forEach((v, i) => {
-            const [x, y] = apply(m, v.x, v.y);
-            if (x < x0 || x > x1 || y < y0 || y > y1) return;
-            (changes.get(path.id) ?? changes.set(path.id, new Map()).get(path.id)).set(i, ev.altKey || e.altKey ? null : bone.id);
-          });
+        const inside = pointsOnScreen(doc, layer).filter(([, , [x, y]]) => x >= x0 && x <= x1 && y >= y0 && y <= y1).map(([key]) => key);
+        const picked = new Set(adding || removing ? state.bindPicked : []);
+        for (const key of inside) {
+          if (removing) picked.delete(key);
+          else picked.add(key);
         }
-        if (changes.size) savePoints(changes, bone.id);
+        setState({ bindPicked: [...picked] });
       },
     );
-  }
-
-  /** Batch with the new vertices of each path: changes = Map(pathId → Map(index → bone or null)). */
-  function savePoints(changes, bone) {
-    const ops = [];
-    let n = 0;
-    for (const [pathId, byIndex] of changes) {
-      const vertices = read(schema, findObject(state.doc, pathId), 'vertices').map((v, i) => {
-        if (!byIndex.has(i)) return v;
-        n++;
-        const { bone, ...rest } = v;
-        return byIndex.get(i) ? { ...rest, bone: byIndex.get(i) } : rest;
-      });
-      ops.push({ op: 'set', target: pathId, props: { vertices } });
-    }
-    const loose = [...changes.values()].every((m) => [...m.values()].every((b) => b === null));
-    execute(ops, loose ? `unbind ${n} point${n === 1 ? '' : 's'}` : `bind ${n} point${n === 1 ? '' : 's'} to ${bone}`);
   }
 
   /** With an active pose: the touched bone is rotated, or the bone of the touched drawing. */
@@ -481,10 +511,11 @@ export function createBones(ctx) {
     if (!id) {
       const g = e.target.closest('[data-id]');
       if (!g || !ctx.documentG.contains(g)) return boneMarquee(e, e.ctrlKey || e.metaKey || e.shiftKey, true);
-      id = boneOf(state.doc, g.dataset.id) ?? nearestBoneToPoints(g.dataset.id, ctx.screenPoint(e));
+      const drawing = pickable(g.dataset.id);
+      id = boneOf(state.doc, drawing) ?? nearestBoneToPoints(drawing, ctx.screenPoint(e));
       // A drawing that follows a locked bone does not rotate it.
       if (id && locked(state.doc, id)) id = null;
-      if (!id) return e.ctrlKey || e.metaKey ? toggleSelection(g.dataset.id) : select(g.dataset.id);
+      if (!id) return e.ctrlKey || e.metaKey ? toggleSelection(drawing) : select(drawing);
     }
     // Ctrl + click: adds or removes from the selection without rotating (to see and key several in the timeline).
     if (e.ctrlKey || e.metaKey) return toggleSelection(id);
@@ -492,10 +523,9 @@ export function createBones(ctx) {
     rotate(e, id);
   }
 
-  /** Path bound by point: the bone (among those its vertices follow) closest to the click, in the pose. */
-  function nearestBoneToPoints(pathId, point) {
-    const path = findObject(state.doc, pathId);
-    const ids = [...new Set((path?.vertices ?? []).map((v) => v.bone).filter(Boolean))];
+  /** Drawing bound by point: the bone (among those its points follow) closest to the click, in the pose. */
+  function nearestBoneToPoints(id, point) {
+    const ids = [...new Set(bindablePoints(findObject(state.doc, id)).map(([, v]) => v.bone).filter(Boolean))];
     if (!ids.length) return null;
     const { posed } = evaluateInPose(state.doc, schema, activePose());
     const camera = ctx.cameraMatrix();

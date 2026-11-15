@@ -1,14 +1,17 @@
 {
   "name": "shape",
-  "abstract": true,
-  "extends": "transformable",
-  "description": "Shape with fill and stroke.",
-  "help": "Shape with fill and stroke.",
+  "parentTypes": ["vector"],
+  "requiresParent": true,
+  "description": "Shape of a vector layer, as in Moho: a fill and a stroke over curves of its layer. It has no transform of its own; it moves with the points of its curves. With several curves, the inner ones cut holes (fillRule evenodd). Shapes draw in their order in the layer: the last one on top. When creating it you can pass \"d\" (an SVG path, any number of subpaths) and its points and curves are added to the layer.",
+  "help": "Fill and stroke over curves of its vector layer. It moves with the points of its curves.",
   "properties": {
+    "curves": { "type": "strings", "default": [], "refScope": "layerCurves", "group": "Shape", "help": "Curves of the layer this shape fills and strokes. Inner curves cut holes.", "description": "Ids of curves of its vector layer. The fill covers the area they enclose (an open curve closes with a straight line for the fill); with several, the inner ones cut holes according to fillRule. The stroke follows every curve." },
+    "fillRule": { "type": "enum", "values": ["evenodd", "nonzero"], "default": "evenodd", "group": "Shape", "help": "How curves inside other curves fill: evenodd cuts holes; nonzero fills them unless they turn the other way.", "description": "evenodd: a curve inside another cuts a hole. nonzero: it only cuts a hole if it turns in the opposite direction." },
     "style": { "type": "ref", "refTypes": ["style"], "default": null, "nullable": true, "group": "Appearance", "help": "Shared style. Appearance properties the shape does not set itself come from it.", "description": "Shared style. Appearance properties the shape does not set itself are taken from it." },
-    "fill": { "type": "color", "default": "#c8c2d4", "nullable": true, "animatable": true, "group": "Appearance", "help": "Fill color. Empty = no fill.", "description": "Fill color. null = no fill." },
-    "fillGradient": { "type": "ref", "refTypes": ["linear_gradient", "radial_gradient"], "default": null, "nullable": true, "group": "Appearance", "help": "Fill gradient (a linear or radial gradient). When set, it replaces fill.", "description": "Fill gradient (id of a linear_gradient or radial_gradient). When set, it replaces fill." },
+    "fill": { "type": "color", "default": "#c8c2d4", "nullable": true, "animatable": true, "group": "Appearance", "help": "Fill color. Empty = no fill (a line).", "description": "Fill color. null = no fill (only the stroke: a line)." },
+    "fillGradient": { "type": "ref", "refTypes": ["linear_gradient", "radial_gradient"], "default": null, "nullable": true, "group": "Appearance", "help": "Fill gradient (a linear or radial gradient). When set, it replaces fill.", "description": "Fill gradient (id of a linear_gradient or radial_gradient), from 0 to 1 over the shape's box. When set, it replaces fill." },
     "stroke": { "type": "color", "default": null, "nullable": true, "animatable": true, "group": "Appearance", "help": "Stroke color. Empty = no stroke.", "description": "Stroke color. null = no stroke." },
-    "strokeWidth": { "type": "number", "default": 2, "min": 0, "animatable": true, "group": "Appearance", "help": "Stroke width in px.", "description": "Stroke width in px." }
+    "strokeWidth": { "type": "number", "default": 2, "min": 0, "animatable": true, "group": "Appearance", "help": "Stroke width in px.", "description": "Stroke width in px." },
+    "visible": { "type": "boolean", "default": true, "animatable": true, "group": "Appearance", "help": "When off, the shape is not drawn.", "description": "If false, the shape is not drawn." }
   }
 }

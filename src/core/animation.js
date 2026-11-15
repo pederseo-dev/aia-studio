@@ -12,6 +12,7 @@ import { applyCurve, sameTime } from './curves.js';
 import { read } from './schema.js';
 import { effectiveValue } from './styles.js';
 import { blendColor, blendPoses, blendVertices, driverWeight, paramValues } from './blend.js';
+import { blendCurves, blendPoints, withoutBones } from './mesh.js';
 
 /**
  * The time inside the clip (0…duration) for a playback time, according to its loop. In a loop, the end of each
@@ -39,7 +40,7 @@ export function localTime(schema, clip, t) {
   return Math.max(0, Math.min(d, t));
 }
 
-/** Value of a list of keyframes at time t, according to the property kind (number, color, vertices or discrete). */
+/** Value of a list of keyframes at time t, according to the property kind (number, color, vertices, points, curves or discrete). */
 export function trackValue(keys, t, kind) {
   if (!keys?.length) return undefined;
   if (t <= keys[0].t) return keys[0].value;
@@ -58,6 +59,8 @@ export function trackValue(keys, t, kind) {
   if (kind === 'number' && typeof a.value === 'number' && typeof b.value === 'number') return a.value + (b.value - a.value) * w;
   if (kind === 'color') return blendColor(a.value, b.value, Math.max(0, Math.min(1, w)));
   if (kind === 'vertices' && Array.isArray(a.value) && Array.isArray(b.value)) return blendVertices(a.value, b.value, w);
+  if (kind === 'points') return blendPoints(a.value, b.value, w);
+  if (kind === 'curves') return blendCurves(a.value, b.value, w);
   // What is not interpolated changes abruptly at the next keyframe.
   return a.value;
 }
@@ -110,14 +113,18 @@ export const roundTime = (t) => Math.round(t * 1e6) / 1e6;
 
 /**
  * Tracks with a keyframe set on `id.prop` at time t (replaces any at that time and keeps its curve if no other is
- * given). Does not modify the given tracks. Vertices do not keep `bone` (it belongs to the setup).
+ * given). Does not modify the given tracks. Vertices and mesh points do not keep `bone` (it belongs to the setup).
  */
 export function putKey(tracks, id, prop, t, value, ease) {
   const created = structuredClone(tracks ?? {});
   const keys = ((created[id] ??= {})[prop] ??= []);
   const time = roundTime(t);
   const j = keys.findIndex((c) => sameTime(c.t, time));
-  const key = { t: time, value: prop === 'vertices' && Array.isArray(value) ? value.map(({ bone, ...v }) => v) : value };
+  const kind = prop === 'vertices' ? 'vertices' : prop === 'points' ? 'points' : null;
+  let given = kind ? withoutBones({ type: kind }, value) : value;
+  // A vector layer's points and curves are added id by id to a keyframe already at that time (as in a pose).
+  if ((prop === 'points' || prop === 'curves') && j >= 0 && given && typeof given === 'object' && keys[j].value && typeof keys[j].value === 'object') given = { ...keys[j].value, ...given };
+  const key = { t: time, value: given };
   const curve = ease ?? (j >= 0 ? keys[j].ease : undefined);
   if (curve !== undefined && curve !== 'linear') key.ease = curve;
   if (j >= 0) keys[j] = key;

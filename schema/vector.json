@@ -1,0 +1,12 @@
+{
+  "name": "vector",
+  "extends": "transformable",
+  "container": true,
+  "childTypes": ["shape"],
+  "description": "Vector layer, as in Moho: it holds a mesh of points and curves, and its shapes (children of type shape) fill and stroke those curves. Any number of shapes live in one layer. Points are keyed by id (\"p1\", \"chin\") and a point used by two curves welds them: moving it moves both. Points and curves are in the layer's own coordinates (its x/y is the pivot). See the «Vector layers» section of the guide.",
+  "help": "Vector layer: a mesh of points and curves; its shapes fill and stroke those curves. Draw into it with the Pen, Rectangle or Ellipse.",
+  "properties": {
+    "points": { "type": "points", "default": {}, "animatable": true, "group": "Shape", "help": "Points of the mesh, by id.", "description": "Points of the mesh: { point_id: { x, y } }, with \"bone\" for per-point binding. A pose or keyframe lists only the points it moves." },
+    "curves": { "type": "curves", "default": {}, "animatable": true, "group": "Shape", "help": "Curves of the mesh: sequences of points with their tangents.", "description": "Curves of the mesh: { curve_id: { closed, points: [entries] } }. An entry is a point id (a corner) or { p: point_id, mode, angle, dist… } with the tangents of that point on this curve. A pose or keyframe lists only the curves it bends, with the same points as in the setup." }
+  }
+}

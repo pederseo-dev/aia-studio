@@ -362,9 +362,8 @@ test('an Animate scene is seen without drivers: setup + keyframes, no warnings; 
   assert.doesNotThrow(() => planClipView(doc, schema, { animation: 'escena', time: 0 }));
 });
 
-test('params in a scene: turning a Puppet clip into Animate, set_keys on a new scene and the migration', async () => {
+test('params in a scene: turning a Puppet clip into Animate, and set_keys on a new scene', async () => {
   const { planSetKeys } = await import('../mcp/animation.js');
-  const { migrateScenesWithParams } = await import('../src/core/migration.js');
   const doc = puppet({ happiness: { value: [{ t: 0, value: 0 }, { t: 1, value: 1 }] } });
   // A Puppet clip with param tracks cannot become a scene: the error says how to proceed.
   assert.throws(() => op(doc, { op: 'set', target: 'wave', props: { usage: 'animate' } }), /if this is a Puppet clip, pass usage: "puppet".*delete_keys with targets: \["happiness"\]/i);
@@ -372,16 +371,6 @@ test('params in a scene: turning a Puppet clip into Animate, set_keys on a new s
   const plan = planSetKeys(doc, schema, 'intro', { keys: [{ t: 0, params: { happiness: 1 } }] });
   assert.throws(() => op(doc, ...plan.ops), /scene "intro" \(Animate\) can't animate params/);
   assert.doesNotThrow(() => op(doc, ...planSetKeys(doc, schema, 'intro', { usage: 'puppet', keys: [{ t: 0, params: { happiness: 1 } }] }).ops));
-  // An old document with a scene that animates params: the migration turns it into Puppet without losing keyframes.
-  const old = structuredClone(doc);
-  findObject(old, 'wave').usage = 'animate';
-  assert.ok(validate(old, schema).errors.length);
-  const { doc: migrated, changes } = migrateScenesWithParams(old, schema);
-  assert.equal(findObject(migrated, 'wave').usage, 'puppet');
-  assert.deepEqual(findObject(migrated, 'wave').tracks, findObject(old, 'wave').tracks);
-  assert.match(changes[0], /Scene "wave" animated parameters.*now a Puppet clip/);
-  assert.deepEqual(validate(migrated, schema).errors, []);
-  assert.equal(migrateScenesWithParams(doc, schema).doc, doc);
 });
 
 test('move_keys: with targets it moves only those tracks; from == to is an error', async () => {

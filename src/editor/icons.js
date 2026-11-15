@@ -46,13 +46,17 @@ export const ICONS = {
   param: stroke('<path d="M4 12h16"/><circle cx="14" cy="12" r="2.5" fill="currentColor"/>'),
   driver: stroke('<path d="M4 17c4 0 4-10 8-10s4 10 8 10"/><circle cx="12" cy="7" r="1.3" fill="currentColor"/>'),
   animation: stroke('<path d="M4 19h16"/><path d="M9 6v8l6-4z"/>'),
+  // A curve between two anchors with its tangent on top: the vector layer (a mesh of points and curves).
+  vector: stroke('<path d="M5 18.5C7.5 9 16.5 9 19 18.5"/><path d="M6.5 11.5h11"/><circle cx="6.5" cy="11.5" r="1.2" fill="currentColor"/><circle cx="17.5" cy="11.5" r="1.2" fill="currentColor"/><rect x="3.3" y="17" width="3.4" height="3.4" fill="currentColor"/><rect x="17.3" y="17" width="3.4" height="3.4" fill="currentColor"/>'),
+  // A filled blob: a shape of a vector layer.
+  shape: stroke('<path d="M6 15.5C3.5 11 7 5 12 6s8.5 3 7 8-6 6.5-9 5.5-3-2-4-4z" fill="currentColor" fill-opacity=".35"/>'),
   // Frame with a mountain and a sun: the image layer.
   image: stroke('<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><path d="m3.5 16.5 5-5 4 4 2.5-2.5 5.5 5"/><circle cx="15.5" cy="9.5" r="1.5"/>'),
 };
 
 // Icon of each object type, for the hierarchy and the assets.
 export const TYPE_ICON = {
-  group: ICONS.group, switch: ICONS.switch, skeleton: ICONS.skeleton, rect: ICONS.rect, ellipse: ICONS.ellipse, path: ICONS.path, image: ICONS.image,
+  group: ICONS.group, switch: ICONS.switch, skeleton: ICONS.skeleton, rect: ICONS.rect, ellipse: ICONS.ellipse, path: ICONS.path, vector: ICONS.vector, shape: ICONS.shape, image: ICONS.image,
   bone: ICONS.bone, style: ICONS.style, linear_gradient: ICONS.gradient, radial_gradient: ICONS.radial,
   pose: ICONS.pose, param: ICONS.param, driver: ICONS.driver, animation: ICONS.animation,
 };

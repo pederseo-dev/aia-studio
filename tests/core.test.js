@@ -23,7 +23,7 @@ function robot() {
 }
 
 test('the schema resolves inheritance and only exposes concrete types', () => {
-  assert.deepEqual([...schema.types.keys()].sort(), ['animation', 'bone', 'driver', 'ellipse', 'group', 'image', 'linear_gradient', 'param', 'path', 'pose', 'radial_gradient', 'rect', 'skeleton', 'style', 'switch']);
+  assert.deepEqual([...schema.types.keys()].sort(), ['animation', 'bone', 'driver', 'ellipse', 'group', 'image', 'linear_gradient', 'param', 'path', 'pose', 'radial_gradient', 'rect', 'shape', 'skeleton', 'style', 'switch', 'vector']);
   assert.equal(schema.types.get('style').resource, true);
   assert.equal(schema.types.get('path').resource, false);
   const rect = schema.types.get('rect');

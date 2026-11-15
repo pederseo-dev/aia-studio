@@ -1,9 +1,10 @@
 // Pen: click adds a straight vertex; click and drag adds a curved one (mirrored). Click on the first vertex
-// closes the shape; Enter or Escape finish it open.
+// closes the shape; Enter or Escape finish it open. The shape goes into the active vector layer (see drawing.js).
 
-import { apply, invert, worldMatrix, multiply } from '../core/geometry.js';
+import { apply } from '../core/geometry.js';
 import { vertexFromTangents, verticesAD } from '../core/paths.js';
-import { execute, schema, state, setState, freeId, parentForNew, select } from './state.js';
+import { state } from './state.js';
+import { commitShape, drawingTarget } from './drawing.js';
 
 const NEAR = 9; // px on screen to close on the first vertex
 
@@ -59,27 +60,22 @@ export function createPen(ctx) {
     });
   }
 
-  /** Creates the path with the drawn points (in the parent's coordinates) and returns to the selection tool. */
+  /** Creates the shape with the drawn points in the active vector layer (or a new one) and returns to the selection tool. */
   function finish(closed) {
     const drawn = points;
     points = [];
     cursor = null;
     if (drawn.length < 2) return ctx.redraw();
 
-    const parent = parentForNew();
-    const inverse = invert(multiply(ctx.cameraMatrix(), worldMatrix(state.doc, schema, parent)));
-    const linear = ([x, y]) => [inverse[0] * x + inverse[2] * y, inverse[1] * x + inverse[3] * y];
-    const [ox, oy] = apply(inverse, ...drawn[0].p).map((v) => Math.round(v * 10) / 10);
+    const target = drawingTarget(ctx);
+    const m = target.toLocal;
+    const linear = ([x, y]) => [m[0] * x + m[2] * y, m[1] * x + m[3] * y];
     const vertices = drawn.map((pt) => {
-      const [x, y] = apply(inverse, ...pt.p);
-      return vertexFromTangents(x - ox, y - oy, linear(pt.in), linear(pt.out));
+      const [x, y] = apply(m, ...pt.p);
+      return vertexFromTangents(x, y, linear(pt.in), linear(pt.out));
     });
-    const props = { x: ox, y: oy, vertices, closed: closed };
-    if (!closed) Object.assign(props, { fill: null, stroke: '#2b2135', strokeWidth: 3 });
-    const id = freeId('path');
-    execute([{ op: 'create', type: 'path', id, parent: parent, props }], `draw ${id}`);
-    setState({ tool: 'select' });
-    select(id);
+    // An open line is a stroke without fill, as before.
+    commitShape(target, [{ vertices, closed }], closed ? {} : { fill: null, stroke: '#2b2135', strokeWidth: 3 });
   }
 
   return {

@@ -59,7 +59,7 @@ export function mountInspector(root) {
     const data = obj ?? doc.meta;
     const others = obj ? state.selected.map((id) => findObject(doc, id)).filter((o) => o && o.id !== obj.id) : [];
     // With several: only what they all have (and that can be edited in bulk).
-    const common = ([prop, p]) => !others.length || (!['vertices', 'stops'].includes(p.type) && others.every((o) => schema.types.get(o.type).properties[prop]?.type === p.type));
+    const common = ([prop, p]) => !others.length || (!['vertices', 'points', 'curves', 'stops'].includes(p.type) && others.every((o) => schema.types.get(o.type).properties[prop]?.type === p.type));
     // The Live settings belong to Puppet clips (a scene is not triggered), and the auto wait, only with auto repeat.
     const fromLive = ([prop, p]) =>
       obj?.type !== 'animation' || others.length || p.group !== 'Live' || (read(schema, obj, 'usage') === 'puppet' && (!prop.startsWith('repeat_') || read(schema, obj, 'auto') === 'repeat'));
@@ -468,6 +468,27 @@ const CONTROLS = {
     summary.textContent = `${value.length} points${curved ? `, ${curved} curved` : ''}`;
     box.append(summary, button);
     return box;
+  },
+
+  // The mesh of a vector layer: only summarized here (it is edited on the canvas).
+  points({ value, target }) {
+    const summary = document.createElement('span');
+    const bound = Object.values(value ?? {}).filter((pt) => pt.bone).length;
+    const n = Object.keys(value ?? {}).length;
+    // In a pose or clip the value lists only the points moved there (the rest are the setup's).
+    const layer = target && findObject(state.doc, target);
+    const all = layer ? Object.keys(read(schema, layer, 'points') ?? {}).length : n;
+    const moved = state.pose && value !== layer?.points;
+    summary.textContent = moved ? `${n} of ${all} point${all === 1 ? '' : 's'} moved here` : `${n} point${n === 1 ? '' : 's'}${bound ? `, ${bound} bound to bones` : ''}`;
+    return summary;
+  },
+
+  curves({ value }) {
+    const summary = document.createElement('span');
+    const closed = Object.values(value ?? {}).filter((c) => c.closed).length;
+    const n = Object.keys(value ?? {}).length;
+    summary.textContent = `${n} curve${n === 1 ? '' : 's'}${closed ? `, ${closed} closed` : ''}`;
+    return summary;
   },
 
   // A pose is edited on the canvas: here it is summarized and activated.

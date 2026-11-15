@@ -878,7 +878,7 @@ export function mountTimeline(root) {
 const JOINED = [['Position', ['x', 'y']], ['Rotation', ['rotation']], ['Scale', ['scaleX', 'scaleY']]];
 // Channels shown even without keys; the others appear in the timeline once they have a key.
 const BASIC_CHANNELS = new Set(['Position', 'Rotation', 'Scale', 'Points', 'Switch', 'Value']);
-const CHANNEL_LABELS = { opacity: 'Opacity', visible: 'Visible', fill: 'Fill', stroke: 'Stroke', strokeWidth: 'Stroke width', vertices: 'Points', active: 'Switch', width: 'Width', height: 'Height', length: 'Length', cornerRadius: 'Corner radius' };
+const CHANNEL_LABELS = { opacity: 'Opacity', visible: 'Visible', fill: 'Fill', stroke: 'Stroke', strokeWidth: 'Stroke width', vertices: 'Points', points: 'Points', curves: 'Curves', active: 'Switch', width: 'Width', height: 'Height', length: 'Length', cornerRadius: 'Corner radius' };
 
 function channelsOf(obj) {
   if (obj.type === 'param') return [{ name: 'Value', props: ['value'] }];
@@ -917,7 +917,7 @@ function curveClass(keys) {
   const curves = new Set(keys.map(([, c]) => (Array.isArray(c.ease) ? 'bezier' : (c.ease ?? 'linear'))));
   if (curves.size > 1) return 'curve-mixed';
   const [curve] = curves;
-  return `curve${curve.startsWith('ease-') ? 'ease' : curve}`;
+  return `curve-${curve.startsWith('ease-') ? 'ease' : curve}`;
 }
 
 /** A small drawing of a span's curve (time → progress), to see the shape without guessing the numbers. */

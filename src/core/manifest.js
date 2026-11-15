@@ -106,7 +106,7 @@ export function manifestText(m) {
   for (const p of m.params) {
     const range = p.kind === 'enum' ? `one of ${p.options.join(' | ')}` : p.kind === 'boolean' ? 'true/false' : `${p.min}…${p.max}`;
     const moves = p.moves.length ? ` → ${p.moves.map((x) => `${x.pose}${x.when != null ? ` (= ${x.when})` : ''}`).join(', ')}` : ' → moves nothing (no driver)';
-    const auto = p.drivenBy ? ` [driven by auto ${p.drivenBy.join(', ')}: don't set it]` : '';
+    const auto = p.drivenBy ? ` [also animated by the auto clip ${p.drivenBy.join(', ')}: while it plays, it overrides what the app set]` : '';
     lines.push(`- ${p.id} (${range}, initial ${p.initial})${p.description ? `: ${p.description}` : ' — no description'}${moves}${auto}`);
   }
   lines.push('', 'Clips (play them):');

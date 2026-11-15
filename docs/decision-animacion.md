@@ -165,8 +165,7 @@ selection, with or without keys). To avoid cluttering the interface, **we start 
 - **Params are Puppet-only** (2026-11-06, user decision): the Parameters panel is only in Puppet and
   an Animate scene does not animate params (validation rejects it, also through the MCP). A scene keys the values
   themselves or copies a pose with «◆ Pose…» / `set_keys` with `pose`. Also, **a scene is shown without drivers** (§4,
-  point 5). An old document with a scene that animates params is migrated when opened: the clip moves to Puppet (no
-  keyframe is lost) and the history notes it (`migrateScenesWithParams` in `src/core/migration.js`).
+  point 5).
 - **The bottom panel is only the timeline** (2026-11-06): Parameters moved to the right panel, only in Puppet. Above the timeline, tabs like the document tabs: in Animate one per scene (+ creates one,
   × deletes it with confirmation), in Puppet the open clip (× closes it). The bar has playback in the middle:
   « (previous keyframe), ▶ and » (next keyframe); on the left the clock, the duration and the loop; on the right

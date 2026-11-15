@@ -73,7 +73,7 @@ test('bind_points and bind_by_proximity distribute by proximity', () => {
   const doc = rig();
   const points = planBindPoints(doc, schema, 'tail');
   assert.equal(points.distribution, 'a [0, 1]; b [2]');
-  assert.throws(() => planBindPoints(doc, schema, 'near_a'), /is not a path/);
+  assert.throws(() => planBindPoints(doc, schema, 'near_a'), /is not a vector layer or a path/);
   assert.equal(planBindByProximity(doc, schema, 'rig').distribution, 'a ← near_a, tail; b ← near_b');
   // A path bound per point is not touched; after binding, nothing is left.
   const byPoint = op(doc, ...points.ops);

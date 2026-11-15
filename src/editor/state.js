@@ -17,6 +17,10 @@ export const state = {
   selection: null, // the main object: the last picked, the one the inspector shows
   selected: [], // all the picked ones (includes the main one)
   editing: null, // id of the path whose points are being edited
+  // Bind Points (as in Moho): the layer whose points are bound (the last vector layer or path picked; it stays while
+  // a bone is picked) and the keys of its points picked to bind.
+  bindTarget: null,
+  bindPicked: [],
   vertex: null, // index of the selected vertex in point editing
   // Auto-weld (as in Moho): dropping an end point of an open path on its other end closes it. On by default; the
   // choice is remembered.
@@ -105,27 +109,6 @@ export async function loadDocuments() {
 }
 
 // ---------- Remembered preferences (localStorage) ----------
-
-// Keys from before the code moved to English: copied once to the new ones, so open tabs and folded panels survive.
-const LEGACY_KEYS = [
-  ['aia-studio.pestanas', 'aia-studio.tabs'],
-  ['aia:capas-plegado', 'aia:folded-layers'],
-  ['aia:recursos-plegado', 'aia:folded-resources'],
-  ['aia:plegado:clips', 'aia:folded:clips'],
-  ['aia:plegado:poses', 'aia:folded:poses'],
-  ['aia:plegado:parametros', 'aia:folded:parameters'],
-  ['aia:plegado:inspector', 'aia:folded:inspector'],
-  ...['design', 'animate', 'puppet'].map((mode) => [`aia:historial-plegado:${mode}`, `aia:folded-history:${mode}`]),
-];
-try {
-  for (const [old, current] of LEGACY_KEYS) {
-    const value = localStorage.getItem(old);
-    if (value !== null && localStorage.getItem(current) === null) localStorage.setItem(current, value);
-    localStorage.removeItem(old);
-  }
-} catch {
-  // localStorage can be unavailable (private mode): the preferences are a convenience.
-}
 
 // ---------- Tabs ----------
 
@@ -329,12 +312,29 @@ export function freeId(base) {
 
 /**
  * Where something new is created: inside the selected container or, if there is none, at the root. With a bone
- * selected, in its skeleton (the drawing does not go inside the bones).
+ * selected, in its skeleton (the drawing does not go inside the bones). A vector layer only holds shapes: with one
+ * selected (or one of its shapes), the new layer goes next to it.
  */
 export function parentForNew() {
-  const sel = state.selection && findObject(state.doc, state.selection);
+  let sel = state.selection && findObject(state.doc, state.selection);
   if (sel?.type === 'bone') return skeletonOf(state.doc, sel.id);
+  if (sel?.type === 'shape') sel = findObject(state.doc, sel.parent);
+  if (sel?.type === 'vector') return sel.parent ?? null;
   return sel && schema.types.get(sel.type).container ? sel.id : null;
+}
+
+/** The vector layer the drawing tools draw into: the selected one, or the one of the selected shape (null if none). */
+export function drawingLayer() {
+  const sel = state.selection && findObject(state.doc, state.selection);
+  if (sel?.type === 'vector') return sel.id;
+  if (sel?.type === 'shape') return sel.parent;
+  return null;
+}
+
+/** What a click on the canvas picks: a shape picks its vector layer (the shape itself is picked with a double click). */
+export function pickable(id) {
+  const obj = id && findObject(state.doc, id);
+  return obj?.type === 'shape' ? obj.parent : id;
 }
 
 /** When changing parent, the x/y that leaves the object in the same place on screen (on the given `doc`). */

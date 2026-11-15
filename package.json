@@ -18,7 +18,6 @@
     "mcp": "node mcp/server.js",
     "test": "node --test tests/*.test.js",
     "typecheck": "tsc -p jsconfig.json",
-    "migrate": "node scripts/migrate-skeletons.js",
     "app": "vite build && electron .",
     "dist:win": "vite build && electron-builder --win",
     "icon": "node scripts/icon.js"

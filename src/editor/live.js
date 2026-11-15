@@ -14,9 +14,6 @@ let before = 0;
 // The Parameters values from before Live: restored when it is turned off (Live's belong to the app and do not stay).
 let beforeParams = null;
 
-/** The running runtime (or null if Live is off). */
-export const liveRuntime = () => live;
-
 function step(now) {
   if (!live) return;
   // A long frame (the tab was hidden) does not skip the whole fade.

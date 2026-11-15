@@ -289,6 +289,7 @@ body.folded-layers #fold-layers .ico-arrow { transform: rotate(-90deg); }
 .parent-line { stroke: #ffffffaa; stroke-width: 1.2; stroke-dasharray: 2 3; }
 .bone-point { pointer-events: all; cursor: copy; fill: var(--c); stroke: #1b1b22; stroke-width: 1.2; }
 .bone-point.free { fill: #ffffff; stroke: #888; }
+.bone-point.picked { stroke: #ffd43b; stroke-width: 3; }
 .bound { fill: color-mix(in srgb, var(--pose) 8%, transparent); stroke: var(--pose); stroke-width: 1.2; stroke-dasharray: 4 2; }
 #canvas.tool-bindLayer #view *, #canvas.tool-bindPoints #view * { cursor: copy; }
 #canvas.tool-reparent .bone { cursor: alias; }
