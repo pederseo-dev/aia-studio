@@ -1,14 +1,14 @@
 // Canvas: draws the document, handles the camera (pan and zoom) and dispatches events among the tools:
 // select (with handles), pen, point editing, creating shapes and bones (with the active pose, if any).
 
-import { findObject } from '../core/document.js';
+import { findObject, locked, subtree } from '../core/document.js';
 import { readMeta } from '../core/schema.js';
 import { apply, invert } from '../core/geometry.js';
 import { svgContent } from '../render/svg.js';
 import { parseD } from '../core/paths.js';
 import { ellipseD, rectD } from '../core/mesh.js';
 import { commitShape, drawingTarget } from './drawing.js';
-import { notify, docVisible, schema, state, setState, select, subscribe, pickable } from './state.js';
+import { notify, docVisible, execute, schema, state, setState, select, subscribe, pickable } from './state.js';
 import { addImages, imagesOnly, assetUrl } from './images.js';
 import { createArtboard } from './artboard.js';
 import { createBones, bindPicked } from './bones.js';
@@ -51,8 +51,10 @@ export function mountCanvas(container) {
     drag,
     redraw: () => drawOverlay(),
   };
-  const transform = createTransform(ctx);
   const shapePoints = createShapePoints(ctx);
+  // The selection tool hands a click inside the picked layer to the shapes' Transform Points.
+  Object.assign(ctx, { shapePoints });
+  const transform = createTransform(ctx);
   const pen = createPen(ctx);
   const points = createPoints(ctx);
   const bones = createBones(ctx);
@@ -254,9 +256,11 @@ export function mountCanvas(container) {
     if (state.tool === 'artboard') return state.selection && select(null);
     if (handle?.startsWith('sp-')) return shapePoints.handle(e, handle);
     if (handle) return state.editing ? points.handle(e, handle) : transform.handle(e, handle);
+    // Alt + drag with Select, in the setup: drags a copy (as in Illustrator or Figma).
+    if (e.altKey && state.tool === 'select' && !state.pose && !state.params && !state.editing && altDuplicate(e)) return;
     // Dragging the picked shape moves its points (Transform Points), in the setup or in the open pose or clip.
     const hit = e.target.closest('[data-id]');
-    if (shapePoints.active() && hit?.dataset.id === state.selection && !(e.ctrlKey || e.metaKey || e.shiftKey)) return shapePoints.move(e);
+    if (shapePoints.active() && state.selected.includes(hit?.dataset.id) && !(e.ctrlKey || e.metaKey || e.shiftKey)) return shapePoints.move(e);
     // With an active pose, the canvas poses: bones are rotated (or the drawing through its bone).
     // What follows no bone is picked, moved, rotated and scaled as in the setup; it stays in the pose (or the clip).
     if (state.pose) {
@@ -300,6 +304,33 @@ export function mountCanvas(container) {
     // As in Moho's Select Shape: a double click picks the shape inside the vector layer (its fill and stroke).
     if (obj?.type === 'shape') select(obj.id);
   });
+
+  /**
+   * Alt + drag: a shape under the pointer is copied inside its own layer (with its own points) and the copy is
+   * dragged; anything else picked by the click (a layer, a group) is copied in place and the original is dragged off
+   * it, which looks the same. Returns false if there is nothing to copy there.
+   */
+  function altDuplicate(e) {
+    const drawn = document.elementsFromPoint(e.clientX, e.clientY).find((el) => documentG.contains(el) && el.closest('[data-id]'));
+    const id = /** @type {HTMLElement | null | undefined} */ (drawn?.closest('[data-id]'))?.dataset.id;
+    const obj = id && findObject(state.doc, id);
+    if (!obj) return false;
+    const target = obj.type === 'shape' ? obj : findObject(state.doc, pickable(obj.id));
+    if (!target || locked(state.doc, target.id) || schema.types.get(target.type).resource) return false;
+    const ids = subtree(state.doc, target.id);
+    let suffix = 'copy';
+    for (let n = 2; ids.some((i) => findObject(state.doc, `${i}_${suffix}`)); n++) suffix = `copy${n}`;
+    // execute applies at once (it only saves in the background): if the copy is not there, it failed (e.g. Live).
+    execute([{ op: 'duplicate', target: target.id, suffix }], `duplicate ${target.id}`);
+    if (!findObject(state.doc, `${target.id}_${suffix}`)) return false;
+    if (target.type !== 'shape') {
+      transform.selectAndMove(e);
+      return true;
+    }
+    select(`${target.id}_${suffix}`);
+    shapePoints.move(e);
+    return true;
+  }
 
   function pan(e) {
     e.preventDefault();

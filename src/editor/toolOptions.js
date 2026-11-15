@@ -137,6 +137,15 @@ export function mountOptions(root, actions) {
         return [text(`${state.tool === 'rotate' ? 'Rotate' : 'Scale'}: drag anywhere; the selection ${state.tool === 'rotate' ? 'rotates' : 'scales'} around its pivot.`)];
     }
 
+    // Several shapes of one vector layer (Shift + click): one Transform Points box for all of them.
+    const pickedShapes = state.selected.map((id) => findObject(doc, id));
+    if (several && pickedShapes.every((o) => o?.type === 'shape' && o.parent === sel?.parent)) {
+      return [
+        text(`${pickedShapes.length} shapes of ${code(sel.parent)}: drag them to move their points together, the corners scale, the top handle rotates. Shift + click adds or removes a shape; <kbd>Esc</kbd> goes back to the layer.`),
+        button(`Go to ${sel.parent}`, `Select the vector layer ${sel.parent} (Esc)`, () => select(sel.parent)),
+      ];
+    }
+
     if (several) {
       const ids = state.selected;
       const parts = [
@@ -151,9 +160,9 @@ export function mountOptions(root, actions) {
 
     if (sel?.type === 'vector') {
       const shapes = children(doc, sel.id).filter((o) => o.type === 'shape').length;
-      return [text(`Vector layer ${code(sel.id)}: ${shapes} shape${shapes === 1 ? '' : 's'}. Draw more with the Pen (P), Rectangle (R) or Ellipse (E); double-click a shape to pick it.`)];
+      return [text(`Vector layer ${code(sel.id)}: ${shapes} shape${shapes === 1 ? '' : 's'}. Draw more with the Pen (P), Rectangle (R) or Ellipse (E); click a shape to pick it (Shift + click adds more), drag to move the layer.`)];
     }
-    if (sel?.type === 'shape') return [text(`Shape ${code(sel.id)} of ${code(sel.parent)}: drag it to move its points, the corners scale, the top handle rotates, the pivot can be dragged; drag a point to deform it. <kbd>Esc</kbd> goes back to the layer.`), button(`Go to ${sel.parent}`, `Select the vector layer ${sel.parent} (Esc)`, () => select(sel.parent))];
+    if (sel?.type === 'shape') return [text(`Shape ${code(sel.id)} of ${code(sel.parent)}: drag it to move its points, the corners scale, the top handle rotates, the pivot can be dragged; drag a point to deform it. Shift + click adds another shape of the layer; <kbd>Esc</kbd> goes back to the layer.`), button(`Go to ${sel.parent}`, `Select the vector layer ${sel.parent} (Esc)`, () => select(sel.parent))];
     if (sel?.type === 'switch') return switchOptions(doc, sel);
     if (sel?.type === 'skeleton') return skeletonOptions(doc, sel);
 

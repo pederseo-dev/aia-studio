@@ -166,10 +166,21 @@ export function createTransform(ctx) {
     const g = e.target.closest('[data-id]');
     const add = e.ctrlKey || e.metaKey || e.shiftKey;
     if (!g || !ctx.documentG.contains(g)) return marquee(e, add);
-    // A shape picks its vector layer (the layer is what moves); a double click picks the shape.
+    // A shape picks its vector layer (the layer is what moves). Inside the picked layer, as in Moho and Figma, a click
+    // goes down to the shape: with the layer picked, a click without dragging picks the shape (dragging still moves
+    // the layer); with shapes of that layer picked, a click picks another one and Shift/Ctrl + click adds or removes.
+    const hit = findObject(state.doc, g.dataset.id);
+    const layer = hit?.type === 'shape' ? hit.parent : null;
+    const shapesPicked = layer && state.selected.length > 0 && state.selected.every((s) => findObject(state.doc, s)?.type === 'shape' && findObject(state.doc, s).parent === layer);
+    if (shapesPicked) {
+      if (add) return toggleSelection(hit.id);
+      select(hit.id);
+      return ctx.shapePoints.move(e);
+    }
+    const insideLayer = layer && state.selected.length === 1 && state.selection === layer;
     const id = pickable(g.dataset.id);
-    // Ctrl or Shift + click: adds or removes without moving.
-    if (add) return toggleSelection(id);
+    // Ctrl or Shift + click: adds or removes without moving (on the picked layer: picks the shape).
+    if (add) return insideLayer ? select(hit.id) : toggleSelection(id);
     // Click on something already in a multiple selection: all of them move; if there was no drag, only that one stays.
     const inGroup = several() && state.selected.includes(id);
     if (!inGroup) select(id);
@@ -201,6 +212,7 @@ export function createTransform(ctx) {
       () => {
         if (ops) return save(ops, `move ${name(objects)}`);
         preview(null);
+        if (insideLayer) return select(hit.id);
         if (inGroup) select(id);
       },
     );

@@ -266,7 +266,7 @@ function meshErrors(doc, schema, o, kind) {
     if (!layer) continue; // the parent errors are reported elsewhere
     const curves = Object.keys(read(schema, layer, 'curves') ?? {});
     const missing = o[prop].filter((c) => !curves.includes(c));
-    if (missing.length) errors.push(`${o.id}.${prop}: ${missing.map((c) => `"${c}"`).join(', ')} ${missing.length > 1 ? 'are not curves' : 'is not a curve'} of layer ${layer.id} (${curves.join(', ') || 'none'}).${suggest(missing[0], curves)} A shape cannot change layer (its curves belong to its layer): to have it in another one, create it there with "d" and delete this one.`);
+    if (missing.length) errors.push(`${o.id}.${prop}: ${missing.map((c) => `"${c}"`).join(', ')} ${missing.length > 1 ? 'are not curves' : 'is not a curve'} of layer ${layer.id} (${curves.join(', ') || 'none'}).${suggest(missing[0], curves)} A shape cannot change layer (its curves belong to its layer): to have it in another one, duplicate it there ({ op: "duplicate", target, parent: "other_layer" }: it gets its own points and keeps its place on screen) and delete this one.`);
   }
   return errors;
 }

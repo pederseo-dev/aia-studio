@@ -376,13 +376,58 @@ $('#image-file').addEventListener('change', (e) => {
   e.target.value = '';
   addImages(files);
 });
-// Pasting an image (Ctrl+V) adds it as a layer, unless typing in a field.
+// Ctrl+V, unless typing in a field: an image from the system clipboard is added as a layer; what Ctrl+C copied in
+// the editor is pasted (see pasteCopied).
 document.addEventListener('paste', (e) => {
+  if (!state.doc || (/** @type {Element} */ (e.target)).closest?.('input, textarea, [contenteditable]')) return;
   const files = imagesOnly(e.clipboardData?.files);
-  if (!files.length || !state.doc || (/** @type {Element} */ (e.target)).closest?.('input, textarea, [contenteditable]')) return;
-  e.preventDefault();
-  addImages(files);
+  if (files.length) {
+    e.preventDefault();
+    return addImages(files);
+  }
+  // The system clipboard still holds the mark Ctrl+C wrote (or nothing readable): paste what was copied here.
+  const text = e.clipboardData?.getData('text/plain') ?? '';
+  if (copied && (!text || text === copied.mark)) {
+    e.preventDefault();
+    pasteCopied();
+  }
 });
+
+/**
+ * Ctrl+C: what is copied (the selection, in this document). The system clipboard gets a mark, so a later image
+ * copied elsewhere wins on Ctrl+V.
+ * @type {{ doc: string, ids: string[], mark: string } | null}
+ */
+let copied = null;
+function copySelection() {
+  const ids = selectionRoots().filter((id) => !schema.types.get(findObject(state.doc, id).type).resource);
+  if (!ids.length) return;
+  copied = { doc: state.id, ids, mark: `aia-studio:copy:${Date.now()}` };
+  navigator.clipboard?.writeText(copied.mark).catch(() => {});
+  notify(`Copied ${nameOf(ids)}`);
+}
+
+/**
+ * Ctrl+V: pastes copies of what was copied. A shape goes into the picked vector layer (or the layer of the picked
+ * shape) and keeps its place on screen, with its own points; with no layer picked, into its own layer. Anything else
+ * is pasted next to its original. The copies are selected.
+ */
+function pasteCopied() {
+  if (copied.doc !== state.id) return notify('Paste works inside the same document: copy it in this one.', true);
+  const ids = copied.ids.filter((id) => findObject(state.doc, id));
+  if (!ids.length) return notify('What was copied no longer exists.', true);
+  const sel = state.selection && findObject(state.doc, state.selection);
+  const layer = sel?.type === 'vector' ? sel.id : sel?.type === 'shape' ? sel.parent : null;
+  const all = ids.flatMap((id) => subtree(state.doc, id));
+  let suffix = 'copy';
+  for (let n = 2; all.some((id) => findObject(state.doc, `${id}_${suffix}`)); n++) suffix = `copy${n}`;
+  const ops = ids.map((id) => {
+    const obj = findObject(state.doc, id);
+    return obj.type === 'shape' && layer ? { op: 'duplicate', target: id, suffix, parent: layer } : { op: 'duplicate', target: id, suffix };
+  });
+  execute(ops, `paste ${nameOf(ids)}${layer && ids.some((id) => findObject(state.doc, id).type === 'shape') ? ` into ${layer}` : ''}`);
+  selectSeveral(ids.map((id) => `${id}_${suffix}`).filter((id) => findObject(state.doc, id)));
+}
 $('#svg-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   e.target.value = '';
@@ -586,6 +631,8 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     return duplicateSelection();
   }
+  // Ctrl+V itself is handled by the paste event (it also brings images from the system clipboard).
+  if (mod && key === 'c' && !window.getSelection()?.toString()) return copySelection();
   if (mod && key === 'g') {
     e.preventDefault();
     return groupSelection();

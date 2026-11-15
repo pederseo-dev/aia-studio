@@ -360,3 +360,24 @@ test('bind_points binds only the points of a shape or a list to one bone, and re
   assert.equal(findObject(doc, 'v').points.p2.bone, 'b');
   assert.throws(() => planBindPoints(doc, schema, 'v', undefined, { shape: 'nope' }), /is not a shape of v \(s1, s2\)/);
 });
+
+test('duplicating a shape gives the copy its own points, in its layer or in another one (keeping its place)', () => {
+  const doc = run(square(), [{ op: 'create', type: 'vector', id: 'other', props: { x: 300, y: 50, rotation: 90 } }]);
+  // Same layer: new curve and points, not welded to the original.
+  const same = run(doc, [{ op: 'duplicate', target: 'box', suffix: 'copy' }]);
+  const body = findObject(same, 'body');
+  assert.deepEqual(findObject(same, 'box_copy').curves, ['c2']);
+  assert.deepEqual(body.curves.c2.points, ['p5', 'p6', 'p7', 'p8']);
+  assert.deepEqual(body.points.p5, body.points.p1);
+  assert.equal(findObject(same, 'box_copy').fill, '#ff0000');
+  // Another layer: the points are taken through both layers' matrices, so the copy is drawn in the same place.
+  const into = run(doc, [{ op: 'duplicate', target: 'box', suffix: 'copy', parent: 'other' }]);
+  const other = findObject(into, 'other');
+  assert.equal(findObject(into, 'box_copy').parent, 'other');
+  assert.deepEqual(findObject(into, 'box_copy').curves, ['c1']);
+  const world = (d, layer, p) => apply(worldMatrix(d, schema, layer), p.x, p.y).map((v) => Math.round(v * 100) / 100);
+  assert.deepEqual(world(into, 'other', other.points.p3), world(into, 'body', findObject(into, 'body').points.p3));
+  // Undo takes the copy and its points away.
+  const { doc: next, inverses } = applyOperations(doc, [{ op: 'duplicate', target: 'box', parent: 'other' }], schema);
+  assert.deepEqual(run(next, inverses), doc);
+});

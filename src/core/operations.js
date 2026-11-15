@@ -10,15 +10,16 @@
 //                                                       keeps its place on screen
 //   { op: 'rename', target: 'eye_l', id: 'left_eye' }                    ← updates the references (and the poses)
 //   { op: 'duplicate', target: 'arm_l', id?: 'arm_r', suffix?: 'copy', parent?, index?, props? }
-//                                                     ← copy with its children; the children get the suffix
+//                                                     ← copy with its children; the children get the suffix. A shape
+//                                                       gets its own curves and points, also into another vector layer
 //
 // `index` is the position among the siblings in drawing order: 0 = at the back; no index = at the front.
 
 import { expandFromTo } from './skeleton.js';
 import { read, suggest } from './schema.js';
-import { apply, invert, localMatrix, worldMatrix } from './geometry.js';
+import { apply, invert, localMatrix, multiply, worldMatrix } from './geometry.js';
 import { parseD } from './paths.js';
-import { addD, dropUnused, mapBones, shiftPoints, withoutBones } from './mesh.js';
+import { addD, dropUnused, entryOf, freeKey, mapBones, shiftPoints, transformMesh, withoutBones } from './mesh.js';
 import { transformPointsOf } from './meshTransform.js';
 import { ValidationError, findObject, idError, children, subtree, validate } from './document.js';
 
@@ -225,6 +226,47 @@ function expandTracks(doc, schema, kind, props) {
     tracks[id] = rest;
   }
   return { ...props, tracks };
+}
+
+/**
+ * Copies the curves of `shape` (and the points they go through) into the vector layer `parentId` with new ids, and
+ * returns the new curve ids. Points shared by those curves stay shared in the copy; nothing is welded to the
+ * original. Into another layer the copy keeps its place on screen (the points and tangents are taken through both
+ * layers' matrices), and per-point bones are dropped (they belong to the source layer's binding). Mutates the layer.
+ */
+function copyShapeMesh(doc, schema, shape, parentId) {
+  const source = findObject(doc, shape.parent);
+  const layer = findObject(doc, parentId);
+  if (layer?.type !== 'vector') throw new Error(`a shape can only be copied into a vector layer, and ${parentId ?? 'the root'} is ${layer ? `a ${layer.type}` : 'not a layer'}`);
+  const fromPoints = read(schema, source, 'points') ?? {};
+  const fromCurves = read(schema, source, 'curves') ?? {};
+  const points = { ...(read(schema, layer, 'points') ?? {}) };
+  const curves = { ...(read(schema, layer, 'curves') ?? {}) };
+  const sameLayer = source.id === layer.id;
+  const pointIds = new Map();
+  const created = [];
+  for (const curveId of shape.curves ?? []) {
+    const curve = fromCurves[curveId];
+    if (!curve) continue;
+    const entries = curve.points.map((e) => {
+      const { p, ...tangent } = entryOf(e);
+      if (!pointIds.has(p)) {
+        const id = freeKey(points, 'p');
+        const { bone, ...pt } = fromPoints[p] ?? { x: 0, y: 0 };
+        points[id] = sameLayer && bone ? { ...pt, bone } : pt;
+        pointIds.set(p, id);
+      }
+      return Object.keys(tangent).length ? { p: pointIds.get(p), ...tangent } : pointIds.get(p);
+    });
+    const id = freeKey(curves, 'c');
+    curves[id] = { ...curve, points: entries };
+    created.push(id);
+  }
+  let mesh = { points, curves };
+  if (!sameLayer) mesh = transformMesh(points, curves, [...pointIds.values()], multiply(invert(worldMatrix(doc, schema, layer.id)), worldMatrix(doc, schema, source.id)));
+  layer.points = mesh.points;
+  layer.curves = mesh.curves;
+  return created;
 }
 
 /** Sugar for the AI: a bone accepts `from` and `to` ([x, y] in the document) instead of x, y, rotation and length. */
@@ -589,12 +631,17 @@ function applyOne(doc, op, schema) {
         });
       const root = copies.find((c) => c.id === map.get(original.id));
       Object.assign(root, structuredClone(op.props ?? {}));
+      // A shape copied without its layer gets its own curves and points (else the copy and the original would share
+      // them and move together), in its layer or in another vector layer, where it keeps its place on screen.
+      // Undo deletes the copy and then puts the layer's mesh back exactly as it was.
+      const restore = original.type === 'shape' && findObject(doc, parent) ? restoreLayer(findObject(doc, parent)) : [];
+      if (original.type === 'shape') root.curves = copyShapeMesh(doc, schema, original, parent);
       // By default it ends up right in front of the original.
       const index = op.index ?? (parent === originalParent ? children(doc, parent).indexOf(original) + 1 : undefined);
       insert(doc, root, parent, index);
       let pos = doc.objects.indexOf(root) + 1;
       for (const c of copies) if (c !== root) doc.objects.splice(pos++, 0, c);
-      return [{ op: 'delete', target: root.id }];
+      return [{ op: 'delete', target: root.id }, ...restore];
     }
 
     default:

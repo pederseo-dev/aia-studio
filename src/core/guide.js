@@ -139,7 +139,7 @@ curves each shape uses (the JSON of \`get_document\` has it whole, tangents incl
   (\`fillRule: "evenodd"\`, the default). \`fill: null\` and a \`stroke\` give a line (an open curve works too). The order
   of the shapes in the layer is the drawing order. \`set\` with \`d\` replaces the curves of a shape, and deleting a
   shape takes its curves along: the curves no other shape uses leave the layer, with their points, and the poses
-  and keyframes that moved them let them go. A shape cannot change layer: create it again with \`d\` in the other one.
+  and keyframes that moved them let them go. A shape cannot change layer: duplicate it into the other one (\`{ op: "duplicate", target, parent: "other_layer" }\`, it gets its own points and keeps its place on screen) and delete the original. Duplicating a shape in its own layer also gives the copy its own points (not welded to the original).
 - **Poses and keyframes** move points: they list **only the points they move**, and the rest stay as in the setup:
   \`{ "face": { "points": { "chin": { "x": 0, "y": 70 } } } }\` (or with \`transformPoints\`, above). A second
   \`set_pose\` (or a second moment of \`set_keys\` at the same time) **adds** its points to the ones already there, point

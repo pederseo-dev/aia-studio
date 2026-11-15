@@ -331,7 +331,7 @@ export function drawingLayer() {
   return null;
 }
 
-/** What a click on the canvas picks: a shape picks its vector layer (the shape itself is picked with a double click). */
+/** What a click on the canvas picks: a shape picks its vector layer (with the layer picked, a click or a double click picks the shape). */
 export function pickable(id) {
   const obj = id && findObject(state.doc, id);
   return obj?.type === 'shape' ? obj.parent : id;
