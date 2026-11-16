@@ -1,0 +1,40 @@
+:root {
+  color-scheme: dark;
+  --bg: #353330;
+  --text: #ece8e1;
+  --muted: #a39d93;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#editor {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+}
+
+h1 {
+  margin: 12px 0 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+p {
+  margin: 4px 0;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
