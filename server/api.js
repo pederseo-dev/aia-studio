@@ -7,6 +7,7 @@
 //   DELETE /api/documents/<id>
 //   POST   /api/documents/<id>/ops          { ops, note? } → applies a batch
 //   POST   /api/documents/<id>/undo | redo
+//   GET    /api/events                      live notices of changes on disk (Server-Sent Events, see events.js)
 
 import { readFileSync } from 'node:fs';
 import { StoreError } from './store.js';
@@ -42,11 +43,11 @@ async function readBody(req) {
 }
 
 /**
- * @param {{ store: ReturnType<typeof import('./store.js').createStore> }} options
+ * @param {{ store: ReturnType<typeof import('./store.js').createStore>, events?: ReturnType<typeof import('./events.js').createEvents> }} options
  * @returns {(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => Promise<boolean>}
  *   true when the request was an API route and has been answered
  */
-export function createApi({ store }) {
+export function createApi({ store, events }) {
   /** @param {import('node:http').IncomingMessage} req @param {string[]} parts */
   async function route(req, parts) {
     const method = req.method;
@@ -78,6 +79,10 @@ export function createApi({ store }) {
   return async (req, res) => {
     const pathname = (req.url ?? '/').split('?')[0];
     if (!pathname.startsWith('/api/')) return false;
+    if (pathname === '/api/events' && req.method === 'GET' && events) {
+      events.listen(res);
+      return true;
+    }
     try {
       const parts = pathname.slice('/api/'.length).split('/').filter(Boolean).map(decodeURIComponent);
       const result = await route(req, parts);

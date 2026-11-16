@@ -13,7 +13,7 @@ import { renderToolbar, setupToolbar } from './toolbar.js';
 import { renderOptions } from './options.js';
 import { renderInspector } from './inspector.js';
 import { render as renderJson, setupJson } from './json.js';
-import { onChange, redo, restore, setTool, state, undo, walkParts } from './state.js';
+import { followChanges, onChange, redo, restore, setTool, state, undo, walkParts } from './state.js';
 
 placeIcons(document);
 setupDropdowns();
@@ -81,3 +81,4 @@ document.addEventListener('keydown', (event) => {
 });
 
 await restore();
+followChanges();

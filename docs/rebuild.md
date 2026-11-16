@@ -123,13 +123,43 @@ After trying `rect` and `ellipse` as parametric parts, the user chose Moho's way
   layer and commands that move, scale and rotate a part by name. The AI works with names and numbers; the core
   computes the vertices.
 
+### 9. The `aia` command language, first cut (2026-11-16)
+
+Topic 3, started small so an AI can try the model of Design mode now (after step 8) instead of after more drawing
+features. Only what is needed to work on documents with the plain operations; high-level commands (draw a rect,
+transform a part by name, weld by name) come after the first AI test shows what the AI misses.
+
+| Command | What it does |
+| --- | --- |
+| `aia list` · `aia new <name>` · `aia delete <doc> --yes` | The documents of the folder |
+| `aia show <doc> [id]` | The JSON as it is saved: the whole document or one object |
+| `aia ops <doc> [--note "…"] <batch>` (or `--file <path>`) | Applies a batch with the editor's engine, origin `ai`; errors carry the engine's message |
+| `aia undo <doc>` · `aia redo <doc>` | Only the AI's own steps (undo per origin) |
+| `aia history <doc>` | The steps, the user's marked, so the AI does not overwrite them |
+| `aia render <doc> [--out file.png] [--width N]` | A PNG drawn by the same `drawDocument` |
+| `aia help [command]` · `aia guide [topic]` | Help step by step; the type topics come from the schema |
+
+- The document is always an explicit argument: there is no hidden «current document».
+- The interpreter (`server/aia.js`) is transport independent: the CLI (`bin/aia.js`) passes it its arguments, the
+  thin MCP (`mcp/server.js`) has two tools, `aia(command)` (the same commands as one string, in process, no shell)
+  and `render` (returns the image).
+- The editor follows changes on disk live (the server watches the documents folder and tells the editor over
+  Server-Sent Events), so what the AI does shows up while it works.
+
+First AI test (2026-11-16, [docs/ai-tests/2026-11-16-design-cli.md](ai-tests/2026-11-16-design-cli.md)): with only
+the CLI, an AI drew a face with ears welded to the head, a mouth sharing the points of another part and a point
+group, in about 23 commands with one refused. What cost it most: there is no way to move one point (the whole
+`vertices` array goes again), circles with more than 4 vertices by hand, and not seeing where a shared vertex
+sits. These are the candidates for the first high-level commands.
+
 ## Open topics
 
 1. **Purpose and priority:** the live character in apps as the design driver (the runtime as the contract), with
    Animate scenes for video as a secondary use? Or both at the same level?
 2. **Document model:** drawing (mesh or not, regions), bones and binding, pose vs clip (one asset?), params and
    drivers.
-3. **The command language itself:** which commands, their syntax, what replaces the sugars inside `set`.
+3. **The command language itself:** which commands, their syntax, what replaces the sugars inside `set`. A first cut
+   is decision 9; the high-level commands are still open.
 4. **Guide and craft recipes:** guide split by topic (`aia guide <topic>`), and the craft recipes (drawing from a
    reference, rig order, 3/4 view, clip recipes, walk cycle without sliding, how to review, AIs without vision).
 5. **Editor structure.**

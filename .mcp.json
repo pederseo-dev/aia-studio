@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "aia-studio": {
+      "command": "node",
+      "args": [
+        "mcp/server.js"
+      ]
+    }
+  }
+}

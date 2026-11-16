@@ -6,6 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createApi, respond } from './api.js';
+import { createEvents } from './events.js';
 import { refusal } from './guard.js';
 import { resolveDocumentsFolder } from './folder.js';
 import { loadSchema } from './schema.js';
@@ -64,7 +65,8 @@ export async function startServer({ documents = resolveDocumentsFolder(), dist =
   const host = '127.0.0.1';
   const root = path.resolve(dist);
   await fs.mkdir(documents, { recursive: true });
-  const api = createApi({ store: createStore({ folder: documents, schema: loadSchema() }) });
+  const events = createEvents(documents);
+  const api = createApi({ store: createStore({ folder: documents, schema: loadSchema() }), events });
   const server = http.createServer(async (req, res) => {
     const refused = refusal(req);
     if (refused) return respond(res, 403, { error: refused });
@@ -88,6 +90,7 @@ export async function startServer({ documents = resolveDocumentsFolder(), dist =
     documents,
     close: () =>
       new Promise((resolve) => {
+        events.close();
         server.closeAllConnections();
         server.close(() => resolve());
       }),

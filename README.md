@@ -27,8 +27,18 @@ A character made here is not locked inside a video or a proprietary player: it i
 
 One command language, `aia`, defined once: agents with a terminal (Claude Code, Cursor, Codex) run `aia …` as a
 CLI, and clients without one (the Claude Desktop chat) reach the same commands through a thin MCP server. Both work
-on the same documents folder as the editor, so what the AI does shows up live. Not built yet: see
-[docs/rebuild.md](docs/rebuild.md).
+on the same documents folder as the editor, so what the AI does shows up live. A first cut is here (decision 9 in
+[docs/rebuild.md](docs/rebuild.md)):
+
+```bash
+npm run aia -- help                 # the commands (or `node bin/aia.js help`; `aia` once installed with npm link)
+npm run aia -- guide start          # how documents work
+npm run aia -- ops face '[{"op":"create","type":"vector","id":"head"}]'
+npm run aia -- render face --out face.png
+```
+
+The MCP server for chats without a terminal is `node mcp/server.js` (stdio, two tools: `aia` and `render`); the
+repo's `.mcp.json` registers it for Claude Code.
 
 ## From source
 
@@ -54,6 +64,7 @@ choose another one.
 | `electron/` | The desktop app's main process: single instance, the window, the local server. |
 | `schema/` | Each type and its properties: the single source for validation, the editor and the AI's help. |
 | `src/core/` | Document and operations (no DOM; the same in the browser and in Node). |
+| `bin/`, `mcp/` | The `aia` CLI and the thin MCP server, both over the interpreter in `server/aia.js`. |
 | `server/` | The local server on `127.0.0.1` (and the same API inside Vite in development), the documents on disk with their history, the documents folder. |
 | `src/editor/` | The visual editor (plain JS, built with Vite): Design mode with Layers and the Document JSON panel so far. |
 | `tests/` | Tests (`node --test`). |

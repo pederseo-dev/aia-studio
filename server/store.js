@@ -142,6 +142,9 @@ export function createStore({ folder, schema }) {
       return { id, document, canUndo: false, canRedo: false };
     },
 
+    /** The history of a document, oldest first. @param {string} id */
+    history,
+
     /** @param {string} id @param {string} origin */
     async get(id, origin) {
       return state(id, await read(id), origin);

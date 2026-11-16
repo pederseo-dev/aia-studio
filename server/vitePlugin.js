@@ -3,6 +3,7 @@
 
 import fs from 'node:fs';
 import { createApi, respond } from './api.js';
+import { createEvents } from './events.js';
 import { refusal } from './guard.js';
 import { resolveDocumentsFolder } from './folder.js';
 import { loadSchema } from './schema.js';
@@ -15,7 +16,9 @@ export function aiaServer() {
     configureServer(server) {
       const documents = resolveDocumentsFolder();
       fs.mkdirSync(documents, { recursive: true });
-      const api = createApi({ store: createStore({ folder: documents, schema: loadSchema() }) });
+      const events = createEvents(documents);
+      server.httpServer?.on('close', () => events.close());
+      const api = createApi({ store: createStore({ folder: documents, schema: loadSchema() }), events });
       // The API validates with the schema it loaded on start, so a change to schema/*.json restarts the server.
       server.watcher.on('change', (file) => {
         if (/[\\/]schema[\\/][^\\/]+\.json$/.test(file)) server.restart();

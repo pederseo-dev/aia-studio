@@ -84,6 +84,36 @@ async function guarded(task) {
   changed();
 }
 
+/** @type {number} batches of this editor on their way to the server */
+let sending = 0;
+
+/**
+ * Live: when the open document changes on disk from elsewhere (the AI, with aia), loads it again. A change of this
+ * editor's own comes back too; it is the same document, so nothing moves.
+ */
+export function followChanges() {
+  if (typeof EventSource === 'undefined') return;
+  const events = new EventSource('/api/events');
+  events.addEventListener('document', async (event) => {
+    const { id } = JSON.parse(/** @type {MessageEvent} */ (event).data);
+    if (id !== state.active || sending) return;
+    try {
+      const result = await api.get(id);
+      if (id !== state.active || sending) return;
+      if (JSON.stringify(result.document) === JSON.stringify(state.saved) && result.canUndo === state.canUndo) return;
+      take(result);
+      changed();
+    } catch {}
+  });
+  events.addEventListener('deleted', (event) => {
+    const { id } = JSON.parse(/** @type {MessageEvent} */ (event).data);
+    if (state.tabs.some((t) => t.id === id)) {
+      close(id);
+      notify(`${id} was deleted`);
+    }
+  });
+}
+
 /** Reopens the tabs of the last session (the ones whose documents still exist). */
 export async function restore() {
   let saved = { tabs: [], active: null };
@@ -158,7 +188,8 @@ export function run(ops, { note, select } = {}) {
   const id = state.active;
   if (!id) return Promise.resolve();
   return guarded(async () => {
-    const result = await api.ops(id, state.saved ? settleOps(state.saved, ops, applyLoose) : ops, note);
+    sending++;
+    const result = await api.ops(id, state.saved ? settleOps(state.saved, ops, applyLoose) : ops, note).finally(() => sending--);
     take(result);
     if (select !== undefined) setSelection(Array.isArray(select) ? select : select ? [select] : []);
   });
