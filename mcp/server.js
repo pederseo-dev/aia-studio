@@ -68,7 +68,7 @@ const operation = z.discriminatedUnion('op', [
   }),
   z.object({ op: z.literal('set'), target: target, props }),
   z.object({ op: z.literal('unset'), target: target, props: z.array(z.string()).describe('properties that go back to their default value') }),
-  z.object({ op: z.literal('delete'), target: z.string().describe('object id; also deletes its children') }),
+  z.object({ op: z.literal('delete'), target: z.string().describe('object id; also deletes its children'), keepCurves: z.boolean().optional().describe('a shape: true leaves its curves in the layer (to fill again), instead of taking along the ones no other shape uses') }),
   z.object({
     op: z.literal('move'),
     target: z.string(),
@@ -280,6 +280,7 @@ server.registerTool(
         .describe('{ param_id: value } to see the blend (missing ones use their initial value; {} = all initial)'),
       region: region.optional(),
       bones: z.boolean().optional().describe('true = draw the bones on top, with their id (in the editor they are always visible)'),
+      curves: z.boolean().optional().describe('true = also draw the curves no shape uses yet, as thin gray lines (as the editor shows them; exports leave them out)'),
       animation: z.string().optional().describe('id of a clip (animation): shows the clip at time, or a strip of frames at times; in a puppet clip, params are added on top (a scene is shown without params or drivers and rejects them)'),
       time: z.number().min(0).optional().describe('with animation: a single frame, in seconds'),
       times: z.array(z.number().min(0)).max(24).optional().describe('with animation: times of the frame strip, in seconds (by default, those of its keyframes); with live, the frames of the script (by default every 0.25 s)'),

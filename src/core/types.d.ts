@@ -40,6 +40,8 @@ export interface ViewOptions {
   show?: any;
   /** src of an image layer → href it is drawn with (the editor: the server URL). */
   assets?: (src: string) => string;
+  /** Draws the curves no shape uses as thin lines (the editor's view; exports leave them out). */
+  curves?: boolean;
   region?: { x: number; y: number; width: number; height: number };
   bones?: boolean;
   columns?: number;

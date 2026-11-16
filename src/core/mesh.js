@@ -8,7 +8,7 @@
 // without x/y: the tangents belong to the point on that curve, so two curves through a point can bend differently.
 // The per-point binding (`bone`) belongs to the point, like in Moho.
 
-import { blendVertices, parseD, transformVertices, vertexErrors } from './paths.js';
+import { blendVertices, parseD, tangents, transformVertices, vertexErrors } from './paths.js';
 
 export const MESH_ID = /^[a-z][a-z0-9_]*$/;
 const WELD = 0.01; // px: `d` reuses an existing point this close
@@ -210,9 +210,145 @@ export function shiftPoints(points, dx, dy) {
   return Object.fromEntries(Object.entries(points).map(([id, pt]) => [id, { ...pt, x: r2(pt.x + dx), y: r2(pt.y + dy) }]));
 }
 
-/** Ids of the points the curves of a shape go through (the points a shape "has"). */
-export function shapePointIds(curves, curveIds) {
-  return [...new Set((curveIds ?? []).flatMap((id) => curvePointIds(curves?.[id])))];
+/**
+ * Ids of the points a shape "has": the points its curves go through and, with `loops`, the points of its loops.
+ * @param {Record<string, any>} curves @param {string[] | undefined} curveIds @param {any[]} [loops]
+ */
+export function shapePointIds(curves, curveIds, loops = []) {
+  return [...new Set([...(curveIds ?? []).flatMap((id) => curvePointIds(curves?.[id])), ...(loops ?? []).flatMap((l) => (Array.isArray(l) ? l.map((e) => loopEntryOf(e).p) : []))])];
+}
+
+// ---------- Loops: regions bounded by segments of welded curves ----------
+//
+// A shape fills whole curves (`curves`) and/or `loops`: each loop goes around a region through point ids, and between
+// two consecutive points (and from the last back to the first) it follows the curve that joins them there, with that
+// curve's tangents. So a lens bounded by two arcs welded at both ends is the loop ["a", "b"]: from a to b along one
+// arc, back along the other. An entry { p, via } names the curve to follow from the previous point when several join
+// them. The region follows the curves when their points or tangents move (poses, keyframes, bones).
+
+/** A loop entry as an object: "p1" → { p: "p1" }. */
+export const loopEntryOf = (e) => (typeof e === 'string' ? { p: e } : e);
+
+/** Shape errors of a loops value (empty list if it is fine). That the points and curves exist is checked by the document. */
+export function loopsErrors(value) {
+  if (!Array.isArray(value)) return ['must be a list of loops: [["p1", "p2", "p3"]]'];
+  const errors = [];
+  value.forEach((loop, i) => {
+    if (!Array.isArray(loop) || loop.length < 2) return void errors.push(`[${i}] must be a list of at least 2 point ids, around the region`);
+    loop.forEach((e, j) => {
+      if (typeof e === 'string') return void (MESH_ID.test(e) || errors.push(`[${i}][${j}]: "${e}" is not a valid point id`));
+      if (!isMap(e) || typeof e.p !== 'string') return void errors.push(`[${i}][${j}] must be a point id or { p: point_id, via: curve_id }`);
+      for (const k of Object.keys(e)) if (!['p', 'via'].includes(k)) errors.push(`[${i}][${j}]: field "${k}" does not belong in a loop entry (fields: p, via)`);
+      if (e.via !== undefined && typeof e.via !== 'string') errors.push(`[${i}][${j}].via must be a curve id`);
+    });
+  });
+  return errors;
+}
+
+/**
+ * The curve segments a loop follows: [{ curve, from, to, forward, span }] with the indices in that curve's points
+ * (to = from ± 1, or across the closing span of a closed curve), whether it goes the curve's way and which span it
+ * is (span k joins point k and the next). Each step tries the curve's way first. Each segment is used once per loop, so two curves joining the same
+ * two points (a lens) give both sides. Returns { segments } or { error } (a point no curve joins to the next).
+ * @param {Record<string, any>} curves @param {any[]} loop
+ */
+export function resolveLoop(curves, loop) {
+  const entries = loop.map(loopEntryOf);
+  const used = new Set();
+  const segments = [];
+  for (let step = 1; step <= entries.length; step++) {
+    const k = step % entries.length;
+    const a = entries[step - 1].p;
+    const { p: b, via } = entries[k];
+    let found = null;
+    for (const [id, curve] of Object.entries(curves ?? {})) {
+      if (via !== undefined && id !== via) continue;
+      const ids = curvePointIds(curve);
+      const n = ids.length;
+      for (let i = 0; i < n && !found; i++) {
+        if (ids[i] !== a) continue;
+        // Span k goes from point k to the next one: forward from i is span i, back from i is span i − 1 (on a closed
+        // curve they wrap, so a closed curve of 2 points has two spans between the same points).
+        const forward = i + 1 < n ? i + 1 : curve.closed ? 0 : -1;
+        const back = i > 0 ? i - 1 : curve.closed ? n - 1 : -1;
+        /** @type {[number, number, boolean][]} */
+        const options = [[forward, i, true], [back, back, false]];
+        for (const [to, span, isForward] of options) {
+          if (to < 0 || ids[to] !== b) continue;
+          const key = `${id}:${span}`;
+          if (used.has(key)) continue;
+          found = { curve: id, from: i, to, forward: isForward, span, key };
+          break;
+        }
+      }
+      if (found) break;
+    }
+    if (!found) {
+      const by = via !== undefined ? ` along ${via}` : '';
+      return { error: `no curve joins ${a} to ${b}${by} (consecutive points of a loop must be neighbors on a curve)` };
+    }
+    used.add(found.key);
+    segments.push({ curve: found.curve, from: found.from, to: found.to, forward: found.forward, span: found.span });
+  }
+  return { segments };
+}
+
+/**
+ * SVG path of a loop from its segments: `vertsOf(curve)` gives that curve's vertices (as curveVertices: positions and
+ * tangents, already deformed in a pose). Each segment is drawn with the tangents it has on its curve, reversed when
+ * the loop goes against the curve. (A rounded corner, `radius`, is drawn sharp here.)
+ * @param {(curve: string) => any[]} vertsOf @param {{ curve: string, from: number, to: number, forward: boolean }[]} segments
+ */
+export function loopD(vertsOf, segments) {
+  const f = (v) => +v.toFixed(3);
+  let d = '';
+  for (const { curve, from, to, forward } of segments) {
+    const v = vertsOf(curve);
+    const [a, b] = [v[from], v[to]];
+    if (!a || !b) return '';
+    const ta = tangents(a);
+    const tb = tangents(b);
+    const [c1, c2] = forward ? [ta.out, tb.in] : [ta.in, tb.out];
+    if (!d) d = `M${f(a.x)} ${f(a.y)}`;
+    d += `C${f(a.x + c1[0])} ${f(a.y + c1[1])} ${f(b.x + c2[0])} ${f(b.y + c2[1])} ${f(b.x)} ${f(b.y)}`;
+  }
+  return d ? `${d}Z` : '';
+}
+
+/** Ids of the curves the loops of a shape follow (unresolvable loops add none). */
+export function loopCurveIds(curves, loops) {
+  return [...new Set((loops ?? []).flatMap((loop) => (Array.isArray(loop) ? (resolveLoop(curves, loop).segments ?? []).map((s) => s.curve) : [])))];
+}
+
+/**
+ * A key of the region a shape (or a region found at a point) covers: its curves and the curve spans of its loops,
+ * in any order. Two equal keys fill the same area.
+ * @param {Record<string, any>} curves @param {{ curves?: string[], loops?: any[] }} region
+ */
+export function regionKey(curves, { curves: ids = [], loops = [] }) {
+  const loopKeys = (loops ?? []).map((l) => (resolveLoop(curves, l).segments ?? []).map((s) => `${s.curve}:${s.span}`).sort().join('+')).sort();
+  return [[...(ids ?? [])].sort().join(), ...loopKeys].join('|');
+}
+
+/** Every curve a shape uses: its own and the ones its loops follow (what deleting it must not leave unused). */
+export const shapeCurveIds = (curves, shape) => [...new Set([...(shape?.curves ?? []), ...loopCurveIds(curves, shape?.loops)])];
+
+/**
+ * The curves the picked points close, as Moho's Create Shape: every point of the curve is picked. `closedOnly` keeps
+ * the closed ones (what a fill needs). The points of an inner curve picked too add it, and it cuts a hole.
+ * @param {Record<string, any>} curves @param {Iterable<string>} pointIds @param {{ closedOnly?: boolean }} [options]
+ */
+export function curvesOfPoints(curves, pointIds, { closedOnly = false } = {}) {
+  const picked = new Set(pointIds);
+  return Object.entries(curves ?? {})
+    .filter(([, c]) => (!closedOnly || c.closed) && c.points?.length && curvePointIds(c).every((p) => picked.has(p)))
+    .map(([id]) => id);
+}
+
+/** Ids of the curves of a mesh that no shape fills or strokes (`used`: the curve ids the shapes list). */
+export function looseCurves(curves, used) {
+  const taken = new Set(used);
+  return Object.keys(curves ?? {}).filter((id) => !taken.has(id));
 }
 
 /** Center of the box of some points ([x, y]), or null if there are none. */

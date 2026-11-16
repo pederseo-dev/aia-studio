@@ -7,7 +7,7 @@ import { findObject, children, bonesOf } from '../src/core/document.js';
 import { IMAGE_MAX, planAddImage, planReplaceImage } from '../src/core/images.js';
 import { evaluateSkeleton, planProximityBinding, boneOf, limitAngle, tipOf, reparentBone, boundPerPoint } from '../src/core/skeleton.js';
 import { apply } from '../src/core/geometry.js';
-import { shapePointIds } from '../src/core/mesh.js';
+import { curvePointIds, looseCurves, shapeCurveIds, shapePointIds } from '../src/core/mesh.js';
 import { read, readMeta, suggest } from '../src/core/schema.js';
 import { switchParams, driverWeight, paramValues } from '../src/core/blend.js';
 import { summarizeOperations } from '../src/core/operations.js';
@@ -25,18 +25,20 @@ function shapeDetail(doc, schema, shape) {
   const layer = findObject(doc, shape.parent);
   const points = (layer && read(schema, layer, 'points')) ?? {};
   const curves = (layer && read(schema, layer, 'curves')) ?? {};
-  const ids = shapePointIds(curves, shape.curves);
+  const ids = shapePointIds(curves, shape.curves, shape.loops);
   const others = children(doc, shape.parent).filter((o) => o.type === 'shape' && o.id !== shape.id);
-  const welded = (id) => others.filter((o) => shapePointIds(curves, o.curves).includes(id)).map((o) => o.id);
+  const welded = (id) => others.filter((o) => shapePointIds(curves, o.curves, o.loops).includes(id)).map((o) => o.id);
   const r = (v) => Math.round(v * 10) / 10;
   const list = ids.map((id) => {
     const p = points[id];
     const shared = welded(id);
     return `${id} (${p ? `${r(p.x)}, ${r(p.y)}` : '?'})${p?.bone ? ` → ${p.bone}` : ''}${shared.length ? ` welded with ${shared.join(', ')}` : ''}`;
   });
-  const curveList = (shape.curves ?? []).map((c) => `${c}${curves[c]?.closed ? '' : ' open'}`).join(', ') || 'none';
+  const loopList = (shape.loops ?? []).map((l) => `[${l.map((e) => (typeof e === 'string' ? e : `${e.p} via ${e.via}`)).join(' → ')}]`).join(', ');
+  const own = (shape.curves ?? []).map((c) => `${c}${curves[c]?.closed ? '' : ' open'}`).join(', ');
+  const curveList = [own && `curves ${own}`, loopList && `loops ${loopList}`].filter(Boolean).join('; ') || 'curves none';
   const paint = shape.style ? `style ${shape.style}` : `fill ${shape.fill ?? read(schema, shape, 'fill')}`;
-  return `[points ${list.join(', ') || 'none'}; curves ${curveList}; ${paint}${shape.stroke ? `, stroke ${shape.stroke}` : ''}]`;
+  return `[points ${list.join(', ') || 'none'}; ${curveList}; ${paint}${shape.stroke ? `, stroke ${shape.stroke}` : ''}]`;
 }
 
 /**
@@ -56,7 +58,12 @@ export function treeOutline(doc, schema, { tracks = true } = {}) {
       else if (findObject(doc, o.parent)?.type === 'skeleton' && o.type !== 'bone' && !boneOf(doc, o.id) && !boundPerPoint(o)) detail = ' (no bone: stays still in the poses)';
       if (o.type === 'skeleton') detail += ` [${bonesOf(doc, o.id).length} bones]`;
       if (o.type === 'image') detail += ` [${read(schema, o, 'src')}, ${r(read(schema, o, 'width'))}×${r(read(schema, o, 'height'))}]`;
-      if (o.type === 'vector') detail += ` [${count(Object.keys(o.points ?? {}).length, 'point')}, ${count(Object.keys(o.curves ?? {}).length, 'curve')}]`;
+      if (o.type === 'vector') {
+        detail += ` [${count(Object.keys(o.points ?? {}).length, 'point')}, ${count(Object.keys(o.curves ?? {}).length, 'curve')}]`;
+        // Curves no shape uses yet (to fill with create shape + curves), with their points.
+        const loose = looseCurves(o.curves, children(doc, o.id).flatMap((s) => shapeCurveIds(o.curves, s)));
+        if (loose.length) detail += ` curves without a shape: ${loose.map((id) => `${id} (${o.curves[id].closed ? 'closed' : 'open'}: ${curvePointIds(o.curves[id]).join(', ')})`).join('; ')}`;
+      }
       if (o.type === 'shape') detail += ` ${shapeDetail(doc, schema, o)}`;
       if (o.type === 'pose') detail = ` [${Object.keys(o.values ?? {}).join(', ') || 'empty'}]`;
       if (o.type === 'animation') detail = ` ${clipSummary(schema, o)}`;
@@ -188,7 +195,7 @@ export function historySummary(entries, { limit, origin, detail } = {}) {
  * or with params.
  * @param {any} doc @param {any} schema @param {Record<string, any>} [options]
  */
-export function planPreview(doc, schema, { pose, region, bones, params, animation, time, times, live, until, auto } = {}) {
+export function planPreview(doc, schema, { pose, region, bones, curves, params, animation, time, times, live, until, auto } = {}) {
   const error = previewError({ pose, animation, time, times, live });
   if (error) throw new Error(error);
   if (live) return planLiveView(doc, schema, { region, bones, params, live, times, until, auto });
@@ -202,7 +209,7 @@ export function planPreview(doc, schema, { pose, region, bones, params, animatio
     const unknown = Object.keys(params).filter((k) => !ids.includes(k));
     if (unknown.length) throw new Error(`there is no param "${unknown[0]}".${suggest(unknown[0], ids)} Params: ${ids.join(', ') || 'none'}`);
   }
-  const svg = svgDocument(doc, schema, { pose, params, region, bones: bones });
+  const svg = svgDocument(doc, schema, { pose, params, region, bones: bones, curves });
   const size = region ? `crop of ${region.width}×${region.height} at (${region.x}, ${region.y})` : `${readMeta(schema, doc, 'width')}×${readMeta(schema, doc, 'height')} px`;
   let view = 'in the setup';
   if (pose) view = `in the pose "${pose}"`;

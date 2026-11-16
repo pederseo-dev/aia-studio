@@ -31,7 +31,7 @@ export function transformPointsOf(doc, layer, t, base) {
       const own = children(doc, layer.id).filter((o) => o.type === 'shape').map((o) => o.id);
       throw new Error(`transformPoints.shape: "${t.shape}" is not a shape of layer ${layer.id} (${own.join(', ') || 'none'}).${suggest(t.shape, own)}`);
     }
-    ids = shapePointIds(curves, shape.curves);
+    ids = shapePointIds(curves, shape.curves, shape.loops);
     if (!ids.length) throw new Error(`transformPoints: shape ${t.shape} has no points (no curves): there is nothing to transform`);
   } else if (Array.isArray(t.points) && t.points.length) {
     const missing = t.points.filter((id) => !(id in points));

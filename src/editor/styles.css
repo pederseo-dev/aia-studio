@@ -68,6 +68,10 @@ kbd { font: 11px ui-monospace, monospace; color: var(--soft); border: 1px solid 
 /* Tab row */
 #tabs-row { display: flex; align-items: flex-end; gap: 6px; padding: 6px 8px 0; background: var(--background); border-bottom: 1px solid var(--border); }
 #tabs-row > .mark { align-self: center; margin-bottom: 6px; }
+/* Main menu (hamburger), at the left of the logo: the tool row keeps its room for the tools. */
+#tabs-row > .main-menu { align-self: center; margin-bottom: 6px; }
+#menu-button { width: 26px; height: 26px; min-width: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--soft); border-radius: 5px; }
+#menu-button:hover, #menu-button[aria-expanded="true"] { background: var(--panel-2); color: var(--text); }
 /* The + sits right after the last tab and rests on the bottom line, like one more tab. */
 #tab-new, .time-tabs .tab-new { align-self: flex-end; margin: 0 0 3px -4px; width: 24px; height: 24px; min-width: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--soft); border-radius: 5px; }
 #tab-new:hover, .time-tabs .tab-new:hover { background: var(--panel-2); color: var(--text); }
@@ -290,6 +294,13 @@ body.folded-layers #fold-layers .ico-arrow { transform: rotate(-90deg); }
 .bone-point { pointer-events: all; cursor: copy; fill: var(--c); stroke: #1b1b22; stroke-width: 1.2; }
 .bone-point.free { fill: #ffffff; stroke: #888; }
 .bone-point.picked { stroke: #ffd43b; stroke-width: 3; }
+/* Fill, Stroke and Both: the picked layer's points and the shape they would create. */
+.shape-point { pointer-events: all; cursor: copy; fill: #ffffff; stroke: #555; stroke-width: 1.2; }
+.shape-point.picked { fill: var(--accent); stroke: #ffd43b; stroke-width: 2.5; }
+.shape-preview { pointer-events: none; opacity: 0.8; }
+.shape-hover { pointer-events: none; fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.shape-picked { pointer-events: none; fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
+.loose-curve { pointer-events: stroke; }
 .bound { fill: color-mix(in srgb, var(--pose) 8%, transparent); stroke: var(--pose); stroke-width: 1.2; stroke-dasharray: 4 2; }
 #canvas.tool-bindLayer #view *, #canvas.tool-bindPoints #view * { cursor: copy; }
 #canvas.tool-reparent .bone { cursor: alias; }

@@ -140,6 +140,39 @@ curves each shape uses (the JSON of \`get_document\` has it whole, tangents incl
   of the shapes in the layer is the drawing order. \`set\` with \`d\` replaces the curves of a shape, and deleting a
   shape takes its curves along: the curves no other shape uses leave the layer, with their points, and the poses
   and keyframes that moved them let them go. A shape cannot change layer: duplicate it into the other one (\`{ op: "duplicate", target, parent: "other_layer" }\`, it gets its own points and keeps its place on screen) and delete the original. Duplicating a shape in its own layer also gives the copy its own points (not welded to the original).
+- **Curves first, shapes later** (the editor's Fill, Stroke and Both, as Moho's Create Shape): a curve no shape uses
+  is valid. It is not exported; \`render_preview\` with \`"curves": true\` draws, as thin gray lines under the shapes,
+  every curve no shape fills whole (also the ones loops follow only a part of), and the tree lists on its layer's
+  line the curves no shape uses at all ("curves without a shape", with its points). Add curves with \`set\` on the layer and a
+  \`d\` (any number of subpaths, welded to existing points like a shape's \`d\`; the curves are named \`c1\`, \`c2\`…), or
+  write \`points\` and \`curves\` yourself; then create shapes over them with \`"curves": [...]\` instead of \`d\`:
+  \`{ "op": "create", "type": "shape", "id": "iris", "parent": "eye", "props": { "curves": ["eye_outer", "eye_inner"],
+  "fill": "#3a2a4d" } }\` fills the ring between
+  two closed curves (the inner one cuts the hole), and another shape with \`"fill": null, "stroke": "#2b2135"\` over
+  the same curves outlines it. That way one layer holds a face's eyes and mouth as rings, only with fills.
+  Easier, as the editor's paint bucket: \`"at": [x, y]\` (in the layer's coordinates) instead of \`curves\` fills the
+  region at that point, the smallest area the curves close around it, with the closed curves inside it as holes:
+  \`{ "op": "create", "type": "shape", "id": "iris", "parent": "eye", "props": { "at": [0, 25], "fill": "#3a2a4d" } }\`.
+- **Regions between welded curves** (\`loops\`): curves welded at their points also close areas, as in Moho: two arcs
+  that share both ends make a lens; an open line welded to two points of a closed eye splits it into the lid and the
+  rest. \`at\` finds those too and writes them as \`loops\`: each loop lists the point ids around the area, and between
+  two consecutive points (and from the last back to the first) it follows the curve that joins them, with its
+  tangents. The lens of arcs \`top\` and \`bottom\` from \`a\` to \`b\` is \`"loops": [["a", "b"]]\` (along one arc and back
+  along the other); when several curves join the same two points and the loop must take a given one, write the entry
+  as \`{ "p": "b", "via": "bottom" }\` (the curve from the previous point). A shape can have \`curves\` (whole ones,
+  holes included) and \`loops\` together. Loops follow their curves in poses, keyframes and bones; the tree shows them
+  on the shape's line (\`loops [a → b]\`). Draw the curves so they meet exactly on shared points: a \`d\` that passes
+  through an existing point welds to it; curves that only cross do not close an area.
+  A shape has a fill and a stroke: to outline curves a shape already fills, \`set\` its \`stroke\` instead of creating
+  another shape (\`at\` refuses a region a shape already covers and names it).
+  Give a fill only to closed curves (an open one would be closed with a straight line); open curves take a stroke.
+  An open curve does not cut a hole in the shape around it: put the shape it bounds (a mouth) above that one.
+  To close an eyelid that is a line welded to the eye's outline (a region in \`loops\`), bend the line in the pose
+  without moving its ends: \`{ "face": { "curves": { "lid": { "closed": false, "points": [{ "p": "l", "mode": "mirrored",
+  "angle": 30, "dist": 40 }, { "p": "r", "mode": "mirrored", "angle": -30, "dist": 40 }] } } } }\` (the same points as in
+  the setup, other tangents); the lid region follows the line, and the eye's outline stays.
+  To take a shape off and keep its curves (the editor's Clear), \`{ "op": "delete", "target": "iris", "keepCurves": true }\`;
+  to remove only its fill or its stroke, \`set\` it to \`null\`.
 - **Poses and keyframes** move points: they list **only the points they move**, and the rest stay as in the setup:
   \`{ "face": { "points": { "chin": { "x": 0, "y": 70 } } } }\` (or with \`transformPoints\`, above). A second
   \`set_pose\` (or a second moment of \`set_keys\` at the same time) **adds** its points to the ones already there, point

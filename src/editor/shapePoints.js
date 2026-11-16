@@ -51,7 +51,7 @@ export function createShapePoints(ctx) {
     if (!layer || locked(doc, layer.id) || (pose && boundPerPoint(layer))) return null;
     const points = read(schema, layer, 'points') ?? {};
     const curves = read(schema, layer, 'curves') ?? {};
-    const ids = shapePointIds(curves, shapes.flatMap((s) => s.curves ?? [])).filter((id) => points[id]);
+    const ids = shapePointIds(curves, shapes.flatMap((s) => s.curves ?? []), shapes.flatMap((s) => s.loops ?? [])).filter((id) => points[id]);
     if (!ids.length) return null;
     // In a pose the layer may follow a bone: its matrix is the one drawn on screen.
     const m = pose ? ctx.element(layer.id)?.getCTM() : null;

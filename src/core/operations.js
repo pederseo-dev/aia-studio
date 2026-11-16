@@ -5,6 +5,7 @@
 //   { op: 'unset',  target: 'eye_l' | 'meta', props: ['x'] }            ← back to the default value
 //   { op: 'delete', target: 'head' }                                     ← also deletes the children and releases
 //                                                                          the references to what was deleted
+//                                                                          (keepCurves: a shape leaves its curves)
 //   { op: 'move',   target: 'eye_l', parent?: 'face' | null, index?: 0, keepPosition?: true }
 //                                                     ← reparent and/or reorder; keepPosition leaves the x/y that
 //                                                       keeps its place on screen
@@ -19,8 +20,9 @@ import { expandFromTo } from './skeleton.js';
 import { read, suggest } from './schema.js';
 import { apply, invert, localMatrix, multiply, worldMatrix } from './geometry.js';
 import { parseD } from './paths.js';
-import { addD, dropUnused, entryOf, freeKey, mapBones, shiftPoints, transformMesh, withoutBones } from './mesh.js';
+import { addD, dropUnused, entryOf, freeKey, loopEntryOf, mapBones, regionKey, shapeCurveIds, shiftPoints, transformMesh, withoutBones } from './mesh.js';
 import { transformPointsOf } from './meshTransform.js';
+import { regionAt } from './regions.js';
 import { ValidationError, findObject, idError, children, subtree, validate } from './document.js';
 
 const STRUCTURE = new Set(['id', 'type', 'parent']);
@@ -115,11 +117,50 @@ function insert(doc, obj, parent, index) {
   doc.objects.splice(pos, 0, obj);
 }
 
+/**
+ * Sugar for the AI, as the editor's Fill, Stroke and Both (Moho's Paint Bucket): a new shape accepts `at: [x, y]` (in
+ * its layer's coordinates) instead of `curves` or `d`, and fills the region there: the smallest area its curves close
+ * around the point (a closed curve, or segments of curves welded at their points), with the closed curves inside it
+ * as holes. Returns the props with `curves` and, for an area of segments, `loops` (see src/core/regions.js).
+ */
+function expandShapeAt(doc, schema, props, parentId) {
+  if (props?.at === undefined) return props;
+  const { at, ...rest } = props;
+  if (!Array.isArray(at) || at.length !== 2 || !at.every((v) => typeof v === 'number' && Number.isFinite(v))) throw new Error('at must be [x, y], a point in the layer’s coordinates');
+  if (rest.curves !== undefined || rest.d !== undefined || rest.loops !== undefined) throw new Error('pass at, curves (and loops) or d, only one: at finds the curves itself');
+  const layer = parentId != null ? findObject(doc, parentId) : null;
+  if (layer?.type !== 'vector') throw new Error(`a shape goes inside a vector layer${layer ? ` (its parent "${layer.id}" is a ${layer.type})` : ''}: create a vector and pass it as parent`);
+  const curves = read(schema, layer, 'curves') ?? {};
+  const found = regionAt(read(schema, layer, 'points') ?? {}, curves, at);
+  if (!found) {
+    const closed = Object.keys(curves).filter((id) => curves[id].closed);
+    throw new Error(`no region of ${layer.id} is around (${at.join(', ')}) (in the layer’s coordinates; a region is closed by a closed curve or by curves welded at their points; its closed curves: ${closed.join(', ') || 'none'}). Pick a point inside one, or add the curves first with set and d`);
+  }
+  const key = regionKey(curves, found);
+  const same = children(doc, layer.id).find((o) => o.type === 'shape' && regionKey(curves, o) === key);
+  if (same) throw new Error(`shape ${same.id} already covers that region: set its fill or stroke instead of creating another`);
+  return { ...rest, curves: found.curves, ...(found.loops.length ? { loops: found.loops } : {}) };
+}
+
+/**
+ * Sugar for the AI and the editor: a vector layer accepts `d` (an SVG path, any number of subpaths) and its subpaths
+ * are added to its mesh as curves no shape uses yet (welded where a point falls on an existing one), as drawing with
+ * Auto fill and Auto stroke off. Shapes are created over them later with `curves`.
+ */
+function expandLayerD(schema, type, layer, props) {
+  if (type !== 'vector' || props?.d === undefined) return props;
+  if (typeof props.d !== 'string') throw new Error('d must be an SVG path (text)');
+  if (props.points !== undefined || props.curves !== undefined) throw new Error('"d" adds curves to the layer’s mesh itself: do not pass points or curves in the same set');
+  const { d, ...rest } = props;
+  const added = addD(layer ? (read(schema, layer, 'points') ?? {}) : {}, layer ? (read(schema, layer, 'curves') ?? {}) : {}, d);
+  return { ...rest, points: added.points, curves: added.curves };
+}
+
 /** Sugar for the AI: a path accepts `d` (SVG path data with a single subpath) and is saved as vertices. */
 function expandD(kind, props) {
   if (props?.d === undefined) return props;
   if (kind?.name === 'shape') throw new Error('a shape is changed by moving the points of its layer: in a pose or keyframe, give the layer’s "points" ({ p3: { x, y } }) instead of "d"');
-  if (!kind?.properties.vertices) throw new Error(`"d" only works on types with vertices (path) and on shapes of a vector layer, not on ${kind?.name ?? 'meta'}`);
+  if (!kind?.properties.vertices) throw new Error(`"d" only works on types with vertices (path), on shapes of a vector layer and on vector layers (curves only), not on ${kind?.name ?? 'meta'}`);
   const subpaths = parseD(props.d);
   if (subpaths.length !== 1) throw new Error(`d has ${subpaths.length} subpaths; create one path for each`);
   const { d, ...rest } = props;
@@ -230,7 +271,7 @@ function expandTracks(doc, schema, kind, props) {
 
 /**
  * Copies the curves of `shape` (and the points they go through) into the vector layer `parentId` with new ids, and
- * returns the new curve ids. Points shared by those curves stay shared in the copy; nothing is welded to the
+ * returns the copy's { curves, loops } (its loops follow the copied curves). Points shared by those curves stay shared in the copy; nothing is welded to the
  * original. Into another layer the copy keeps its place on screen (the points and tangents are taken through both
  * layers' matrices), and per-point bones are dropped (they belong to the source layer's binding). Mutates the layer.
  */
@@ -245,7 +286,8 @@ function copyShapeMesh(doc, schema, shape, parentId) {
   const sameLayer = source.id === layer.id;
   const pointIds = new Map();
   const created = [];
-  for (const curveId of shape.curves ?? []) {
+  const curveIds = new Map();
+  for (const curveId of shapeCurveIds(fromCurves, shape)) {
     const curve = fromCurves[curveId];
     if (!curve) continue;
     const entries = curve.points.map((e) => {
@@ -260,13 +302,20 @@ function copyShapeMesh(doc, schema, shape, parentId) {
     });
     const id = freeKey(curves, 'c');
     curves[id] = { ...curve, points: entries };
-    created.push(id);
+    curveIds.set(curveId, id);
   }
+  for (const curveId of shape.curves ?? []) if (curveIds.has(curveId)) created.push(curveIds.get(curveId));
+  const loops = (shape.loops ?? []).map((loop) =>
+    loop.map((e) => {
+      const { p, via } = loopEntryOf(e);
+      return via === undefined ? pointIds.get(p) ?? p : { p: pointIds.get(p) ?? p, via: curveIds.get(via) ?? via };
+    }),
+  );
   let mesh = { points, curves };
   if (!sameLayer) mesh = transformMesh(points, curves, [...pointIds.values()], multiply(invert(worldMatrix(doc, schema, layer.id)), worldMatrix(doc, schema, source.id)));
   layer.points = mesh.points;
   layer.curves = mesh.curves;
-  return created;
+  return { curves: created, loops };
 }
 
 /** Sugar for the AI: a bone accepts `from` and `to` ([x, y] in the document) instead of x, y, rotation and length. */
@@ -347,11 +396,14 @@ function expandShapeD(doc, schema, props, parentId, shapeId, current = null) {
   layer.points = added.points;
   layer.curves = added.curves;
   if (current) {
-    // The old curves no other shape uses leave the layer (and the poses and keyframes that moved them).
-    const others = new Set(children(doc, layer.id).filter((o) => o.id !== shapeId).flatMap((o) => o.curves ?? []));
-    inverses.push(...pruneLayer(doc, schema, layer, current.curves ?? [], others));
+    // The old curves (its own and the ones its loops follow) no other shape uses leave the layer (and the poses and
+    // keyframes that moved them).
+    const others = new Set(children(doc, layer.id).filter((o) => o.id !== shapeId).flatMap((o) => shapeCurveIds(layer.curves, o)));
+    inverses.push(...pruneLayer(doc, schema, layer, shapeCurveIds(before.curves, current), others));
   }
-  return { props: { ...rest, curves: [...(current ? [] : (rest.curves ?? [])), ...added.ids] }, inverses };
+  // `d` replaces what the shape filled: its curves and its loops.
+  const loops = current?.loops?.length ? { loops: [] } : {};
+  return { props: { ...rest, ...loops, curves: [...(current ? [] : (rest.curves ?? [])), ...added.ids] }, inverses };
 }
 
 /**
@@ -456,17 +508,20 @@ function applyOne(doc, op, schema) {
       const parent = container(doc, op.parent, schema);
       if (op.props !== undefined) checkProps(op.props);
       for (const k of ['pivot', 'transformPoints']) if (op.props?.[k] !== undefined) throw new Error(`"${k}" changes an existing layer: create ${op.id} first and use "${k}" in a later set`);
-      const shape = op.type === 'shape' ? expandShapeD(doc, schema, op.props, parent, op.id) : { props: op.props, inverses: [] };
+      const shape = op.type === 'shape' ? expandShapeD(doc, schema, expandShapeAt(doc, schema, op.props, parent), parent, op.id) : { props: expandLayerD(schema, op.type, null, op.props), inverses: [] };
       const props = expandTracks(doc, schema, op.type, expandPose(doc, schema, op.type, expandBone(doc, schema, op.type, parent, expandD(kind, shape.props)))) ?? {};
       insert(doc, { id: op.id, type: op.type, parent: parent, ...structuredClone(props) }, parent, op.index);
-      return [{ op: 'delete', target: op.id }, ...shape.inverses];
+      // A shape created over curves that were already there (Fill, Stroke, Both): undoing it leaves them in the layer.
+      const keep = op.type === 'shape' && op.props?.d === undefined ? { keepCurves: true } : {};
+      // (with `at` the curves were there too)
+      return [{ op: 'delete', target: op.id, ...keep }, ...shape.inverses];
     }
 
     case 'set': {
       checkProps(op.props);
       const obj = op.target === 'meta' ? doc.meta : target(doc, op.target);
       // transformPoints first: it checks the props as they were given (pivot adds points of its own).
-      const given = op.target === 'meta' ? op.props : expandTransformPoints(doc, schema, obj, op.props);
+      const given = op.target === 'meta' ? op.props : expandLayerD(schema, obj.type, obj, expandTransformPoints(doc, schema, obj, op.props));
       const shape = obj.type === 'shape' ? expandShapeD(doc, schema, given, obj.parent ?? null, obj.id, obj) : op.target === 'meta' ? { props: given, inverses: [] } : expandPivot(doc, schema, obj, given);
       const props = op.target === 'meta' ? op.props : expandTracks(doc, schema, obj.type, expandPose(doc, schema, obj.type, expandBone(doc, schema, obj.type, obj.parent ?? null, expandD(schema.types.get(obj.type), shape.props), obj)));
       const previous = {};
@@ -503,15 +558,16 @@ function applyOne(doc, op, schema) {
       doc.objects.forEach((o, pos) => ids.has(o.id) && removed.push({ pos, obj: o }));
       doc.objects = doc.objects.filter((o) => !ids.has(o.id));
       // A deleted shape takes along the curves (and points) of its layer that no other shape uses, as they would be
-      // invisible and unreachable; the poses and keyframes that moved them let them go too.
+      // invisible and unreachable; the poses and keyframes that moved them let them go too. `keepCurves` leaves them
+      // (the Clear of Fill, Stroke and Both, and the undo of a shape created over existing curves).
       const pruned = [];
-      for (const { obj: shape } of removed) {
+      for (const { obj: shape } of op.keepCurves ? [] : removed) {
         const layer = shape.type === 'shape' && !ids.has(shape.parent) ? findObject(doc, shape.parent) : null;
         if (layer?.type !== 'vector') continue;
-        const keep = new Set(children(doc, layer.id).flatMap((o) => o.curves ?? []));
+        const keep = new Set(children(doc, layer.id).flatMap((o) => shapeCurveIds(layer.curves, o)));
         const restore = restoreLayer(layer);
         const mesh = JSON.stringify([layer.points, layer.curves]);
-        const poses = pruneLayer(doc, schema, layer, shape.curves ?? [], keep);
+        const poses = pruneLayer(doc, schema, layer, shapeCurveIds(layer.curves, shape), keep);
         if (JSON.stringify([layer.points, layer.curves]) !== mesh) pruned.push(...restore, ...poses);
       }
       // What pointed to something deleted (a style, a bone) is released; undo binds it again.
@@ -635,7 +691,11 @@ function applyOne(doc, op, schema) {
       // them and move together), in its layer or in another vector layer, where it keeps its place on screen.
       // Undo deletes the copy and then puts the layer's mesh back exactly as it was.
       const restore = original.type === 'shape' && findObject(doc, parent) ? restoreLayer(findObject(doc, parent)) : [];
-      if (original.type === 'shape') root.curves = copyShapeMesh(doc, schema, original, parent);
+      if (original.type === 'shape') {
+        const copied = copyShapeMesh(doc, schema, original, parent);
+        root.curves = copied.curves;
+        if (original.loops?.length) root.loops = copied.loops;
+      }
       // By default it ends up right in front of the original.
       const index = op.index ?? (parent === originalParent ? children(doc, parent).indexOf(original) + 1 : undefined);
       insert(doc, root, parent, index);

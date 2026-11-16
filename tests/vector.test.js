@@ -381,3 +381,212 @@ test('duplicating a shape gives the copy its own points, in its layer or in anot
   const { doc: next, inverses } = applyOperations(doc, [{ op: 'duplicate', target: 'box', parent: 'other' }], schema);
   assert.deepEqual(run(next, inverses), doc);
 });
+
+test('Fill, Stroke and Both: the picked points close whole curves, inner ones too (a hole)', async () => {
+  const { curvesOfPoints, looseCurves } = await import('../src/core/mesh.js');
+  const curves = {
+    outer: { closed: true, points: ['a', 'b', 'c', 'd'] },
+    inner: { closed: true, points: ['e', 'f', 'g'] },
+    brow: { closed: false, points: ['h', 'i'] },
+  };
+  assert.deepEqual(curvesOfPoints(curves, ['a', 'b', 'c']), []);
+  assert.deepEqual(curvesOfPoints(curves, ['a', 'b', 'c', 'd', 'e', 'f', 'g']), ['outer', 'inner']);
+  // A fill only takes closed curves; a stroke takes open ones too.
+  assert.deepEqual(curvesOfPoints(curves, ['h', 'i', 'e', 'f', 'g'], { closedOnly: true }), ['inner']);
+  assert.deepEqual(curvesOfPoints(curves, ['h', 'i', 'e', 'f', 'g']), ['inner', 'brow']);
+  assert.deepEqual(looseCurves(curves, ['outer', 'brow']), ['inner']);
+});
+
+test('curves no shape uses are valid, drawn only with the curves view option, and a shape over them fills the ring', () => {
+  const doc = run(createDocument(), [
+    { op: 'create', type: 'vector', id: 'eye' },
+    { op: 'set', target: 'eye', props: {
+      points: { a: { x: 0, y: 0 }, b: { x: 40, y: 0 }, c: { x: 40, y: 40 }, d: { x: 0, y: 40 }, e: { x: 10, y: 10 }, f: { x: 30, y: 10 }, g: { x: 20, y: 30 } },
+      curves: { outer: { closed: true, points: ['a', 'b', 'c', 'd'] }, inner: { closed: true, points: ['e', 'f', 'g'] } },
+    } },
+  ]);
+  assert.deepEqual(validate(doc, schema).errors, []);
+  assert.doesNotMatch(svgDocument(doc, schema), /loose-curve/);
+  assert.match(svgDocument(doc, schema, { curves: true }), /class="loose-curve"/);
+  const ring = run(doc, [{ op: 'create', type: 'shape', id: 'iris', parent: 'eye', props: { curves: ['outer', 'inner'] } }]);
+  const svg = svgDocument(ring, schema, { curves: true });
+  assert.match(svg, /data-id="iris" d="M[^"]*ZM[^"]*Z" fill-rule="evenodd"/);
+  assert.doesNotMatch(svg, /loose-curve/);
+});
+
+test('undoing a shape created over existing curves leaves the curves in the layer', () => {
+  const mesh = {
+    points: { a: { x: 0, y: 0 }, b: { x: 40, y: 0 }, c: { x: 20, y: 30 } },
+    curves: { tri: { closed: true, points: ['a', 'b', 'c'] } },
+  };
+  const before = run(createDocument(), [{ op: 'create', type: 'vector', id: 'v' }, { op: 'set', target: 'v', props: mesh }]);
+  const { doc, inverses } = applyOperations(before, [{ op: 'create', type: 'shape', id: 's', parent: 'v', props: { curves: ['tri'] } }], schema);
+  const undone = applyOperations(doc, inverses, schema).doc;
+  assert.equal(findObject(undone, 's'), undefined);
+  assert.deepEqual(findObject(undone, 'v').curves, mesh.curves);
+  assert.deepEqual(findObject(undone, 'v').points, mesh.points);
+});
+
+test('d on a vector layer adds curves no shape uses, welded to its points; the tree and the preview show them', async () => {
+  const doc = run(square(), [{ op: 'set', target: 'body', props: { d: 'M40 0 L80 0 L80 40 L40 40 Z' } }]);
+  const body = findObject(doc, 'body');
+  assert.deepEqual(Object.keys(body.curves), ['c1', 'c2']);
+  // Its corners on the square's right edge are the square's points (welded).
+  assert.deepEqual(body.curves.c2.points.filter((p) => ['p2', 'p3'].includes(p)), ['p2', 'p3']);
+  assert.equal(findObject(doc, 'box').curves.join(), 'c1');
+  assert.throws(() => run(square(), [{ op: 'set', target: 'body', props: { d: 'M0 0 L1 1', points: {} } }]), /do not pass points or curves/);
+  const { treeOutline, planPreview } = await import('../mcp/tools.js');
+  assert.match(treeOutline(doc, schema), /curves without a shape: c2 \(closed: p2, p5, p6, p3\)/);
+  assert.match(planPreview(doc, schema, { curves: true }).svg, /loose-curve/);
+  assert.doesNotMatch(planPreview(doc, schema).svg, /loose-curve/);
+});
+
+test('delete with keepCurves takes a shape off and leaves its curves (Clear); without it they leave the layer', () => {
+  const doc = square();
+  const kept = run(doc, [{ op: 'delete', target: 'box', keepCurves: true }]);
+  assert.deepEqual(Object.keys(findObject(kept, 'body').curves), ['c1']);
+  assert.deepEqual(Object.keys(findObject(run(doc, [{ op: 'delete', target: 'box' }]), 'body').curves ?? {}), []);
+});
+
+test('regions as a paint bucket: the smallest closed curve around a point, with the curves inside it as holes', async () => {
+  const { regionAt, curveNear } = await import('../src/core/regions.js');
+  const sq = (x, y, s, n) => ({ [`${n}a`]: { x, y }, [`${n}b`]: { x: x + s, y }, [`${n}c`]: { x: x + s, y: y + s }, [`${n}d`]: { x, y: y + s } });
+  const loop = (n) => ({ closed: true, points: [`${n}a`, `${n}b`, `${n}c`, `${n}d`] });
+  const points = { ...sq(0, 0, 100, 'o'), ...sq(20, 20, 40, 'h'), ...sq(30, 30, 10, 'p'), ...sq(70, 70, 20, 'k'), l1: { x: 0, y: 120 }, l2: { x: 100, y: 120 } };
+  const curves = { outer: loop('o'), hole: loop('h'), pupil: loop('p'), corner: loop('k'), line: { closed: false, points: ['l1', 'l2'] } };
+  // Between the outer square and its two inner ones: a ring with two holes (the pupil is inside the hole, not a hole).
+  assert.deepEqual(regionAt(points, curves, [10, 10]), { curves: ['outer', 'hole', 'corner'], loops: [] });
+  assert.deepEqual(regionAt(points, curves, [25, 25]), { curves: ['hole', 'pupil'], loops: [] });
+  assert.deepEqual(regionAt(points, curves, [35, 35]), { curves: ['pupil'], loops: [] });
+  assert.equal(regionAt(points, curves, [150, 150]), null);
+  assert.equal(curveNear(points, curves, [50, 122], 4), 'line');
+  assert.equal(curveNear(points, curves, [50, 130], 4), null);
+});
+
+test('create shape with at fills the region at that point, and teaches when there is none or it is taken', () => {
+  const doc = run(createDocument(), [
+    { op: 'create', type: 'vector', id: 'eye' },
+    { op: 'set', target: 'eye', props: { d: 'M-80 0 L0 -60 L80 0 L0 60 Z M-30 0 L0 -30 L30 0 L0 30 Z' } },
+    { op: 'create', type: 'shape', id: 'white', parent: 'eye', props: { at: [-50, 0], fill: '#ffffff' } },
+  ]);
+  assert.deepEqual(findObject(doc, 'white').curves, ['c1', 'c2']);
+  assert.equal(findObject(doc, 'white').at, undefined);
+  assert.throws(() => run(doc, [{ op: 'create', type: 'shape', id: 'x', parent: 'eye', props: { at: [200, 0] } }]), /no region of eye is around \(200, 0\)/);
+  assert.throws(() => run(doc, [{ op: 'create', type: 'shape', id: 'x', parent: 'eye', props: { at: [-60, 0] } }]), /white already covers that region/);
+});
+
+// A lens: two arcs welded at both ends (a and b), and an eye whose lid is an open line welded to its outline.
+const lensDoc = () =>
+  run(createDocument(), [
+    { op: 'create', type: 'vector', id: 'face' },
+    { op: 'set', target: 'face', props: {
+      points: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, l: { x: 200, y: 0 }, t: { x: 250, y: -50 }, r: { x: 300, y: 0 }, u: { x: 250, y: 50 } },
+      curves: {
+        top: { closed: false, points: [{ p: 'a', mode: 'mirrored', angle: -45, dist: 40 }, { p: 'b', mode: 'mirrored', angle: 45, dist: 40 }] },
+        bottom: { closed: false, points: [{ p: 'a', mode: 'mirrored', angle: 45, dist: 40 }, { p: 'b', mode: 'mirrored', angle: -45, dist: 40 }] },
+        eye: { closed: true, points: ['l', 't', 'r', 'u'] },
+        lid: { closed: false, points: ['l', 'r'] },
+      },
+    } },
+  ]);
+
+test('loops: the bucket finds areas bounded by segments of welded curves, and a shape fills them', async () => {
+  const { regionAt } = await import('../src/core/regions.js');
+  const doc = lensDoc();
+  const { points, curves } = findObject(doc, 'face');
+  const lens = regionAt(points, curves, [50, 0]);
+  assert.deepEqual(lens.curves, []);
+  assert.equal(lens.loops.length, 1);
+  assert.deepEqual(lens.loops[0].map((e) => (typeof e === 'string' ? e : e.p)).sort(), ['a', 'b']);
+  // The lid line splits the eye: above it, the area of t; below, the area of u.
+  const upper = regionAt(points, curves, [250, -20]).loops[0].map((e) => (typeof e === 'string' ? e : e.p));
+  assert.deepEqual([...upper].sort(), ['l', 'r', 't']);
+  assert.deepEqual(regionAt(points, curves, [250, 20]).loops[0].map((e) => (typeof e === 'string' ? e : e.p)).sort(), ['l', 'r', 'u']);
+
+  const filled = run(doc, [
+    { op: 'create', type: 'shape', id: 'iris', parent: 'face', props: { at: [50, 0], fill: '#3a2a4d' } },
+    { op: 'create', type: 'shape', id: 'lid_fill', parent: 'face', props: { at: [250, -20], fill: '#f2c7a5' } },
+  ]);
+  assert.deepEqual(validate(filled, schema).errors, []);
+  const svg = svgDocument(filled, schema);
+  assert.match(svg, /data-id="iris" d="M[^"]*C[^"]*C[^"]*Z"/);
+  assert.match(svg, /data-id="lid_fill" d="M[^"]*Z"/);
+  assert.throws(() => run(filled, [{ op: 'create', type: 'shape', id: 'x', parent: 'face', props: { at: [50, 5] } }]), /iris already covers that region/);
+});
+
+test('loops: validation teaches, deleting keeps the curves other shapes use, duplicating copies them, transformPoints moves them', () => {
+  const doc = lensDoc();
+  assert.throws(() => run(doc, [{ op: 'create', type: 'shape', id: 's', parent: 'face', props: { loops: [['a', 'r']] } }]), /no curve joins a to r/);
+  assert.throws(() => run(doc, [{ op: 'create', type: 'shape', id: 's', parent: 'face', props: { loops: [['a', 'zz']] } }]), /"zz" is not in face.points/);
+  const lens = run(doc, [{ op: 'create', type: 'shape', id: 'lens', parent: 'face', props: { loops: [['a', 'b']] } }]);
+  // A loop that names the curve to follow back.
+  const named = run(doc, [{ op: 'create', type: 'shape', id: 'lens', parent: 'face', props: { loops: [['a', { p: 'b', via: 'bottom' }]] } }]);
+  assert.deepEqual(validate(named, schema).errors, []);
+  // Deleting the shape takes along the curves its loops followed, if no other shape uses them.
+  const gone = run(lens, [{ op: 'delete', target: 'lens' }]);
+  assert.deepEqual(Object.keys(findObject(gone, 'face').curves).sort(), ['eye', 'lid']);
+  // A duplicate in its own layer gets its own curves and points, with the loop renamed to them.
+  const twin = run(lens, [{ op: 'duplicate', target: 'lens' }]);
+  const copy = findObject(twin, 'lens_copy');
+  assert.equal(copy.loops.length, 1);
+  assert.ok(copy.loops[0].every((e) => !['a', 'b'].includes(typeof e === 'string' ? e : e.p)));
+  assert.deepEqual(validate(twin, schema).errors, []);
+  const moved = run(lens, [{ op: 'set', target: 'face', props: { transformPoints: { shape: 'lens', translate: [10, 0] } } }]);
+  assert.equal(findObject(moved, 'face').points.a.x, 10);
+  assert.equal(findObject(moved, 'face').points.l.x, 200);
+});
+
+test('loops: going back along an open curve uses its tangents reversed (the lens is symmetric)', () => {
+  const doc = run(lensDoc(), [{ op: 'create', type: 'shape', id: 'lens', parent: 'face', props: { loops: [['a', 'b']] } }]);
+  const d = svgDocument(doc, schema).match(/data-id="lens" d="([^"]*)"/)[1];
+  const numbers = d.match(/-?\d+(\.\d+)?/g).map(Number);
+  // M0 0 C(along top) 100 0 C(back along bottom) 0 0: the top's control points are above (y < 0), the bottom's below.
+  const [top, bottom] = d.split('C').slice(1).map((c) => c.trim().split(/[ ,]+/).map(Number));
+  assert.ok(top[1] < 0 && top[3] < 0, d);
+  assert.ok(bottom[1] > 0 && bottom[3] > 0, d);
+});
+
+test('loops: set d on a shape replaces its loops too, and lets go of the curves only they followed', () => {
+  const doc = run(lensDoc(), [{ op: 'create', type: 'shape', id: 'lens', parent: 'face', props: { at: [50, 0] } }]);
+  const redrawn = run(doc, [{ op: 'set', target: 'lens', props: { d: 'M0 100 L40 100 L40 140 Z' } }]);
+  const lens = findObject(redrawn, 'lens');
+  assert.deepEqual(lens.loops, []);
+  assert.equal(lens.curves.length, 1);
+  assert.deepEqual(Object.keys(findObject(redrawn, 'face').curves).filter((c) => ['top', 'bottom'].includes(c)), []);
+  assert.deepEqual(validate(redrawn, schema).errors, []);
+});
+
+test('loops over a closed curve of 2 points (a leaf drawn with the Pen) split by a line', async () => {
+  const { regionAt } = await import('../src/core/regions.js');
+  const doc = run(createDocument(), [
+    { op: 'create', type: 'vector', id: 'leaf' },
+    { op: 'set', target: 'leaf', props: { d: 'M0 0 C0 -50 100 -50 100 0 C100 50 0 50 0 0 Z M0 0 L100 0' } },
+    { op: 'create', type: 'shape', id: 'up', parent: 'leaf', props: { at: [50, -20], fill: '#00aa00' } },
+    { op: 'create', type: 'shape', id: 'down', parent: 'leaf', props: { at: [50, 20], fill: '#006600' } },
+  ]);
+  assert.deepEqual(validate(doc, schema).errors, []);
+  const { points, curves } = findObject(doc, 'leaf');
+  // Each half is its own region: the bucket finds a different one above and below the line.
+  assert.notDeepEqual(regionAt(points, curves, [50, -20]), regionAt(points, curves, [50, 20]));
+  const svg = svgDocument(doc, schema);
+  const ys = (id) => svg.match(new RegExp(`data-id="${id}" d="([^"]*)"`))[1].match(/-?\d+(\.\d+)?/g).map(Number).filter((_, i) => i % 2);
+  assert.ok(Math.min(...ys('up')) < -10 && Math.max(...ys('up')) <= 0.01, 'the upper half stays above the line');
+  assert.ok(Math.max(...ys('down')) > 10 && Math.min(...ys('down')) >= -0.01, 'the lower half stays below the line');
+});
+
+test('loops: a ring touching the outline at one point fills the area between them', async () => {
+  const { regionAt } = await import('../src/core/regions.js');
+  // A square and a triangle inside it that shares only its corner p1.
+  const doc = run(createDocument(), [
+    { op: 'create', type: 'vector', id: 'v' },
+    { op: 'set', target: 'v', props: { d: 'M0 0 L100 0 L100 100 L0 100 Z M0 0 L60 20 L20 60 Z' } },
+  ]);
+  const { points, curves } = findObject(doc, 'v');
+  const region = regionAt(points, curves, [80, 80]);
+  const filled = run(doc, [{ op: 'create', type: 'shape', id: 's', parent: 'v', props: { at: [80, 80] } }]);
+  assert.deepEqual(validate(filled, schema).errors, []);
+  assert.ok(region.loops.length === 1 || region.curves.length === 2, JSON.stringify(region));
+  // The small square is not filled: a point inside it is not inside the shape.
+  assert.notDeepEqual(regionAt(points, curves, [25, 25]), region);
+  assert.match(svgDocument(filled, schema), /data-id="s" d="M[^"]*Z/);
+});

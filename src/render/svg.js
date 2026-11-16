@@ -8,7 +8,7 @@ import { clipPose } from '../core/animation.js';
 import { applyPose, blendPoses } from '../core/blend.js';
 import { IDENTITY, invert, localMatrix, worldMatrix, multiply } from '../core/geometry.js';
 import { transformVertices, verticesAD } from '../core/paths.js';
-import { curveVertices } from '../core/mesh.js';
+import { curveVertices, loopD, looseCurves, resolveLoop } from '../core/mesh.js';
 
 const n = (v) => +v.toFixed(3);
 const attribute = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -45,20 +45,31 @@ export const DRAW = {
     const points = v('points');
     const curves = v('curves');
     const deform = v.deform ?? ((vertices) => vertices);
-    const drawn = new Map();
-    const d = (id) => {
-      if (!drawn.has(id)) drawn.set(id, curves[id] ? verticesAD(deform(curveVertices(points, curves[id])), curves[id].closed ?? false) : '');
-      return drawn.get(id);
+    const vertices = new Map();
+    const vertsOf = (id) => {
+      if (!vertices.has(id)) vertices.set(id, curves[id] ? deform(curveVertices(points, curves[id])) : []);
+      return vertices.get(id);
     };
-    return children(v.doc, v.obj.id)
-      .filter((o) => o.type === 'shape')
+    const d = (id) => (curves[id] ? verticesAD(vertsOf(id), curves[id].closed ?? false) : '');
+    // A loop: a region bounded by segments of welded curves (see mesh.js).
+    const loop = (l) => {
+      const { segments } = resolveLoop(curves, l);
+      return segments ? loopD(vertsOf, segments) : '';
+    };
+    const shapes = children(v.doc, v.obj.id).filter((o) => o.type === 'shape');
+    const drawnShapes = shapes
       .map((o) => {
         const sv = reader(v.doc, v.schema, o, v.assets);
-        const path = (sv('curves') ?? []).map(d).join('');
+        const path = (sv('curves') ?? []).map(d).join('') + (sv('loops') ?? []).map(loop).join('');
         if (!path || !sv('visible')) return '';
         return `<path data-id="${o.id}" d="${path}" fill-rule="${sv('fillRule')}"${paint(sv)} stroke-linejoin="round" stroke-linecap="round"/>`;
       })
       .join('');
+    // Curves no shape uses whole (the `curves` view option, the editor's): a thin line under the shapes, so they can
+    // be seen and filled (also the ones loops follow only a part of).
+    if (!v.looseCurves) return drawnShapes;
+    const loose = looseCurves(curves, shapes.flatMap((o) => o.curves ?? [])).map(d).join('');
+    return (loose ? `<path class="loose-curve" d="${loose}" fill="none" stroke="#8d8aa0" stroke-width="1" vector-effect="non-scaling-stroke"/>` : '') + drawnShapes;
   },
   // The href is decided by the view (`assets`): a server URL in the editor; with nothing, the file name (the MCP
   // replaces it with the bytes when converting to PNG). Stretched to width × height, like a rect.
@@ -140,6 +151,7 @@ function node(doc, schema, obj, ctx) {
     v = Object.assign((prop) => (prop === 'vertices' ? deformed : base(prop)), { doc: base.doc, schema, obj, assets: base.assets });
   }
   if (ctx.skeleton && obj.type === 'vector') v.deform = (vertices) => verticesInPose(doc, schema, obj, vertices, delta, ctx);
+  if (ctx.curves && obj.type === 'vector') v.looseCurves = true;
   const attributes = [
     ` data-id="${obj.id}"`,
     transformAttr,
@@ -179,7 +191,7 @@ export function resolvePose(doc, schema, pose, params, animation = null, time = 
  * the setup.
  */
 /** @param {any} setup @param {any} schema @param {import('../core/types.js').ViewOptions} [options] */
-export function svgContent(setup, schema, { pose, params, animation, time, show, assets } = {}) {
+export function svgContent(setup, schema, { pose, params, animation, time, show, assets, curves } = {}) {
   const activePose = resolvePose(setup, schema, pose, params, animation, time);
   // What is not a bone takes the values of the pose; bones are moved by the skeleton (with their delta).
   const doc = applyPose(setup, schema, activePose);
@@ -192,7 +204,8 @@ export function svgContent(setup, schema, { pose, params, animation, time, show,
   const rect = background == null ? '' : `<rect data-background="" width="${w}" height="${h}" fill="${attribute(background)}"/>`;
   // `show`: { switch_id: child_id } to see a variant without changing it (the editor, when selecting it).
   // `assets`: src → href of the image layers (the editor gives the server URL).
-  const ctx = { skeleton: activePose ? evaluateSkeleton(doc, schema, activePose) : null, parentDelta: IDENTITY, show, assets };
+  // `curves`: the curves no shape uses are drawn as thin lines (the editor; an export leaves them out).
+  const ctx = { skeleton: activePose ? evaluateSkeleton(doc, schema, activePose) : null, parentDelta: IDENTITY, show, assets, curves };
   const objects = root.filter((o) => DRAW[o.type]).map((o) => node(doc, schema, o, ctx));
   return defs + rect + objects.join('');
 }

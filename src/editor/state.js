@@ -25,6 +25,12 @@ export const state = {
   // Auto-weld (as in Moho): dropping an end point of an open path on its other end closes it. On by default; the
   // choice is remembered.
   autoWeld: readFlag('aia:auto-weld', true),
+  // Auto fill / Auto stroke (as in Moho) of Rectangle, Ellipse and Pen: what the new shape gets. Both off = only the
+  // curves (fill them later with Fill, Stroke or Both). Remembered.
+  autoFill: readFlag('aia:auto-fill', true),
+  autoStroke: readFlag('aia:auto-stroke', false),
+  // Fill, Stroke and Both: the points of the picked vector layer picked to create a shape over the curves they close.
+  shapePicked: [],
   tool: 'select',
   mode: 'design', // 'design' (drawing and rig), 'animate' (scene timeline) or 'puppet' (puppet controls and clips)
   // What is seen and edited on top of the setup: a pose or a clip (animation, at `time`). What is changed goes to the
@@ -50,11 +56,12 @@ function readFlag(key, fallback) {
     return fallback;
   }
 }
-export function setAutoWeld(value) {
+/** Changes and remembers an on/off option of a tool: 'autoWeld', 'autoFill' or 'autoStroke'. */
+export function setToolFlag(name, value) {
   try {
-    localStorage.setItem('aia:auto-weld', value ? '1' : '0');
+    localStorage.setItem(`aia:${name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`, value ? '1' : '0');
   } catch {}
-  setState({ autoWeld: value });
+  setState({ [name]: value });
 }
 
 const listeners = new Set();

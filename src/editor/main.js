@@ -13,6 +13,8 @@ import { importOperations } from './importSvg.js';
 import { addImages, imagesOnly } from './images.js';
 import { mountInspector } from './inspector.js';
 import { mountCanvas } from './canvas.js';
+import { createFromPicked, isShapeTool, shapeToolLayer } from './shapeTools.js';
+import { isSelectShape, restackShape } from './selectShape.js';
 import { mountOptions } from './toolOptions.js';
 import { mountParameters } from './parameters.js';
 import { changeMode, mountClips, mountModes, mountTimeline } from './timeline.js';
@@ -281,6 +283,12 @@ const GROUPS = {
     { id: 'rect', name: 'Rectangle', shortcut: 'R' },
     { id: 'ellipse', name: 'Ellipse', shortcut: 'E' },
   ],
+  paint: [
+    { id: 'selectShape', name: 'Select Shape', shortcut: 'Q' },
+    { id: 'fill', name: 'Fill', shortcut: 'U' },
+    { id: 'stroke', name: 'Stroke' },
+    { id: 'both', name: 'Both' },
+  ],
   skeleton: [
     { id: 'bone', name: 'Add Bone', shortcut: 'B', icon: 'addBone' },
     { id: 'manipulate', name: 'Manipulate Bones', shortcut: 'M' },
@@ -289,7 +297,7 @@ const GROUPS = {
     { id: 'bindPoints', name: 'Bind Points' },
   ],
 };
-const lastInGroup = { transform: 'select', canvas: 'artboard', create: 'path', skeleton: 'bone' };
+const lastInGroup = { transform: 'select', canvas: 'artboard', create: 'path', paint: 'fill', skeleton: 'bone' };
 const SHORTCUTS = Object.fromEntries(Object.values(GROUPS).flat().filter((h) => h.shortcut).map((h) => [h.shortcut.toLowerCase(), h.id]));
 
 function drawGroups() {
@@ -642,8 +650,10 @@ window.addEventListener('keydown', (e) => {
     return bindSelection();
   }
   if (mod && key === 'a') {
-    // Everything at the root (without the assets).
     e.preventDefault();
+    // Fill, Stroke and Both: every point of the picked layer (as Moho's Select All in point tools).
+    if (isShapeTool() && shapeToolLayer()) return setState({ shapePicked: Object.keys(read(schema, shapeToolLayer(), 'points') ?? {}) });
+    // Everything at the root (without the assets).
     return selectSeveral(children(state.doc, null).filter((o) => !schema.types.get(o.type).resource && !o.locked).map((o) => o.id));
   }
   if (mod) return;
@@ -655,6 +665,8 @@ window.addEventListener('keydown', (e) => {
 
   // Pen: Enter or Escape finish the open stroke.
   if (state.tool === 'path' && canvas.pen.active() && (e.key === 'Enter' || e.key === 'Escape')) return canvas.pen.finish(false);
+  // Fill, Stroke and Both: Enter (or Space) creates the shape over the picked points.
+  if (e.key === 'Enter' && isShapeTool() && state.shapePicked.length) return createFromPicked();
   // Enter enters or leaves point editing of a path.
   if (e.key === 'Enter') {
     if (state.editing) return exitEditing();
@@ -673,6 +685,11 @@ window.addEventListener('keydown', (e) => {
     return deleteSelection();
   }
 
+  // Select Shape (as in Moho): ↑ ↓ raise or lower the picked shape in its layer.
+  if (isSelectShape() && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    e.preventDefault();
+    return restackShape(e.key === 'ArrowUp' ? 1 : -1);
+  }
   // Arrows: move the selection 1 px (Shift: 10 px).
   const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   // Locked layers (picked from Layers) are not moved: the lock protects them on the canvas and from the keyboard.

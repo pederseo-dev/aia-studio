@@ -7,7 +7,9 @@ import { bindingsByProximity, boneOf } from '../core/skeleton.js';
 import { planBindPoints } from '../core/bindPoints.js';
 import { switchParams } from '../core/blend.js';
 import { artboardOps } from '../core/artboard.js';
-import { notify, execute, schema, state, setState, setAutoWeld, drawingLayer, select, subscribe } from './state.js';
+import { notify, execute, schema, state, setState, setToolFlag, drawingLayer, select, subscribe } from './state.js';
+import { restackShape, selectShapeSummary } from './selectShape.js';
+import { NAMES as SHAPE_TOOL_NAMES, clearPicked, createFromPicked, shapePlan, shapeToClear, shapeToolLayer } from './shapeTools.js';
 import { boneColor, activeSkeleton, reparentPlan, bindablePoints, bindLayer, bindPicked } from './bones.js';
 import { chooseVariant, poseOps, variantOf, variantsToShow } from './editing.js';
 
@@ -27,7 +29,7 @@ const SIZES = [
 
 export function mountOptions(root, actions) {
   subscribe((c) => {
-    if (['doc', 'selection', 'tool', 'pose', 'params', 'editing', 'vertex', 'id', 'mode', 'bindTarget', 'bindPicked'].some((k) => k in c) || ('time' in c && !state.playing)) draw();
+    if (['doc', 'selection', 'tool', 'pose', 'params', 'editing', 'vertex', 'id', 'mode', 'bindTarget', 'bindPicked', 'shapePicked', 'autoFill', 'autoStroke'].some((k) => k in c) || ('time' in c && !state.playing)) draw();
   });
 
   const button = (text, title, onClick, className = '') => {
@@ -38,6 +40,19 @@ export function mountOptions(root, actions) {
   const text = (html) => Object.assign(document.createElement('span'), { className: 'text', innerHTML: html });
   const code = (id) => `<b>${id}</b>`;
   // Where the drawing tools put the next shape: the active vector layer, or a new one (as in Moho).
+  /** A named checkbox for an on/off tool option (as in Moho's tool options), remembered (see setToolFlag). */
+  const flag = (name, label, title) => {
+    const box = Object.assign(document.createElement('label'), { className: 'option-check', title });
+    const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: state[name] });
+    check.addEventListener('change', () => setToolFlag(name, check.checked));
+    box.append(check, ` ${label}`);
+    return box;
+  };
+  // Auto fill / Auto stroke of Rectangle, Ellipse and Pen, as in Moho.
+  const autoPaint = () => [
+    flag('autoFill', 'Auto fill', 'The new shape gets a fill. With both off, only the curves are drawn: fill them later with Fill, Stroke or Both'),
+    flag('autoStroke', 'Auto stroke', 'The new shape gets a stroke (an open line always does while Auto fill is on, since it cannot be filled)'),
+  ];
   const intoLayer = () => (drawingLayer() ? `It goes into layer ${code(drawingLayer())}.` : 'It goes into a new vector layer (select one to draw into it).');
 
   function draw() {
@@ -95,12 +110,7 @@ export function mountOptions(root, actions) {
 
     if (state.editing) {
       const parts = [text('Points: drag anchors and tangents (Alt breaks them), double-click an anchor = straight or curved, click the outline to add, <kbd>Del</kbd> deletes.')];
-      // Auto-weld, a named checkbox as in Moho's tool options.
-      const weld = Object.assign(document.createElement('label'), { className: 'option-check', title: 'Drop an end point of an open path on its other end to weld them and close the path' });
-      const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: state.autoWeld });
-      check.addEventListener('change', () => setAutoWeld(check.checked));
-      weld.append(check, ' Auto-weld');
-      parts.push(weld);
+      parts.push(flag('autoWeld', 'Auto-weld', 'Drop an end point of an open path on its other end to weld them and close the path'));
       parts.push(...pointBones(doc));
       parts.push(button('Done', 'Exit point editing (Enter)', () => setState({ editing: null, vertex: null }), 'main'));
       return parts;
@@ -128,10 +138,19 @@ export function mountOptions(root, actions) {
           ...(bones.length ? [] : [button('Add Bone', 'Create bones (B)', () => setState({ tool: 'bone' }), 'main')]),
         ];
       case 'path':
-        return [text(`Pen: click = straight point, click and drag = curved, click the first point = close, <kbd>Enter</kbd> = finish open. ${intoLayer()}`)];
+        return [text(`Pen: click = straight point, click and drag = curved, click the first point = close, <kbd>Enter</kbd> = finish open. ${intoLayer()}`), ...autoPaint()];
       case 'rect':
       case 'ellipse':
-        return [text(`Drag to draw ${state.tool === 'rect' ? 'a rectangle' : 'an ellipse'}; <kbd>Shift</kbd> = ${state.tool === 'rect' ? 'square' : 'circle'}. ${intoLayer()}`)];
+        return [text(`Drag to draw ${state.tool === 'rect' ? 'a rectangle' : 'an ellipse'}; <kbd>Shift</kbd> = ${state.tool === 'rect' ? 'square' : 'circle'}. ${intoLayer()}`), ...autoPaint()];
+      case 'fill':
+      case 'stroke':
+      case 'both':
+        return shapeToolOptions(doc);
+      case 'selectShape': {
+        const parts = [text(selectShapeSummary(doc))];
+        if (sel?.type === 'shape' && !several && !state.pose) parts.push(button('Raise', 'Draw it above the next shape of its layer (↑)', () => restackShape(1)), button('Lower', 'Draw it below the previous shape of its layer (↓)', () => restackShape(-1)));
+        return parts;
+      }
       case 'rotate':
       case 'scale':
         return [text(`${state.tool === 'rotate' ? 'Rotate' : 'Scale'}: drag anywhere; the selection ${state.tool === 'rotate' ? 'rotates' : 'scales'} around its pivot.`)];
@@ -209,6 +228,31 @@ export function mountOptions(root, actions) {
     }
 
     return [text(bones.length ? 'Click to select; drag on empty space for a marquee. Bones are picked on the canvas with Add Bone (B) or Manipulate Bones (M).' : 'Click to select; drag on empty space to marquee-select.')];
+  }
+
+  /** Fill, Stroke and Both: which layer, how many points are picked, what they close, and Create. */
+  function shapeToolOptions(doc) {
+    const name = SHAPE_TOOL_NAMES[state.tool];
+    const what = { fill: 'a fill', stroke: 'a stroke', both: 'a fill and a stroke' }[state.tool];
+    const where = state.tool === 'stroke' ? 'Click a curve (or inside a region) to give it a stroke' : `Click inside a closed region to give it ${what}`;
+    const n = state.shapePicked.length;
+    const plan = shapePlan(doc);
+    const step = !n
+      ? `${where}; curves inside it are holes. Alt + click takes it off. Or drag a box over points and press <kbd>Enter</kbd>.`
+      : plan
+        ? `${n} point${n === 1 ? '' : 's'} close ${plan.curves.length === 1 ? `curve ${code(plan.curves[0])}` : `curves ${plan.curves.map(code).join(', ')}`}: <kbd>Space</kbd> or <kbd>Enter</kbd> paints them.`
+        : `${n} point${n === 1 ? '' : 's'} picked, but they close no ${state.tool === 'stroke' ? 'curve' : 'closed curve'}: pick every point of one.`;
+    const layer = shapeToolLayer(doc);
+    const parts = [text(`${name}${layer ? ` in ${code(layer.id)}` : ''}: ${step}`)];
+    if (n) {
+      const create = button('Create', `Give ${what} to the curves the picked points close (Space or Enter)`, createFromPicked, 'main');
+      create.disabled = !plan;
+      parts.push(create);
+    }
+    // Clear: only when the shape at hand (of the picked points, or the picked one) has what this tool gives.
+    const clearing = shapeToClear(doc);
+    if (clearing) parts.push(button('Clear', state.tool === 'both' ? `Remove shape ${clearing.id} (its curves stay)` : `Remove the ${state.tool} of ${clearing.id} (its curves stay)`, clearPicked));
+    return parts;
   }
 
   /**

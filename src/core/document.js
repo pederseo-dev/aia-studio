@@ -3,7 +3,7 @@
 
 import { FORMAT } from './format.js';
 import { read, suggest, validateValue } from './schema.js';
-import { boundEntries, curvePointIds, isMeshType, meshValueError } from './mesh.js';
+import { boundEntries, curvePointIds, isMeshType, loopEntryOf, meshValueError, resolveLoop } from './mesh.js';
 
 export const ID = /^[a-z][a-z0-9_]*$/;
 // "meta" names the document properties in set/unset (target: "meta"): no object can be called that.
@@ -151,7 +151,7 @@ export function validate(doc, schema) {
     }
     errors.push(...meshErrors(doc, schema, o, kind));
     // A shape without curves draws nothing and cannot be picked on the canvas.
-    if (kind.properties.curves?.refScope === 'layerCurves' && !o.curves?.length) warnings.push(`${o.id}: the shape has no curves, so it draws nothing. Create it with "d", or give it curves of its layer.`);
+    if (kind.properties.curves?.refScope === 'layerCurves' && !o.curves?.length && !o.loops?.length) warnings.push(`${o.id}: the shape has no curves, so it draws nothing. Create it with "d" or "at", or give it curves of its layer.`);
     // Poses name objects that exist and animatable properties of theirs, with valid values.
     for (const [prop, p] of Object.entries(kind.properties)) {
       if (p.type !== 'pose' || !o[prop] || typeof o[prop] !== 'object' || Array.isArray(o[prop])) continue;
@@ -259,6 +259,21 @@ function meshErrors(doc, schema, o, kind) {
       const track = ` A set of ${o.id}.points replaces the whole map: send every point (read them with get_document), or remove curve ${id} in the same batch.`;
       errors.push(`${o.id}.curves.${id}: ${missing.map((p) => `"${p}"`).join(', ')} ${missing.length > 1 ? 'are' : 'is'} not in ${o.id}.points (${known.join(', ') || 'none'}).${track}`);
     }
+  }
+  // Loops go through points of the layer, each one a neighbor of the next on some curve.
+  if (kind.properties.loops?.type === 'loops' && Array.isArray(o.loops) && o.parent) {
+    const layer = findObject(doc, o.parent);
+    const points = (layer && read(schema, layer, 'points')) ?? {};
+    const curves = (layer && read(schema, layer, 'curves')) ?? {};
+    o.loops.forEach((loop, i) => {
+      if (!layer || !Array.isArray(loop)) return;
+      const missing = [...new Set(loop.map((e) => loopEntryOf(e)?.p).filter((p) => typeof p === 'string' && !(p in points)))];
+      if (missing.length) return void errors.push(`${o.id}.loops[${i}]: ${missing.map((p) => `"${p}"`).join(', ')} ${missing.length > 1 ? 'are' : 'is'} not in ${layer.id}.points (${Object.keys(points).join(', ') || 'none'})`);
+      const via = loop.map((e) => loopEntryOf(e)?.via).filter((c) => typeof c === 'string' && !(c in curves));
+      if (via.length) return void errors.push(`${o.id}.loops[${i}]: via "${via[0]}" is not a curve of ${layer.id} (${Object.keys(curves).join(', ') || 'none'})`);
+      const { error } = resolveLoop(curves, loop);
+      if (error) errors.push(`${o.id}.loops[${i}]: ${error}. A loop goes around a region through points that are neighbors on its curves; to fill whole closed curves use "curves", or "at" to find the region at a point.`);
+    });
   }
   for (const [prop, p] of Object.entries(kind.properties)) {
     if (p.refScope !== 'layerCurves' || !Array.isArray(o[prop])) continue;

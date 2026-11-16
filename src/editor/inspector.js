@@ -59,7 +59,7 @@ export function mountInspector(root) {
     const data = obj ?? doc.meta;
     const others = obj ? state.selected.map((id) => findObject(doc, id)).filter((o) => o && o.id !== obj.id) : [];
     // With several: only what they all have (and that can be edited in bulk).
-    const common = ([prop, p]) => !others.length || (!['vertices', 'points', 'curves', 'stops'].includes(p.type) && others.every((o) => schema.types.get(o.type).properties[prop]?.type === p.type));
+    const common = ([prop, p]) => !others.length || (!['vertices', 'points', 'curves', 'loops', 'stops'].includes(p.type) && others.every((o) => schema.types.get(o.type).properties[prop]?.type === p.type));
     // The Live settings belong to Puppet clips (a scene is not triggered), and the auto wait, only with auto repeat.
     const fromLive = ([prop, p]) =>
       obj?.type !== 'animation' || others.length || p.group !== 'Live' || (read(schema, obj, 'usage') === 'puppet' && (!prop.startsWith('repeat_') || read(schema, obj, 'auto') === 'repeat'));
@@ -480,6 +480,13 @@ const CONTROLS = {
     const all = layer ? Object.keys(read(schema, layer, 'points') ?? {}).length : n;
     const moved = state.pose && value !== layer?.points;
     summary.textContent = moved ? `${n} of ${all} point${all === 1 ? '' : 's'} moved here` : `${n} point${n === 1 ? '' : 's'}${bound ? `, ${bound} bound to bones` : ''}`;
+    return summary;
+  },
+
+  loops({ value }) {
+    const summary = document.createElement('span');
+    const n = (value ?? []).length;
+    summary.textContent = n ? `${n} region${n === 1 ? '' : 's'} between welded curves` : 'none';
     return summary;
   },
 

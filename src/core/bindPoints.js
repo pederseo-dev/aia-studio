@@ -39,7 +39,7 @@ export function planBindPoints(doc, schema, layerId, bones, { points, shape, rel
       const shapes = children(doc, layerId).filter((o) => o.type === 'shape').map((o) => o.id);
       throw new Error(`"${shape}" is not a shape of ${layerId} (${shapes.join(', ') || 'none'}).${suggest(shape, shapes)}`);
     }
-    chosen = shapePointIds(read(schema, layer, 'curves'), s.curves);
+    chosen = shapePointIds(read(schema, layer, 'curves'), s.curves, s.loops);
   } else if (points !== undefined) {
     const missing = points.filter((k) => !keys.includes(String(k)));
     if (missing.length) throw new Error(`${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} not in ${layerId}.${type === 'vector' ? 'points' : 'vertices'} (${keys.join(', ') || 'none'})`);

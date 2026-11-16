@@ -3,9 +3,9 @@
 
 import { SAME_TIME, curveError } from './curves.js';
 import { vertexErrors } from './paths.js';
-import { pointsErrors, curvesErrors } from './mesh.js';
+import { pointsErrors, curvesErrors, loopsErrors } from './mesh.js';
 
-const PROPERTY_TYPES = new Set(['number', 'string', 'strings', 'boolean', 'color', 'enum', 'ref', 'asset', 'vertices', 'points', 'curves', 'stops', 'pose', 'tracks']);
+const PROPERTY_TYPES = new Set(['number', 'string', 'strings', 'boolean', 'color', 'enum', 'ref', 'asset', 'vertices', 'points', 'curves', 'loops', 'stops', 'pose', 'tracks']);
 const POSE_ID = /^[a-z][a-z0-9_]*$/;
 const COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 // Name of a file in the document's assets/ folder (see src/core/images.js): no folders or oddities.
@@ -83,8 +83,9 @@ export function validateValue(p, value) {
       return errors.length ? errors.slice(0, 5).join('; ') + (errors.length > 5 ? ` (and ${errors.length - 5} more)` : '') : null;
     }
     case 'points':
-    case 'curves': {
-      const errors = (p.type === 'points' ? pointsErrors : curvesErrors)(value);
+    case 'curves':
+    case 'loops': {
+      const errors = (p.type === 'points' ? pointsErrors : p.type === 'curves' ? curvesErrors : loopsErrors)(value);
       return errors.length ? errors.slice(0, 5).join('; ') + (errors.length > 5 ? ` (and ${errors.length - 5} more)` : '') : null;
     }
     case 'stops': {

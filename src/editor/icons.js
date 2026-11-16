@@ -7,6 +7,9 @@ const BONE = 'M8 10.2h8a2.4 2.4 0 1 1 3.2 1.8 2.4 2.4 0 1 1-3.2 1.8H8a2.4 2.4 0 
 // The shrunk bone in the top-left corner, with the same stroke width as the rest.
 const smallBone = `<path transform="translate(9 9) scale(0.72) translate(-12 -12) rotate(-45 12 12)" stroke-width="2.1" d="${BONE}"/>`;
 
+// A bean (Fill, Stroke and Both).
+const BEAN = 'M4 12.5c0-3.6 2.4-6 5.3-6 1.8 0 2.5 1.1 3.9 1.1s2.1-1.1 3.9-1.1c2.4 0 3.9 2.2 3.9 4.9 0 4.3-4.1 7.1-8.9 7.1-4.3 0-8.1-2.5-8.1-6z';
+
 export const ICONS = {
   select: stroke('<path d="M5 3.5 18.5 10l-6 1.8-2.6 6.2z"/>'),
   rotate: stroke('<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v4h-4"/>'),
@@ -16,6 +19,12 @@ export const ICONS = {
   artboard: stroke('<rect x="6.5" y="6.5" width="11" height="11"/><path d="M6.5 2.5v2M6.5 19.5v2M17.5 2.5v2M17.5 19.5v2M2.5 6.5h2M19.5 6.5h2M2.5 17.5h2M19.5 17.5h2"/>'),
   rect: stroke('<rect x="4" y="6" width="16" height="12" rx="1"/>'),
   ellipse: stroke('<ellipse cx="12" cy="12" rx="8" ry="6.5"/>'),
+  // Select Shape: the selection arrow over a small filled bean.
+  selectShape: stroke(`<path d="M4 3.5l9.5 4.5-4.2 1.3-1.8 4.4z"/><path transform="translate(10.5 10.5) scale(0.55) rotate(-30 12 12)" d="${BEAN}" fill="currentColor" stroke="none"/>`),
+  // Fill, Stroke and Both: a bean filled, outlined or both.
+  fill: stroke(`<path transform="rotate(-30 12 12)" d="${BEAN}" fill="currentColor" stroke="none"/>`),
+  stroke: stroke(`<path transform="rotate(-30 12 12)" d="${BEAN}"/>`),
+  both: stroke(`<path transform="rotate(-30 12 12)" d="${BEAN}" fill="currentColor" fill-opacity="0.4"/>`),
   // Classic diagonal bone (two knobs at each end) so it is not confused with a brush.
   bone: stroke('<path transform="rotate(-45 12 12)" d="M8 10.2h8a2.4 2.4 0 1 1 3.2 1.8 2.4 2.4 0 1 1-3.2 1.8H8a2.4 2.4 0 1 1-3.2-1.8A2.4 2.4 0 1 1 8 10.2z"/>'),
   // Bone tool family: the same small bone at the top left and, at the bottom right, the mark of
@@ -83,3 +92,28 @@ export const CHANNEL_ICON = {
 };
 
 export const ARROW = `<svg class="ico-arrow" viewBox="0 0 10 10" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5"/></svg>`;
+
+// The toolbar's tool icons are drawn at different sizes in their 24 box: each is fitted to the same 16 box (its
+// longest side), centered, so no tool looks bigger than another. Boxes measured with getBBox: [x, y, width, height].
+const TOOL_BOXES = {
+  select: [5, 3.5, 13.5, 14.5],
+  selectShape: [4, 3.5, 19.2, 18.9],
+  rotate: [4.5, 4, 15, 15.5],
+  path: [7, 3, 10, 18],
+  artboard: [2.5, 2.5, 19, 19],
+  fill: [2.3, 2.7, 20.7, 18.9],
+  stroke: [2.3, 2.7, 20.7, 18.9],
+  both: [2.3, 2.7, 20.7, 18.9],
+  addBone: [2.2, 2.2, 18.8, 18.8],
+  manipulate: [2.2, 2.2, 18.8, 18.8],
+  reparent: [2.2, 2.2, 18.8, 19.8],
+  bindLayer: [2.2, 2.2, 19.3, 19.3],
+  bindPoints: [2.2, 2.2, 20.2, 19.7],
+};
+for (const [name, [x, y, w, h]] of Object.entries(TOOL_BOXES)) {
+  const s = 16 / Math.max(w, h);
+  const t = [12 - s * (x + w / 2), 12 - s * (y + h / 2)].map((v) => +v.toFixed(2));
+  // The stroke keeps its width on screen.
+  const open = `<g transform="translate(${t.join(' ')}) scale(${+s.toFixed(3)})" stroke-width="${+(1.5 / s).toFixed(2)}">`;
+  ICONS[name] = ICONS[name].replace(/(<svg[^>]*>)([\s\S]*)<\/svg>$/, `$1${open}$2</g></svg>`);
+}

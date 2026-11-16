@@ -7,7 +7,7 @@ import { apply, invert } from '../core/geometry.js';
 import { svgContent } from '../render/svg.js';
 import { parseD } from '../core/paths.js';
 import { ellipseD, rectD } from '../core/mesh.js';
-import { commitShape, drawingTarget } from './drawing.js';
+import { autoProps, commitShape, drawingTarget } from './drawing.js';
 import { notify, docVisible, execute, schema, state, setState, select, subscribe, pickable } from './state.js';
 import { addImages, imagesOnly, assetUrl } from './images.js';
 import { createArtboard } from './artboard.js';
@@ -17,6 +17,8 @@ import { createPen } from './pen.js';
 import { createPoints } from './points.js';
 import { createTransform, isFree } from './transform.js';
 import { createShapePoints } from './shapePoints.js';
+import { createShapeTools, createFromPicked, isShapeTool } from './shapeTools.js';
+import { createSelectShape, isSelectShape } from './selectShape.js';
 import { togglePlayback } from './timeline.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -59,6 +61,8 @@ export function mountCanvas(container) {
   const points = createPoints(ctx);
   const bones = createBones(ctx);
   const artboard = createArtboard(ctx);
+  const shapeTools = createShapeTools(ctx);
+  const selectShape = createSelectShape(ctx);
 
   subscribe((c) => {
     if ('pose' in c) container.classList.toggle('mode-pose', !!state.pose);
@@ -67,7 +71,7 @@ export function mountCanvas(container) {
     if ('doc' in c || 'previewDoc' in c || 'pose' in c || 'params' in c || 'time' in c || 'livePose' in c) drawDocument();
     // Selecting a hidden variant of a switch shows it (only in the view): the document must be redrawn.
     else if ('selection' in c && JSON.stringify(variantsToShow()) !== showing) drawDocument();
-    else if ('selection' in c || 'editing' in c || 'vertex' in c || 'bindTarget' in c || 'bindPicked' in c) drawOverlay();
+    else if ('selection' in c || 'editing' in c || 'vertex' in c || 'bindTarget' in c || 'bindPicked' in c || 'shapePicked' in c) drawOverlay();
     if ('tool' in c) {
       container.className = `tool-${state.tool}${state.pose ? ' mode-pose' : ''}${state.live ? ' in-live' : ''}`;
       if (state.tool !== 'path' && pen.active()) pen.finish(false);
@@ -117,7 +121,7 @@ export function mountCanvas(container) {
     const view = state.live ? { pose: state.livePose } : clip ? { animation: clip.id, time: state.time, params: state.params ?? {} } : state.pose ? { pose: state.pose } : state.params ? { params: state.params } : {};
     const show = state.live || (state.params && !state.pose) ? {} : variantsToShow(doc);
     showing = JSON.stringify(show);
-    documentG.innerHTML = `${svgContent(doc, schema, { ...view, show, assets: (src) => assetUrl(src) })}<rect class="document-frame" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
+    documentG.innerHTML = `${svgContent(doc, schema, { ...view, show, curves: true, assets: (src) => assetUrl(src) })}<rect class="document-frame" width="${w}" height="${h}" vector-effect="non-scaling-stroke"/>`;
     // Locked: clicks pass through (they reach what is below), and its children inherit it.
     for (const o of doc.objects) if (o.locked) ctx.element(o.id)?.style.setProperty('pointer-events', 'none');
     drawOverlay();
@@ -139,6 +143,12 @@ export function mountCanvas(container) {
         }
       }
       points.draw();
+    } else if (isSelectShape()) {
+      // Select Shape outlines the picked shapes and the one under the pointer.
+      selectShape.draw();
+    } else if (isShapeTool() && !state.pose && !state.params) {
+      // Fill, Stroke and Both show the picked layer's points and the shape they would create.
+      shapeTools.draw();
     } else if (state.tool !== 'bindPoints') {
       // In a pose, handles only appear for what does not follow a bone (transform.draw decides). Bind Points shows
       // the layer's points instead (bones.draw).
@@ -221,6 +231,8 @@ export function mountCanvas(container) {
       else notify('Bind Points: click the bone the picked points should follow, then press Space', true);
       return;
     }
+    // Fill, Stroke and Both (as Moho's Create Shape): Space creates the shape over the picked points.
+    if (isShapeTool() && !state.pose && state.shapePicked.length) return createFromPicked();
     togglePlayback();
   });
 
@@ -258,6 +270,7 @@ export function mountCanvas(container) {
     if (handle) return state.editing ? points.handle(e, handle) : transform.handle(e, handle);
     // Alt + drag with Select, in the setup: drags a copy (as in Illustrator or Figma).
     if (e.altKey && state.tool === 'select' && !state.pose && !state.params && !state.editing && altDuplicate(e)) return;
+    if (isSelectShape()) return selectShape.pointerdown(e);
     // Dragging the picked shape moves its points (Transform Points), in the setup or in the open pose or clip.
     const hit = e.target.closest('[data-id]');
     if (shapePoints.active() && state.selected.includes(hit?.dataset.id) && !(e.ctrlKey || e.metaKey || e.shiftKey)) return shapePoints.move(e);
@@ -278,6 +291,7 @@ export function mountCanvas(container) {
     if (state.tool === 'reparent') return bones.pointerdownReparent(e);
     if (state.tool === 'bindLayer') return bones.pointerdownBindLayer(e);
     if (state.tool === 'bindPoints') return bones.pointerdownBindPoints(e);
+    if (isShapeTool()) return shapeTools.pointerdown(e);
     if (state.tool === 'path') return pen.pointerdown(e);
     if (state.tool === 'rotate' || state.tool === 'scale') return transform.withTool(e, state.tool);
     if (state.tool === 'rect' || state.tool === 'ellipse') return createShape(e, state.tool);
@@ -288,7 +302,11 @@ export function mountCanvas(container) {
     transform.selectAndMove(e);
   });
 
-  view.addEventListener('pointermove', (e) => state.tool === 'path' && pen.hover(e));
+  view.addEventListener('pointermove', (e) => {
+    if (state.tool === 'path') pen.hover(e);
+    else if (isShapeTool()) shapeTools.hover(e);
+    else if (isSelectShape()) selectShape.hover(e);
+  });
 
   view.addEventListener('dblclick', (e) => {
     if (state.tool !== 'select') return;
@@ -383,7 +401,7 @@ export function mountCanvas(container) {
         const [bx, by] = c.w < 4 && c.h < 4 ? [ax + 100, ay + 100] : apply(target.toLocal, ...c.end);
         const [x, y, w, h] = c.w < 4 && c.h < 4 ? [ax - 50, ay - 50, 100, 100] : [Math.min(ax, bx), Math.min(ay, by), Math.abs(bx - ax), Math.abs(by - ay)];
         const d = kind === 'ellipse' ? ellipseD(x + w / 2, y + h / 2, w / 2, h / 2) : rectD(x, y, w, h);
-        commitShape(target, parseD(d));
+        commitShape(target, parseD(d), autoProps(true));
       },
     );
   }

@@ -4,7 +4,7 @@
 import { apply } from '../core/geometry.js';
 import { vertexFromTangents, verticesAD } from '../core/paths.js';
 import { state } from './state.js';
-import { commitShape, drawingTarget } from './drawing.js';
+import { autoProps, commitShape, drawingTarget } from './drawing.js';
 
 const NEAR = 9; // px on screen to close on the first vertex
 
@@ -74,8 +74,8 @@ export function createPen(ctx) {
       const [x, y] = apply(m, ...pt.p);
       return vertexFromTangents(x, y, linear(pt.in), linear(pt.out));
     });
-    // An open line is a stroke without fill, as before.
-    commitShape(target, [{ vertices, closed }], closed ? {} : { fill: null, stroke: '#2b2135', strokeWidth: 3 });
+    // Auto fill / Auto stroke decide its fill and stroke (an open line gets a stroke, it cannot be filled).
+    commitShape(target, [{ vertices, closed }], autoProps(closed));
   }
 
   return {
