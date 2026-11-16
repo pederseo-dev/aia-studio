@@ -69,6 +69,21 @@ project setup. The rest of the parts come after the open topics are decided.
 - The historical records come along as they are (`docs/auditorias.md`, `docs/pruebas-ia/`, `docs/investigacion/`,
   and the old design docs as references), all under `docs/v1/`.
 - **At the end** `rebuild` replaces `main`, and the old code stays reachable in a tag (for example `v1-final`).
+- The old code is brought over piece by piece from `main` (`git show main:<file>`) when a part needs it: kept when it
+  proved right, rewritten clean otherwise, never copied wholesale.
+- This file, on the `rebuild` branch, is the official record of the rebuild: decisions and the plan are written here.
+
+### 4. Vertical slices (2026-11-16)
+
+After the base, the first part is a **thin slice that works end to end** (document, operations, render, runtime, the
+`aia` CLI and the MCP, with simple shapes only). Each later part adds **one whole capability**: its model, its `aia`
+commands, its guide topic, its editor tools, tests, an AI test and an audit. No part leaves a layer for later.
+
+### 5. The runtime early, as the contract (2026-11-16)
+
+A minimal runtime (plays a document without the DOM) exists from the first slice, and every later part must play in
+it. The export was the last phase of v1 and was never built, so the model was never checked against it; here it is
+checked from the start.
 
 ## Open topics
 
@@ -84,7 +99,29 @@ project setup. The rest of the parts come after the open topics are decided.
 
 ## Build plan
 
-To be written when the open topics are decided.
+Agreed on 2026-11-16 (decisions 4 and 5). Each part is closed with `npm test` + `npm run typecheck`, an AI test
+(an AI with only the CLI or the MCP does the part's tasks; results in `docs/ai-tests/`) and an audit. A part does
+not start while the open topics it depends on are undecided. «From v1» names the files on `main` the part draws on:
+*keep* = brought nearly as is, *rewrite* = the idea kept, the code written clean.
+
+| Part | What | From v1 | Depends on |
+| --- | --- | --- | --- |
+| 1 ✅ | **Base** | `electron/main.js`, `server/folder.js`, `server/app.js` (rewrite) | — |
+| 2 | **Thin slice, end to end**, with simple shapes (rect, ellipse, path, group, styles): document, schema, operations, store with history and undo by origin, live notices, SVG/PNG render, a minimal runtime, the `aia` CLI with `help` and `guide <topic>`, the thin MCP (`aia(command)` + `render`) | keep: `geometry`, `curves`, `paths`, `render/svg`, `server/png`, `server/events`; rewrite: `document`, `schema`, `operations` (no sugars inside `set`), `server/store`, `guide` | topics 2 (the basics) and 3 |
+| 3 | **Editor base**: canvas, Layers, an inspector generated from the schema, selection and transform, a console with the `aia` commands | rewrite: `editor/state`, `canvas`, `layers`, `inspector`, `transform` (small files, no global state) | topic 5 |
+| 4 | **Drawing**: one drawing model, regions, Fill / Stroke | rewrite: `core/mesh`, `regions`, `meshTransform`; editor drawing tools | topic 2 |
+| 5 | **Skeleton and binding** | rewrite: `core/skeleton`, `bindPoints`; `editor/bones` | topic 2 |
+| 6 | **Animation**: poses and clips, params and drivers, the timeline | rewrite: `core/animation`, `blend`, `poseValues`; `editor/timeline`, `poses`, `parameters` | topic 2 |
+| 7 | **Runtime and export**: `.aia` + the JS runtime for apps, the manifest, video and Lottie | rewrite: `core/live`, `manifest` | topics 1 and 6 |
+| 8 | **Connect your AI and release**: Claude Desktop setup, installer, signing | keep: `server/aiClients`, `mcpStatus`, `aiRoutes`; `editor/connectAi` | — |
+| End | `rebuild` replaces `main`; the old code stays in the tag `v1-final` | — | — |
+
+Not brought over: the `painted` type and the coexisting drawing models, the 46 KB guide (replaced by
+`aia guide <topic>`), the 20 MCP tools (replaced by `aia(command)` + `render`), the `.claude/agents/` written for
+them (rewritten when the `aia` commands exist).
+
+The craft recipes (topic 4; draft in `docs/v1/plan.md`, «Pendiente: guía de oficio») go into the guide topic of the
+part they belong to: drawing from a reference in 4, rig order in 5, clips and the walk cycle in 6.
 
 **Part 1, the base (2026-11-16):** the Electron shell (single instance, a window, external links open outside, a
 stable local port), the documents folder (`--documents`, `AIA_DOCUMENTS`, the repo's `documents/` from source,
