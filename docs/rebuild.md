@@ -135,6 +135,7 @@ transform a part by name, weld by name) come after the first AI test shows what 
 | `aia show <doc> [id]` | The JSON as it is saved: the whole document or one object |
 | `aia ops <doc> [--note "…"] <batch>` (or `--file <path>`) | Applies a batch with the editor's engine, origin `ai`; errors carry the engine's message |
 | `aia move <doc> <point>... --by dx,dy \| --to x,y` | Moves points by name: `head.chin`, `head.3` (by index) or a point group `face.upper_lid`; what shares them follows (added after the first AI test) |
+| `aia transform <doc> <id> --move dx,dy --rotate deg --scale s` · `--apply` | A layer's own transform, or a part's vertices; Apply transform |
 | `aia weld <doc> <point> <target>` (`--join`, `--on <part>`) · `aia unweld <doc> <point>...` | Welding by name, as in point editing |
 | `aia name <doc> <point> <name>` · `aia add-point <doc> <part> --at x,y` | Name a point; add one on a line without changing its shape |
 | `aia follow <doc> <point> <point>` (`--long`, `--off`) · `aia group <doc> <layer>.<group> <point>...` | Followed stretches; point groups |
@@ -164,7 +165,23 @@ the commands above, so a weld is the same whoever makes it. The store settles ev
 (`settleOps`): giving a shared vertex a place moves the point it shares, and deleting a shared point (or its part)
 leaves the vertices that shared it where they were. Before, the editor did this and the AI's same batch was refused.
 `aia show --resolved` gives shared vertices their x, y. Still without a command: turning points into corners or
-curves (the AI writes the handles), and transforming whole parts by name (decision 8).
+curves (the AI writes the handles).
+
+**Trying Design mode, step 11 (2026-11-16): the layer transform**, as Moho's Transform Layer (agreed with the user).
+A layer, vector or group, has `x`, `y`, `rotation`, `scaleX`, `scaleY` that move, turn and scale everything in it
+around its origin without changing any vertex; a group's transform applies to the layers in it. They draw as a
+`<g transform>` (`src/core/transform.js`: the layer matrix, `worldOf`, and turning a matrix back into the five
+values). The origin stays where it is: the first time a layer is transformed, its origin (null = the center of its
+content) is fixed there, and moving the origin of a transformed layer makes up with its `x`, `y`, so nothing jumps.
+Parts are still only geometry: transforming them rewrites their vertices, in their layer's coordinates.
+- **Editor:** with a layer selected, Move, Scale and Rotate (and the arrow keys) change its transform; its frame turns
+  with it and its handles scale along its own axes. Dragging on its content moves the layer; a click picks the part.
+  Point editing, the Pen, Rectangle and Ellipse work inside a moved, turned or scaled layer (the pointer is turned into
+  the layer's coordinates; points and handles keep their size on the screen).
+- **Apply transform** (in the Inspector of a vector layer, and `aia transform <doc> <layer> --apply`) puts the layer's
+  transform into its parts' vertices and leaves it without one.
+- **AI:** `aia transform <doc> <id> --move dx,dy --rotate deg --scale s` changes a layer's transform or rewrites a
+  part's vertices, around its origin (the high-level transform by name that decision 8 promised).
 
 ## Open topics
 
@@ -254,7 +271,7 @@ nothing is selected, and what several parts share (mixed values show empty; a ch
   scale around. It shows as a crosshair that can be dragged (double-click: back to the center) and in the Inspector.
   It moves along with its part. With a vector layer selected, the Transform tools transform all its content around
   the layer's origin. (A layer still has no transform of its own: its content's vertices change. A non-destructive
-  layer transform, as Moho's Transform Layer, is still to be decided.)
+  layer transform, as Moho's Transform Layer, came in step 11.)
 - **Colors:** fill and stroke are swatches; a click opens a popover (palette, the system picker, a hex field, None).
   The stroke's width sits on the same row, and colors and numbers show live on the canvas while they change.
 - **Auto fill and auto stroke:** with the Pen, Rectangle or Ellipse, the bar and the Inspector («New shapes») set the

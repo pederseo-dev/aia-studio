@@ -5,6 +5,7 @@
 import { childrenOf } from './document.js';
 import { outlineOf } from './geometry.js';
 import { resolveDoc } from './points.js';
+import { svgTransform } from './transform.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc
@@ -62,7 +63,8 @@ function drawChildren(doc, parent) {
   for (const object of childrenOf(doc, parent)) {
     if (object.visible === false) continue;
     if (object.type === 'group' || object.type === 'vector') {
-      nodes.push({ tag: 'g', attrs: { 'data-id': object.id }, children: drawChildren(doc, object.id) });
+      const transform = svgTransform(doc, object);
+      nodes.push({ tag: 'g', attrs: { 'data-id': object.id, ...(transform ? { transform } : {}) }, children: drawChildren(doc, object.id) });
       continue;
     }
     const fill = object.fill === undefined ? DEFAULTS.fill : object.fill;

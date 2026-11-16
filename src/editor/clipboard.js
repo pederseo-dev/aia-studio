@@ -1,6 +1,6 @@
 // Copies of parts: Ctrl+D duplicates the selection (a little down and to the right), Ctrl+C / Ctrl+V copy and paste
-// it (into the active vector layer, in the same place), Alt+drag with Select drags a copy, and the arrow keys nudge
-// the selection 1 px (Shift: 10 px). Copies get free names from their originals: rect_1 → rect_2.
+// it (into the active vector layer, in the same place) and Alt+drag with Select drags a copy (selectTool.js; the
+// arrow keys nudge there too). Copies get free names from their originals: rect_1 → rect_2.
 
 import { findObject, idFromName } from '../core/document.js';
 import { IDENTITY, transformPart, translate } from '../core/geometry.js';
@@ -23,7 +23,7 @@ let copied = [];
  * The ops that create copies of parts, each moved by `m`, in the layer `layer` (or each in its own layer).
  * @param {Doc} doc
  * @param {DocObject[]} parts
- * @param {Matrix} m
+ * @param {Matrix | ((part: DocObject) => Matrix)} m the same for all, or one for each part (in its layer's coordinates)
  * @param {string} [layer]
  * @returns {{ ops: Operation[], ids: string[] }}
  */
@@ -36,7 +36,8 @@ export function copyOps(doc, parts, m, layer) {
     const id = idFromName(part.id, (x) => x === 'meta' || !!findObject(doc, x) || used.has(x));
     used.add(id);
     const { id: _id, type, parent, ...props } = structuredClone(part);
-    Object.assign(props, m === IDENTITY ? {} : transformPart(part, m));
+    const matrix = typeof m === 'function' ? m(part) : m;
+    Object.assign(props, matrix === IDENTITY ? {} : transformPart(part, matrix));
     // A copy does not share the original's points: its shared vertices stay where they are, as its own.
     if (Array.isArray(props.vertices)) props.vertices = props.vertices.map(({ ref: _ref, ...v }) => v);
     ops.push({ op: 'create', type, id, parent: layer ?? parent, props });
@@ -71,17 +72,5 @@ export function paste() {
     : doc;
   const { ops, ids } = copyOps(withLayer, copied, IDENTITY, target.layer);
   run([...target.ops, ...ops], { select: ids, note: `Paste ${ids.length > 1 ? `${ids.length} parts` : ids[0]}` });
-  return true;
-}
-
-/** @param {number} dx @param {number} dy */
-export function nudge(dx, dy) {
-  const parts = selectedParts();
-  if (!parts.length) return false;
-  const m = translate(dx, dy);
-  run(
-    parts.map((part) => ({ op: 'set', target: part.id, props: transformPart(part, m) })),
-    { select: state.selection, note: 'Nudge' },
-  );
   return true;
 }

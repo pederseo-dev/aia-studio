@@ -1,7 +1,7 @@
 {
   "name": "layer",
   "abstract": true,
-  "description": "Everything that shows in Layers. The order among siblings is the drawing order: the last one is drawn on top.",
+  "description": "Everything that shows in Layers. The order among siblings is the drawing order: the last one is drawn on top. A layer has a transform of its own (x, y, rotation, scaleX, scaleY around its origin) that moves, turns and scales everything inside it without changing the vertices; a group's transform applies to the layers in it.",
   "help": "Anything in the Layers panel.",
   "properties": {
     "visible": {
@@ -16,18 +16,48 @@
       "description": "Editor lock: the layer and its children can't be picked or changed on the canvas. It does not change how it looks. It is the user's: the AI does not change a locked layer or its children unless asked, and does not unlock it.",
       "help": "Locked layers can't be picked or changed on the canvas."
     },
+    "x": {
+      "type": "number",
+      "default": 0,
+      "description": "Moves the layer and everything in it right (px, in its parent's coordinates), without changing its parts' vertices: Moho's Transform Layer.",
+      "help": "Moves the layer right, without changing its drawing."
+    },
+    "y": {
+      "type": "number",
+      "default": 0,
+      "description": "Moves the layer and everything in it down (px, in its parent's coordinates), without changing its parts' vertices.",
+      "help": "Moves the layer down, without changing its drawing."
+    },
+    "rotation": {
+      "type": "number",
+      "default": 0,
+      "description": "Turns the layer and everything in it around its origin, in degrees (clockwise), without changing its parts' vertices.",
+      "help": "Turns the layer around its origin (degrees)."
+    },
+    "scaleX": {
+      "type": "number",
+      "default": 1,
+      "description": "Scales the layer and everything in it horizontally around its origin (1 = as drawn; negative flips it), without changing its parts' vertices.",
+      "help": "Horizontal scale around the origin (1 = as drawn)."
+    },
+    "scaleY": {
+      "type": "number",
+      "default": 1,
+      "description": "Scales the layer and everything in it vertically around its origin (1 = as drawn; negative flips it), without changing its parts' vertices.",
+      "help": "Vertical scale around the origin (1 = as drawn)."
+    },
     "originX": {
       "type": "number",
       "default": null,
       "nullable": true,
-      "description": "X of the origin: the point the layer's content rotates and scales around, in the layer's coordinates. null = the center of its box. It moves along when the layer's content moves.",
+      "description": "X of the origin: the point the layer turns and scales around, in the layer's own coordinates. null = the center of its content (the editor and aia set it when the layer is first transformed, so it stays put).",
       "help": "Origin X: the point it rotates and scales around. Empty = its center."
     },
     "originY": {
       "type": "number",
       "default": null,
       "nullable": true,
-      "description": "Y of the origin: the point the layer's content rotates and scales around, in the layer's coordinates. null = the center of its box. It moves along when the layer's content moves.",
+      "description": "Y of the origin: the point the layer turns and scales around, in the layer's own coordinates. null = the center of its content (the editor and aia set it when the layer is first transformed, so it stays put).",
       "help": "Origin Y: the point it rotates and scales around. Empty = its center."
     }
   }

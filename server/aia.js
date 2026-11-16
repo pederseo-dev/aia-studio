@@ -7,7 +7,8 @@ import fs from 'node:fs/promises';
 import { findObject, subtree } from '../src/core/document.js';
 import { toSvg } from '../src/core/draw.js';
 import { guide } from '../src/core/guide.js';
-import { insertVertex, nearestOnOutline, verticesOf } from '../src/core/geometry.js';
+import { around, bounds, insertVertex, multiply, nearestOnOutline, originOf, rotate, scale, transformPart, translate, verticesOf } from '../src/core/geometry.js';
+import { applyTransformOps, transformOf, transformProps } from '../src/core/transform.js';
 import { movePointsOps, pointsNamed, resolveDoc } from '../src/core/points.js';
 import { followOps, groupOps, namePoint, unweld, weld } from '../src/core/weld.js';
 import { svgToPng } from './png.js';
@@ -21,7 +22,7 @@ import { svgToPng } from './png.js';
 
 export class AiaError extends Error {}
 
-const BOOLEAN_FLAGS = new Set(['yes', 'all', 'join', 'long', 'off', 'none', 'add', 'remove', 'delete', 'resolved']);
+const BOOLEAN_FLAGS = new Set(['yes', 'all', 'join', 'long', 'off', 'none', 'add', 'remove', 'delete', 'resolved', 'apply']);
 const RENDER_MAX = 2000;
 
 /**
@@ -302,6 +303,63 @@ export function createAia({ store, schema }) {
         await store.apply(id, ops, { origin: ORIGIN, note });
         const where = by ? `by ${by.x}, ${by.y}` : `to ${to?.x}, ${to?.y}`;
         return ok(`Moved ${names.join(', ')} ${where}. Changed: ${ops.map((o) => o.target).join(', ')}.`);
+      },
+    },
+
+    transform: {
+      usage: 'aia transform <doc> <id> [--move dx,dy] [--rotate deg] [--scale s | sx,sy] | --apply',
+      summary: 'Moves, turns and scales a layer (its own transform) or a part (its vertices), around its origin',
+      details:
+        'A layer (vector or group) keeps its drawing and changes its x, y, rotation, scaleX, scaleY; the first time,\n' +
+        'its origin is fixed where its center is, so it stays put when its content changes. A part is only geometry:\n' +
+        'its vertices are rewritten. --move is in the coordinates the object lives in (a part: its layer’s).\n' +
+        '--apply puts a vector layer’s transform into its parts’ vertices and leaves it without one.\n' +
+        'Example: aia transform robot arm_l --rotate -20',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const target = need(args, 1, 'the layer or part');
+        const doc = await resolved(id);
+        const object = findObject(doc, target);
+        if (!object) throw new AiaError(`${id} has no object "${target}"`);
+        const isLayer = object.type === 'vector' || object.type === 'group';
+        if (args.flags.apply === true) {
+          let ops;
+          try {
+            ops = applyTransformOps(doc, object);
+          } catch (e) {
+            throw new AiaError(e.message);
+          }
+          if (!ops.length) return ok(`${target} has no transform to apply.`);
+          await store.apply(id, ops, { origin: ORIGIN, note: `Apply the transform of ${target}` });
+          return ok(`Applied the transform of ${target} to its parts' vertices.`);
+        }
+        const move = pair(args, 'move') ?? { x: 0, y: 0 };
+        const degrees = args.flags.rotate === undefined ? 0 : Number(args.flags.rotate);
+        if (!Number.isFinite(degrees)) throw new AiaError('--rotate must be a number of degrees');
+        const scaleText = args.flags.scale;
+        const [sx, sy = sx] = typeof scaleText === 'string' ? scaleText.split(',').map(Number) : [1, 1];
+        if (!Number.isFinite(sx) || !Number.isFinite(sy) || !sx || !sy) throw new AiaError('--scale must be a number (or sx,sy), not 0');
+        if (!move.x && !move.y && !degrees && sx === 1 && sy === 1) throw new AiaError('Say what to do: --move dx,dy, --rotate deg, --scale s (or --apply)');
+        /** @type {import('../src/core/operations.js').Operation[]} */
+        let ops;
+        if (isLayer) {
+          const t = transformOf(object);
+          const next = { x: t.x + move.x, y: t.y + move.y, rotation: t.rotation + degrees, scaleX: t.scaleX * sx, scaleY: t.scaleY * sy };
+          ops = [{ op: 'set', target, props: transformProps(doc, object, next) }];
+        } else if (object.type === 'path') {
+          const box = bounds([object]);
+          const pivot = originOf(object) ?? (box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : { x: 0, y: 0 });
+          const m = multiply(translate(move.x, move.y), around(pivot, multiply(rotate(degrees), scale(sx, sy))));
+          ops = [{ op: 'set', target, props: transformPart(object, m) }];
+        } else throw new AiaError(`${target} is a ${object.type}: only layers and parts transform`);
+        await store.apply(id, ops, { origin: ORIGIN, note: `Transform ${target}` });
+        const after = (await store.get(id, ORIGIN)).document;
+        const now = findObject(after, target);
+        if (isLayer && now) {
+          const t = transformOf(now);
+          return ok(`${target}: x ${t.x}, y ${t.y}, rotation ${t.rotation}, scale ${t.scaleX}, ${t.scaleY} (its vertices are unchanged).`);
+        }
+        return ok(`Transformed ${target}'s vertices.`);
       },
     },
 

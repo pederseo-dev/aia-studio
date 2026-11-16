@@ -1,14 +1,33 @@
-// The Transform tools, for the parts of vector layers, or a whole vector layer's content when the layer is selected.
+// The Transform tools, for the parts of vector layers and for whole layers.
 //   Select (V) does everything: click a part to pick it (Shift+click: add or take out), drag it to move (Shift:
 //   straight; Alt: a copy), drag on empty space for a marquee (a click there goes back to the layer), the square
 //   handles scale (Shift: keep proportions; Alt: from the origin), the round handle rotates (Shift: 15° steps).
 //   A second click on the picked part edits the points of its layer (see pointEdit.js).
 //   Move (M), Scale (S) and Rotate (T) do only that, dragging anywhere, as Moho's separate tools.
+// With a layer selected, the tools change the layer's own transform (x, y, rotation, scale; Moho's Transform Layer):
+// its parts' vertices stay as they are. Dragging on its content moves the layer; a click without moving picks the
+// part. Parts are only geometry: transforming them rewrites their vertices, in their layer's coordinates.
 // The origin (the crosshair) is what a part or a layer rotates and scales around: drag it to move it, double-click it
 // to bring it back to the center. While dragging, the canvas shows a preview; one batch is saved when released.
+// Everything here is measured on the artboard and turned into each object's own coordinates (core/transform.js).
 
 import { findObject } from '../core/document.js';
-import { around, bounds, originOf, rotate, round2, scale, transformOrigin, transformPart, translate } from '../core/geometry.js';
+import { IDENTITY, apply, around, bounds, multiply, originOf, rotate, round2, scale, transformPart, translate } from '../core/geometry.js';
+import {
+  conjugate,
+  contentBounds,
+  decompose,
+  invert,
+  isTransformed,
+  layerMatrix,
+  mapBox,
+  moveLayerOrigin,
+  parentWorldOf,
+  pivotOf as layerPivot,
+  transformOf,
+  transformProps,
+  worldOf,
+} from '../core/transform.js';
 import { copyOps } from './clipboard.js';
 import { addPainter, onToolDown, showPreview } from './canvas.js';
 import { editPoints, inShownLayer, isLocked, run, select, selectMany, selectedParts, state, toggleSelect } from './state.js';
@@ -23,6 +42,7 @@ import { drag, element, screen, svg, toDoc } from './view.js';
  * @typedef {import('../core/geometry.js').Box} Box
  * @typedef {import('./view.js').Point} Point
  * @typedef {{ parts: DocObject[], layer: DocObject | null }} Subject
+ * @typedef {{ box: Box, f: Matrix }} Frame the box around a subject in a frame of its own, and that frame's matrix to the artboard
  */
 
 const HANDLE = 7; // screen px
@@ -38,41 +58,83 @@ const HANDLES = /** @type {const} */ ({
 /** @param {Box} b @param {number} hx @param {number} hy */
 const onFrame = (b, hx, hy) => ({ x: b.x + ((hx + 1) / 2) * b.width, y: b.y + ((hy + 1) / 2) * b.height });
 
+const isLayerType = (/** @type {string | undefined} */ type) => type === 'vector' || type === 'group';
+
 /**
- * What the tools transform: the picked parts, or every editable part of the selected vector layer.
+ * What the tools transform: the selected layer (its own transform), or the picked parts.
  * @param {Doc | null} [doc] @returns {Subject}
  */
 function subject(doc = state.document) {
   const only = doc && state.selection.length === 1 ? findObject(doc, state.selection[0]) : undefined;
-  if (doc && only?.type === 'vector') {
-    const parts = doc.objects.filter((o) => o.parent === only.id && isPart(o.type) && inShownLayer(o.id) && !isLocked(o.id));
-    return { parts, layer: isLocked(only.id) ? null : only };
-  }
+  if (doc && isLayerType(only?.type)) return { parts: [], layer: only && !isLocked(only.id) ? only : null };
   const ids = new Set(state.selection);
   return { parts: doc ? doc.objects.filter((o) => ids.has(o.id) && isPart(o.type)) : [], layer: null };
 }
 
-/** The point a subject rotates and scales around: its origin if set, else the center of its box. @param {Subject} s */
-function pivotOf(s) {
-  const owner = s.layer ?? (s.parts.length === 1 ? s.parts[0] : null);
-  const origin = owner && originOf(owner);
-  if (origin) return origin;
-  const box = bounds(s.parts);
-  return box ? onFrame(box, 0, 0) : null;
+/** Whether there is something to transform. @param {Subject} s */
+const hasSubject = (s) => !!s.layer || s.parts.length > 0;
+
+/** A part's box on the artboard. @param {Doc} doc @param {DocObject} part */
+const worldBox = (doc, part) => {
+  const box = bounds([part]);
+  return box && mapBox(box, worldOf(doc, part.id));
+};
+
+/**
+ * The frame of a subject: for parts, their box on the artboard; for a layer, its content in the layer's own turned
+ * frame, so its handles scale along the layer's axes (and the frame turns with it).
+ * @param {Subject} s @param {Doc} [doc] @returns {Frame | null}
+ */
+function frameOf(s, doc = /** @type {Doc} */ (state.document)) {
+  if (s.layer) {
+    const content = contentBounds(doc, s.layer);
+    if (!content) return null;
+    const t = transformOf(s.layer);
+    const p = layerPivot(doc, s.layer);
+    return {
+      box: mapBox(content, around(p, scale(t.scaleX, t.scaleY))),
+      f: multiply(parentWorldOf(doc, s.layer), multiply(translate(t.x, t.y), around(p, rotate(t.rotation)))),
+    };
+  }
+  const boxes = s.parts.map((part) => worldBox(doc, part)).filter((b) => !!b);
+  if (!boxes.length) return null;
+  const x = Math.min(...boxes.map((b) => b.x));
+  const y = Math.min(...boxes.map((b) => b.y));
+  return { box: { x, y, width: Math.max(...boxes.map((b) => b.x + b.width)) - x, height: Math.max(...boxes.map((b) => b.y + b.height)) - y }, f: IDENTITY };
+}
+
+/** The point a subject rotates and scales around, on the artboard: its origin, else the center of its frame. @param {Subject} s @param {Doc} [doc] */
+function pivotOf(s, doc = /** @type {Doc} */ (state.document)) {
+  if (s.layer) return apply(worldOf(doc, s.layer.id), layerPivot(doc, s.layer));
+  const origin = s.parts.length === 1 ? originOf(s.parts[0]) : null;
+  if (origin) return apply(worldOf(doc, s.parts[0].id), origin);
+  const frame = frameOf(s, doc);
+  return frame ? apply(frame.f, onFrame(frame.box, 0, 0)) : null;
+}
+
+/**
+ * The props that change for a matrix that acts on the artboard: a layer's transform, or each part's vertices (in its
+ * layer's coordinates).
+ * @param {Subject} s @param {Matrix} m
+ * @returns {Map<string, Record<string, unknown>>}
+ */
+function changesFor(s, m) {
+  const doc = /** @type {Doc} */ (state.document);
+  /** @type {Map<string, Record<string, unknown>>} */
+  const changes = new Map();
+  if (s.layer) {
+    const matrix = multiply(conjugate(m, parentWorldOf(doc, s.layer)), layerMatrix(doc, s.layer));
+    changes.set(s.layer.id, transformProps(doc, s.layer, decompose(doc, s.layer, matrix)));
+  }
+  for (const part of s.parts) changes.set(part.id, transformPart(part, conjugate(m, worldOf(doc, part.id))));
+  return changes;
 }
 
 /** The saved document with a subject changed by a matrix (the preview of a drag). @param {Subject} s @param {Matrix} m */
 function changedDoc(s, m) {
   const doc = /** @type {Doc} */ (state.document);
-  const ids = new Set(s.parts.map((p) => p.id));
-  return {
-    ...doc,
-    objects: doc.objects.map((o) => {
-      if (ids.has(o.id)) return { ...o, ...transformPart(o, m) };
-      if (s.layer && o.id === s.layer.id) return { ...o, ...transformOrigin(o, m) };
-      return o;
-    }),
-  };
+  const changes = changesFor(s, m);
+  return { ...doc, objects: doc.objects.map((o) => (changes.has(o.id) ? { ...o, ...changes.get(o.id) } : o)) };
 }
 
 /** @param {Subject} s @param {string} verb */
@@ -80,16 +142,15 @@ const noteFor = (s, verb) => `${verb} ${s.layer ? s.layer.id : s.parts.length > 
 
 /** Saves a transform of the subject, or copies of its parts. @param {Subject} s @param {Matrix} m @param {string} verb @param {boolean} [asCopy] */
 function commit(s, m, verb, asCopy = false) {
-  if (asCopy) {
+  const doc = /** @type {Doc} */ (state.document);
+  if (asCopy && s.parts.length) {
     // The originals go back to their place right away; the copies appear where they were dropped.
     showPreview(null);
-    const { ops, ids } = copyOps(/** @type {Doc} */ (state.document), s.parts, m);
+    const { ops, ids } = copyOps(doc, s.parts, (part) => conjugate(m, worldOf(doc, part.id)));
     run(ops, { select: ids, note: noteFor(s, 'Copy of') });
     return;
   }
-  /** @type {import('../core/operations.js').Operation[]} */
-  const ops = s.parts.map((part) => ({ op: 'set', target: part.id, props: transformPart(part, m) }));
-  if (s.layer && originOf(s.layer)) ops.push({ op: 'set', target: s.layer.id, props: transformOrigin(s.layer, m) });
+  const ops = [...changesFor(s, m)].map(([target, props]) => ({ op: 'set', target, props }));
   // The preview stays until the saved document arrives, so nothing jumps back to where it was.
   run(ops, { select: state.selection, note: noteFor(s, verb) }).finally(() => showPreview(null));
 }
@@ -99,6 +160,17 @@ export function partAt(target) {
   const id = /** @type {Element} */ (target)?.closest?.('.content [data-id]')?.getAttribute('data-id');
   const object = id && state.document ? findObject(state.document, id) : undefined;
   return object && isPart(object.type) && !isLocked(object.id) ? object : undefined;
+}
+
+/** The selected layer, if the part is inside it (then dragging the part moves the layer). @param {DocObject} part */
+function selectedLayerHolding(part) {
+  const doc = state.document;
+  const s = subject();
+  if (!doc || !s.layer) return null;
+  for (let o = part.parent ? findObject(doc, part.parent) : undefined; o; o = o.parent ? findObject(doc, o.parent) : undefined) {
+    if (o.id === s.layer.id) return s;
+  }
+  return null;
 }
 
 /**
@@ -131,26 +203,30 @@ function moveDrag(event, s, onClick) {
   );
 }
 
-/** Scales from a handle of the frame (Alt: from the origin). @param {PointerEvent} event @param {keyof typeof HANDLES} handle */
+/** Scales from a handle of the frame (Alt: from the origin), along the frame's axes. @param {PointerEvent} event @param {keyof typeof HANDLES} handle */
 function handleScale(event, handle) {
   const s = subject();
-  const box = bounds(s.parts);
+  const frame = frameOf(s);
   const pivot = pivotOf(s);
-  if (!box || !pivot) return;
+  if (!frame || !pivot) return;
+  const { box, f } = frame;
+  const back = invert(f);
+  const pivotInFrame = apply(back, pivot);
   const [hx, hy] = HANDLES[handle];
   /** @type {Matrix} */
   let m = translate(0, 0);
   drag(
     event,
-    (p, e) => {
-      const anchor = e.altKey ? pivot : onFrame(box, -hx, -hy);
+    (world, e) => {
+      const p = apply(back, world);
+      const anchor = e.altKey ? pivotInFrame : onFrame(box, -hx, -hy);
       const grip = onFrame(box, hx, hy);
       /** @param {'x' | 'y'} axis @param {number} along */
       const factor = (axis, along) => {
         const span = grip[axis] - anchor[axis];
         if (!along || Math.abs(span) < 1e-6) return 1;
-        const f = (p[axis] - anchor[axis]) / span;
-        return Math.abs(f) < 0.01 ? Math.sign(f || 1) * 0.01 : f;
+        const k = (p[axis] - anchor[axis]) / span;
+        return Math.abs(k) < 0.01 ? Math.sign(k || 1) * 0.01 : k;
       };
       let sx = factor('x', hx);
       let sy = factor('y', hy);
@@ -159,7 +235,8 @@ function handleScale(event, handle) {
         sx = Math.sign(sx || 1) * Math.abs(k);
         sy = Math.sign(sy || 1) * Math.abs(k);
       }
-      m = around(anchor, scale(sx, sy));
+      // Scaled in the frame, seen on the artboard.
+      m = multiply(f, multiply(around(anchor, scale(sx, sy)), back));
       showPreview(changedDoc(s, m));
     },
     () => commit(s, m, 'Scale'),
@@ -207,29 +284,46 @@ function rotateDrag(event) {
   );
 }
 
+/**
+ * The props that put an owner's origin at a point of the artboard (null: back to the center). A transformed layer
+ * makes up for it with its x, y, so it does not move.
+ * @param {DocObject} owner @param {Point | null} world
+ */
+function originProps(owner, world) {
+  const doc = /** @type {Doc} */ (state.document);
+  const isLayer = isLayerType(owner.type);
+  if (!world) {
+    if (!isLayer || !isTransformed(owner)) return { originX: null, originY: null };
+    const content = contentBounds(doc, owner);
+    const center = content ? onFrame(content, 0, 0) : { x: 0, y: 0 };
+    return { ...moveLayerOrigin(doc, owner, center), originX: null, originY: null };
+  }
+  const local = apply(invert(worldOf(doc, owner.id)), world);
+  if (isLayer && isTransformed(owner)) return moveLayerOrigin(doc, owner, local);
+  return { originX: round2(local.x), originY: round2(local.y) };
+}
+
 /** Drags the origin of the selected part or layer; a double-click puts it back at the center. @param {PointerEvent} event */
 function originDrag(event) {
   const s = subject();
   const owner = s.layer ?? (s.parts.length === 1 ? s.parts[0] : null);
   if (!owner) return;
   if (event.detail >= 2) {
-    run([{ op: 'set', target: owner.id, props: { originX: null, originY: null } }], { select: state.selection, note: `Origin of ${owner.id} to the center` });
+    run([{ op: 'set', target: owner.id, props: originProps(owner, null) }], { select: state.selection, note: `Origin of ${owner.id} to the center` });
     return;
   }
   const doc = /** @type {Doc} */ (state.document);
-  /** @type {Point | null} */
-  let at = null;
+  /** @type {Record<string, unknown> | null} */
+  let props = null;
   drag(
     event,
     (p) => {
-      at = { x: round2(p.x), y: round2(p.y) };
-      showPreview({ ...doc, objects: doc.objects.map((o) => (o.id === owner.id ? { ...o, originX: at?.x, originY: at?.y } : o)) });
+      props = originProps(owner, p);
+      showPreview({ ...doc, objects: doc.objects.map((o) => (o.id === owner.id ? { ...o, ...props } : o)) });
     },
     () => {
-      if (!at) return showPreview(null);
-      run([{ op: 'set', target: owner.id, props: { originX: at.x, originY: at.y } }], { select: state.selection, note: `Move the origin of ${owner.id}` }).finally(() =>
-        showPreview(null),
-      );
+      if (!props) return showPreview(null);
+      run([{ op: 'set', target: owner.id, props }], { select: state.selection, note: `Move the origin of ${owner.id}` }).finally(() => showPreview(null));
     },
   );
 }
@@ -268,7 +362,7 @@ function marquee(event) {
       const hits = doc.objects
         .filter((o) => isPart(o.type) && !isLocked(o.id) && inShownLayer(o.id))
         .filter((o) => {
-          const b = bounds([o]);
+          const b = worldBox(doc, o);
           return b && b.x <= r.x + r.width && b.x + b.width >= r.x && b.y <= r.y + r.height && b.y + b.height >= r.y;
         })
         .map((o) => o.id);
@@ -299,6 +393,9 @@ function selectDown(event) {
   if (handle) return handleScale(event, /** @type {keyof typeof HANDLES} */ (handle));
   const part = partAt(event.target);
   if (!part) return marquee(event);
+  // With its layer selected, dragging a part moves the layer, and a click picks the part.
+  const layer = !event.shiftKey && selectedLayerHolding(part);
+  if (layer) return moveDrag(event, layer, () => select(part.id));
   // A second click on the part that is already picked alone edits the points of its layer.
   const again = state.selection.length === 1 && state.selected === part.id;
   if (!pick(event, part)) return;
@@ -306,8 +403,8 @@ function selectDown(event) {
 }
 
 /**
- * Move, Scale and Rotate: a pointerdown on a part picks it, then a drag anywhere does the tool's one thing (on the
- * picked parts, or on the selected layer's content).
+ * Move, Scale and Rotate: a pointerdown on a part picks it (unless its layer is selected), then a drag anywhere does
+ * the tool's one thing (on the picked parts, or on the selected layer).
  * @param {(event: PointerEvent) => void} act
  */
 const singleTool = (act) => (/** @type {PointerEvent} */ event) => {
@@ -316,31 +413,41 @@ const singleTool = (act) => (/** @type {PointerEvent} */ event) => {
   if (handle === 'origin') return originDrag(event);
   if (handle && handle !== 'rotate' && state.tool === 'scale') return handleScale(event, /** @type {keyof typeof HANDLES} */ (handle));
   const part = partAt(event.target);
-  if (part && !pick(event, part)) return;
-  if (!subject().parts.length) return marquee(event);
+  if (part && !selectedLayerHolding(part) && !pick(event, part)) return;
+  if (!hasSubject(subject())) return marquee(event);
   act(event);
 };
+
+/** @param {Point[]} points @returns {string} a closed polygon as path data */
+const polygon = (points) => `M${points.map((p) => `${p.x} ${p.y}`).join('L')}Z`;
 
 /** The frame around the subject with the handles the tool uses, and its origin. @param {SVGGElement} overlay @param {Doc} doc */
 function paintSelection(overlay, doc) {
   if (state.editing) return;
   const s = subject(doc);
-  if (!s.parts.length) return;
+  if (!hasSubject(s)) return;
   if (s.parts.length > 1) {
     for (const part of s.parts) {
-      const b = bounds([part]);
+      const b = worldBox(doc, part);
       if (b) overlay.append(element('rect', { ...b, class: 'part-box' }));
     }
   }
-  const tight = bounds(s.parts);
-  if (!tight) return;
-  const pad = screen(3);
-  const b = { x: tight.x - pad, y: tight.y - pad, width: tight.width + pad * 2, height: tight.height + pad * 2 };
-  overlay.append(element('rect', { ...b, class: `selection-box${s.layer ? ' layer' : ''}` }));
+  const frame = frameOf(s, doc);
+  if (!frame) return;
+  const { f } = frame;
+  // The padding is on the screen: in the frame it is divided by the frame's own scale.
+  const unit = Math.hypot(f[0], f[1]) || 1;
+  const pad = screen(3) / unit;
+  const b = { x: frame.box.x - pad, y: frame.box.y - pad, width: frame.box.width + pad * 2, height: frame.box.height + pad * 2 };
+  /** @param {number} hx @param {number} hy */
+  const at = (hx, hy) => apply(f, onFrame(b, hx, hy));
+  overlay.append(element('path', { d: polygon([at(-1, -1), at(1, -1), at(1, 1), at(-1, 1)]), class: `selection-box${s.layer ? ' layer' : ''}` }));
   const tool = state.tool;
   if (tool === 'select' || tool === 'rotate') {
-    const top = onFrame(b, 0, -1);
-    const knob = { x: top.x, y: top.y - screen(ROTATE_GAP) };
+    const top = at(0, -1);
+    const center = at(0, 0);
+    const length = Math.hypot(top.x - center.x, top.y - center.y) || 1;
+    const knob = { x: top.x + ((top.x - center.x) / length) * screen(ROTATE_GAP), y: top.y + ((top.y - center.y) / length) * screen(ROTATE_GAP) };
     overlay.append(
       element('line', { x1: top.x, y1: top.y, x2: knob.x, y2: knob.y, class: 'rotate-line' }),
       element('circle', { cx: knob.x, cy: knob.y, r: screen(HANDLE / 2 + 1), class: 'handle rotate', 'data-handle': 'rotate' }),
@@ -349,7 +456,7 @@ function paintSelection(overlay, doc) {
   if (tool === 'select' || tool === 'scale') {
     const size = screen(HANDLE);
     for (const [name, [x, y]] of Object.entries(HANDLES)) {
-      const c = onFrame(b, x, y);
+      const c = at(x, y);
       overlay.append(
         element('rect', { x: c.x - size / 2, y: c.y - size / 2, width: size, height: size, class: `handle scale ${name}`, 'data-handle': name }),
       );
@@ -357,7 +464,7 @@ function paintSelection(overlay, doc) {
   }
   // The origin of a single part or of the layer: a crosshair that can be dragged.
   const owner = s.layer ?? (s.parts.length === 1 ? s.parts[0] : null);
-  const pivot = owner && pivotOf(s);
+  const pivot = owner && pivotOf(s, doc);
   if (pivot) {
     const r = screen(ORIGIN);
     const set = !!originOf(/** @type {DocObject} */ (owner));
@@ -366,6 +473,17 @@ function paintSelection(overlay, doc) {
       element('circle', { cx: pivot.x, cy: pivot.y, r: screen(4), class: `handle origin${set ? ' set' : ''}`, 'data-handle': 'origin' }),
     );
   }
+}
+
+/**
+ * Moves the selected layer, or the picked parts, by an offset on the artboard (the arrow keys).
+ * @param {number} dx @param {number} dy
+ */
+export function nudgeSelection(dx, dy) {
+  const s = subject();
+  if (!hasSubject(s)) return false;
+  commit(s, translate(dx, dy), 'Nudge');
+  return true;
 }
 
 export function setupSelectTool() {

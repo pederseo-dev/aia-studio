@@ -27,6 +27,10 @@ Work like this:
   4. aia render <doc>               look at the result, then fix what is wrong (aia undo <doc> takes back your step)
 
 The person sees your changes live in the editor and can change anything by hand.
+Layers have a transform of their own (x, y, rotation, scaleX, scaleY around their origin) that moves the whole
+layer without changing its vertices: aia transform <doc> <layer> --rotate 20. Transforming a part rewrites its
+vertices: aia transform <doc> <part> --move 10,0.
+
 Topics: aia guide ops · aia guide paths · aia guide points · aia guide types · aia guide <type>`,
   },
   ops: {

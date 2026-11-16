@@ -23,6 +23,8 @@ import { addPainter, paintOverlay, showPreview } from './canvas.js';
 import { isPart } from './schema.js';
 import { autoWeld, editPoints, inShownLayer, isLocked, notify, pickPoints, run, select, state } from './state.js';
 import { drag, element, screen, svg, toDoc } from './view.js';
+import { IDENTITY, apply } from '../core/geometry.js';
+import { invert, worldOf } from '../core/transform.js';
 
 /**
  * @typedef {import('../core/document.js').Doc} Doc
@@ -53,6 +55,20 @@ function editableParts(doc = state.document, layer = state.editing) {
   if (!doc || !layer) return [];
   return doc.objects.filter((o) => o.parent === layer && isPart(o.type) && inShownLayer(o.id) && !isLocked(o.id));
 }
+
+/** From a layer's coordinates to the artboard's (its parts' vertices are in its coordinates). @param {string | null | undefined} layer */
+const layerWorld = (layer) => (state.document && layer ? worldOf(state.document, layer) : IDENTITY);
+/** A point of the artboard in a layer's coordinates. @param {string | null | undefined} layer @param {Point} p */
+export const toLayer = (layer, p) => apply(invert(layerWorld(layer)), p);
+/** A point in a layer's coordinates on the artboard. @param {string | null | undefined} layer @param {Point} p */
+export const fromLayer = (layer, p) => apply(layerWorld(layer), p);
+/** A length of `px` screen pixels in a layer's units (a scaled layer has bigger or smaller units). @param {string | null | undefined} layer @param {number} px */
+export const layerScreen = (layer, px) => {
+  const w = layerWorld(layer);
+  return screen(px) / (Math.hypot(w[0], w[1]) || 1);
+};
+/** Where the pointer is in the edited layer's coordinates. @param {{ clientX: number, clientY: number }} event */
+const pointerInLayer = (event) => toLayer(state.editing, toDoc(event));
 
 /** The picked points grouped by part: { part id: [indices] }. */
 function pickedByPart() {
@@ -105,12 +121,13 @@ function pointDown(event, part, index) {
     return;
   }
   if (!state.points.includes(key)) pickPoints([key], part.id);
-  const start = toDoc(event);
+  const start = pointerInLayer(event);
   /** @type {Map<string, Vertex[]> | null} */
   let changes = null;
   drag(
     event,
-    (p, e) => {
+    (world, e) => {
+      const p = toLayer(state.editing, world);
       let dx = p.x - start.x;
       let dy = p.y - start.y;
       if (e.shiftKey) Math.abs(dx) > Math.abs(dy) ? (dy = 0) : (dx = 0);
@@ -120,9 +137,11 @@ function pointDown(event, part, index) {
       const target = autoWeld.on && state.points.length === 1 ? weldTargetNear(p, key) : null;
       weldHint = target && weldOps(key, target, e.altKey) ? weldPlace(target) : null;
       hintKind = 'weld';
+      hintLayer = state.editing;
       showPreview(withVertices(changes));
     },
-    (p, e) => {
+    (world, e) => {
+      const p = toLayer(state.editing, world);
       weldHint = null;
       if (!changes) {
         // A click without moving on one of several picked points picks only it.
@@ -153,7 +172,8 @@ function knobDown(event, part, index, side) {
   let moved = false;
   drag(
     event,
-    (p, e) => {
+    (world, e) => {
+      const p = toLayer(state.editing, world);
       moved = true;
       const handle = { x: p.x - vertex.x, y: p.y - vertex.y };
       vertex[side] = handle;
@@ -248,7 +268,10 @@ function pointMarquee(event) {
       const r = rectOf(p);
       const hits = editableParts().flatMap((part) =>
         verticesOf(part)
-          .map((v, i) => (v.x >= r.x && v.x <= r.x + r.width && v.y >= r.y && v.y <= r.y + r.height ? keyOf(part.id, i) : ''))
+          .map((v, i) => {
+            const w = fromLayer(state.editing, v);
+            return w.x >= r.x && w.x <= r.x + r.width && w.y >= r.y && w.y <= r.y + r.height ? keyOf(part.id, i) : '';
+          })
           .filter(Boolean),
       );
       const main = hits.length ? parseKey(hits.at(-1) ?? '')[0] : undefined;
@@ -265,7 +288,7 @@ function lineAt(p) {
   let best = null;
   for (const part of editableParts()) {
     const hit = nearestOnOutline(part, p);
-    if (hit && hit.distance <= screen(LINE_REACH) && (!best || hit.distance < best.distance)) best = { part, ...hit };
+    if (hit && hit.distance <= layerScreen(state.editing, LINE_REACH) && (!best || hit.distance < best.distance)) best = { part, ...hit };
   }
   return best;
 }
@@ -276,12 +299,13 @@ function addPointDown(event, part, segment, t) {
   const { vertices, index } = insertVertex(part, segment, t);
   const key = keyOf(part.id, index);
   pickPoints([key], part.id);
-  const start = toDoc(event);
+  const start = pointerInLayer(event);
   let changed = vertices;
   showPreview(withVertices(new Map([[part.id, changed]])));
   drag(
     event,
-    (p) => {
+    (world) => {
+      const p = toLayer(state.editing, world);
       const m = translate(p.x - start.x, p.y - start.y);
       changed = transformVertices({ ...part, vertices }, [index], m).vertices;
       showPreview(withVertices(new Map([[part.id, changed]])));
@@ -308,7 +332,7 @@ export function pointEditDown(event) {
     if (side) return knobDown(event, part, Number(index), /** @type {'in' | 'out'} */ (side));
     return pointDown(event, part, Number(index));
   }
-  const onLine = lineAt(toDoc(event));
+  const onLine = lineAt(pointerInLayer(event));
   if (onLine) return addPointDown(event, onLine.part, onLine.segment, onLine.t);
   const id = target.closest?.('.content [data-id]')?.getAttribute('data-id');
   const other = id ? findObject(doc, id) : undefined;
@@ -360,16 +384,22 @@ const WELD_HINT = 8; // screen px, the radius of the ring that shows where a wel
  * @typedef {{ ops: Operation[], keep: string, pick: string[], note: string }} Weld
  */
 
-/** @type {Point | null} where the point being dragged or drawn would weld (a ring on the canvas) */
+/** @type {Point | null} where the point being dragged or drawn would weld (a ring on the canvas), in hintLayer's coordinates */
 let weldHint = null;
+/** @type {string | null | undefined} */
+let hintLayer = null;
 /** @type {'weld' | 'continue'} what the ring means: a weld, or an end the Pen would continue */
 let hintKind = 'weld';
 
-/** Shows where a weld would happen, or nothing with null. @param {Point | null} p @param {'weld' | 'continue'} [kind] */
-export function showWeldHint(p, kind = 'weld') {
-  if (p?.x === weldHint?.x && p?.y === weldHint?.y && kind === hintKind) return;
+/**
+ * Shows where a weld would happen, or nothing with null.
+ * @param {Point | null} p in the layer's coordinates @param {'weld' | 'continue'} [kind] @param {string | null} [layer]
+ */
+export function showWeldHint(p, kind = 'weld', layer = state.editing) {
+  if (p?.x === weldHint?.x && p?.y === weldHint?.y && kind === hintKind && layer === hintLayer) return;
   weldHint = p;
   hintKind = kind;
+  hintLayer = layer;
   paintOverlay();
 }
 
@@ -390,7 +420,7 @@ export function weldPlace(target) {
 export function weldTargetNear(p, except, layer = state.editing) {
   const [exceptPart] = except ? parseKey(except) : [''];
   let best = '';
-  let bestDistance = screen(WELD_DISTANCE);
+  let bestDistance = layerScreen(layer, WELD_DISTANCE);
   for (const part of editableParts(state.document, layer)) {
     for (const [index, v] of verticesOf(part).entries()) {
       const key = keyOf(part.id, index);
@@ -407,7 +437,7 @@ export function weldTargetNear(p, except, layer = state.editing) {
   for (const part of editableParts(state.document, layer)) {
     if (part.id === exceptPart) continue;
     const hit = nearestOnOutline(part, p);
-    if (hit && hit.distance <= screen(WELD_DISTANCE) && (!line || hit.distance < line.distance)) line = { part, ...hit };
+    if (hit && hit.distance <= layerScreen(layer, WELD_DISTANCE) && (!line || hit.distance < line.distance)) line = { part, ...hit };
   }
   return line && { part: line.part.id, segment: line.segment, t: line.t, point: line.point };
 }
@@ -585,7 +615,8 @@ export function paintLayerPoints(overlay, layer) {
   const size = screen(4);
   for (const part of editableParts(state.document, layer)) {
     for (const v of verticesOf(part)) {
-      overlay.append(element('rect', { x: v.x - size / 2, y: v.y - size / 2, width: size, height: size, class: `layer-point${v.ref ? ' shared' : ''}` }));
+      const w = fromLayer(layer, v);
+      overlay.append(element('rect', { x: w.x - size / 2, y: w.y - size / 2, width: size, height: size, class: `layer-point${v.ref ? ' shared' : ''}` }));
     }
   }
 }
@@ -601,10 +632,19 @@ export function stopEditing() {
 function paintPoints(overlay, doc) {
   const parts = editableParts(doc);
   if (!parts.length) return;
+  const w = layerWorld(state.editing);
+  // The outlines are drawn in the layer's coordinates; the points and knobs on the artboard, so they keep their size.
+  const outlines = element('g', { transform: `matrix(${w.join(' ')})` });
   for (const part of parts) {
-    overlay.append(element('path', { d: partData(part), class: `edit-outline${part.id === state.selected ? ' main' : ''}` }));
+    outlines.append(element('path', { d: partData(part), class: `edit-outline${part.id === state.selected ? ' main' : ''}` }));
   }
-  if (hover) overlay.append(element('circle', { cx: hover.x, cy: hover.y, r: screen(KNOB), class: 'add-point' }));
+  overlay.append(outlines);
+  /** @param {Point} p */
+  const on = (p) => apply(w, p);
+  if (hover) {
+    const h = on(hover);
+    overlay.append(element('circle', { cx: h.x, cy: h.y, r: screen(KNOB), class: 'add-point' }));
+  }
   const sharedNames = new Set(parts.flatMap((part) => verticesOf(part).flatMap((v) => (v.ref ? [v.ref] : []))));
   const size = screen(POINT);
   for (const part of parts) {
@@ -614,9 +654,10 @@ function paintPoints(overlay, doc) {
       for (const side of /** @type {const} */ (['in', 'out'])) {
         const h = v[side];
         if (!h) continue;
-        const end = { x: v.x + h.x, y: v.y + h.y };
+        const end = on({ x: v.x + h.x, y: v.y + h.y });
+        const at = on(v);
         overlay.append(
-          element('line', { x1: v.x, y1: v.y, x2: end.x, y2: end.y, class: 'knob-line' }),
+          element('line', { x1: at.x, y1: at.y, x2: end.x, y2: end.y, class: 'knob-line' }),
           element('circle', { cx: end.x, cy: end.y, r: screen(KNOB), class: 'handle knob', 'data-knob': `${part.id}|${index}|${side}` }),
         );
       }
@@ -624,10 +665,11 @@ function paintPoints(overlay, doc) {
     for (const [index, v] of vertices.entries()) {
       const picked = state.points.includes(keyOf(part.id, index));
       const shared = !!v.ref || sharedNames.has(`${part.id}.${v.name}`);
+      const at = on(v);
       overlay.append(
         element('rect', {
-          x: v.x - size / 2,
-          y: v.y - size / 2,
+          x: at.x - size / 2,
+          y: at.y - size / 2,
           width: size,
           height: size,
           ...(shared ? { rx: size / 2 } : {}),
@@ -642,13 +684,15 @@ function paintPoints(overlay, doc) {
 export function setupPointEdit() {
   addPainter(paintPoints);
   addPainter((overlay) => {
-    if (weldHint) overlay.append(element('circle', { cx: weldHint.x, cy: weldHint.y, r: screen(WELD_HINT), class: `weld-hint${hintKind === 'continue' ? ' continue' : ''}` }));
+    if (!weldHint) return;
+    const at = fromLayer(hintLayer, weldHint);
+    overlay.append(element('circle', { cx: at.x, cy: at.y, r: screen(WELD_HINT), class: `weld-hint${hintKind === 'continue' ? ' continue' : ''}` }));
   });
   svg.addEventListener('pointermove', (event) => {
     if (!state.editing || event.buttons) return;
     const target = /** @type {Element} */ (event.target);
     const onHandle = target.getAttribute?.('data-point') || target.getAttribute?.('data-knob');
-    const next = onHandle ? null : (lineAt(toDoc(event))?.point ?? null);
+    const next = onHandle ? null : (lineAt(pointerInLayer(event))?.point ?? null);
     if (next?.x === hover?.x && next?.y === hover?.y) return;
     hover = next;
     paintOverlay();

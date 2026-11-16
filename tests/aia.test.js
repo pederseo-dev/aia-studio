@@ -139,3 +139,23 @@ test('the AI welds, names, adds points, follows and groups by name, as the edito
   assert.match((await aia.run('weld face mouth.0 mouth.mid')).text, /only its two open ends weld/);
   assert.match((await aia.run('follow face mouth.0 mouth.1')).text, /share points|weld them first/);
 });
+
+test('aia transform turns a layer without touching its vertices, and --apply puts it into them', async () => {
+  await ok('new Robot');
+  const box = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }];
+  await ok(['ops', 'robot', JSON.stringify([
+    { op: 'create', type: 'vector', id: 'arm' },
+    { op: 'create', type: 'path', id: 'hand', parent: 'arm', props: { vertices: box } },
+  ])]);
+  assert.match(await ok('transform robot arm --rotate 90 --move 10,0'), /arm: x 10, y 0, rotation 90/);
+  let { document } = await store.get('robot', 'ai');
+  assert.deepEqual(document.objects[0], { id: 'arm', type: 'vector', parent: null, x: 10, rotation: 90, originX: 50, originY: 50 });
+  assert.deepEqual(document.objects[1].vertices, box);
+  await ok('transform robot arm --apply');
+  ({ document } = await store.get('robot', 'ai'));
+  assert.deepEqual(document.objects[1].vertices, [{ x: 110, y: 0 }, { x: 110, y: 100 }, { x: 10, y: 100 }, { x: 10, y: 0 }]);
+  await ok('transform robot hand --scale 0.5');
+  ({ document } = await store.get('robot', 'ai'));
+  assert.deepEqual(document.objects[1].vertices[0], { x: 85, y: 25 });
+  assert.match((await aia.run('transform robot arm')).text, /Say what to do/);
+});

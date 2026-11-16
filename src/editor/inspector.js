@@ -6,6 +6,7 @@
 // With a drawing tool active, a «New shapes» section sets the auto fill and auto stroke the tool gives new shapes.
 
 import { findObject } from '../core/document.js';
+import { applyTransformOps, isTransformed } from '../core/transform.js';
 import { showPreview } from './canvas.js';
 import { colorSwatch } from './colorSwatch.js';
 import { drawStyle, isDrawTool, run, setDrawStyle, state } from './state.js';
@@ -176,6 +177,23 @@ function propertyRow(key, spec, targets) {
   return row(labelOf(key), spec.help, input);
 }
 
+/** Apply transform: the layer's transform goes into its parts' vertices. @param {import('../core/document.js').DocObject} layer */
+function applyTransformRow(layer) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'small apply-transform';
+  button.textContent = 'Apply transform';
+  button.title = 'Put this layer’s move, turn and scale into its parts’ vertices, and leave the layer without a transform (it looks the same)';
+  button.addEventListener('click', () => {
+    const doc = state.document;
+    if (doc) run(applyTransformOps(doc, layer), { select: layer.id, note: `Apply the transform of ${layer.id}` });
+  });
+  const row = document.createElement('div');
+  row.className = 'prop';
+  row.append(document.createElement('span'), button);
+  return row;
+}
+
 /** @param {Target[]} targets */
 const typeOf = (targets) => (targets[0].id === 'meta' ? 'meta' : String(targets[0].values.type));
 
@@ -253,6 +271,8 @@ export function renderInspector() {
       for (const [name, property] of Object.entries(spec.properties)) {
         if (!SHOWN_WITH.has(name)) parts.push(propertyRow(name, property, targets));
       }
+      const only = objects.length === 1 ? objects[0] : null;
+      if (only?.type === 'vector' && isTransformed(only)) parts.push(applyTransformRow(only));
     }
   }
   panel.replaceChildren(...parts);

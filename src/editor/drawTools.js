@@ -10,10 +10,11 @@
 // Each stretch is saved when it is released: one step to undo.
 
 import { childrenOf, findObject, idFromName } from '../core/document.js';
-import { ellipseVertices, rectVertices, round2, roundVertex, verticesOf } from '../core/geometry.js';
+import { ellipseVertices, rectVertices, round2, roundVertex, transformVertex, verticesOf } from '../core/geometry.js';
 import { askName } from './namePrompt.js';
 import { activeVector, autoWeld, drawStyle, isHidden, isLocked, notify, penOptions, run, state } from './state.js';
-import { paintLayerPoints, shapePoint, shareTargets, showWeldHint, weldPlace, weldTargetNear } from './pointEdit.js';
+import { fromLayer, layerScreen, paintLayerPoints, shapePoint, shareTargets, showWeldHint, toLayer, weldPlace, weldTargetNear } from './pointEdit.js';
+import { invert, worldOf } from '../core/transform.js';
 import { addPainter, onToolDown, paintOverlay } from './canvas.js';
 import { drag, element, screen, svg, toDoc } from './view.js';
 
@@ -112,7 +113,10 @@ function boxDown(event, type) {
       draft.remove();
       const b = boxOf(p, e);
       if (b.width < screen(2) || b.height < screen(2)) return;
-      const vertices = (type === 'rect' ? rectVertices(b) : ellipseVertices(b)).map(roundVertex);
+      // Drawn on the artboard, saved in the active layer's coordinates (it may be moved, turned or scaled).
+      const layer = activeVector();
+      const back = layer && state.document ? invert(worldOf(state.document, layer.id)) : null;
+      const vertices = (type === 'rect' ? rectVertices(b) : ellipseVertices(b)).map((v) => roundVertex(back ? transformVertex(v, back) : v));
       addPart(type === 'rect' ? 'rectangle' : 'ellipse', { vertices }, `New ${type === 'rect' ? 'rectangle' : 'ellipse'}`);
     },
   );
@@ -144,7 +148,7 @@ function layerParts() {
 function openEndAt(p) {
   /** @type {{ part: import('../core/document.js').DocObject, index: number } | null} */
   let best = null;
-  let bestDistance = screen(END_REACH);
+  let bestDistance = layerScreen(activeVector()?.id, END_REACH);
   for (const part of layerParts()) {
     const vertices = verticesOf(part);
     if (part.closed !== false || vertices.length < 2) continue;
@@ -187,7 +191,8 @@ const isSmooth = (v) => !!(v.in || v.out);
  * @param {PointerEvent} event
  */
 function penDown(event) {
-  const p = toDoc(event);
+  const layerId = activeVector()?.id;
+  const p = toLayer(layerId, toDoc(event));
   const end = openEndAt(p);
   if (!end && !targetLayer()) return;
   const endVertex = end ? verticesOf(end.part)[end.index] : null;
@@ -201,15 +206,17 @@ function penDown(event) {
   showWeldHint(null);
   drag(
     event,
-    (q) => {
-      moved ||= Math.hypot(q.x - from.x, q.y - from.y) > screen(3);
+    (world) => {
+      const q = toLayer(layerId, world);
+      moved ||= Math.hypot(q.x - from.x, q.y - from.y) > layerScreen(layerId, 3);
       weld = moved ? penWeld(q, except) : null;
       const place = weld ? weldPlace(weld) : null;
       stretch = { from, to: place ?? q };
-      showWeldHint(place);
+      showWeldHint(place, 'weld', layerId);
       paintOverlay();
     },
-    (q, e) => {
+    (world, e) => {
+      const q = toLayer(layerId, world);
       const to = stretch?.to ?? q;
       stretch = null;
       showWeldHint(null);
@@ -286,21 +293,23 @@ export function setupDrawTools() {
   onToolDown('pen', penDown);
   svg.addEventListener('pointermove', (event) => {
     if (state.tool !== 'pen' || event.buttons) return;
-    const p = toDoc(event);
+    const layerId = activeVector()?.id ?? null;
+    const p = toLayer(layerId, toDoc(event));
     const end = openEndAt(p);
     if (end) {
       const v = verticesOf(end.part)[end.index];
-      return showWeldHint({ x: v.x, y: v.y }, 'continue');
+      return showWeldHint({ x: v.x, y: v.y }, 'continue', layerId);
     }
     const weld = penWeld(p);
-    showWeldHint(weld ? weldPlace(weld) : null);
+    showWeldHint(weld ? weldPlace(weld) : null, 'weld', layerId);
   });
   addPainter((overlay) => {
     if (state.tool !== 'pen') return;
     const layer = activeVector();
     if (layer) paintLayerPoints(overlay, layer.id);
     if (!stretch) return;
-    const { from, to } = stretch;
+    const from = fromLayer(layer?.id, stretch.from);
+    const to = fromLayer(layer?.id, stretch.to);
     overlay.append(
       element('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: 'pen-line' }),
       element('circle', { cx: from.x, cy: from.y, r: screen(3.5), class: 'pen-point' }),
