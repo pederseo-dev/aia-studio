@@ -8,12 +8,146 @@
     <link rel="stylesheet" href="/src/editor/styles.css" />
   </head>
   <body>
-    <main id="editor">
-      <img src="/logo.svg" alt="" width="72" height="72" />
-      <h1>aia-studio</h1>
-      <p>The editor is being rebuilt from scratch.</p>
-      <p id="status" class="muted"></p>
+    <header id="header">
+      <!-- Row 1: main menu, logo and the tabs of the open documents -->
+      <div id="tabs-row">
+        <div class="dropdown">
+          <button id="menu-button" type="button" class="icon" aria-haspopup="menu" aria-expanded="false" title="Menu" aria-label="Menu" data-icon="menu"></button>
+          <div id="menu" class="menu" role="menu" hidden>
+            <button type="button" role="menuitem" data-action="new">New file…</button>
+            <button type="button" role="menuitem" data-action="open">Open…</button>
+            <hr />
+            <button type="button" role="menuitem" data-action="settings" data-requires-doc>Project Settings…</button>
+            <hr />
+            <button type="button" role="menuitem" data-action="close" data-requires-doc>Close tab <kbd>Alt+W</kbd></button>
+            <button type="button" role="menuitem" data-action="delete" data-requires-doc class="danger">Delete document…</button>
+            <hr />
+            <button type="button" role="menuitem" data-action="shortcuts">Keyboard shortcuts</button>
+          </div>
+        </div>
+        <strong class="mark"><img src="/logo.svg" alt="" width="18" height="18" />aia-studio</strong>
+        <div id="tabs" role="tablist" aria-label="Open documents"></div>
+        <button id="tab-new" type="button" class="icon" title="New file" aria-label="New file" data-icon="add"></button>
+        <span id="notice" role="status"></span>
+      </div>
+      <!-- Row 2, in the columns of the panels below: the tools (over Layers), the selection (over the canvas), and
+           undo, redo and the modes (over the right panel) -->
+      <div id="bar" role="toolbar" aria-label="Tools">
+        <div id="tools" class="tools"></div>
+        <div id="options" class="options" aria-label="Options of the selection"></div>
+        <div class="bar-end">
+        <button id="undo" type="button" class="icon" title="Undo (Ctrl+Z)" aria-label="Undo" data-icon="undo"></button>
+        <button id="redo" type="button" class="icon" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" data-icon="redo"></button>
+        <span class="separator"></span>
+        <div id="modes" role="tablist" aria-label="Mode">
+          <button type="button" role="tab" aria-selected="true" class="active">Design</button>
+        </div>
+        </div>
+      </div>
+    </header>
+
+    <main id="space">
+      <aside id="layers-panel" class="panel">
+        <div class="header">
+          <h2>Layers</h2>
+          <span class="spacer"></span>
+          <div class="dropdown">
+            <button id="layer-new" type="button" class="icon" aria-haspopup="menu" aria-expanded="false" title="New layer" aria-label="New layer" data-icon="folderPlus"></button>
+            <div id="layer-menu" class="menu right" role="menu" hidden>
+              <button type="button" role="menuitem" data-type="vector" title="Vector layer, as in Moho: holds the drawing"><span class="with-icon" data-icon="vector">Vector</span></button>
+              <button type="button" role="menuitem" data-type="group" title="Group layer: holds other layers"><span class="with-icon" data-icon="group">Group</span></button>
+            </div>
+          </div>
+          <button id="layer-delete" type="button" class="icon" title="Delete layer (Del)" aria-label="Delete layer" data-icon="delete"></button>
+        </div>
+        <ul id="tree" class="tree" role="tree"></ul>
+      </aside>
+
+      <section id="canvas-area">
+        <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+        <p id="empty" class="empty-state" hidden>No document open. <button type="button" data-action="new">New file…</button> <button type="button" data-action="open">Open…</button></p>
+      </section>
+
+      <aside id="right-panel" class="panel">
+        <section id="inspector-section" class="section">
+          <div class="header"><h2>Inspector</h2><span class="spacer"></span><span id="inspector-title" class="faint"></span></div>
+          <div id="inspector" class="inspector"></div>
+        </section>
+        <section id="json-panel" class="section">
+          <div class="header">
+            <h2>Document JSON</h2>
+            <span class="spacer"></span>
+            <button id="json-copy" type="button" class="icon" title="Copy the JSON" aria-label="Copy the JSON" data-icon="copy"></button>
+          </div>
+          <pre id="json" class="json" aria-label="The document as it is saved"></pre>
+        </section>
+      </aside>
     </main>
+
+    <dialog id="new-dialog">
+      <h2>New file</h2>
+      <form method="dialog" class="form">
+        <label>Name <input name="name" type="text" value="Untitled" required /></label>
+        <label>Width <input name="width" type="number" min="1" step="1" value="800" required /></label>
+        <label>Height <input name="height" type="number" min="1" step="1" value="600" required /></label>
+        <div class="buttons">
+          <button type="button" data-close>Cancel</button>
+          <button type="submit" value="ok" class="main">Create</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="open-dialog">
+      <h2>Open file</h2>
+      <ul id="documents-list" class="dialog-list"></ul>
+      <div class="buttons"><button type="button" data-close>Close</button></div>
+    </dialog>
+
+    <dialog id="settings-dialog">
+      <h2>Project Settings</h2>
+      <form method="dialog" class="form">
+        <label>Name <input name="name" type="text" required /></label>
+        <label>Width <input name="width" type="number" min="1" step="1" required /></label>
+        <label>Height <input name="height" type="number" min="1" step="1" required /></label>
+        <label>Background <span class="row"><input name="background" type="color" /><label class="checkbox"><input name="transparent" type="checkbox" /> Transparent</label></span></label>
+        <div class="buttons">
+          <button type="button" data-close>Cancel</button>
+          <button type="submit" value="ok" class="main">OK</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="shortcuts-dialog">
+      <h2>Keyboard shortcuts</h2>
+      <table class="shortcuts">
+        <tr><th colspan="2">Transform: Select (V) does it all; Move (M), Scale (S) and Rotate (T) do one thing, dragging anywhere</th></tr>
+        <tr><td>Click · <kbd>Shift</kbd>+click</td><td>Pick a part · add it or take it out (also in Layers)</td></tr>
+        <tr><td>Drag a part</td><td>Move the selection (Shift: straight; <kbd>Alt</kbd>: drag a copy)</td></tr>
+        <tr><td>Drag on empty space</td><td>Marquee: picks every part it touches (Shift: adds). A click goes back to the layer</td></tr>
+        <tr><td>Square handles</td><td>Scale (Shift: keep proportions; Alt: from the center)</td></tr>
+        <tr><td>Round handle</td><td>Rotate (Shift: 15° steps)</td></tr>
+        <tr><td>Arrow keys</td><td>Nudge 1 px (Shift: 10 px)</td></tr>
+        <tr><th colspan="2">Points: click a picked part again to edit the points of every part of its layer</th></tr>
+        <tr><td>Click · Shift+click · drag on empty space</td><td>Pick points · add or take out · marquee</td></tr>
+        <tr><td>Drag a point · its round knobs</td><td>Move the picked points · bend the curve (Alt: a corner)</td></tr>
+        <tr><td><kbd>Alt</kbd>+click a point</td><td>Corner ↔ curve</td></tr>
+        <tr><td><kbd>Del</kbd> · <kbd>Esc</kbd> or click on empty space</td><td>Delete the picked points · done</td></tr>
+        <tr><td><kbd>Ctrl+D</kbd> · <kbd>Ctrl+C</kbd> · <kbd>Ctrl+V</kbd></td><td>Duplicate · copy · paste into the active layer, in the same place</td></tr>
+        <tr><th colspan="2">Draw</th></tr>
+        <tr><td><kbd>P</kbd></td><td>Pen: click for corners, drag for curves; click the first point to close, <kbd>Enter</kbd> ends a line, <kbd>Esc</kbd> cancels</td></tr>
+        <tr><td><kbd>R</kbd> · <kbd>E</kbd></td><td>Rectangle · ellipse: drag on the canvas (Shift: square · circle). Every shape is a path</td></tr>
+        <tr><td colspan="2" class="faint">After drawing, a small box asks for the part's name: type it and Enter, or Esc to name it later.</td></tr>
+        <tr><td colspan="2" class="faint">New parts go into the selected vector layer (or the layer of the selected part); with none, a new layer is made.</td></tr>
+        <tr><th colspan="2">Editing</th></tr>
+        <tr><td><kbd>Ctrl+Z</kbd> · <kbd>Ctrl+Shift+Z</kbd></td><td>Undo · redo your changes</td></tr>
+        <tr><td><kbd>Del</kbd></td><td>Delete the selected layer or part</td></tr>
+        <tr><td><kbd>F2</kbd> or double click</td><td>Rename the selected layer or part (a part's name is in the options bar)</td></tr>
+        <tr><td>Drag in Layers</td><td>Reorder; drop on the middle of a group to put it inside</td></tr>
+        <tr><td><kbd>Alt+W</kbd></td><td>Close the tab</td></tr>
+      </table>
+      <div class="buttons"><button type="button" data-close>Close</button></div>
+    </dialog>
+
     <script type="module" src="/src/editor/main.js"></script>
   </body>
 </html>

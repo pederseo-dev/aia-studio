@@ -1,0 +1,7 @@
+{
+  "name": "group",
+  "extends": "layer",
+  "childTypes": ["vector", "group"],
+  "description": "Group layer: holds other layers, which move together with it.",
+  "help": "Group layer: holds other layers."
+}

@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import { createApi, respond } from './api.js';
 import { refusal } from './guard.js';
 import { resolveDocumentsFolder } from './folder.js';
+import { loadSchema } from './schema.js';
+import { createStore } from './store.js';
 
 /** @returns {import('vite').Plugin} */
 export function aiaServer() {
@@ -13,11 +15,15 @@ export function aiaServer() {
     configureServer(server) {
       const documents = resolveDocumentsFolder();
       fs.mkdirSync(documents, { recursive: true });
-      const api = createApi({ documents });
-      server.middlewares.use((req, res, next) => {
+      const api = createApi({ store: createStore({ folder: documents, schema: loadSchema() }) });
+      // The API validates with the schema it loaded on start, so a change to schema/*.json restarts the server.
+      server.watcher.on('change', (file) => {
+        if (/[\\/]schema[\\/][^\\/]+\.json$/.test(file)) server.restart();
+      });
+      server.middlewares.use(async (req, res, next) => {
         const refused = refusal(req);
         if (refused) return respond(res, 403, { error: refused });
-        if (!api(req, res)) next();
+        if (!(await api(req, res))) next();
       });
     },
   };

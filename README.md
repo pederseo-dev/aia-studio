@@ -10,7 +10,7 @@ previews.
 sees it live and can change all of it by hand.
 
 > **Status: rebuild in progress.** This branch rebuilds aia-studio from scratch, in parts. Only the base is here so
-> far: the desktop app shell, the local server and an empty editor. The decisions and open topics are in
+> far: the desktop app shell, the local server, and Design mode with Layers and a live Document JSON panel. The decisions and open topics are in
 > [docs/rebuild.md](docs/rebuild.md). The previous version stays on `main` until this one replaces it.
 
 ## Why HTML, CSS, JS and SVG
@@ -52,13 +52,15 @@ choose another one.
 | Folder | Contents |
 | --- | --- |
 | `electron/` | The desktop app's main process: single instance, the window, the local server. |
-| `server/` | The local server on `127.0.0.1` (and the same API inside Vite in development), the documents folder. |
-| `src/editor/` | The visual editor (plain JS, built with Vite). Empty for now. |
+| `schema/` | Each type and its properties: the single source for validation, the editor and the AI's help. |
+| `src/core/` | Document and operations (no DOM; the same in the browser and in Node). |
+| `server/` | The local server on `127.0.0.1` (and the same API inside Vite in development), the documents on disk with their history, the documents folder. |
+| `src/editor/` | The visual editor (plain JS, built with Vite): Design mode with Layers and the Document JSON panel so far. |
 | `tests/` | Tests (`node --test`). |
 | `docs/` | [rebuild.md](docs/rebuild.md) and, in [docs/v1/](docs/v1/), the records and design docs of the previous version. |
 
-Planned, once their design is decided: `src/core/` (document model and operations, no DOM), the `aia` command
-language with its CLI and MCP, the renderer and the runtime.
+Planned, once their design is decided: the drawing (parts), the `aia` command language with its CLI and MCP, the
+renderer and the runtime.
 
 ## Credits
 

@@ -1,0 +1,18 @@
+{
+  "name": "vector",
+  "extends": "layer",
+  "description": "Vector layer, as in Moho: it holds parts (paths, each with its fill and stroke) that draw in their order, the last one on top. Every shape is a path: the Rectangle and Ellipse tools draw paths too. Points of its parts can be named (\"jaw.chin\"), shared between parts (welded) and gathered in point groups.",
+  "help": "Vector layer: holds the drawing (parts with fill and stroke).",
+  "childTypes": [
+    "path"
+  ],
+  "properties": {
+    "groups": {
+      "type": "pointGroups",
+      "default": null,
+      "nullable": true,
+      "description": "Point groups: { \"upper_lid\": [\"lid.top\", \"brow.mid\"] }, each a list of named points (\"part.point\") of this layer's parts, to pick, move or bind them together. null = none.",
+      "help": "Groups of named points of this layer's parts."
+    }
+  }
+}

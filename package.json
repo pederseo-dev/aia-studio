@@ -41,7 +41,9 @@
       "package.json",
       "dist/**",
       "electron/**",
-      "server/**"
+      "server/**",
+      "src/core/**",
+      "schema/**"
     ],
     "win": {
       "target": [

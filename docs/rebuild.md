@@ -85,6 +85,44 @@ A minimal runtime (plays a document without the DOM) exists from the first slice
 it. The export was the last phase of v1 and was never built, so the model was never checked against it; here it is
 checked from the start.
 
+### 6. Drawing: named parts, as in Moho but readable (2026-11-16, being tried out)
+
+v1 kept drifting toward Moho's mesh and it kept getting harder for the AI: anonymous points (`p1`…`p47`), curves
+through them, shapes that paint curves and `loops` for regions, so every change meant rebuilding the topology in its
+head. SVG was never the limit; the unnamed indirection was. What the user wants from Moho is the way of working:
+many shapes, fills and strokes inside one layer, and painting between lines.
+
+- A **vector layer** holds **parts** (each an outline of vertices with its fill and stroke; see decision 8),
+  **named points** (`chin`, `mouth_corner_l`) and **point groups** (`upper_lid`), like Moho's point groups.
+- **Welding is explicit:** a vertex can reference a point of another part (`jaw.chin`), and a stretch of an outline
+  can follow another part's curve between two points (what v1's `loops` did, inside a named part).
+- Moho's **paint bucket is a tool** (and an `aia` command) that creates a part whose outline follows the lines
+  around a region; not a type of its own.
+- Each part draws as one SVG path, so the runtime resolves references and draws.
+
+It is being tried out in the editor first (see «Trying Design mode» below) before parts are built.
+
+### 7. Try Design mode in the editor first (2026-11-16)
+
+The user tries the model by hand in Design mode, one piece at a time, with a **Document JSON** panel that shows the
+document exactly as it is saved and marks what each step changed. The editor works on the real operations and store
+from the start, so what is tried is what the AI will use.
+
+### 8. Every shape is a path, as in Moho (2026-11-16)
+
+After trying `rect` and `ellipse` as parametric parts, the user chose Moho's way: there is one kind of part, the
+`path` (vertices with optional curve handles). Rectangle and Ellipse are tools that draw a path, not types.
+
+- **Gained:** one kind of shape, so named points, point groups, welding, binding to bones and animating vertices work
+  the same everywhere, with no «convert it first». Every shape can be edited point by point. The runtime and the
+  export only draw paths. Every transform is exact (no `rotation` property, no approximations when scaling a turned
+  rect).
+- **Lost:** the parameters (`width: 200`, `cornerRadius: 8`); an ellipse is 4 vertices with handles in the JSON.
+- **How the AI keeps the convenience:** high-level `aia` commands that build and transform paths with the same
+  geometry as the editor (`src/core/geometry.js`), for example a command that draws a rect or an ellipse into a
+  layer and commands that move, scale and rotate a part by name. The AI works with names and numbers; the core
+  computes the vertices.
+
 ## Open topics
 
 1. **Purpose and priority:** the live character in apps as the design driver (the runtime as the contract), with
@@ -128,3 +166,85 @@ stable local port), the documents folder (`--documents`, `AIA_DOCUMENTS`, the re
 `%APPDATA%\aia-studio\documents` installed), a local server on `127.0.0.1` that refuses foreign `Host` and `Origin`
 (shared with the Vite dev server), an empty editor page, tests, typecheck and the Windows installer config. No
 document model, operations, `aia` commands, CLI or MCP yet.
+
+**Trying Design mode, step 1 (2026-11-16):** the top bar (☰ menu: New, Open, Project Settings, Close tab, Delete;
+the logo; the document tabs; undo and redo; the Design mode), the Layers panel (vector and group layers: add above
+the selection or inside a group, rename with F2 or a double click, hide, lock, delete, drag to reorder or into a
+group), the artboard on the canvas and the Document JSON panel. Under it, the start of part 2: the schema
+(`schema/*.json`: `meta`, `layer`, `vector`, `group`), the document (a flat list in tree order, only non-default
+values stored), the operations (`create`, `set`, `delete`, `move`, `rename`; atomic batches with their inverse) and
+the store (`document.json` + `history.jsonl`, undo and redo per origin).
+
+**Trying Design mode, step 2 (2026-11-16):** parts inside a vector layer (`rect`, `ellipse` and `path`, from the
+abstract `part`: fill, stroke, strokeWidth, visible; coordinates are the layer's), shown inside their layer in
+Layers. Tools: Select (V: pick a part, drag to move; empty space goes back to its layer), Rectangle (R) and Ellipse
+(E) (drag; Shift for a square or circle), Pen (P: corners and curves; the first point closes, Enter ends a line).
+New parts go into the active vector layer, or a new one. `src/core/draw.js` draws a document as SVG without the DOM
+(the canvas uses it; previews and the runtime will).
+
+**Trying Design mode, step 3 (2026-11-16):** the tools sit in groups with a menu, as in v1 (Transform: Select; Draw:
+Rectangle, Ellipse, Pen), and an options bar shows what is selected with its name, editable, as in Moho. Select now
+does what was missing: scale with handles (Shift keeps proportions, Alt from the center), rotate with a knob (Shift:
+15° steps; `rect` and `ellipse` gained `rotation`, a path turns its vertices), several parts at once (Shift+click,
+also in Layers, or a marquee), and copies (Ctrl+D, Ctrl+C / Ctrl+V into the active layer, Alt+drag), plus nudging with
+the arrow keys. `src/core/geometry.js` holds the math (matrices, outlines, bounds, `transformPart`) so the `aia`
+commands can transform parts exactly as the editor does.
+
+**Trying Design mode, step 4 (2026-11-16):** every shape is a path (decision 8): `rect` and `ellipse` left the
+schema and the Rectangle and Ellipse tools draw paths. The Draw group starts with the Pen. The Transform group adds
+Move (M), Scale (S) and Rotate (T), which do one thing by dragging anywhere, besides Select (V), which does it all.
+A second click on the picked part edits the points of every part of its layer, as in Moho (drag points of
+several parts at once, bend curves with their knobs, Alt+click for corner ↔
+curve, Del, a marquee over points, Esc). Layers lists only layers: a part is named in the options bar and its layer is
+highlighted. After drawing, a small box asks for the new part's name (optional), and a new layer opens its name for
+editing.
+
+**Trying Design mode, step 5 (2026-11-16):** the bar follows the columns of the panels (the tools over Layers, the
+selection from where the canvas starts, undo, redo and the mode over the right panel). The options bar shows buttons
+instead of instructions: Edit points, and while editing, Curve / Corner, Delete and Done. The Inspector is on: the
+properties of the selection built from the schema (each with its `help` as a tooltip), the document's own when
+nothing is selected, and what several parts share (mixed values show empty; a change applies to all, in one batch).
+
+**Trying Design mode, step 6 (2026-11-16):**
+- **Origin:** layers and parts have `originX` / `originY` (null = the center of the box), the point they rotate and
+  scale around. It shows as a crosshair that can be dragged (double-click: back to the center) and in the Inspector.
+  It moves along with its part. With a vector layer selected, the Transform tools transform all its content around
+  the layer's origin. (A layer still has no transform of its own: its content's vertices change. A non-destructive
+  layer transform, as Moho's Transform Layer, is still to be decided.)
+- **Colors:** fill and stroke are swatches; a click opens a popover (palette, the system picker, a hex field, None).
+  The stroke's width sits on the same row, and colors and numbers show live on the canvas while they change.
+- **Auto fill and auto stroke:** with the Pen, Rectangle or Ellipse, the bar and the Inspector («New shapes») set the
+  fill and stroke new shapes get (None turns it off; an open line never gets a fill). Kept per person in the browser.
+- **Weld:** in point editing, the Weld button joins two picked open ends (the ends of one line close it; the ends of
+  two lines make one, the other part is deleted), and Auto weld does it when an open end is dropped on another.
+  `closeOutline` and `joinOutlines` in `src/core/geometry.js`.
+
+**Trying Design mode, step 7 (2026-11-16):** ghost outlines. A part that draws nothing (hidden, or with neither
+fill nor stroke) shows on the canvas as a thin dashed outline in its place, fainter when hidden, so it can be found,
+picked (inside it, or near the line of an open one), transformed and edited point by point. Only with the Transform
+tools and in point editing, never with the drawing tools, and never in `drawDocument`'s output (previews, the
+runtime and the export draw only what is visible). A hidden layer hides its parts completely. Tab / Shift+Tab pick
+the next or previous part of the active layer, hidden ones included.
+
+**Trying Design mode, step 8 (2026-11-16):** named points, shared points (welding) and point groups, as decision 6
+foresaw. Agreed with the user:
+- **Named points:** a vertex may have a `name`, unique in its part (`{ x, y, name: "chin" }`), called `jaw.chin`
+  elsewhere. A picked point is named in the options bar. Points that need a name to be referred to (welded or
+  grouped) get one at once, the part's id and a number (`jaw_1`), and can be renamed; shared points and groups
+  follow the new name.
+- **Shared points:** a vertex may share a named point of another part of the same layer instead of having x, y:
+  `{ ref: "jaw.chin", in?, out? }` sits where `jaw.chin` is (its handles are its own). The core resolves it
+  (`resolveDoc` in `src/core/points.js`) for drawing, the runtime and the editor. Renaming a part renames the
+  references; a batch that leaves a reference or a group member without its point is refused, with a message.
+- **In the editor**, a moved shared vertex moves the point it shares (the same point), and deleting a shared point or
+  its part leaves the vertices that shared it where they were, as points of their own (`settleOps`: the editor's
+  batches are settled before they are saved, so the AI's operations stay plain).
+- **Weld:** dropping a point on a point of another part (Auto weld, or the Weld button with two picked points) makes
+  it share that point; dropping it on a line of another part adds a point there and shares it. The two ends of one
+  line still close it. **Alt** joins two open ends of two lines into one line (the weld of step 6). Shared points
+  show round; **Unweld** makes the picked ones separate points again.
+- **Add points:** in point editing, a click on the line of an outline adds a point there without changing its shape
+  (Moho's Add Point; drag to move it at once). `nearestOnOutline` and `insertVertex` in `src/core/geometry.js`.
+- **Point groups** belong to the vector layer: `groups: { "upper_lid": ["lid.top", "brow.mid"] }`. While editing
+  points, the Groups menu picks a group's points, makes a group of the picked points, adds or takes them out, and
+  deletes a group (its points stay).

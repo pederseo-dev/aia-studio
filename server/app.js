@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { createApi, respond } from './api.js';
 import { refusal } from './guard.js';
 import { resolveDocumentsFolder } from './folder.js';
+import { loadSchema } from './schema.js';
+import { createStore } from './store.js';
 
 export const DIST_FOLDER = fileURLToPath(new URL('../dist/', import.meta.url));
 
@@ -62,12 +64,12 @@ export async function startServer({ documents = resolveDocumentsFolder(), dist =
   const host = '127.0.0.1';
   const root = path.resolve(dist);
   await fs.mkdir(documents, { recursive: true });
-  const api = createApi({ documents });
+  const api = createApi({ store: createStore({ folder: documents, schema: loadSchema() }) });
   const server = http.createServer(async (req, res) => {
     const refused = refusal(req);
     if (refused) return respond(res, 403, { error: refused });
     try {
-      if (api(req, res)) return;
+      if (await api(req, res)) return;
       if (req.method !== 'GET' && req.method !== 'HEAD') return respond(res, 405, { error: 'Method not allowed' });
       await serveFile(res, root, (req.url ?? '/').split('?')[0]);
     } catch (e) {

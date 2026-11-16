@@ -1,0 +1,377 @@
+// The Transform tools, for the parts of vector layers, or a whole vector layer's content when the layer is selected.
+//   Select (V) does everything: click a part to pick it (Shift+click: add or take out), drag it to move (Shift:
+//   straight; Alt: a copy), drag on empty space for a marquee (a click there goes back to the layer), the square
+//   handles scale (Shift: keep proportions; Alt: from the origin), the round handle rotates (Shift: 15° steps).
+//   A second click on the picked part edits the points of its layer (see pointEdit.js).
+//   Move (M), Scale (S) and Rotate (T) do only that, dragging anywhere, as Moho's separate tools.
+// The origin (the crosshair) is what a part or a layer rotates and scales around: drag it to move it, double-click it
+// to bring it back to the center. While dragging, the canvas shows a preview; one batch is saved when released.
+
+import { findObject } from '../core/document.js';
+import { around, bounds, originOf, rotate, round2, scale, transformOrigin, transformPart, translate } from '../core/geometry.js';
+import { copyOps } from './clipboard.js';
+import { addPainter, onToolDown, showPreview } from './canvas.js';
+import { editPoints, inShownLayer, isLocked, run, select, selectMany, selectedParts, state, toggleSelect } from './state.js';
+import { isPart } from './schema.js';
+import { pointEditDown } from './pointEdit.js';
+import { drag, element, screen, svg, toDoc } from './view.js';
+
+/**
+ * @typedef {import('../core/document.js').Doc} Doc
+ * @typedef {import('../core/document.js').DocObject} DocObject
+ * @typedef {import('../core/geometry.js').Matrix} Matrix
+ * @typedef {import('../core/geometry.js').Box} Box
+ * @typedef {import('./view.js').Point} Point
+ * @typedef {{ parts: DocObject[], layer: DocObject | null }} Subject
+ */
+
+const HANDLE = 7; // screen px
+const ROTATE_GAP = 22; // screen px above the frame
+const SNAP = 15; // degrees
+const ORIGIN = 7; // screen px, half the crosshair
+
+/** Each handle's place on the frame, from -1 to 1 (x right, y down). */
+const HANDLES = /** @type {const} */ ({
+  nw: [-1, -1], n: [0, -1], ne: [1, -1], e: [1, 0], se: [1, 1], s: [0, 1], sw: [-1, 1], w: [-1, 0],
+});
+
+/** @param {Box} b @param {number} hx @param {number} hy */
+const onFrame = (b, hx, hy) => ({ x: b.x + ((hx + 1) / 2) * b.width, y: b.y + ((hy + 1) / 2) * b.height });
+
+/**
+ * What the tools transform: the picked parts, or every editable part of the selected vector layer.
+ * @param {Doc | null} [doc] @returns {Subject}
+ */
+function subject(doc = state.document) {
+  const only = doc && state.selection.length === 1 ? findObject(doc, state.selection[0]) : undefined;
+  if (doc && only?.type === 'vector') {
+    const parts = doc.objects.filter((o) => o.parent === only.id && isPart(o.type) && inShownLayer(o.id) && !isLocked(o.id));
+    return { parts, layer: isLocked(only.id) ? null : only };
+  }
+  const ids = new Set(state.selection);
+  return { parts: doc ? doc.objects.filter((o) => ids.has(o.id) && isPart(o.type)) : [], layer: null };
+}
+
+/** The point a subject rotates and scales around: its origin if set, else the center of its box. @param {Subject} s */
+function pivotOf(s) {
+  const owner = s.layer ?? (s.parts.length === 1 ? s.parts[0] : null);
+  const origin = owner && originOf(owner);
+  if (origin) return origin;
+  const box = bounds(s.parts);
+  return box ? onFrame(box, 0, 0) : null;
+}
+
+/** The saved document with a subject changed by a matrix (the preview of a drag). @param {Subject} s @param {Matrix} m */
+function changedDoc(s, m) {
+  const doc = /** @type {Doc} */ (state.document);
+  const ids = new Set(s.parts.map((p) => p.id));
+  return {
+    ...doc,
+    objects: doc.objects.map((o) => {
+      if (ids.has(o.id)) return { ...o, ...transformPart(o, m) };
+      if (s.layer && o.id === s.layer.id) return { ...o, ...transformOrigin(o, m) };
+      return o;
+    }),
+  };
+}
+
+/** @param {Subject} s @param {string} verb */
+const noteFor = (s, verb) => `${verb} ${s.layer ? s.layer.id : s.parts.length > 1 ? `${s.parts.length} parts` : s.parts[0].id}`;
+
+/** Saves a transform of the subject, or copies of its parts. @param {Subject} s @param {Matrix} m @param {string} verb @param {boolean} [asCopy] */
+function commit(s, m, verb, asCopy = false) {
+  if (asCopy) {
+    // The originals go back to their place right away; the copies appear where they were dropped.
+    showPreview(null);
+    const { ops, ids } = copyOps(/** @type {Doc} */ (state.document), s.parts, m);
+    run(ops, { select: ids, note: noteFor(s, 'Copy of') });
+    return;
+  }
+  /** @type {import('../core/operations.js').Operation[]} */
+  const ops = s.parts.map((part) => ({ op: 'set', target: part.id, props: transformPart(part, m) }));
+  if (s.layer && originOf(s.layer)) ops.push({ op: 'set', target: s.layer.id, props: transformOrigin(s.layer, m) });
+  // The preview stays until the saved document arrives, so nothing jumps back to where it was.
+  run(ops, { select: state.selection, note: noteFor(s, verb) }).finally(() => showPreview(null));
+}
+
+/** The part under the pointer that can be picked (not in a locked layer). @param {EventTarget | null} target */
+export function partAt(target) {
+  const id = /** @type {Element} */ (target)?.closest?.('.content [data-id]')?.getAttribute('data-id');
+  const object = id && state.document ? findObject(state.document, id) : undefined;
+  return object && isPart(object.type) && !isLocked(object.id) ? object : undefined;
+}
+
+/**
+ * Drags the subject by the pointer.
+ * @param {PointerEvent} event @param {Subject} s
+ * @param {() => void} [onClick] what a click without moving does
+ */
+function moveDrag(event, s, onClick) {
+  const start = toDoc(event);
+  /** @type {Matrix} */
+  let m = translate(0, 0);
+  let moved = false;
+  drag(
+    event,
+    (p, e) => {
+      let dx = p.x - start.x;
+      let dy = p.y - start.y;
+      if (e.shiftKey) Math.abs(dx) > Math.abs(dy) ? (dy = 0) : (dx = 0);
+      moved ||= Math.hypot(dx, dy) > screen(2);
+      m = translate(dx, dy);
+      if (moved) showPreview(changedDoc(s, m));
+    },
+    (p, e) => {
+      if (!moved) {
+        showPreview(null);
+        return onClick?.();
+      }
+      commit(s, m, 'Move', e.altKey);
+    },
+  );
+}
+
+/** Scales from a handle of the frame (Alt: from the origin). @param {PointerEvent} event @param {keyof typeof HANDLES} handle */
+function handleScale(event, handle) {
+  const s = subject();
+  const box = bounds(s.parts);
+  const pivot = pivotOf(s);
+  if (!box || !pivot) return;
+  const [hx, hy] = HANDLES[handle];
+  /** @type {Matrix} */
+  let m = translate(0, 0);
+  drag(
+    event,
+    (p, e) => {
+      const anchor = e.altKey ? pivot : onFrame(box, -hx, -hy);
+      const grip = onFrame(box, hx, hy);
+      /** @param {'x' | 'y'} axis @param {number} along */
+      const factor = (axis, along) => {
+        const span = grip[axis] - anchor[axis];
+        if (!along || Math.abs(span) < 1e-6) return 1;
+        const f = (p[axis] - anchor[axis]) / span;
+        return Math.abs(f) < 0.01 ? Math.sign(f || 1) * 0.01 : f;
+      };
+      let sx = factor('x', hx);
+      let sy = factor('y', hy);
+      if (e.shiftKey) {
+        const k = hx && hy ? (Math.abs(sx) > Math.abs(sy) ? sx : sy) : hx ? sx : sy;
+        sx = Math.sign(sx || 1) * Math.abs(k);
+        sy = Math.sign(sy || 1) * Math.abs(k);
+      }
+      m = around(anchor, scale(sx, sy));
+      showPreview(changedDoc(s, m));
+    },
+    () => commit(s, m, 'Scale'),
+  );
+}
+
+/** Scales evenly around the origin by how far the pointer goes from it (the Scale tool). @param {PointerEvent} event */
+function freeScale(event) {
+  const s = subject();
+  const pivot = pivotOf(s);
+  if (!pivot) return;
+  const start = toDoc(event);
+  const from = Math.max(screen(4), Math.hypot(start.x - pivot.x, start.y - pivot.y));
+  /** @type {Matrix} */
+  let m = translate(0, 0);
+  drag(
+    event,
+    (p) => {
+      const k = Math.max(0.01, Math.hypot(p.x - pivot.x, p.y - pivot.y) / from);
+      m = around(pivot, scale(k, k));
+      showPreview(changedDoc(s, m));
+    },
+    () => commit(s, m, 'Scale'),
+  );
+}
+
+/** Rotates around the origin. @param {PointerEvent} event */
+function rotateDrag(event) {
+  const s = subject();
+  const pivot = pivotOf(s);
+  if (!pivot) return;
+  const start = toDoc(event);
+  const startAngle = Math.atan2(start.y - pivot.y, start.x - pivot.x);
+  /** @type {Matrix} */
+  let m = translate(0, 0);
+  drag(
+    event,
+    (p, e) => {
+      let degrees = ((Math.atan2(p.y - pivot.y, p.x - pivot.x) - startAngle) * 180) / Math.PI;
+      if (e.shiftKey) degrees = Math.round(degrees / SNAP) * SNAP;
+      m = around(pivot, rotate(degrees));
+      showPreview(changedDoc(s, m));
+    },
+    () => commit(s, m, 'Rotate'),
+  );
+}
+
+/** Drags the origin of the selected part or layer; a double-click puts it back at the center. @param {PointerEvent} event */
+function originDrag(event) {
+  const s = subject();
+  const owner = s.layer ?? (s.parts.length === 1 ? s.parts[0] : null);
+  if (!owner) return;
+  if (event.detail >= 2) {
+    run([{ op: 'set', target: owner.id, props: { originX: null, originY: null } }], { select: state.selection, note: `Origin of ${owner.id} to the center` });
+    return;
+  }
+  const doc = /** @type {Doc} */ (state.document);
+  /** @type {Point | null} */
+  let at = null;
+  drag(
+    event,
+    (p) => {
+      at = { x: round2(p.x), y: round2(p.y) };
+      showPreview({ ...doc, objects: doc.objects.map((o) => (o.id === owner.id ? { ...o, originX: at?.x, originY: at?.y } : o)) });
+    },
+    () => {
+      if (!at) return showPreview(null);
+      run([{ op: 'set', target: owner.id, props: { originX: at.x, originY: at.y } }], { select: state.selection, note: `Move the origin of ${owner.id}` }).finally(() =>
+        showPreview(null),
+      );
+    },
+  );
+}
+
+/** @param {PointerEvent} event */
+function marquee(event) {
+  const start = toDoc(event);
+  const additive = event.shiftKey;
+  const box = element('rect', { class: 'marquee' });
+  svg.querySelector('.overlay')?.append(box);
+  let dragged = false;
+  /** @param {Point} p */
+  const rectOf = (p) => ({
+    x: Math.min(start.x, p.x),
+    y: Math.min(start.y, p.y),
+    width: Math.abs(p.x - start.x),
+    height: Math.abs(p.y - start.y),
+  });
+  drag(
+    event,
+    (p) => {
+      const r = rectOf(p);
+      dragged ||= r.width > screen(3) || r.height > screen(3);
+      for (const [k, v] of Object.entries(r)) box.setAttribute(k, String(v));
+    },
+    (p) => {
+      box.remove();
+      const doc = state.document;
+      if (!doc) return;
+      if (!dragged) {
+        // A click on empty space: back from the parts to their layer, as in Moho.
+        if (!additive && selectedParts().length) select(selectedParts()[0].parent);
+        return;
+      }
+      const r = rectOf(p);
+      const hits = doc.objects
+        .filter((o) => isPart(o.type) && !isLocked(o.id) && inShownLayer(o.id))
+        .filter((o) => {
+          const b = bounds([o]);
+          return b && b.x <= r.x + r.width && b.x + b.width >= r.x && b.y <= r.y + r.height && b.y + b.height >= r.y;
+        })
+        .map((o) => o.id);
+      selectMany(additive ? [...selectedParts().map((o) => o.id), ...hits] : hits);
+    },
+  );
+}
+
+/** What a pointerdown on a part does before the tool acts: pick it (Shift: toggle). Returns false if nothing is left to act on. @param {PointerEvent} event @param {DocObject} part */
+function pick(event, part) {
+  if (event.shiftKey) {
+    toggleSelect(part.id);
+    return false;
+  }
+  if (!state.selection.includes(part.id)) select(part.id);
+  return true;
+}
+
+/** The handle under the pointer, if any. @param {PointerEvent} event */
+const handleAt = (event) => /** @type {Element} */ (event.target).getAttribute?.('data-handle');
+
+/** @param {PointerEvent} event */
+function selectDown(event) {
+  if (state.editing) return pointEditDown(event);
+  const handle = handleAt(event);
+  if (handle === 'origin') return originDrag(event);
+  if (handle === 'rotate') return rotateDrag(event);
+  if (handle) return handleScale(event, /** @type {keyof typeof HANDLES} */ (handle));
+  const part = partAt(event.target);
+  if (!part) return marquee(event);
+  // A second click on the part that is already picked alone edits the points of its layer.
+  const again = state.selection.length === 1 && state.selected === part.id;
+  if (!pick(event, part)) return;
+  moveDrag(event, subject(), again ? () => editPoints(part.id) : undefined);
+}
+
+/**
+ * Move, Scale and Rotate: a pointerdown on a part picks it, then a drag anywhere does the tool's one thing (on the
+ * picked parts, or on the selected layer's content).
+ * @param {(event: PointerEvent) => void} act
+ */
+const singleTool = (act) => (/** @type {PointerEvent} */ event) => {
+  if (state.editing) return pointEditDown(event);
+  const handle = handleAt(event);
+  if (handle === 'origin') return originDrag(event);
+  if (handle && handle !== 'rotate' && state.tool === 'scale') return handleScale(event, /** @type {keyof typeof HANDLES} */ (handle));
+  const part = partAt(event.target);
+  if (part && !pick(event, part)) return;
+  if (!subject().parts.length) return marquee(event);
+  act(event);
+};
+
+/** The frame around the subject with the handles the tool uses, and its origin. @param {SVGGElement} overlay @param {Doc} doc */
+function paintSelection(overlay, doc) {
+  if (state.editing) return;
+  const s = subject(doc);
+  if (!s.parts.length) return;
+  if (s.parts.length > 1) {
+    for (const part of s.parts) {
+      const b = bounds([part]);
+      if (b) overlay.append(element('rect', { ...b, class: 'part-box' }));
+    }
+  }
+  const tight = bounds(s.parts);
+  if (!tight) return;
+  const pad = screen(3);
+  const b = { x: tight.x - pad, y: tight.y - pad, width: tight.width + pad * 2, height: tight.height + pad * 2 };
+  overlay.append(element('rect', { ...b, class: `selection-box${s.layer ? ' layer' : ''}` }));
+  const tool = state.tool;
+  if (tool === 'select' || tool === 'rotate') {
+    const top = onFrame(b, 0, -1);
+    const knob = { x: top.x, y: top.y - screen(ROTATE_GAP) };
+    overlay.append(
+      element('line', { x1: top.x, y1: top.y, x2: knob.x, y2: knob.y, class: 'rotate-line' }),
+      element('circle', { cx: knob.x, cy: knob.y, r: screen(HANDLE / 2 + 1), class: 'handle rotate', 'data-handle': 'rotate' }),
+    );
+  }
+  if (tool === 'select' || tool === 'scale') {
+    const size = screen(HANDLE);
+    for (const [name, [x, y]] of Object.entries(HANDLES)) {
+      const c = onFrame(b, x, y);
+      overlay.append(
+        element('rect', { x: c.x - size / 2, y: c.y - size / 2, width: size, height: size, class: `handle scale ${name}`, 'data-handle': name }),
+      );
+    }
+  }
+  // The origin of a single part or of the layer: a crosshair that can be dragged.
+  const owner = s.layer ?? (s.parts.length === 1 ? s.parts[0] : null);
+  const pivot = owner && pivotOf(s);
+  if (pivot) {
+    const r = screen(ORIGIN);
+    const set = !!originOf(/** @type {DocObject} */ (owner));
+    overlay.append(
+      element('path', { d: `M${pivot.x - r} ${pivot.y}H${pivot.x + r}M${pivot.x} ${pivot.y - r}V${pivot.y + r}`, class: 'origin-cross' }),
+      element('circle', { cx: pivot.x, cy: pivot.y, r: screen(4), class: `handle origin${set ? ' set' : ''}`, 'data-handle': 'origin' }),
+    );
+  }
+}
+
+export function setupSelectTool() {
+  onToolDown('select', selectDown);
+  onToolDown('move', singleTool((event) => moveDrag(event, subject())));
+  onToolDown('scale', singleTool(freeScale));
+  onToolDown('rotate', singleTool(rotateDrag));
+  addPainter(paintSelection);
+}

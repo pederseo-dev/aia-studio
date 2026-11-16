@@ -1,40 +1,312 @@
 :root {
+  /* Warm mid gray, like Moho: light panels separated by dark borders and an orange accent. */
+  --background: #353330;
+  --panel: #46433f;
+  --panel-2: #55514c;
+  --border: #2b2926;
+  --text: #f4f0ea;
+  --soft: #c6beb3;
+  --faint: #9a9187;
+  --accent: #f0a23a;
+  --on-accent: #231d15;
+  --selection: #6e5534;
+  --error: #ff8a80;
+  --canvas: #67635d;
+  --left: 240px; /* Layers, and the tools above it */
+  --right: 340px; /* Inspector and Document JSON */
   color-scheme: dark;
-  --bg: #353330;
-  --text: #ece8e1;
-  --muted: #a39d93;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: 12px/1.4 system-ui, sans-serif;
 }
 
-html,
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
 body {
-  height: 100%;
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-}
-
-#editor {
-  height: 100%;
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  text-align: center;
+  background: var(--background);
+  color: var(--text);
+  overflow: hidden;
 }
 
-h1 {
-  margin: 12px 0 0;
-  font-size: 22px;
+button, input {
+  font: inherit;
+  color: inherit;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.4; cursor: default; }
+button.active, button.main { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+input:focus, button:focus-visible { outline: 1px solid var(--accent); outline-offset: 0; }
+kbd { font: 11px ui-monospace, monospace; color: var(--soft); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; }
+.ico { display: block; }
+.spacer { flex: 1; }
+.faint { color: var(--faint); }
+
+h2 {
+  margin: 0;
+  font-size: 11px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--soft);
 }
 
-p {
-  margin: 4px 0;
+/* Icon buttons: no frame until hovered. */
+button.icon {
+  width: 26px; height: 26px; min-width: 0; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: none; color: var(--soft); border-radius: 5px;
 }
+button.icon:hover:not(:disabled), button.icon[aria-expanded="true"] { background: var(--panel-2); color: var(--text); }
 
-.muted {
-  color: var(--muted);
-  font-size: 13px;
+/* ---------- Top bar ---------- */
+
+#header { background: var(--panel); border-bottom: 1px solid var(--border); }
+#tabs-row { display: flex; align-items: flex-end; gap: 6px; padding: 6px 8px 0; background: var(--background); border-bottom: 1px solid var(--border); }
+#tabs-row > .dropdown, #tabs-row > .mark { align-self: center; margin-bottom: 6px; }
+.mark { margin: 0 6px 6px 2px; font-size: 12px; color: var(--soft); display: inline-flex; align-items: center; gap: 6px; }
+#tabs { display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; margin-bottom: -1px; }
+.tab {
+  display: flex; align-items: center; gap: 4px; max-width: 200px;
+  padding: 4px 4px 4px 12px; border: 1px solid var(--border); border-bottom: none; border-radius: 6px 6px 0 0;
+  background: var(--panel-2); color: var(--soft); cursor: pointer; white-space: nowrap;
 }
+.tab.active { background: var(--panel); color: var(--text); border-bottom: 1px solid var(--panel); }
+.tab .title { overflow: hidden; text-overflow: ellipsis; }
+.tab .close { border: none; background: none; padding: 1px; color: var(--faint); display: inline-flex; border-radius: 3px; }
+.tab .close .ico { width: 14px; height: 14px; }
+.tab .close:hover { color: var(--text); background: var(--border); }
+#tab-new { align-self: flex-end; margin: 0 0 3px -2px; width: 24px; height: 24px; }
+#notice { align-self: center; margin: 0 0 6px auto; color: var(--error); max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The bar uses the same columns as the panels below: tools over Layers, the selection over the canvas, undo/redo and
+   the modes over the right panel. */
+#bar { display: grid; grid-template-columns: var(--left) minmax(0, 1fr) var(--right); align-items: center; min-height: 36px; }
+#bar > .tools { padding: 0 8px; border-right: 1px solid var(--border); height: 100%; align-items: center; }
+#bar > .options { padding: 0 10px; }
+#bar > .bar-end { display: flex; align-items: center; justify-content: flex-end; gap: 4px; padding: 0 8px; }
+#modes { display: flex; gap: 2px; }
+#modes button { padding: 2px 12px; }
+
+/* ---------- Menus and dialogs ---------- */
+
+.dropdown { position: relative; }
+.menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 10; min-width: 200px;
+  display: flex; flex-direction: column; padding: 4px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px #0008;
+}
+.menu.right { left: auto; right: 0; }
+.menu button { display: flex; align-items: center; justify-content: space-between; gap: 16px; text-align: left; border: none; background: none; padding: 5px 8px; }
+.menu button:hover:not(:disabled) { background: var(--selection); }
+.menu .danger { color: var(--error); }
+.menu hr { width: 100%; border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+.with-icon { display: inline-flex; align-items: center; gap: 8px; }
+
+dialog { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; min-width: 340px; }
+dialog::backdrop { background: #0006; }
+dialog h2 { margin-bottom: 12px; }
+.form { display: flex; flex-direction: column; gap: 8px; }
+.form label { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 8px; }
+.form .row { display: flex; align-items: center; gap: 10px; }
+.form label.checkbox { display: inline-flex; gap: 4px; }
+.buttons { display: flex; justify-content: flex-end; gap: 6px; margin-top: 12px; }
+.dialog-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; }
+.dialog-list button { width: 100%; text-align: left; border: none; background: none; padding: 6px 8px; }
+.dialog-list button:hover { background: var(--panel-2); }
+.shortcuts td { padding: 3px 12px 3px 0; }
+
+/* ---------- Workspace ---------- */
+
+#space { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--left) minmax(0, 1fr) var(--right); }
+.panel { background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.panel > .header { display: flex; align-items: center; gap: 2px; padding: 4px 6px 4px 10px; border-bottom: 1px solid var(--border); min-height: 34px; }
+#layers-panel { border-right: 1px solid var(--border); }
+#right-panel { border-left: 1px solid var(--border); }
+#right-panel > .section { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+#right-panel > .section + .section { border-top: 1px solid var(--border); }
+#right-panel .header { display: flex; align-items: center; gap: 2px; padding: 4px 6px 4px 10px; border-bottom: 1px solid var(--border); min-height: 34px; }
+
+/* ---------- Layers ---------- */
+
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree { flex: 1; overflow-y: auto; padding: 4px 0; }
+.tree .empty { padding: 10px; color: var(--faint); }
+.row { display: flex; align-items: center; gap: 4px; height: 26px; padding-right: 4px; cursor: default; border-top: 1px solid transparent; border-bottom: 1px solid transparent; }
+.row:hover { background: var(--panel-2); }
+.row.selected { background: var(--selection); }
+.row.hidden-layer .name, .row.hidden-layer .kind { opacity: 0.45; }
+.row .fold { border: none; background: none; padding: 0; width: 16px; height: 16px; display: inline-flex; color: var(--faint); }
+.row .fold:disabled { visibility: hidden; }
+.row .fold .ico { width: 14px; height: 14px; transition: transform 0.1s; }
+.row .fold.open .ico { transform: rotate(90deg); }
+.row .kind { color: var(--soft); display: inline-flex; }
+.row .kind .ico { width: 16px; height: 16px; }
+.row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .rename { flex: 1; min-width: 0; padding: 0 4px; height: 20px; }
+.row .toggle { border: none; background: none; padding: 2px; display: inline-flex; color: var(--faint); border-radius: 3px; }
+.row .toggle .ico { width: 15px; height: 15px; }
+.row .toggle:hover { color: var(--text); background: var(--border); }
+/* Off by default (eye open, padlock open) they only show on hover; a hidden or locked layer always shows it. */
+.row .toggle[title="Lock on the canvas"], .row .toggle[title="Hide"] { opacity: 0; }
+.row:hover .toggle, .row.selected .toggle { opacity: 1 !important; }
+.row.drop-above { border-top-color: var(--accent); }
+.row.drop-below { border-bottom-color: var(--accent); }
+.row.drop-inside { outline: 1px solid var(--accent); outline-offset: -1px; }
+
+/* ---------- Canvas ---------- */
+
+#canvas-area { position: relative; background: var(--canvas); overflow: hidden; }
+#canvas { position: absolute; inset: 0; }
+#canvas .artboard { stroke: #0005; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.empty-state { position: absolute; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--soft); }
+
+/* ---------- Document JSON ---------- */
+
+.json { flex: 1; margin: 0; padding: 8px 10px; overflow: auto; font: 12px/1.5 ui-monospace, Consolas, monospace; color: var(--soft); white-space: pre; }
+.json .line { display: inline-block; min-width: 100%; }
+.json .changed { animation: changed 1.8s ease-out; }
+@keyframes changed { from { background: color-mix(in srgb, var(--accent) 35%, transparent); } to { background: transparent; } }
+.j-key { color: #e8c48a; }
+.j-string { color: #a9d68f; }
+.j-number { color: #8fc7e8; }
+.j-literal { color: #e88aa0; }
+
+/* ---------- Tools ---------- */
+
+.tools { display: flex; gap: 2px; }
+.tools button.icon.active { background: var(--accent); color: var(--on-accent); }
+.separator { width: 1px; height: 20px; background: var(--border); margin: 0 6px; }
+#canvas[data-tool="rect"], #canvas[data-tool="ellipse"], #canvas[data-tool="pen"] { cursor: crosshair; }
+#canvas[data-tool="select"] .content [data-id] { cursor: move; }
+#canvas .overlay * { vector-effect: non-scaling-stroke; pointer-events: none; }
+#canvas .selection-box { fill: none; stroke-linejoin: round; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+#canvas .draft { fill: color-mix(in srgb, var(--accent) 20%, transparent); stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+#canvas .pen-line { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+#canvas .pen-point { fill: #fff; stroke: var(--accent); stroke-width: 1.5; }
+#canvas .pen-start { fill: var(--accent); stroke: #fff; stroke-width: 1.5; }
+#canvas .pen-handle { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 2; }
+.row.part .kind { color: var(--faint); }
+.row.part .name { color: var(--soft); }
+.row.part.selected .name { color: var(--text); }
+
+/* Tool groups: the group's tool and an arrow for its menu. */
+.tools-group { display: flex; align-items: center; border-radius: 5px; }
+.tools-group.active .main { background: var(--accent); color: var(--on-accent); }
+.tools-group.active .main:hover { background: var(--accent) !important; color: var(--on-accent) !important; }
+.tools-group .more { border: none; background: none; padding: 0 3px; height: 26px; color: var(--faint); border-radius: 4px; }
+.tools-group .more:hover, .tools-group .more[aria-expanded="true"] { background: var(--panel-2); color: var(--text); }
+.tools-group .menu button.current { color: var(--accent); }
+.tools-group .menu .ico { width: 16px; height: 16px; }
+
+/* Options of the selection, as Moho's option bar. */
+.options { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--soft); }
+.options .kind { color: var(--faint); white-space: nowrap; }
+.options .name-field { display: inline-flex; align-items: center; gap: 6px; }
+.options .name-field input { width: 160px; height: 22px; }
+
+/* Select: the frame, its handles and the marquee. */
+#canvas .overlay .handle { pointer-events: all; fill: #fff; stroke: var(--accent); stroke-width: 1.5; }
+#canvas .overlay .handle.rotate { cursor: grab; }
+#canvas .overlay .handle.n, #canvas .overlay .handle.s { cursor: ns-resize; }
+#canvas .overlay .handle.e, #canvas .overlay .handle.w { cursor: ew-resize; }
+#canvas .overlay .handle.nw, #canvas .overlay .handle.se { cursor: nwse-resize; }
+#canvas .overlay .handle.ne, #canvas .overlay .handle.sw { cursor: nesw-resize; }
+#canvas .rotate-line { stroke: var(--accent); stroke-width: 1; }
+#canvas .part-box { fill: none; stroke: var(--accent); stroke-width: 1; opacity: 0.5; }
+#canvas .marquee { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; }
+
+/* Layers: the layer that holds the picked parts. */
+.row.holds-selection { background: color-mix(in srgb, var(--selection) 45%, transparent); }
+
+/* Point editing. */
+#canvas .edit-outline { fill: none; stroke: var(--accent); stroke-width: 1; }
+#canvas .overlay .handle.point { fill: #fff; stroke: var(--accent); stroke-width: 1.2; cursor: move; }
+#canvas .overlay .handle.point.picked { fill: var(--accent); stroke: #fff; }
+#canvas .overlay .handle.knob { fill: var(--accent); stroke: #fff; stroke-width: 1; cursor: pointer; }
+#canvas .knob-line { stroke: var(--accent); stroke-width: 1; }
+
+/* The box that asks for a new part's name. */
+.name-prompt {
+  position: absolute; z-index: 5; display: flex; flex-direction: column; gap: 4px; padding: 6px 8px;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 6px; box-shadow: 0 6px 18px #0007;
+}
+.name-prompt input { width: 180px; }
+.name-prompt .help { color: var(--faint); font-size: 11px; }
+#canvas .edit-outline { opacity: 0.55; }
+#canvas .edit-outline.main { opacity: 1; stroke-width: 1.5; }
+#bar > .bar-end { border-left: 1px solid var(--border); height: 100%; }
+.options .actions { display: flex; align-items: center; gap: 4px; }
+.options .action { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px 0 5px; }
+.options .action .ico { width: 15px; height: 15px; }
+.options .count { color: var(--faint); margin-right: 4px; white-space: nowrap; }
+
+/* ---------- Inspector ---------- */
+
+.inspector { flex: 1; overflow-y: auto; padding: 6px 10px 10px; }
+.inspector .type-help { margin: 0 0 8px; color: var(--faint); }
+.inspector .empty { color: var(--faint); }
+.inspector .prop { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 28px; }
+.inspector .prop-name { color: var(--soft); }
+.inspector input[type="number"], .inspector input[type="text"] { width: 100%; height: 22px; }
+.inspector input[type="checkbox"] { justify-self: start; margin: 0; }
+.inspector .color { display: flex; align-items: center; gap: 6px; }
+.inspector input[type="color"] { width: 28px; height: 22px; padding: 1px; }
+.inspector input[type="color"]:disabled { opacity: 0.35; }
+.inspector .hex { flex: 1; min-width: 0; font-family: ui-monospace, Consolas, monospace; }
+
+/* ---------- Color swatches ---------- */
+
+.swatch {
+  --color: transparent;
+  width: 22px; height: 22px; min-width: 0; padding: 0; border-radius: 4px; border: 1px solid var(--border);
+  background: linear-gradient(var(--color), var(--color)), repeating-conic-gradient(#d9d9d9 0 25%, #fff 0 50%) 0 0 / 8px 8px;
+  box-shadow: inset 0 0 0 1px #ffffff22;
+}
+.swatch.empty { background: #fff linear-gradient(to top right, transparent 46%, #e05555 46% 54%, transparent 54%); }
+.swatch.mixed { background: repeating-linear-gradient(45deg, var(--panel-2) 0 4px, var(--panel) 4px 8px); }
+.color-popover {
+  position: fixed; z-index: 20; display: flex; flex-direction: column; gap: 8px; padding: 10px; width: 200px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 28px #0009;
+}
+.color-popover .palette { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.color-popover .chip { height: 22px; padding: 0; border-radius: 4px; border: 1px solid var(--border); }
+.color-popover .row { display: flex; gap: 6px; align-items: center; }
+.color-popover input[type="color"] { width: 36px; height: 26px; padding: 1px; }
+.color-popover .hex { flex: 1; min-width: 0; font-family: ui-monospace, Consolas, monospace; }
+.color-popover .none { margin-right: auto; }
+.inspector .prop .controls { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.inspector .prop .controls input[type="number"] { flex: 1; min-width: 0; }
+.inspector .prop .controls input.width { flex: 0 0 64px; }
+.inspector button.small { height: 22px; padding: 0 6px; font-size: 11px; }
+.inspector .new-shapes { margin: 0 -10px 8px; padding: 6px 10px 8px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.inspector h3 { margin: 0 0 4px; font-size: 11px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
+.options .draw-style { display: flex; align-items: center; gap: 6px; padding-right: 10px; margin-right: 2px; border-right: 1px solid var(--border); white-space: nowrap; color: var(--soft); }
+.options .draw-style input[type="number"] { width: 52px; height: 22px; }
+.options .action.toggle { padding-left: 7px; }
+.options .action .led { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--faint); }
+.options .action.toggle.on .led { background: var(--accent); border-color: var(--accent); }
+#canvas .selection-box.layer { stroke-dasharray: 8 4; }
+#canvas .origin-cross { stroke: var(--accent); stroke-width: 1.5; }
+#canvas .overlay .handle.origin { fill: var(--panel); stroke: var(--accent); stroke-width: 1.5; cursor: move; }
+#canvas .overlay .handle.origin.set { fill: var(--accent); }
+
+/* Ghost outlines: parts that draw nothing (hidden, or without fill and stroke), only with the Transform tools. */
+#canvas .ghost-hit { stroke: transparent; }
+#canvas .ghost-line { fill: none; stroke: #6d6a80; stroke-width: 1; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+#canvas .ghost.hidden .ghost-line { opacity: 0.4; }
+#canvas .add-point { fill: #fff; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 2 2; }
+#canvas .overlay .handle.point.shared { stroke-width: 2; }
+.options .point-name input { width: 120px; }
+.groups-menu { min-width: 240px; padding: 6px; gap: 2px; }
+.groups-menu .group-row { display: flex; align-items: center; gap: 2px; }
+.groups-menu .group-pick { flex: 1; }
+.groups-menu .group-edit { width: 22px; justify-content: center; padding: 3px 0; }
+.groups-menu input { width: 100%; height: 24px; margin-top: 2px; }

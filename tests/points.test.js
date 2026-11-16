@@ -1,0 +1,67 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { loadSchema } from '../server/schema.js';
+import { newDocument } from '../src/core/document.js';
+import { applyOps } from '../src/core/operations.js';
+import { drawDocument } from '../src/core/draw.js';
+import { resolveDoc, settleOps, syncShared } from '../src/core/points.js';
+
+const schema = loadSchema();
+const apply = (doc, ops) => applyOps(schema, doc, ops).document;
+const loose = (doc, ops) => applyOps(schema, doc, ops, { checkPoints: false }).document;
+
+/** A layer with a jaw (its chin named) and a mouth line whose end shares the chin. */
+function face() {
+  return apply(newDocument(), [
+    { op: 'create', type: 'vector', id: 'head' },
+    { op: 'create', type: 'path', id: 'jaw', parent: 'head', props: { vertices: [{ x: 0, y: 0 }, { x: 50, y: 80, name: 'chin' }, { x: 100, y: 0 }] } },
+    { op: 'create', type: 'path', id: 'mouth', parent: 'head', props: { closed: false, fill: null, vertices: [{ x: 20, y: 40 }, { ref: 'jaw.chin', in: { x: -5, y: 0 } }] } },
+  ]);
+}
+const vertex = (doc, id, i) => doc.objects.find((o) => o.id === id).vertices[i];
+
+test('a shared vertex sits where the point it shares is', () => {
+  const doc = face();
+  assert.deepEqual(vertex(doc, 'mouth', 1), { ref: 'jaw.chin', in: { x: -5, y: 0 } });
+  assert.deepEqual(vertex(resolveDoc(doc), 'mouth', 1), { ref: 'jaw.chin', in: { x: -5, y: 0 }, x: 50, y: 80 });
+  const mouth = drawDocument(doc).nodes[0].children[1];
+  assert.match(String(mouth.attrs.d), /50 80$/);
+});
+
+test('broken points are refused with a message that says why', () => {
+  const doc = face();
+  const refuses = (ops, pattern) => assert.throws(() => apply(doc, ops), pattern);
+  refuses([{ op: 'set', target: 'mouth', props: { vertices: [{ x: 0, y: 0 }, { ref: 'jaw.nose' }] } }], /no such point/);
+  refuses([{ op: 'set', target: 'mouth', props: { vertices: [{ x: 0, y: 0 }, { ref: 'jaw.chin', x: 1, y: 2 }] } }], /no x, y of its own/);
+  refuses([{ op: 'set', target: 'jaw', props: { vertices: [{ x: 0, y: 0, name: 'a' }, { x: 1, y: 1, name: 'a' }] } }], /two points named "a"/);
+  refuses([{ op: 'delete', target: 'jaw' }], /no such point/);
+  refuses([{ op: 'set', target: 'head', props: { groups: { lid: ['jaw.nose'] } } }], /no such point/);
+  refuses([{ op: 'set', target: 'head', props: { groups: { Lid: ['jaw.chin'] } } }], /group name/);
+});
+
+test('renaming a part renames the points that name it', () => {
+  let doc = apply(face(), [{ op: 'set', target: 'head', props: { groups: { lower: ['jaw.chin'] } } }]);
+  doc = apply(doc, [{ op: 'rename', target: 'jaw', id: 'chin_part' }]);
+  assert.equal(vertex(doc, 'mouth', 1).ref, 'chin_part.chin');
+  assert.deepEqual(doc.objects.find((o) => o.id === 'head').groups, { lower: ['chin_part.chin'] });
+});
+
+test('moving a shared vertex in the editor moves the point it shares', () => {
+  const doc = face();
+  const resolved = resolveDoc(doc);
+  const moved = /** @type {any[]} */ (resolved.objects.find((o) => o.id === 'mouth')?.vertices).map((v) => (v.ref ? { ...v, x: 60, y: 90 } : v));
+  // While dragging, the jaw follows.
+  const preview = syncShared({ ...resolved, objects: resolved.objects.map((o) => (o.id === 'mouth' ? { ...o, vertices: moved } : o)) }, resolved);
+  assert.deepEqual([vertex(preview, 'jaw', 1).x, vertex(preview, 'jaw', 1).y], [60, 90]);
+  // Saved: the shared vertex keeps no x, y; the chin moves.
+  const after = apply(doc, settleOps(doc, [{ op: 'set', target: 'mouth', props: { vertices: moved } }], loose));
+  assert.deepEqual(vertex(after, 'mouth', 1), { ref: 'jaw.chin', in: { x: -5, y: 0 } });
+  assert.deepEqual(vertex(after, 'jaw', 1), { x: 60, y: 90, name: 'chin' });
+});
+
+test('deleting a shared point leaves its sharers where they were, and groups without it', () => {
+  const doc = apply(face(), [{ op: 'set', target: 'head', props: { groups: { lower: ['jaw.chin'] } } }]);
+  const after = apply(doc, settleOps(doc, [{ op: 'delete', target: 'jaw' }], loose));
+  assert.deepEqual(vertex(after, 'mouth', 1), { x: 50, y: 80, in: { x: -5, y: 0 } });
+  assert.deepEqual(after.objects.find((o) => o.id === 'head').groups, { lower: [] });
+});

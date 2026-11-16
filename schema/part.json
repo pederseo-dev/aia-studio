@@ -1,0 +1,49 @@
+{
+  "name": "part",
+  "abstract": true,
+  "description": "A part of a vector layer: one path with its own fill and stroke. Its coordinates are the layer's. Parts draw in their order in the layer: the last one on top.",
+  "help": "A shape of a vector layer, with its fill and stroke.",
+  "properties": {
+    "visible": {
+      "type": "boolean",
+      "default": true,
+      "description": "If false, the part is not drawn.",
+      "help": "When off, the part is not drawn."
+    },
+    "fill": {
+      "type": "color",
+      "default": "#c8c2d4",
+      "nullable": true,
+      "description": "Fill color. null = no fill (only the stroke).",
+      "help": "Fill color. Empty = no fill."
+    },
+    "stroke": {
+      "type": "color",
+      "default": "#2b2926",
+      "nullable": true,
+      "description": "Stroke color. null = no stroke.",
+      "help": "Stroke color. Empty = no stroke."
+    },
+    "strokeWidth": {
+      "type": "number",
+      "default": 2,
+      "min": 0,
+      "description": "Stroke width in px.",
+      "help": "Stroke width in px."
+    },
+    "originX": {
+      "type": "number",
+      "default": null,
+      "nullable": true,
+      "description": "X of the origin: the point the part rotates and scales around, in the layer's coordinates. null = the center of its box. It moves along when the part moves.",
+      "help": "Origin X: the point it rotates and scales around. Empty = its center."
+    },
+    "originY": {
+      "type": "number",
+      "default": null,
+      "nullable": true,
+      "description": "Y of the origin: the point the part rotates and scales around, in the layer's coordinates. null = the center of its box. It moves along when the part moves.",
+      "help": "Origin Y: the point it rotates and scales around. Empty = its center."
+    }
+  }
+}

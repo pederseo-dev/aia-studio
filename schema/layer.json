@@ -1,0 +1,34 @@
+{
+  "name": "layer",
+  "abstract": true,
+  "description": "Everything that shows in Layers. The order among siblings is the drawing order: the last one is drawn on top.",
+  "help": "Anything in the Layers panel.",
+  "properties": {
+    "visible": {
+      "type": "boolean",
+      "default": true,
+      "description": "If false, neither the layer nor its children are drawn.",
+      "help": "When off, the layer and its children are not drawn."
+    },
+    "locked": {
+      "type": "boolean",
+      "default": false,
+      "description": "Editor lock: the layer and its children can't be picked or changed on the canvas. It does not change how it looks. It is the user's: the AI does not change a locked layer or its children unless asked, and does not unlock it.",
+      "help": "Locked layers can't be picked or changed on the canvas."
+    },
+    "originX": {
+      "type": "number",
+      "default": null,
+      "nullable": true,
+      "description": "X of the origin: the point the layer's content rotates and scales around, in the layer's coordinates. null = the center of its box. It moves along when the layer's content moves.",
+      "help": "Origin X: the point it rotates and scales around. Empty = its center."
+    },
+    "originY": {
+      "type": "number",
+      "default": null,
+      "nullable": true,
+      "description": "Y of the origin: the point the layer's content rotates and scales around, in the layer's coordinates. null = the center of its box. It moves along when the layer's content moves.",
+      "help": "Origin Y: the point it rotates and scales around. Empty = its center."
+    }
+  }
+}

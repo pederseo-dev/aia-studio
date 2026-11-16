@@ -1,0 +1,10 @@
+{
+  "name": "path",
+  "extends": "part",
+  "description": "Outline part: a list of vertices in the layer's coordinates. A vertex is { x, y } (a corner) and may carry tangent handles relative to it: \"in\" (toward the previous vertex) and \"out\" (toward the next), each { x, y }. A vertex may have a name, unique in its part ({ x, y, name: \"chin\" }; elsewhere it is \"jaw.chin\"). A vertex may share a named point of another part of the same layer instead of having x, y: { ref: \"jaw.chin\", in?, out? } sits where jaw.chin is, so the two outlines are welded there and move together. closed joins the last vertex to the first; an open outline is usually a line (fill null).",
+  "help": "Outline made of vertices with optional curve handles.",
+  "properties": {
+    "vertices": { "type": "vertices", "default": [], "description": "Vertices: [{ x, y, in?: { x, y }, out?: { x, y }, name? }] or a shared point [{ ref: \"part.point\", in?, out? }], handles relative to their vertex.", "help": "The vertices of the outline." },
+    "closed": { "type": "boolean", "default": true, "description": "If true, the last vertex joins the first one.", "help": "Joins the last vertex to the first one." }
+  }
+}
