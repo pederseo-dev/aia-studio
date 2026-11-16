@@ -113,3 +113,29 @@ test('aia move moves points by name in one step', async () => {
   await ok('undo face');
   assert.deepEqual((await store.get('face', 'ai')).document.objects[1].vertices[0], { x: 0, y: 0 });
 });
+
+test('the AI welds, names, adds points, follows and groups by name, as the editor does', async () => {
+  await ok('new Face');
+  await ok(['ops', 'face', JSON.stringify([
+    { op: 'create', type: 'vector', id: 'head' },
+    { op: 'create', type: 'path', id: 'jaw', parent: 'head', props: { closed: false, fill: null, vertices: [{ x: 0, y: 0 }, { x: 50, y: 80 }, { x: 100, y: 0 }] } },
+    { op: 'create', type: 'path', id: 'skin', parent: 'head', props: { vertices: [{ x: 0, y: 1 }, { x: 99, y: 1 }, { x: 50, y: -60 }] } },
+    { op: 'create', type: 'path', id: 'mouth', parent: 'head', props: { closed: false, fill: null, vertices: [{ x: 30, y: 30 }, { x: 70, y: 31 }] } },
+  ])]);
+  await ok('name face jaw.1 chin');
+  assert.match(await ok('weld face skin.0 jaw.0'), /Weld skin.0 to jaw.jaw_1/);
+  await ok('weld face skin.1 jaw.2');
+  assert.match(await ok('follow face skin.0 skin.1'), /skin follows jaw/);
+  await ok('weld face mouth.1 --on jaw');
+  assert.match(await ok('add-point face mouth --at 50,20 --name mid'), /Added mouth.mid at \d/);
+  await ok('group face head.lower jaw.chin mouth.mid');
+  const shown = await ok('show face skin --resolved');
+  assert.match(shown, /"ref":"jaw.jaw_1","follow":"jaw","x":0,"y":0/);
+  // Deleting the jaw keeps what shared its points where it was (as in the editor), instead of refusing.
+  await ok('ops face [{"op":"delete","target":"jaw"}]');
+  const { document } = await store.get('face', 'ai');
+  assert.deepEqual(/** @type {any[]} */ (document.objects.find((o) => o.id === 'skin')?.vertices).slice(0, 2), [{ x: 0, y: 0 }, { x: 100, y: 0 }]);
+  assert.deepEqual(document.objects[0].groups, { lower: ['mouth.mid'] });
+  assert.match((await aia.run('weld face mouth.0 mouth.mid')).text, /only its two open ends weld/);
+  assert.match((await aia.run('follow face mouth.0 mouth.1')).text, /share points|weld them first/);
+});

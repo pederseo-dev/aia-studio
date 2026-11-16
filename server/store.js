@@ -9,6 +9,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { idFromName, newDocument } from '../src/core/document.js';
 import { applyOps } from '../src/core/operations.js';
+import { settleOps } from '../src/core/points.js';
 
 /**
  * @typedef {import('../src/core/document.js').Doc} Doc
@@ -103,6 +104,16 @@ export function createStore({ folder, schema }) {
   }
 
   /** @param {Doc} document @param {Operation[]} ops */
+  function settled(document, ops) {
+    if (!Array.isArray(ops) || !ops.length) return ops;
+    try {
+      return settleOps(document, ops, (d, o) => applyOps(schema, d, o, { checkPoints: false }).document);
+    } catch (e) {
+      throw new StoreError(e.message, 400);
+    }
+  }
+
+  /** @param {Doc} document @param {Operation[]} ops */
   function apply(document, ops) {
     try {
       return applyOps(schema, document, ops);
@@ -156,10 +167,16 @@ export function createStore({ folder, schema }) {
       await fs.rm(dir(id), { recursive: true, force: true });
     },
 
-    /** @param {string} id @param {Operation[]} ops @param {{ origin: string, note?: string }} by */
+    /**
+     * Applies a batch, settled first as for everyone (settleOps in core/points.js): a shared vertex given a place
+     * moves the point it shares, and deleting a shared point leaves the vertices that shared it where they were.
+     * @param {string} id @param {Operation[]} ops @param {{ origin: string, note?: string }} by
+     */
     apply(id, ops, { origin, note }) {
       return queued(id, async () => {
-        const { document, inverse } = apply(await read(id), ops);
+        const current = await read(id);
+        ops = settled(current, ops);
+        const { document, inverse } = apply(current, ops);
         await save(id, document, { origin, kind: 'batch', ...(note ? { note } : {}), ops, inverse });
         return state(id, document, origin);
       });

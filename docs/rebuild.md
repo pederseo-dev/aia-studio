@@ -135,6 +135,9 @@ transform a part by name, weld by name) come after the first AI test shows what 
 | `aia show <doc> [id]` | The JSON as it is saved: the whole document or one object |
 | `aia ops <doc> [--note "…"] <batch>` (or `--file <path>`) | Applies a batch with the editor's engine, origin `ai`; errors carry the engine's message |
 | `aia move <doc> <point>... --by dx,dy \| --to x,y` | Moves points by name: `head.chin`, `head.3` (by index) or a point group `face.upper_lid`; what shares them follows (added after the first AI test) |
+| `aia weld <doc> <point> <target>` (`--join`, `--on <part>`) · `aia unweld <doc> <point>...` | Welding by name, as in point editing |
+| `aia name <doc> <point> <name>` · `aia add-point <doc> <part> --at x,y` | Name a point; add one on a line without changing its shape |
+| `aia follow <doc> <point> <point>` (`--long`, `--off`) · `aia group <doc> <layer>.<group> <point>...` | Followed stretches; point groups |
 | `aia undo <doc>` · `aia redo <doc>` | Only the AI's own steps (undo per origin) |
 | `aia history <doc>` | The steps, the user's marked, so the AI does not overwrite them |
 | `aia render <doc> [--out file.png] [--width N]` | A PNG drawn by the same `drawDocument` |
@@ -154,6 +157,14 @@ group, in about 23 commands with one refused. What cost it most: there is no way
 sits. These are the candidates for the first high-level commands.
 The first one built: `aia move` (points by name, index or group, by an offset or to a place, in one step;
 `pointsNamed` and `movePointsOps` in `src/core/points.js`, so the editor can use them too).
+
+**Editor ↔ AI parity (2026-11-16):** everything point editing does with names and welds is now in the core
+(`src/core/weld.js`: `weld`, `unweld`, `namePoint`, `groupOps`, `followOps`, `shareTargets`), used by the editor and by
+the commands above, so a weld is the same whoever makes it. The store settles every batch for every origin
+(`settleOps`): giving a shared vertex a place moves the point it shares, and deleting a shared point (or its part)
+leaves the vertices that shared it where they were. Before, the editor did this and the AI's same batch was refused.
+`aia show --resolved` gives shared vertices their x, y. Still without a command: turning points into corners or
+curves (the AI writes the handles), and transforming whole parts by name (decision 8).
 
 ## Open topics
 

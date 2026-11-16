@@ -3,9 +3,7 @@
 
 import { api } from './api.js';
 import { findObject } from '../core/document.js';
-import { applyOps } from '../core/operations.js';
-import { resolveDoc, settleOps } from '../core/points.js';
-import { schema } from './schema.js';
+import { resolveDoc } from '../core/points.js';
 
 /**
  * @typedef {import('../core/document.js').Doc} Doc
@@ -174,13 +172,9 @@ export async function deleteDocument(id) {
   await close(id);
 }
 
-/** Applies a batch without checking shared points (to look at its result before it is settled). @param {Doc} doc @param {Operation[]} ops */
-const applyLoose = (doc, ops) => applyOps(schema, doc, ops, { checkPoints: false }).document;
-
 /**
  * Applies a batch to the active document. The tools write it against `state.document` (shared vertices with x, y);
- * it is settled for the saved document first: a moved shared vertex moves the point it shares, and shared vertices
- * whose point is gone keep their place.
+ * the store settles it for the saved document (see settleOps in core/points.js).
  * @param {Operation[]} ops
  * @param {{ note?: string, select?: string | string[] | null }} [options] select: what to select after it applies
  */
@@ -189,7 +183,7 @@ export function run(ops, { note, select } = {}) {
   if (!id) return Promise.resolve();
   return guarded(async () => {
     sending++;
-    const result = await api.ops(id, state.saved ? settleOps(state.saved, ops, applyLoose) : ops, note).finally(() => sending--);
+    const result = await api.ops(id, ops, note).finally(() => sending--);
     take(result);
     if (select !== undefined) setSelection(Array.isArray(select) ? select : select ? [select] : []);
   });

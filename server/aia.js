@@ -7,7 +7,9 @@ import fs from 'node:fs/promises';
 import { findObject, subtree } from '../src/core/document.js';
 import { toSvg } from '../src/core/draw.js';
 import { guide } from '../src/core/guide.js';
-import { movePointsOps, pointsNamed } from '../src/core/points.js';
+import { insertVertex, nearestOnOutline, verticesOf } from '../src/core/geometry.js';
+import { movePointsOps, pointsNamed, resolveDoc } from '../src/core/points.js';
+import { followOps, groupOps, namePoint, unweld, weld } from '../src/core/weld.js';
 import { svgToPng } from './png.js';
 
 /**
@@ -19,7 +21,7 @@ import { svgToPng } from './png.js';
 
 export class AiaError extends Error {}
 
-const BOOLEAN_FLAGS = new Set(['yes', 'all']);
+const BOOLEAN_FLAGS = new Set(['yes', 'all', 'join', 'long', 'off', 'none', 'add', 'remove', 'delete', 'resolved']);
 const RENDER_MAX = 2000;
 
 /**
@@ -124,6 +126,34 @@ export function createAia({ store, schema }) {
     return n;
   };
 
+  /** The document with shared points resolved (where each shared vertex is). @param {string} id */
+  const resolved = async (id) => resolveDoc((await store.get(id, ORIGIN)).document);
+
+  /** Points by name, each a vertex of its own (a shared vertex is itself, not the point it shares). @param {any} doc @param {string[]} names */
+  const points = (doc, names) => {
+    try {
+      return pointsNamed(doc, names, { own: true });
+    } catch (e) {
+      throw new AiaError(e.message);
+    }
+  };
+
+  /** One point by name (part.point or part.index, not a group). @param {any} doc @param {string} name */
+  const onePoint = (doc, name) => {
+    const found = points(doc, [name]);
+    if (found.length !== 1) throw new AiaError(`"${name}" is ${found.length} points (a group?): name one point, part.point or part.index`);
+    return found[0];
+  };
+
+  /** Runs a weld function and turns its WeldError into an answer. @template T @param {() => T} task @returns {T} */
+  const welding = (task) => {
+    try {
+      return task();
+    } catch (e) {
+      throw new AiaError(e.message);
+    }
+  };
+
   /** A flag with two numbers, "10,-5". @param {Args} args @param {string} name */
   const pair = (args, name) => {
     const value = args.flags[name];
@@ -203,11 +233,13 @@ export function createAia({ store, schema }) {
     },
 
     show: {
-      usage: 'aia show <doc> [id]',
+      usage: 'aia show <doc> [id] [--resolved]',
       summary: 'The document as it is saved (JSON), or one object with what is inside it',
+      details: '--resolved gives each shared vertex the x, y of the point it shares (as it is drawn), to check welds.',
       run: async (args) => {
         const id = need(args, 0, 'the document id');
-        const { document } = await store.get(id, ORIGIN);
+        const saved = (await store.get(id, ORIGIN)).document;
+        const document = args.flags.resolved === true ? resolveDoc(saved) : saved;
         const target = args.positional[1];
         if (!target) return ok(compactJson(document));
         if (target === 'meta') return ok(compactJson(document.meta));
@@ -270,6 +302,130 @@ export function createAia({ store, schema }) {
         await store.apply(id, ops, { origin: ORIGIN, note });
         const where = by ? `by ${by.x}, ${by.y}` : `to ${to?.x}, ${to?.y}`;
         return ok(`Moved ${names.join(', ')} ${where}. Changed: ${ops.map((o) => o.target).join(', ')}.`);
+      },
+    },
+
+    weld: {
+      usage: 'aia weld <doc> <point> <target point> [--join] | aia weld <doc> <point> --on <part>',
+      summary: 'Welds a point to a point of another part (it shares it from then on), or onto its line',
+      details:
+        'The first point goes to the target and shares it ({ "ref": "jaw.chin" }); the target gets a name if it has\n' +
+        'none. --on <part> welds it onto that part’s line, where it is nearest, adding a point there. The two ends of\n' +
+        'one line close it. --join: two open ends of two lines become one line (the first line is deleted).\n' +
+        'Points: part.point or part.index. Example: aia weld face mouth.0 jaw.chin',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const doc = await resolved(id);
+        const moving = onePoint(doc, need(args, 1, 'the point to weld'));
+        const on = args.flags.on;
+        /** @type {import('../src/core/weld.js').WeldTarget} */
+        let target;
+        if (typeof on === 'string') {
+          const part = findObject(doc, on);
+          if (!part || part.type !== 'path') throw new AiaError(`there is no part "${on}"`);
+          const from = verticesOf(/** @type {any} */ (findObject(doc, moving.part)))[moving.index];
+          const hit = nearestOnOutline(part, from);
+          if (!hit) throw new AiaError(`${on} has no line to weld onto`);
+          target = { part: on, segment: hit.segment, t: hit.t };
+        } else target = onePoint(doc, need(args, 2, 'the target point (or --on <part>)'));
+        const w = welding(() => weld(doc, moving, target, { merge: args.flags.join === true }));
+        await store.apply(id, w.ops, { origin: ORIGIN, note: w.note });
+        return ok(`${w.note}.`);
+      },
+    },
+
+    unweld: {
+      usage: 'aia unweld <doc> <point>...',
+      summary: 'The points stop sharing: each keeps its place as a point of its own',
+      details: 'A shared vertex stops sharing; a point that others share is unwelded from all of them.',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const doc = await resolved(id);
+        const names = args.positional.slice(1);
+        if (!names.length) throw new AiaError('Missing the points to unweld');
+        const ops = welding(() => unweld(doc, points(doc, names)));
+        await store.apply(id, ops, { origin: ORIGIN, note: `Unweld ${names.join(', ')}` });
+        return ok(`Unwelded ${names.join(', ')}.`);
+      },
+    },
+
+    name: {
+      usage: 'aia name <doc> <point> <name> | --none',
+      summary: 'Names a point (part.index or its old name), so it can be shared, grouped and moved by name',
+      details: 'Shared points and groups follow a new name. --none takes the name away, if nothing uses it.',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const doc = await resolved(id);
+        const at = onePoint(doc, need(args, 1, 'the point'));
+        const typed = args.flags.none === true ? '' : need(args, 2, 'the new name (or --none)');
+        const { ops, name } = welding(() => namePoint(doc, at, typed));
+        if (!ops.length) return ok('It already has that name.');
+        await store.apply(id, ops, { origin: ORIGIN, note: name ? `Name ${at.part}.${name}` : `Unname a point of ${at.part}` });
+        return ok(name ? `Named ${at.part}.${name}.` : `${at.part} vertex ${at.index} has no name now.`);
+      },
+    },
+
+    'add-point': {
+      usage: 'aia add-point <doc> <part> --at x,y [--name <name>]',
+      summary: 'Adds a point on a part’s line where it is nearest to x,y, without changing its shape',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const doc = await resolved(id);
+        const partId = need(args, 1, 'the part');
+        const part = findObject(doc, partId);
+        if (!part || part.type !== 'path') throw new AiaError(`there is no part "${partId}"`);
+        const at = pair(args, 'at');
+        if (!at) throw new AiaError('Say where: --at x,y (the point goes on the line, where it is nearest)');
+        const hit = nearestOnOutline(part, at);
+        if (!hit) throw new AiaError(`${partId} has no line to add a point on (or it only follows other parts)`);
+        const { vertices, index } = insertVertex(part, hit.segment, hit.t);
+        const name = typeof args.flags.name === 'string' ? args.flags.name : undefined;
+        if (name) {
+          if (vertices.some((v) => v.name === name)) throw new AiaError(`${partId} has a point named "${name}" already`);
+          vertices[index] = { ...vertices[index], name };
+        }
+        await store.apply(id, [{ op: 'set', target: partId, props: { vertices } }], { origin: ORIGIN, note: `Add a point to ${partId}` });
+        const p = vertices[index];
+        return ok(`Added ${partId}.${name ?? index} at ${p.x}, ${p.y} (vertex ${index}; the ones after it moved up one).`);
+      },
+    },
+
+    follow: {
+      usage: 'aia follow <doc> <point> <point> [--long | --off]',
+      summary: 'The stretch between two neighbor points follows the curve of the part they share points with',
+      details:
+        'Both points are in one part, next to each other, and share points of another part (weld them first). The\n' +
+        'stretch then goes along that part’s outline: the short way, or --long the other. --off stops it.',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const doc = await resolved(id);
+        const a = onePoint(doc, need(args, 1, 'the first point'));
+        const b = onePoint(doc, need(args, 2, 'the second point'));
+        const how = args.flags.off === true ? 'off' : args.flags.long === true ? 'long' : 'short';
+        const { ops, note } = welding(() => followOps(doc, a, b, how));
+        await store.apply(id, ops, { origin: ORIGIN, note });
+        return ok(`${note}.`);
+      },
+    },
+
+    group: {
+      usage: 'aia group <doc> <layer>.<group> <point>... [--add | --remove | --delete]',
+      summary: 'Point groups of a vector layer: set a group to these points, add or take them out, or delete it',
+      details:
+        'Without a flag the group becomes exactly these points (made if new). Points without a name get one\n' +
+        '(part_1…). Example: aia group face face.upper_lid lid.0 lid.1 brow.mid',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const doc = await resolved(id);
+        const full = need(args, 1, 'the group, as layer.group');
+        const match = /^([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)$/.exec(full);
+        if (!match) throw new AiaError(`"${full}" is not a group: write it as layer.group (face.upper_lid)`);
+        const flags = args.flags;
+        const action = flags.delete === true ? 'delete' : flags.add === true ? 'add' : flags.remove === true ? 'remove' : 'set';
+        const names = args.positional.slice(2);
+        const { ops, name } = welding(() => groupOps(doc, match[1], action, match[2], action === 'delete' ? [] : points(doc, names)));
+        await store.apply(id, ops, { origin: ORIGIN, note: `Group ${match[1]}.${match[2]}: ${action}` });
+        return ok(action === 'delete' ? `Deleted the group ${match[1]}.${name}.` : `${match[1]}.${name}: ${action === 'set' ? 'set' : action === 'add' ? 'added to' : 'taken out of'}.`);
       },
     },
 

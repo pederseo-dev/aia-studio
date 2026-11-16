@@ -225,7 +225,7 @@ function penDown(event) {
  * @param {Point} from @param {Point} to @param {WeldTarget | null} fromWeld @param {WeldTarget | null} toWeld @param {boolean} corners
  */
 function newLine(from, to, fromWeld, toWeld, corners) {
-  if (fromWeld && toWeld && 'key' in fromWeld && 'key' in toWeld && fromWeld.key === toWeld.key) return paintOverlay();
+  if (fromWeld && toWeld && 'index' in fromWeld && 'index' in toWeld && fromWeld.part === toWeld.part && fromWeld.index === toWeld.index) return paintOverlay();
   /** @type {Vertex[]} */
   let vertices = [{ x: from.x, y: from.y }, { x: to.x, y: to.y }];
   if (!corners) smooth(vertices, [0, 1], false);
@@ -246,8 +246,8 @@ function continueLine(end, to, weld, corners) {
   const otherEnd = atStart ? vertices.length - 1 : 0;
   // Dropped on the other end of the same line: it closes, as a shape with the auto fill. Other points of the same
   // line are not welded to (a part does not share its own points).
-  const own = !!weld && 'key' in weld && weld.key.startsWith(`${part.id}:`);
-  if (own && vertices.length > 2 && weld && 'key' in weld && weld.key === `${part.id}:${otherEnd}`) {
+  const own = !!weld && weld.part === part.id;
+  if (own && vertices.length > 2 && weld && 'index' in weld && weld.index === otherEnd) {
     smooth(vertices, [0, vertices.length - 1].filter((i) => isSmooth(vertices[i])), true);
     /** @type {Record<string, unknown>} */
     const props = { vertices: vertices.map(roundVertex), closed: true };

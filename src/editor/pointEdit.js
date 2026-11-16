@@ -14,9 +14,10 @@
 //   point groups of the layer.
 // Each change is one batch, even when it touches several parts.
 
-import { findObject, idFromName } from '../core/document.js';
-import { nextPointName, pointOf, splitRef } from '../core/points.js';
-import { closeOutline, endOf, insertVertex, joinOutlines, nearestOnOutline, roundVertex, transformVertices, translate, verticesOf } from '../core/geometry.js';
+import { findObject } from '../core/document.js';
+import { pointOf } from '../core/points.js';
+import { followOps, groupOps, isShared, namePoint, shareTargets as shareTargetsIn, stretchBetween, unweld, weld } from '../core/weld.js';
+import { insertVertex, nearestOnOutline, roundVertex, transformVertices, translate, verticesOf } from '../core/geometry.js';
 import { partData } from '../core/draw.js';
 import { addPainter, paintOverlay, showPreview } from './canvas.js';
 import { isPart } from './schema.js';
@@ -132,9 +133,9 @@ function pointDown(event, part, index) {
       // ends become one line).
       if (autoWeld.on && state.points.length === 1) {
         const target = weldTargetNear(p, key);
-        const weld = target && weldOps(key, target, e.altKey);
-        if (weld) {
-          applyWeld(weld).finally(() => showPreview(null));
+        const welded = target && weldOps(key, target, e.altKey);
+        if (welded) {
+          applyWeld(welded).finally(() => showPreview(null));
           return;
         }
       }
@@ -354,7 +355,8 @@ const WELD_DISTANCE = 8; // screen px
 const WELD_HINT = 8; // screen px, the radius of the ring that shows where a weld would happen
 
 /**
- * @typedef {{ key: string } | { part: DocObject, segment: number, t: number, point: Point }} WeldTarget a point, or a place on a line
+ * @typedef {import('../core/weld.js').PointAt} PointAt
+ * @typedef {PointAt | { part: string, segment: number, t: number, point: Point }} WeldTarget a point, or a place on a line (and where it is)
  * @typedef {{ ops: Operation[], keep: string, pick: string[], note: string }} Weld
  */
 
@@ -373,9 +375,8 @@ export function showWeldHint(p, kind = 'weld') {
 
 /** Where a weld target is. @param {WeldTarget} target @returns {Point} */
 export function weldPlace(target) {
-  if (!('key' in target)) return target.point;
-  const [id, index] = parseKey(target.key);
-  const v = verticesOf(/** @type {DocObject} */ (findObject(/** @type {Doc} */ (state.document), id)))[index];
+  if (!('index' in target)) return target.point;
+  const v = verticesOf(/** @type {DocObject} */ (findObject(/** @type {Doc} */ (state.document), target.part)))[target.index];
   return { x: v.x, y: v.y };
 }
 
@@ -400,7 +401,7 @@ export function weldTargetNear(p, except, layer = state.editing) {
       }
     }
   }
-  if (best) return { key: best };
+  if (best) return atOf(best);
   /** @type {{ part: DocObject, segment: number, t: number, point: Point, distance: number } | null} */
   let line = null;
   for (const part of editableParts(state.document, layer)) {
@@ -408,123 +409,38 @@ export function weldTargetNear(p, except, layer = state.editing) {
     const hit = nearestOnOutline(part, p);
     if (hit && hit.distance <= screen(WELD_DISTANCE) && (!line || hit.distance < line.distance)) line = { part, ...hit };
   }
-  return line;
+  return line && { part: line.part.id, segment: line.segment, t: line.t, point: line.point };
 }
 
-/**
- * After a point stops being "old" (it now shares "next", or was renamed to it): the vertices that shared it and the
- * point groups that had it name "next" instead (null: the vertices keep their place as their own points, and the
- * groups drop it). Adds the new vertices to `changes` and returns the groups op, if any.
- * @param {Doc} doc @param {string} layer @param {string} old @param {string | null} next
- * @param {Map<string, Vertex[]>} changes
- * @returns {Operation[]}
- */
-function redirect(doc, layer, old, next, changes) {
-  for (const o of doc.objects) {
-    if (o.parent !== layer) continue;
-    const vertices = changes.get(o.id) ?? verticesOf(o);
-    if (!vertices.some((v) => v.ref === old)) continue;
-    changes.set(
-      o.id,
-      vertices.map((v) => {
-        if (v.ref !== old) return v;
-        if (next) return { ...v, ref: next };
-        const { ref: _ref, ...own } = v;
-        return own;
-      }),
-    );
-  }
-  const groups = /** @type {Record<string, string[]> | undefined} */ (findObject(doc, layer)?.groups);
-  if (!groups || !Object.values(groups).some((members) => members.includes(old))) return [];
-  const renamed = Object.fromEntries(
-    Object.entries(groups).map(([g, members]) => [g, [...new Set(members.flatMap((m) => (m !== old ? [m] : next ? [next] : [])))]]),
-  );
-  return [{ op: 'set', target: layer, props: { groups: renamed } }];
-}
-
-/** @param {Map<string, Vertex[]>} changes @returns {Operation[]} */
-const vertexOps = (changes) => [...changes].map(([id, vertices]) => ({ op: 'set', target: id, props: { vertices: vertices.map(roundVertex) } }));
+/** @param {string} key "part:index" @returns {PointAt} */
+const atOf = (key) => {
+  const [part, index] = parseKey(key);
+  return { part, index };
+};
 
 /**
- * Welds a point of part `a` to the point `bi` of part `b` (whose vertices are `bVertices`: one may have just been
- * added): the point of `a` shares b's point from now on (named first if it has no name). Whoever shared a's point
- * shares b's.
- * @param {Doc} doc @param {DocObject} a @param {number} ai @param {DocObject} b @param {Vertex[]} bVertices @param {number} bi
- * @returns {Weld | null}
- */
-function shareOps(doc, a, ai, b, bVertices, bi) {
-  /** @type {Map<string, Vertex[]>} */
-  const changes = new Map();
-  const target = bVertices[bi];
-  let owner = target.ref;
-  if (!owner) {
-    const name = target.name ?? nextPointName(b);
-    owner = `${b.id}.${name}`;
-    if (!target.name) bVertices = bVertices.map((v, i) => (i === bi ? { ...v, name } : v));
-    if (bVertices !== verticesOf(b)) changes.set(b.id, bVertices);
-  }
-  const shared = owner;
-  if (splitRef(shared)[0] === a.id) return null; // a part cannot share a point with itself
-  const moving = verticesOf(a)[ai];
-  changes.set(
-    a.id,
-    verticesOf(a).map((v, i) => (i === ai ? { ref: shared, x: target.x, y: target.y, ...(v.in ? { in: v.in } : {}), ...(v.out ? { out: v.out } : {}) } : v)),
-  );
-  const groupOps = moving.name ? redirect(doc, String(a.parent), `${a.id}.${moving.name}`, shared, changes) : [];
-  return { ops: [...vertexOps(changes), ...groupOps], keep: a.id, pick: [keyOf(a.id, ai)], note: `Weld a point of ${a.id} to ${shared}` };
-}
-
-/**
- * What welding a point to a target does. The two ends of one line close it. With `merge`, an open end dropped on an
- * open end of another line joins the two lines into the target's part (the other is deleted). Otherwise the point
- * shares the target point, or a point added where it was dropped on a line.
+ * What welding a point to a target does (see weld in core/weld.js), or null if it cannot be done.
  * @param {string} moving "part:index" @param {WeldTarget} target @param {boolean} [merge]
- * @returns {Weld | null}
+ * @returns {import('../core/weld.js').Weld | null}
  */
 function weldOps(moving, target, merge = false) {
-  const doc = state.document;
-  if (!doc) return null;
-  const [movingId, movingIndex] = parseKey(moving);
-  const a = findObject(doc, movingId);
-  if (!a) return null;
-  if (!('key' in target)) {
-    if (target.part.id === a.id) return null;
-    const { vertices, index } = insertVertex(target.part, target.segment, target.t);
-    return shareOps(doc, a, movingIndex, target.part, vertices, index);
+  if (!state.document) return null;
+  try {
+    return weld(state.document, atOf(moving), target, { merge });
+  } catch {
+    return null;
   }
-  const [targetId, targetIndex] = parseKey(target.key);
-  const b = findObject(doc, targetId);
-  if (!b) return null;
-  const aEnd = endOf(a, movingIndex);
-  const bEnd = endOf(b, targetIndex);
-  if (a.id === b.id) {
-    if (!aEnd || !bEnd || aEnd === bEnd) return null;
-    return { ops: [{ op: 'set', target: b.id, props: closeOutline(b, bEnd) }], keep: b.id, pick: [], note: `Weld: close ${b.id}` };
-  }
-  if (merge) {
-    if (!aEnd || !bEnd) return null;
-    return {
-      ops: [
-        { op: 'set', target: b.id, props: { vertices: joinOutlines(a, aEnd, b, bEnd) } },
-        { op: 'delete', target: a.id },
-      ],
-      keep: b.id,
-      pick: [],
-      note: `Weld ${a.id} into ${b.id}`,
-    };
-  }
-  return shareOps(doc, a, movingIndex, b, verticesOf(b), targetIndex);
 }
 
-/** Saves a weld; the part that stays becomes the main one first, so point editing goes on. @param {Weld} weld */
-function applyWeld(weld) {
-  pickPoints(weld.pick, weld.keep);
-  return run(weld.ops, { select: weld.keep, note: weld.note });
+/** Saves a weld; the part that stays becomes the main one first, so point editing goes on. @param {import('../core/weld.js').Weld} w */
+function applyWeld(w) {
+  pickPoints(w.pick.map((at) => keyOf(at.part, at.index)), w.keep);
+  return run(w.ops, { select: w.keep, note: w.note });
 }
 
 /** Whether the two picked points can be welded. */
 export function canWeld() {
-  return state.points.length === 2 && !!weldOps(state.points[0], { key: state.points[1] });
+  return state.points.length === 2 && !!weldOps(state.points[0], atOf(state.points[1]));
 }
 
 /**
@@ -533,9 +449,12 @@ export function canWeld() {
  * @param {boolean} [merge]
  */
 export function weldPicked(merge = false) {
-  const weld = state.points.length === 2 ? weldOps(state.points[0], { key: state.points[1] }, merge) : null;
-  if (!weld) return notify('Pick two points to weld: points of two parts of this layer, or the two ends of a line');
-  applyWeld(weld);
+  if (!state.document || state.points.length !== 2) return notify('Pick two points to weld: points of two parts of this layer, or the two ends of a line');
+  try {
+    applyWeld(weld(state.document, atOf(state.points[0]), atOf(state.points[1]), { merge }));
+  } catch (e) {
+    notify(`Cannot weld: ${e.message}`);
+  }
 }
 
 /** A picked point as { part, index, vertex }. @param {string} key */
@@ -546,55 +465,33 @@ function pointAt(key) {
   return part && vertex ? { part, index, vertex } : null;
 }
 
-/** Whether a named point of a part is shared by another. @param {DocObject} part @param {Vertex} v */
-const isShared = (part, v) => !!v.name && !!state.document?.objects.some((o) => verticesOf(o).some((w) => w.ref === `${part.id}.${v.name}`));
-
 /** Whether a picked point is welded (it shares a point, or another shares it). */
 export function canUnweld() {
-  return state.points.some((key) => {
+  const doc = state.document;
+  return !!doc && state.points.some((key) => {
     const at = pointAt(key);
-    return !!at && (!!at.vertex.ref || isShared(at.part, at.vertex));
+    return !!at && (!!at.vertex.ref || isShared(doc, at.part, at.vertex));
   });
 }
 
 /** Unweld: the picked points stop sharing; each vertex keeps its place as a point of its own. */
 export function unweldPicked() {
-  const doc = state.document;
-  const layer = state.editing;
-  if (!doc || !layer) return;
-  /** @type {Map<string, Vertex[]>} */
-  const changes = new Map();
-  for (const key of state.points) {
-    const at = pointAt(key);
-    if (!at) continue;
-    const vertices = changes.get(at.part.id) ?? verticesOf(at.part);
-    if (at.vertex.ref) {
-      const { ref: _ref, ...own } = vertices[at.index];
-      changes.set(at.part.id, vertices.map((v, i) => (i === at.index ? own : v)));
-    } else if (at.vertex.name) redirect(doc, layer, `${at.part.id}.${at.vertex.name}`, null, changes);
+  if (!state.document) return;
+  try {
+    run(unweld(state.document, state.points.map(atOf)), { select: state.selected, note: `Unweld ${pointsWord(state.points.length)}` });
+  } catch (e) {
+    notify(e.message);
   }
-  if (!changes.size) return notify('The picked points are not welded');
-  run(vertexOps(changes), { select: state.selected, note: `Unweld ${pointsWord(state.points.length)}` });
 }
 
-/**
- * The stretch between the two picked points, if it can follow another part: both in one part and next to each other,
- * both sharing points of one other part.
- */
+/** The stretch between the two picked points, if it can follow another part. */
 function pickedStretch() {
-  if (state.points.length !== 2) return null;
-  const [a, b] = state.points.map(pointAt);
-  if (!a || !b || a.part.id !== b.part.id) return null;
-  const n = verticesOf(a.part).length;
-  const closed = a.part.closed !== false;
-  /** @param {{ index: number }} x @param {{ index: number }} y */
-  const before = (x, y) => (x.index + 1 < n ? x.index + 1 === y.index : closed && y.index === 0);
-  const from = before(a, b) ? a : before(b, a) ? b : null;
-  const to = from === a ? b : a;
-  if (!from || !from.vertex.ref || !to.vertex.ref) return null;
-  const other = splitRef(from.vertex.ref)[0];
-  if (splitRef(to.vertex.ref)[0] !== other) return null;
-  return { part: from.part, index: from.index, other, follows: from.vertex.follow === other, long: from.vertex.way === 'long' };
+  if (!state.document || state.points.length !== 2) return null;
+  try {
+    return stretchBetween(state.document, atOf(state.points[0]), atOf(state.points[1]));
+  } catch {
+    return null;
+  }
 }
 
 /** Whether the two picked points make a stretch that can follow another part (or already does). */
@@ -614,16 +511,11 @@ export function pickedFollows() {
  */
 export function followPicked(otherWay = false) {
   const s = pickedStretch();
-  if (!s) return notify('Pick two neighbor points of a part that share points of another part, to follow its curve between them');
-  const vertices = verticesOf(s.part).map((v, i) => {
-    if (i !== s.index) return v;
-    const { follow: _follow, way: _way, ...rest } = v;
-    if (s.follows && !otherWay) return rest;
-    const long = s.follows ? !s.long : otherWay;
-    return { ...rest, follow: s.other, ...(long ? { way: 'long' } : {}) };
-  });
-  const note = s.follows && !otherWay ? `${s.part.id} stops following ${s.other}` : `${s.part.id} follows ${s.other}${otherWay ? ' the other way' : ''}`;
-  run([{ op: 'set', target: s.part.id, props: { vertices: vertices.map(roundVertex) } }], { select: state.selected, note });
+  if (!s || !state.document) return notify('Pick two neighbor points of a part that share points of another part, to follow its curve between them');
+  /** @type {'short' | 'long' | 'off'} */
+  const how = s.follows && !otherWay ? 'off' : (s.follows ? !s.long : otherWay) ? 'long' : 'short';
+  const { ops, note } = followOps(state.document, atOf(state.points[0]), atOf(state.points[1]), how);
+  run(ops, { select: state.selected, note });
 }
 
 /** The one picked point, if exactly one is picked. */
@@ -636,31 +528,14 @@ export function pickedPoint() {
  * @param {string} typed
  */
 export function renamePickedPoint(typed) {
-  const doc = state.document;
   const at = pickedPoint();
-  const layer = state.editing;
-  if (!doc || !at || !layer) return;
-  if (at.vertex.ref) return notify(`This point is ${at.vertex.ref}: rename it there`);
-  const old = at.vertex.name;
-  const taken = new Set(verticesOf(at.part).filter((_, i) => i !== at.index).map((v) => v.name));
-  const name = typed.trim() ? idFromName(typed, (x) => taken.has(x)) : undefined;
-  if (name === old) return;
-  const oldRef = old ? `${at.part.id}.${old}` : '';
-  const groups = /** @type {Record<string, string[]>} */ (findObject(doc, layer)?.groups ?? {});
-  const used = !!old && (isShared(at.part, at.vertex) || Object.values(groups).some((m) => m.includes(oldRef)));
-  if (!name && used) return notify(`${oldRef} is shared or in a group, so it keeps a name`);
-  /** @type {Map<string, Vertex[]>} */
-  const changes = new Map();
-  changes.set(
-    at.part.id,
-    verticesOf(at.part).map((v, i) => {
-      if (i !== at.index) return v;
-      const { name: _name, ...rest } = v;
-      return name ? { ...rest, name } : rest;
-    }),
-  );
-  const groupOps = old && name ? redirect(doc, layer, oldRef, `${at.part.id}.${name}`, changes) : [];
-  run([...vertexOps(changes), ...groupOps], { select: state.selected, note: name ? `Name a point ${at.part.id}.${name}` : `Unname ${oldRef}` });
+  if (!state.document || !at) return;
+  try {
+    const { ops, name } = namePoint(state.document, { part: at.part.id, index: at.index }, typed);
+    if (ops.length) run(ops, { select: state.selected, note: name ? `Name a point ${at.part.id}.${name}` : `Unname a point of ${at.part.id}` });
+  } catch (e) {
+    notify(e.message);
+  }
 }
 
 /** The point groups of the edited layer. @returns {Record<string, string[]>} */
@@ -681,134 +556,28 @@ export function pickGroup(group) {
 }
 
 /**
- * The picked points as named points ("part.point"), naming the ones without a name (part_1, part_2…).
- * @returns {{ refs: string[], changes: Map<string, Vertex[]> }}
- */
-function pickedRefs() {
-  /** @type {Map<string, Vertex[]>} */
-  const changes = new Map();
-  /** @type {string[]} */
-  const refs = [];
-  /** @type {Map<string, Set<string>>} */
-  const given = new Map();
-  for (const key of state.points) {
-    const at = pointAt(key);
-    if (!at) continue;
-    if (at.vertex.ref) {
-      refs.push(at.vertex.ref);
-      continue;
-    }
-    let name = at.vertex.name;
-    if (!name) {
-      const taken = given.get(at.part.id) ?? new Set();
-      name = nextPointName(at.part, taken);
-      taken.add(name);
-      given.set(at.part.id, taken);
-      const named = name;
-      const vertices = changes.get(at.part.id) ?? verticesOf(at.part);
-      changes.set(at.part.id, vertices.map((v, i) => (i === at.index ? { ...v, name: named } : v)));
-    }
-    refs.push(`${at.part.id}.${name}`);
-  }
-  return { refs: [...new Set(refs)], changes };
-}
-
-/**
  * Changes the point groups of the edited layer with the picked points: a new group of them, add them to a group,
  * take them out of it, or delete the group.
  * @param {'new' | 'add' | 'remove' | 'delete'} action @param {string} group
  */
 export function editGroup(action, group) {
-  const doc = state.document;
-  const layer = state.editing;
-  if (!doc || !layer) return;
-  const groups = { ...pointGroups() };
-  const { refs, changes } = action === 'delete' ? { refs: [], changes: new Map() } : pickedRefs();
-  if ((action === 'new' || action === 'add') && !refs.length) return notify('Pick the points for the group first');
-  let name = group;
-  if (action === 'new') {
-    name = idFromName(group || 'group', (x) => x in groups);
-    groups[name] = refs;
-  } else if (action === 'add') groups[name] = [...new Set([...(groups[name] ?? []), ...refs])];
-  else if (action === 'remove') groups[name] = (groups[name] ?? []).filter((m) => !refs.includes(m));
-  else delete groups[name];
-  const notes = { new: `New point group ${name}`, add: `Add to ${name}`, remove: `Take out of ${name}`, delete: `Delete the group ${name}` };
-  // Taking points out names nothing new.
-  const named = action === 'remove' ? [] : vertexOps(changes);
-  run([...named, { op: 'set', target: layer, props: { groups: Object.keys(groups).length ? groups : null } }], { select: state.selected, note: notes[action] });
+  if (!state.document || !state.editing) return;
+  if (action === 'new' && group in pointGroups()) return notify(`There is a group "${group}" already: use + to add to it`);
+  try {
+    const { ops, name } = groupOps(state.document, state.editing, action === 'new' ? 'set' : action, group, state.points.map(atOf));
+    const notes = { new: `New point group ${name}`, add: `Add to ${name}`, remove: `Take out of ${name}`, delete: `Delete the group ${name}` };
+    run(ops, { select: state.selected, note: notes[action] });
+  } catch (e) {
+    notify(e.message);
+  }
 }
 
 /**
- * What a new outline (the Pen) needs to weld some of its vertices as it is created: for each target, the point it
- * shares ("part.point"), naming points and adding points on lines as needed; and the ops that do that to the other
- * parts. Targets on the same part are handled together, so indices stay right.
+ * What a new outline (the Pen) needs to weld some of its vertices as it is created (see shareTargets in core/weld.js).
  * @param {(WeldTarget | null)[]} targets one per vertex of the new outline
- * @returns {{ ops: Operation[], refs: (string | null)[] }}
  */
 export function shareTargets(targets) {
-  const doc = /** @type {Doc} */ (state.document);
-  /** @type {Map<string, Vertex[]>} */
-  const changes = new Map();
-  /** @type {(string | null)[]} */
-  const refs = targets.map(() => null);
-  /** @param {string} id */
-  const verticesNow = (id) => changes.get(id) ?? verticesOf(/** @type {DocObject} */ (findObject(doc, id)));
-  // 1. Points added on lines, the last stretch first so the earlier ones keep their index.
-  /** @type {Map<string, { i: number, segment: number, t: number }[]>} */
-  const onLines = new Map();
-  targets.forEach((target, i) => {
-    if (target && !('key' in target)) onLines.set(target.part.id, [...(onLines.get(target.part.id) ?? []), { i, segment: target.segment, t: target.t }]);
-  });
-  /** @type {Map<number, { part: string, index: number }>} where each added point ended up */
-  const added = new Map();
-  /** @type {Map<string, number[]>} the stretches split in each part (to shift the indices of its other points) */
-  const split = new Map();
-  for (const [id, list] of onLines) {
-    list.sort((a, b) => b.segment - a.segment || b.t - a.t);
-    /** @type {{ segment: number, t: number } | null} */
-    let previous = null;
-    for (const item of list) {
-      // A second point on a stretch already split falls on its first half.
-      const t = previous && previous.segment === item.segment ? item.t / previous.t : item.t;
-      const part = /** @type {DocObject} */ (findObject(doc, id));
-      const { vertices, index } = insertVertex({ ...part, vertices: verticesNow(id) }, item.segment, t);
-      for (const place of added.values()) if (place.part === id && place.index >= index) place.index++;
-      added.set(item.i, { part: id, index });
-      changes.set(id, vertices);
-      previous = item;
-    }
-    split.set(id, list.map((item) => item.segment));
-  }
-  // 2. The points shared: named if they have no name yet.
-  /** @type {Map<string, Set<string>>} */
-  const given = new Map();
-  targets.forEach((target, i) => {
-    if (!target) return;
-    let id;
-    let index;
-    if ('key' in target) {
-      [id, index] = parseKey(target.key);
-      const at = index;
-      index += (split.get(id) ?? []).filter((segment) => segment + 1 <= at).length;
-    } else ({ part: id, index } = /** @type {{ part: string, index: number }} */ (added.get(i)));
-    const vertices = verticesNow(id);
-    const v = vertices[index];
-    if (v.ref) {
-      refs[i] = v.ref;
-      return;
-    }
-    let name = v.name;
-    if (!name) {
-      const taken = given.get(id) ?? new Set();
-      name = nextPointName({ .../** @type {DocObject} */ (findObject(doc, id)), vertices }, taken);
-      taken.add(name);
-      given.set(id, taken);
-      const named = name;
-      changes.set(id, vertices.map((w, j) => (j === index ? { ...w, name: named } : w)));
-    }
-    refs[i] = `${id}.${name}`;
-  });
-  return { ops: vertexOps(changes), refs };
+  return shareTargetsIn(/** @type {Doc} */ (state.document), targets);
 }
 
 /** The points of a layer as small dots, to weld to while drawing (not editable). @param {SVGGElement} overlay @param {string} layer */

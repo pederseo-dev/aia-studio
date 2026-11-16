@@ -368,15 +368,16 @@ export function groupsError(value) {
  * point it shares). A name is "part.point" (a named point), "part.3" (the vertex at index 3) or "layer.group" (the
  * points of a point group). Throws an Error that says what is wrong with a name.
  * @param {Doc} doc @param {string[]} names
+ * @param {{ own?: boolean }} [options] own: a shared vertex stands for itself, not for the point it shares
  * @returns {{ part: string, index: number }[]} without repeats
  */
-export function pointsNamed(doc, names) {
+export function pointsNamed(doc, names, { own = false } = {}) {
   /** @type {Map<string, { part: string, index: number }>} */
   const found = new Map();
   /** @param {DocObject} part @param {number} index @param {string} name */
   const add = (part, index, name) => {
     const v = verticesOf(part)[index];
-    if (v.ref) {
+    if (v.ref && !own) {
       const shared = pointOf(doc, v.ref);
       if (!shared) throw new Error(`${name} shares "${v.ref}", which does not exist`);
       part = shared.part;

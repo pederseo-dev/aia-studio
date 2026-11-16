@@ -77,15 +77,27 @@ It has no x, y of its own: it is wherever jaw.chin is, so the two outlines stay 
 Rules (a batch that breaks them is refused):
   - the point it names exists and has a name; it is in another part of the same layer
   - it is not itself a shared vertex (share the original point instead)
-  - a shared vertex has no name and no x, y
-  - deleting a part or a point that others share is refused: unshare them first (give them x, y)
-Renaming a part (rename) updates the references to its points.
+  - a shared vertex has no name of its own
+What batches do with shared points, the same for you and for the person in the editor:
+  - giving a shared vertex an x, y moves the point it shares (it is the same point)
+  - deleting a part or a point that others share leaves those vertices where they were, as points of their own
+  - renaming a part (rename) updates the references to its points
+
+The commands do this by name, without writing vertices (points are part.point or part.index, from 0):
+  aia weld face mouth.0 jaw.chin      mouth.0 shares jaw.chin from now on (jaw.3 gets a name if it has none)
+  aia weld face mouth.2 --on jaw      onto jaw's line, where it is nearest (a point is added there)
+  aia weld face line.0 line.5         the two ends of one line close it; --join makes two lines one
+  aia unweld face mouth.0             it keeps its place, as a point of its own
+  aia name face head.3 chin           names a point (shares and groups follow a new name)
+  aia add-point face head --at 120,40 a point on the line, where it is nearest, without changing its shape
+  aia show face --resolved            each shared vertex with the x, y of the point it shares
 
 Following a curve: a stretch of an outline can go along another part's outline instead of having its own curve,
 so a fill and a line drawn over the same points stay together when the line is curved:
   "vertices": [{ "ref": "jaw.ear_l", "follow": "jaw" }, { "ref": "jaw.ear_r" }, { "x": 50, "y": 200 }]
 From ear_l to ear_r this outline goes along jaw (its points and curves in between). Both ends of the stretch share
 points of jaw. On a closed jaw it takes the short way; "way": "long" takes the other.
+  aia follow face skin.0 skin.1       (--long: the other way; --off: stop following)
 
 Moving points by name, without sending the vertices again (the vertices that share them follow):
   aia move face head.chin --to 400,470          one point to a place
@@ -93,7 +105,8 @@ Moving points by name, without sending the vertices again (the vertices that sha
   aia move face face.upper_lid --by 0,-6        all the points of a point group
 
 Point groups belong to the vector layer, a list of named points of its parts:
-  { "op": "set", "target": "face", "props": { "groups": { "upper_lid": ["lid.top", "brow.mid"] } } }`,
+  { "op": "set", "target": "face", "props": { "groups": { "upper_lid": ["lid.top", "brow.mid"] } } }
+  aia group face face.upper_lid lid.0 lid.1 brow.mid    (--add, --remove, --delete)`,
   },
 };
 
