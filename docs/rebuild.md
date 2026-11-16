@@ -134,6 +134,7 @@ transform a part by name, weld by name) come after the first AI test shows what 
 | `aia list` · `aia new <name>` · `aia delete <doc> --yes` | The documents of the folder |
 | `aia show <doc> [id]` | The JSON as it is saved: the whole document or one object |
 | `aia ops <doc> [--note "…"] <batch>` (or `--file <path>`) | Applies a batch with the editor's engine, origin `ai`; errors carry the engine's message |
+| `aia move <doc> <point>... --by dx,dy \| --to x,y` | Moves points by name: `head.chin`, `head.3` (by index) or a point group `face.upper_lid`; what shares them follows (added after the first AI test) |
 | `aia undo <doc>` · `aia redo <doc>` | Only the AI's own steps (undo per origin) |
 | `aia history <doc>` | The steps, the user's marked, so the AI does not overwrite them |
 | `aia render <doc> [--out file.png] [--width N]` | A PNG drawn by the same `drawDocument` |
@@ -151,6 +152,8 @@ the CLI, an AI drew a face with ears welded to the head, a mouth sharing the poi
 group, in about 23 commands with one refused. What cost it most: there is no way to move one point (the whole
 `vertices` array goes again), circles with more than 4 vertices by hand, and not seeing where a shared vertex
 sits. These are the candidates for the first high-level commands.
+The first one built: `aia move` (points by name, index or group, by an offset or to a place, in one step;
+`pointsNamed` and `movePointsOps` in `src/core/points.js`, so the editor can use them too).
 
 ## Open topics
 

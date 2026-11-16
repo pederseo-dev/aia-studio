@@ -4,7 +4,7 @@ import { loadSchema } from '../server/schema.js';
 import { newDocument } from '../src/core/document.js';
 import { applyOps } from '../src/core/operations.js';
 import { drawDocument } from '../src/core/draw.js';
-import { resolveDoc, settleOps, syncShared } from '../src/core/points.js';
+import { movePointsOps, pointsNamed, resolveDoc, settleOps, syncShared } from '../src/core/points.js';
 
 const schema = loadSchema();
 const apply = (doc, ops) => applyOps(schema, doc, ops).document;
@@ -64,4 +64,22 @@ test('deleting a shared point leaves its sharers where they were, and groups wit
   const after = apply(doc, settleOps(doc, [{ op: 'delete', target: 'jaw' }], loose));
   assert.deepEqual(vertex(after, 'mouth', 1), { x: 50, y: 80, in: { x: -5, y: 0 } });
   assert.deepEqual(after.objects.find((o) => o.id === 'head').groups, { lower: [] });
+});
+
+test('points are moved by name, by index or by group, and what shares them follows', () => {
+  let doc = apply(face(), [{ op: 'set', target: 'head', props: { groups: { lower: ['jaw.chin'] } } }]);
+  // A named point to a place: the mouth's end shares it.
+  doc = apply(doc, movePointsOps(doc, pointsNamed(doc, ['jaw.chin']), { to: { x: 55, y: 90 } }));
+  assert.deepEqual(vertex(resolveDoc(doc), 'mouth', 1), { ref: 'jaw.chin', in: { x: -5, y: 0 }, x: 55, y: 90 });
+  // A shared vertex named by index moves the point it shares; a group and an index together move each point once.
+  const points = pointsNamed(doc, ['mouth.1', 'head.lower', 'jaw.0']);
+  assert.deepEqual(points, [{ part: 'jaw', index: 1 }, { part: 'jaw', index: 0 }]);
+  doc = apply(doc, movePointsOps(doc, points, { by: { x: 10, y: -10 } }));
+  assert.deepEqual(vertex(doc, 'jaw', 1), { x: 65, y: 80, name: 'chin' });
+  assert.deepEqual(vertex(doc, 'jaw', 0), { x: 10, y: -10 });
+  // Names that do not exist say what does.
+  assert.throws(() => pointsNamed(doc, ['jaw.nose']), /named points: chin/);
+  assert.throws(() => pointsNamed(doc, ['jaw.9']), /3 vertices \(0 to 2\)/);
+  assert.throws(() => pointsNamed(doc, ['head.upper']), /groups: lower/);
+  assert.throws(() => movePointsOps(doc, points, { to: { x: 0, y: 0 } }), /--by/);
 });

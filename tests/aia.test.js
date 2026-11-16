@@ -97,3 +97,19 @@ test('changes on disk become notices for the editor', () => {
   assert.equal(classifyChange(path.join('face', 'notes.txt'), exists), null);
   assert.equal(classifyChange('.git', exists), null);
 });
+
+test('aia move moves points by name in one step', async () => {
+  await ok('new Face');
+  await ok(['ops', 'face', JSON.stringify([
+    { op: 'create', type: 'vector', id: 'head' },
+    { op: 'create', type: 'path', id: 'jaw', parent: 'head', props: { vertices: [{ x: 0, y: 0 }, { x: 50, y: 80, name: 'chin', out: { x: 5, y: 0 } }, { x: 100, y: 0 }] } },
+  ])]);
+  assert.match(await ok('move face jaw.chin jaw.0 --by -10,5'), /Moved jaw.chin, jaw.0 by -10, 5\. Changed: jaw\./);
+  const { document } = await store.get('face', 'ai');
+  assert.deepEqual(/** @type {any[]} */ (document.objects[1].vertices).slice(0, 2), [{ x: -10, y: 5 }, { x: 40, y: 85, name: 'chin', out: { x: 5, y: 0 } }]);
+  assert.match((await aia.run('move face jaw.chin')).text, /--by dx,dy/);
+  assert.match((await aia.run('move face jaw.chin --by 1')).text, /two numbers/);
+  assert.match((await aia.run('move face jaw.lip --by 1,1')).text, /named points: chin/);
+  await ok('undo face');
+  assert.deepEqual((await store.get('face', 'ai')).document.objects[1].vertices[0], { x: 0, y: 0 });
+});

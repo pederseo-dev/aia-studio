@@ -252,3 +252,83 @@ export function groupsError(value) {
   }
   return null;
 }
+
+/**
+ * The points a list of names stands for, each as the vertex that has its own x, y (a shared vertex stands for the
+ * point it shares). A name is "part.point" (a named point), "part.3" (the vertex at index 3) or "layer.group" (the
+ * points of a point group). Throws an Error that says what is wrong with a name.
+ * @param {Doc} doc @param {string[]} names
+ * @returns {{ part: string, index: number }[]} without repeats
+ */
+export function pointsNamed(doc, names) {
+  /** @type {Map<string, { part: string, index: number }>} */
+  const found = new Map();
+  /** @param {DocObject} part @param {number} index @param {string} name */
+  const add = (part, index, name) => {
+    const v = verticesOf(part)[index];
+    if (v.ref) {
+      const shared = pointOf(doc, v.ref);
+      if (!shared) throw new Error(`${name} shares "${v.ref}", which does not exist`);
+      part = shared.part;
+      index = shared.index;
+    }
+    found.set(`${part.id}:${index}`, { part: part.id, index });
+  };
+  for (const name of names) {
+    const match = /^([a-z][a-z0-9_]*)\.([a-z0-9_]+)$/.exec(name);
+    if (!match) throw new Error(`"${name}" is not a point: use part.point (head.chin), part.index (head.3) or layer.group (face.upper_lid)`);
+    const [, owner, key] = match;
+    const object = findObject(doc, owner);
+    if (!object) throw new Error(`there is no object "${owner}" (in "${name}")`);
+    const groups = /** @type {PointGroups | undefined} */ (object.groups);
+    if (object.vertices === undefined && object.type !== 'path') {
+      const members = groups?.[key];
+      if (!members) {
+        const known = Object.keys(groups ?? {});
+        throw new Error(`${owner} has no point group "${key}" (${known.length ? `groups: ${known.join(', ')}` : 'it has no groups'})`);
+      }
+      for (const member of members) {
+        const point = pointOf(doc, member);
+        if (point) add(point.part, point.index, member);
+      }
+      continue;
+    }
+    const vertices = verticesOf(object);
+    if (/^\d+$/.test(key)) {
+      const index = Number(key);
+      if (index >= vertices.length) throw new Error(`${owner} has ${vertices.length} vertices (0 to ${vertices.length - 1}), so there is no "${name}"`);
+      add(object, index, name);
+      continue;
+    }
+    const index = vertices.findIndex((v) => v.name === key);
+    if (index < 0) {
+      const known = vertices.flatMap((v) => (v.name ? [v.name] : []));
+      throw new Error(`${owner} has no point named "${key}" (${known.length ? `named points: ${known.join(', ')}` : 'it has no named points; use its index, as ' + owner + '.0'})`);
+    }
+    add(object, index, name);
+  }
+  return [...found.values()];
+}
+
+/**
+ * The batch that moves points: by an offset, or one point to a place. Their handles go along; the vertices that
+ * share them follow by themselves.
+ * @param {Doc} doc @param {{ part: string, index: number }[]} points from pointsNamed
+ * @param {{ by?: { x: number, y: number }, to?: { x: number, y: number } }} where
+ * @returns {Operation[]}
+ */
+export function movePointsOps(doc, points, { by, to }) {
+  if (to && points.length !== 1) throw new Error(`--to places one point, and these are ${points.length}: use --by to move them together`);
+  /** @type {Map<string, Vertex[]>} */
+  const changes = new Map();
+  const round = (/** @type {number} */ n) => Math.round(n * 100) / 100 || 0;
+  for (const { part, index } of points) {
+    const object = /** @type {DocObject} */ (findObject(doc, part));
+    const vertices = changes.get(part) ?? verticesOf(object).map((v) => ({ ...v }));
+    const v = vertices[index];
+    if (to) Object.assign(v, { x: round(to.x), y: round(to.y) });
+    else if (by) Object.assign(v, { x: round(v.x + by.x), y: round(v.y + by.y) });
+    changes.set(part, vertices);
+  }
+  return [...changes].map(([target, vertices]) => ({ op: 'set', target, props: { vertices } }));
+}

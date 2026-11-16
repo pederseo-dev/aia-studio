@@ -80,8 +80,11 @@ Rules (a batch that breaks them is refused):
   - a shared vertex has no name and no x, y
   - deleting a part or a point that others share is refused: unshare them first (give them x, y)
 Renaming a part (rename) updates the references to its points.
-To move a point, set the part's whole vertices again with that vertex changed (aia show <doc> <part> gives them);
-its shared vertices follow by themselves.
+
+Moving points by name, without sending the vertices again (the vertices that share them follow):
+  aia move face head.chin --to 400,470          one point to a place
+  aia move face head.ear_l_top head.3 --by -10,0  points by an offset (head.3: the vertex at index 3, from 0)
+  aia move face face.upper_lid --by 0,-6        all the points of a point group
 
 Point groups belong to the vector layer, a list of named points of its parts:
   { "op": "set", "target": "face", "props": { "groups": { "upper_lid": ["lid.top", "brow.mid"] } } }`,

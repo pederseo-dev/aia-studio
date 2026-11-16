@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import { findObject, subtree } from '../src/core/document.js';
 import { toSvg } from '../src/core/draw.js';
 import { guide } from '../src/core/guide.js';
+import { movePointsOps, pointsNamed } from '../src/core/points.js';
 import { svgToPng } from './png.js';
 
 /**
@@ -123,6 +124,15 @@ export function createAia({ store, schema }) {
     return n;
   };
 
+  /** A flag with two numbers, "10,-5". @param {Args} args @param {string} name */
+  const pair = (args, name) => {
+    const value = args.flags[name];
+    if (value === undefined) return undefined;
+    const [x, y, ...rest] = String(value).split(',').map((s) => Number(s.trim()));
+    if (rest.length || !Number.isFinite(x) || !Number.isFinite(y)) throw new AiaError(`--${name} must be two numbers: x,y (for example 10,-5)`);
+    return { x, y };
+  };
+
   /** @type {Record<string, Command>} */
   const commands = {
     help: {
@@ -231,6 +241,35 @@ export function createAia({ store, schema }) {
         const before = (await store.get(id, ORIGIN)).document;
         const { document } = await store.apply(id, ops, { origin: ORIGIN, note });
         return ok(`Applied ${ops.length} operation${ops.length > 1 ? 's' : ''} to ${id}. ${changes(before, document)}`);
+      },
+    },
+
+    move: {
+      usage: 'aia move <doc> <point>... --by dx,dy | --to x,y',
+      summary: 'Moves points by name: named points, vertices by index, or point groups',
+      details:
+        'A point is part.point (head.chin), part.index (head.3, from 0) or layer.group (face.upper_lid: all its\n' +
+        'points). --by moves them all by an offset; --to places one point. Their curve handles go along, and the\n' +
+        'vertices that share them follow (a shared vertex named here moves the point it shares). One step to undo.\n' +
+        'Example: aia move face head.ear_l_top head.ear_l_bot --by -10,0',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const names = args.positional.slice(1);
+        if (!names.length) throw new AiaError('Missing the points to move: part.point, part.index or layer.group');
+        const by = pair(args, 'by');
+        const to = pair(args, 'to');
+        if (!by === !to) throw new AiaError('Say where: --by dx,dy (an offset) or --to x,y (one point)');
+        const { document } = await store.get(id, ORIGIN);
+        let ops;
+        try {
+          ops = movePointsOps(document, pointsNamed(document, names), { by, to });
+        } catch (e) {
+          throw new AiaError(e.message);
+        }
+        const note = typeof args.flags.note === 'string' ? args.flags.note : `Move ${names.join(', ')}`;
+        await store.apply(id, ops, { origin: ORIGIN, note });
+        const where = by ? `by ${by.x}, ${by.y}` : `to ${to?.x}, ${to?.y}`;
+        return ok(`Moved ${names.join(', ')} ${where}. Changed: ${ops.map((o) => o.target).join(', ')}.`);
       },
     },
 
