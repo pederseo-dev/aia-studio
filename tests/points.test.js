@@ -83,3 +83,46 @@ test('points are moved by name, by index or by group, and what shares them follo
   assert.throws(() => pointsNamed(doc, ['head.upper']), /groups: lower/);
   assert.throws(() => movePointsOps(doc, points, { to: { x: 0, y: 0 } }), /--by/);
 });
+
+/** A layer with a closed jaw of 4 points and a skin whose top stretch follows jaw from ear_l to ear_r through chin. */
+function followed(way) {
+  return apply(newDocument(), [
+    { op: 'create', type: 'vector', id: 'head' },
+    { op: 'create', type: 'path', id: 'jaw', parent: 'head', props: { vertices: [
+      { x: 0, y: 0, name: 'ear_l' }, { x: 50, y: 80, name: 'chin', in: { x: -20, y: 0 }, out: { x: 20, y: 0 } }, { x: 100, y: 0, name: 'ear_r' }, { x: 50, y: -60, name: 'top' },
+    ] } },
+    { op: 'create', type: 'path', id: 'skin', parent: 'head', props: { vertices: [
+      { ref: 'jaw.ear_l', follow: 'jaw', ...(way ? { way } : {}) }, { ref: 'jaw.ear_r' }, { x: 50, y: 200 },
+    ] } },
+  ]);
+}
+
+test('a followed stretch draws along the other part, and changes with it', () => {
+  const doc = followed();
+  const skin = drawDocument(doc).nodes[0].children[1];
+  // ear_l → chin (with its curve) → ear_r, then the skin's own point.
+  assert.equal(skin.attrs.d, 'M0 0C0 0 30 80 50 80C70 80 100 0 100 0L50 200Z');
+  // The long way goes over the top instead.
+  assert.match(String(drawDocument(followed('long')).nodes[0].children[1].attrs.d), /^M0 0L50 -60L100 0/);
+  // Curving the chin of jaw curves the skin too.
+  const curved = apply(doc, [{ op: 'set', target: 'jaw', props: { vertices: [
+    { x: 0, y: 0, name: 'ear_l' }, { x: 50, y: 90, name: 'chin', in: { x: -40, y: 0 }, out: { x: 40, y: 0 } }, { x: 100, y: 0, name: 'ear_r' }, { x: 50, y: -60, name: 'top' },
+  ] } }]);
+  assert.match(String(drawDocument(curved).nodes[0].children[1].attrs.d), /C0 0 10 90 50 90C90 90/);
+});
+
+test('a followed stretch needs both ends on the part it follows, and renaming keeps it', () => {
+  const doc = followed();
+  assert.throws(() => apply(doc, [{ op: 'set', target: 'skin', props: { vertices: [{ ref: 'jaw.ear_l', follow: 'jaw' }, { x: 9, y: 9 }, { x: 50, y: 200 }] } }]), /must both share points of jaw/);
+  assert.throws(() => apply(doc, [{ op: 'set', target: 'skin', props: { vertices: [{ ref: 'jaw.ear_l', follow: 'nose' }, { ref: 'jaw.ear_r' }] } }]), /no such part/);
+  assert.throws(() => apply(doc, [{ op: 'set', target: 'skin', props: { vertices: [{ x: 0, y: 0, way: 'long' }, { x: 1, y: 1 }] } }]), /"way" can only be "long", next to "follow"/);
+  const renamed = apply(doc, [{ op: 'rename', target: 'jaw', id: 'mandible' }]);
+  assert.deepEqual(vertex(renamed, 'skin', 0), { ref: 'mandible.ear_l', follow: 'mandible' });
+});
+
+test('deleting the followed part in the editor leaves a plain outline where it was', () => {
+  const doc = followed();
+  const after = apply(doc, settleOps(doc, [{ op: 'delete', target: 'jaw' }], loose));
+  assert.deepEqual(vertex(after, 'skin', 0), { x: 0, y: 0 });
+  assert.deepEqual(vertex(after, 'skin', 1), { x: 100, y: 0 });
+});

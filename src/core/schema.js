@@ -95,9 +95,11 @@ function verticesError(value) {
   if (!Array.isArray(value)) return 'must be a list of vertices [{ x, y }]';
   for (const [i, vertex] of value.entries()) {
     if (!vertex || typeof vertex !== 'object') return `vertex ${i} must be { x, y }`;
-    const { x, y, in: before, out: after, name, ref, ...rest } = vertex;
+    const { x, y, in: before, out: after, name, ref, follow, way, ...rest } = vertex;
     const extra = Object.keys(rest);
-    if (extra.length) return `vertex ${i} has unknown fields: ${extra.join(', ')} (fields: x, y, in, out, name, ref)`;
+    if (extra.length) return `vertex ${i} has unknown fields: ${extra.join(', ')} (fields: x, y, in, out, name, ref, follow, way)`;
+    if (follow !== undefined && (typeof follow !== 'string' || !ID.test(follow))) return `vertex ${i}: "follow" must be the id of a part, like "jaw"`;
+    if (way !== undefined && (way !== 'long' || follow === undefined)) return `vertex ${i}: "way" can only be "long", next to "follow"`;
     if (ref !== undefined) {
       if (typeof ref !== 'string' || !POINT_REF.test(ref)) return `vertex ${i}: "ref" must name a point of another part, like "jaw.chin"`;
       if (x !== undefined || y !== undefined) return `vertex ${i} shares "${ref}", so it has no x, y of its own (it is where that point is)`;

@@ -5,6 +5,9 @@
 //   its own: it is where jaw.chin is (its handles are its own, the curve on its outline). This is how parts are
 //   welded, as in Moho: moving the point moves both outlines.
 // - A vector layer may have point groups: groups: { upper_lid: ['lid.top', 'brow.mid'] }, named points of its parts.
+// - A stretch of an outline may follow another part's curve: { ref: 'jaw.ear_l', follow: 'jaw' }, { ref: 'jaw.chin' }
+//   draws from ear_l to chin along jaw's own outline (its points and curves in between), so it changes when jaw
+//   does. Both ends share points of jaw; on a closed jaw it goes the short way, or the other with way: 'long'.
 //
 // The stored document keeps references as they are; resolveDoc fills in where each shared vertex is, for drawing and
 // for the editor. settleOps turns a batch written against the resolved document (shared vertices with x, y) into one
@@ -12,6 +15,7 @@
 // stays where it was as a point of its own.
 
 import { ID, findObject } from './document.js';
+import { OUTLINE } from './geometry.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc
@@ -19,6 +23,7 @@ import { ID, findObject } from './document.js';
  * @typedef {import('./geometry.js').Vertex} Vertex
  * @typedef {import('./operations.js').Operation} Operation
  * @typedef {Record<string, string[]>} PointGroups
+ * @typedef {import('./geometry.js').Point} Point
  */
 
 /** "jaw.chin": a named point of a part. */
@@ -47,14 +52,14 @@ export function pointOf(doc, ref) {
 const hasRefs = (doc) => doc.objects.some((o) => verticesOf(o).some((v) => v.ref));
 
 /**
- * The document with every shared vertex at the place of the point it shares (its `ref` kept). The same object when
- * nothing is shared.
+ * The document with every shared vertex at the place of the point it shares (its `ref` kept), and, for the parts
+ * with followed stretches, where their outline really goes (part[OUTLINE]). The same object when nothing is shared.
  * @param {Doc} doc
  * @returns {Doc}
  */
 export function resolveDoc(doc) {
   if (!hasRefs(doc)) return doc;
-  return {
+  const placed = {
     ...doc,
     objects: doc.objects.map((o) => {
       if (!verticesOf(o).some((v) => v.ref)) return o;
@@ -68,6 +73,85 @@ export function resolveDoc(doc) {
       };
     }),
   };
+  for (const o of placed.objects) {
+    if (verticesOf(o).some((v) => v.follow)) /** @type {any} */ (o)[OUTLINE] = followedOutline(placed, o);
+  }
+  return placed;
+}
+
+/** @param {Vertex} v @returns {Vertex} the vertex with its handles swapped (walked the other way) */
+const flipped = (v) => ({ x: v.x, y: v.y, ...(v.out ? { in: v.out } : {}), ...(v.in ? { out: v.in } : {}) });
+
+/**
+ * The stretch from vertex `i` of a part to the next one along the part it follows, or why it cannot be.
+ * @param {Doc} doc resolved @param {DocObject} part @param {number} i
+ * @returns {{ error: string } | { startOut?: Point, inner: Vertex[], endIn?: Point }}
+ */
+export function followStretch(doc, part, i) {
+  const vertices = verticesOf(part);
+  const v = vertices[i];
+  const closed = part.closed !== false;
+  const nextIndex = i + 1 < vertices.length ? i + 1 : closed ? 0 : -1;
+  const where = `point ${i} of ${part.id} follows "${v.follow}"`;
+  if (nextIndex < 0) return { error: `${where}, but it is the last point of an open line: there is no stretch after it` };
+  const other = findObject(doc, String(v.follow));
+  if (!other || other.type !== 'path') return { error: `${where}, but there is no such part` };
+  if (other.id === part.id) return { error: `${where}: a part cannot follow itself` };
+  if (other.parent !== part.parent) return { error: `${where}, which is in another layer` };
+  const next = vertices[nextIndex];
+  const a = v.ref ? pointOf(doc, v.ref) : null;
+  const b = next.ref ? pointOf(doc, next.ref) : null;
+  if (!a || !b || a.part.id !== other.id || b.part.id !== other.id) {
+    return { error: `${where}: this point and the next one must both share points of ${other.id} (ref "${other.id}.…")` };
+  }
+  if (a.index === b.index) return { error: `${where}: this point and the next one share the same point of ${other.id}` };
+  const path = verticesOf(other);
+  const n = path.length;
+  const otherClosed = other.closed !== false;
+  let forward;
+  if (!otherClosed) forward = b.index > a.index;
+  else {
+    const ahead = (b.index - a.index + n) % n;
+    const behind = (a.index - b.index + n) % n;
+    const short = ahead <= behind;
+    forward = v.way === 'long' ? !short : short;
+  }
+  /** @type {Vertex[]} */
+  const walked = [];
+  for (let k = a.index; ; k = (k + (forward ? 1 : -1) + n) % n) {
+    walked.push(forward ? path[k] : flipped(path[k]));
+    if (k === b.index) break;
+  }
+  const first = walked[0];
+  const last = walked[walked.length - 1];
+  return { startOut: first.out, inner: walked.slice(1, -1).map((w) => ({ x: w.x, y: w.y, ...(w.in ? { in: w.in } : {}), ...(w.out ? { out: w.out } : {}) })), endIn: last.in };
+}
+
+/**
+ * Where an outline with followed stretches goes: its own vertices with the other part's points in between, and the
+ * handles at the ends of each stretch taken from that part.
+ * @param {Doc} doc resolved @param {DocObject} part
+ * @returns {Vertex[]}
+ */
+function followedOutline(doc, part) {
+  const vertices = verticesOf(part);
+  const closed = part.closed !== false;
+  const stretches = vertices.map((v, i) => {
+    if (!v.follow) return null;
+    const s = followStretch(doc, part, i);
+    return 'error' in s ? null : s;
+  });
+  /** @type {Vertex[]} */
+  const outline = [];
+  for (const [i, v] of vertices.entries()) {
+    const before = stretches[i > 0 ? i - 1 : closed ? vertices.length - 1 : -1];
+    const after = stretches[i];
+    const inHandle = before ? before.endIn : v.in;
+    const outHandle = after ? after.startOut : v.out;
+    outline.push({ x: v.x, y: v.y, ...(inHandle ? { in: inHandle } : {}), ...(outHandle ? { out: outHandle } : {}) });
+    if (after) outline.push(...after.inner);
+  }
+  return outline;
 }
 
 /**
@@ -83,6 +167,10 @@ export function pointsError(doc) {
       if (v.name) {
         if (names.has(v.name)) return `${object.id} has two points named "${v.name}"`;
         names.add(v.name);
+      }
+      if (v.follow) {
+        const stretch = followStretch(resolveDoc(doc), object, i);
+        if ('error' in stretch) return stretch.error;
       }
       if (!v.ref) continue;
       const [partId] = splitRef(v.ref);
@@ -117,7 +205,13 @@ export function renamePointRefs(doc, from, to) {
     return part === from ? `${to}.${name}` : ref;
   };
   for (const o of doc.objects) {
-    if (verticesOf(o).some((v) => v.ref)) o.vertices = verticesOf(o).map((v) => (v.ref ? { ...v, ref: rename(v.ref) } : v));
+    if (verticesOf(o).some((v) => v.ref || v.follow)) {
+      o.vertices = verticesOf(o).map((v) => ({
+        ...v,
+        ...(v.ref ? { ref: rename(v.ref) } : {}),
+        ...(v.follow === from ? { follow: to } : {}),
+      }));
+    }
     const groups = /** @type {PointGroups | undefined} */ (o.groups);
     if (groups) o.groups = Object.fromEntries(Object.entries(groups).map(([g, members]) => [g, members.map(rename)]));
   }
@@ -231,6 +325,22 @@ export function settleOps(doc, ops, apply) {
     const groups = /** @type {PointGroups | undefined} */ (o.groups);
     if (!groups || Object.values(groups).every((members) => members.every((m) => pointOf(after, m)))) continue;
     fix(o, { groups: Object.fromEntries(Object.entries(groups).map(([g, members]) => [g, members.filter((m) => pointOf(after, m))])) });
+  }
+  // Followed stretches whose ends no longer share points of the part they follow (or whose part is gone) become
+  // plain stretches.
+  const final = fixes.size ? apply(after, [...fixes].map(([target, props]) => ({ op: 'set', target, props }))) : after;
+  const shown = resolveDoc(final);
+  for (const o of final.objects) {
+    const vertices = verticesOf(o);
+    const broken = vertices.map((v, i) => !!v.follow && 'error' in followStretch(shown, o, i));
+    if (!broken.some(Boolean)) continue;
+    fix(o, {
+      vertices: vertices.map((v, i) => {
+        if (!broken[i]) return v;
+        const { follow: _follow, way: _way, ...rest } = v;
+        return rest;
+      }),
+    });
   }
   return [...first, ...[...fixes].map(([target, props]) => ({ op: 'set', target, props }))];
 }

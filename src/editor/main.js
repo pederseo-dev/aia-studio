@@ -5,7 +5,7 @@ import { placeIcons } from './icons.js';
 import { actions, renderHeader, setupDropdowns, setupHeader } from './header.js';
 import { deleteSelected, render as renderLayers, renameSelected, setupLayers } from './layers.js';
 import { render as renderCanvas, setupCanvas } from './canvas.js';
-import { cancelPen, finishPenLine, setupDrawTools } from './drawTools.js';
+import { cancelPen, setupDrawTools } from './drawTools.js';
 import { setupSelectTool } from './selectTool.js';
 import { deletePoints, nudgePoints, setupPointEdit, stopEditing } from './pointEdit.js';
 import { copy, duplicate, nudge, paste } from './clipboard.js';
@@ -60,10 +60,8 @@ document.addEventListener('keydown', (event) => {
   } else if (ctrl && key === 'v') {
     if (!paste()) return;
   } else if (event.altKey && key === 'w') actions.close();
-  else if (event.key === 'Enter' && finishPenLine()) {
-    // the pen ended its line
-  } else if (event.key === 'Escape' && (cancelPen() || stopEditing())) {
-    // the pen dropped its outline, or point editing ended
+  else if (event.key === 'Escape' && stopEditing()) {
+    // point editing ended
   } else if (arrow && !ctrl) {
     const step = event.shiftKey ? 10 : 1;
     const done = state.editing ? nudgePoints(arrow[0] * step, arrow[1] * step) : nudge(arrow[0] * step, arrow[1] * step);

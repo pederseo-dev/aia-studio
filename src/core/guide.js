@@ -81,6 +81,12 @@ Rules (a batch that breaks them is refused):
   - deleting a part or a point that others share is refused: unshare them first (give them x, y)
 Renaming a part (rename) updates the references to its points.
 
+Following a curve: a stretch of an outline can go along another part's outline instead of having its own curve,
+so a fill and a line drawn over the same points stay together when the line is curved:
+  "vertices": [{ "ref": "jaw.ear_l", "follow": "jaw" }, { "ref": "jaw.ear_r" }, { "x": 50, "y": 200 }]
+From ear_l to ear_r this outline goes along jaw (its points and curves in between). Both ends of the stretch share
+points of jaw. On a closed jaw it takes the short way; "way": "long" takes the other.
+
 Moving points by name, without sending the vertices again (the vertices that share them follow):
   aia move face head.chin --to 400,470          one point to a place
   aia move face head.ear_l_top head.3 --by -10,0  points by an offset (head.3: the vertex at index 3, from 0)

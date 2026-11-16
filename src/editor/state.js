@@ -372,6 +372,17 @@ export const isDrawTool = (tool) => tool === 'pen' || tool === 'rect' || tool ==
 /** Auto weld (point editing): an open end dropped on another open end welds them. Kept per person in this browser. */
 export const autoWeld = { on: (() => { try { return localStorage.getItem('aia.autoWeld') !== 'off'; } catch { return true; } })() };
 
+/** The Pen's Sharp corners: new points are corners instead of smooth curves. Kept per person in this browser. */
+export const penOptions = { sharp: (() => { try { return localStorage.getItem('aia.penSharp') === 'on'; } catch { return false; } })() };
+
+export function toggleSharpCorners() {
+  penOptions.sharp = !penOptions.sharp;
+  try {
+    localStorage.setItem('aia.penSharp', penOptions.sharp ? 'on' : 'off');
+  } catch {}
+  changed();
+}
+
 export function toggleAutoWeld() {
   autoWeld.on = !autoWeld.on;
   try {

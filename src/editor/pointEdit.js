@@ -43,10 +43,14 @@ const parseKey = (key) => {
   return [key.slice(0, at), Number(key.slice(at + 1))];
 };
 
-/** The parts whose points can be edited: the edited layer's, visible and not locked. @param {Doc | null} [doc] */
-function editableParts(doc = state.document) {
-  if (!doc || !state.editing) return [];
-  return doc.objects.filter((o) => o.parent === state.editing && isPart(o.type) && inShownLayer(o.id) && !isLocked(o.id));
+/**
+ * The parts whose points can be edited or welded to: a layer's (the edited one by default), in a shown layer and
+ * not locked.
+ * @param {Doc | null} [doc] @param {string | null} [layer]
+ */
+function editableParts(doc = state.document, layer = state.editing) {
+  if (!doc || !layer) return [];
+  return doc.objects.filter((o) => o.parent === layer && isPart(o.type) && inShownLayer(o.id) && !isLocked(o.id));
 }
 
 /** The picked points grouped by part: { part id: [indices] }. */
@@ -111,9 +115,14 @@ function pointDown(event, part, index) {
       if (e.shiftKey) Math.abs(dx) > Math.abs(dy) ? (dy = 0) : (dx = 0);
       if (!changes && Math.hypot(dx, dy) < screen(2)) return;
       changes = movedPicked(translate(dx, dy));
+      // Auto weld shows where the point would weld if it were dropped here.
+      const target = autoWeld.on && state.points.length === 1 ? weldTargetNear(p, key) : null;
+      weldHint = target && weldOps(key, target, e.altKey) ? weldPlace(target) : null;
+      hintKind = 'weld';
       showPreview(withVertices(changes));
     },
     (p, e) => {
+      weldHint = null;
       if (!changes) {
         // A click without moving on one of several picked points picks only it.
         if (state.points.length > 1) pickPoints([key], part.id);
@@ -163,7 +172,7 @@ function knobDown(event, part, index, side) {
  * corner, takes its handles away. Changes the vertices in place.
  * @param {Vertex[]} vertices @param {number} index @param {boolean} closed @param {boolean} corner
  */
-function shapePoint(vertices, index, closed, corner) {
+export function shapePoint(vertices, index, closed, corner) {
   const v = vertices[index];
   delete v.in;
   delete v.out;
@@ -342,23 +351,46 @@ export function nudgePoints(dx, dy) {
 }
 
 const WELD_DISTANCE = 8; // screen px
+const WELD_HINT = 8; // screen px, the radius of the ring that shows where a weld would happen
 
 /**
- * @typedef {{ key: string } | { part: DocObject, segment: number, t: number }} WeldTarget a point, or a place on a line
+ * @typedef {{ key: string } | { part: DocObject, segment: number, t: number, point: Point }} WeldTarget a point, or a place on a line
  * @typedef {{ ops: Operation[], keep: string, pick: string[], note: string }} Weld
  */
 
+/** @type {Point | null} where the point being dragged or drawn would weld (a ring on the canvas) */
+let weldHint = null;
+/** @type {'weld' | 'continue'} what the ring means: a weld, or an end the Pen would continue */
+let hintKind = 'weld';
+
+/** Shows where a weld would happen, or nothing with null. @param {Point | null} p @param {'weld' | 'continue'} [kind] */
+export function showWeldHint(p, kind = 'weld') {
+  if (p?.x === weldHint?.x && p?.y === weldHint?.y && kind === hintKind) return;
+  weldHint = p;
+  hintKind = kind;
+  paintOverlay();
+}
+
+/** Where a weld target is. @param {WeldTarget} target @returns {Point} */
+export function weldPlace(target) {
+  if (!('key' in target)) return target.point;
+  const [id, index] = parseKey(target.key);
+  const v = verticesOf(/** @type {DocObject} */ (findObject(/** @type {Doc} */ (state.document), id)))[index];
+  return { x: v.x, y: v.y };
+}
+
 /**
- * Where a point dropped at `p` would weld: the nearest point of the edited layer within reach (other than itself),
- * or else the nearest line of another part.
- * @param {Point} p @param {string} except the dropped point, "part:index"
+ * Where a point dropped at `p` would weld: the nearest point of the layer within reach (other than itself), or else
+ * the nearest line of another part.
+ * @param {Point} p @param {string} except the dropped point, "part:index" ('' for none)
+ * @param {string | null} [layer] the edited layer by default
  * @returns {WeldTarget | null}
  */
-function weldTargetNear(p, except) {
-  const [exceptPart] = parseKey(except);
+export function weldTargetNear(p, except, layer = state.editing) {
+  const [exceptPart] = except ? parseKey(except) : [''];
   let best = '';
   let bestDistance = screen(WELD_DISTANCE);
-  for (const part of editableParts()) {
+  for (const part of editableParts(state.document, layer)) {
     for (const [index, v] of verticesOf(part).entries()) {
       const key = keyOf(part.id, index);
       const d = Math.hypot(v.x - p.x, v.y - p.y);
@@ -369,9 +401,9 @@ function weldTargetNear(p, except) {
     }
   }
   if (best) return { key: best };
-  /** @type {{ part: DocObject, segment: number, t: number, distance: number } | null} */
+  /** @type {{ part: DocObject, segment: number, t: number, point: Point, distance: number } | null} */
   let line = null;
-  for (const part of editableParts()) {
+  for (const part of editableParts(state.document, layer)) {
     if (part.id === exceptPart) continue;
     const hit = nearestOnOutline(part, p);
     if (hit && hit.distance <= screen(WELD_DISTANCE) && (!line || hit.distance < line.distance)) line = { part, ...hit };
@@ -545,6 +577,55 @@ export function unweldPicked() {
   run(vertexOps(changes), { select: state.selected, note: `Unweld ${pointsWord(state.points.length)}` });
 }
 
+/**
+ * The stretch between the two picked points, if it can follow another part: both in one part and next to each other,
+ * both sharing points of one other part.
+ */
+function pickedStretch() {
+  if (state.points.length !== 2) return null;
+  const [a, b] = state.points.map(pointAt);
+  if (!a || !b || a.part.id !== b.part.id) return null;
+  const n = verticesOf(a.part).length;
+  const closed = a.part.closed !== false;
+  /** @param {{ index: number }} x @param {{ index: number }} y */
+  const before = (x, y) => (x.index + 1 < n ? x.index + 1 === y.index : closed && y.index === 0);
+  const from = before(a, b) ? a : before(b, a) ? b : null;
+  const to = from === a ? b : a;
+  if (!from || !from.vertex.ref || !to.vertex.ref) return null;
+  const other = splitRef(from.vertex.ref)[0];
+  if (splitRef(to.vertex.ref)[0] !== other) return null;
+  return { part: from.part, index: from.index, other, follows: from.vertex.follow === other, long: from.vertex.way === 'long' };
+}
+
+/** Whether the two picked points make a stretch that can follow another part (or already does). */
+export function canFollow() {
+  return !!pickedStretch();
+}
+
+/** Whether the picked stretch follows another part now. */
+export function pickedFollows() {
+  return !!pickedStretch()?.follows;
+}
+
+/**
+ * Follow: the stretch between the two picked points (shared points of another part) follows that part's curve; on a
+ * stretch that follows, it stops. Alt+click: the long way round (or back to the short one).
+ * @param {boolean} [otherWay]
+ */
+export function followPicked(otherWay = false) {
+  const s = pickedStretch();
+  if (!s) return notify('Pick two neighbor points of a part that share points of another part, to follow its curve between them');
+  const vertices = verticesOf(s.part).map((v, i) => {
+    if (i !== s.index) return v;
+    const { follow: _follow, way: _way, ...rest } = v;
+    if (s.follows && !otherWay) return rest;
+    const long = s.follows ? !s.long : otherWay;
+    return { ...rest, follow: s.other, ...(long ? { way: 'long' } : {}) };
+  });
+  const note = s.follows && !otherWay ? `${s.part.id} stops following ${s.other}` : `${s.part.id} follows ${s.other}${otherWay ? ' the other way' : ''}`;
+  run([{ op: 'set', target: s.part.id, props: { vertices: vertices.map(roundVertex) } }], { select: state.selected, note });
+}
+
 /** The one picked point, if exactly one is picked. */
 export function pickedPoint() {
   return state.points.length === 1 ? pointAt(state.points[0]) : null;
@@ -657,6 +738,89 @@ export function editGroup(action, group) {
   run([...named, { op: 'set', target: layer, props: { groups: Object.keys(groups).length ? groups : null } }], { select: state.selected, note: notes[action] });
 }
 
+/**
+ * What a new outline (the Pen) needs to weld some of its vertices as it is created: for each target, the point it
+ * shares ("part.point"), naming points and adding points on lines as needed; and the ops that do that to the other
+ * parts. Targets on the same part are handled together, so indices stay right.
+ * @param {(WeldTarget | null)[]} targets one per vertex of the new outline
+ * @returns {{ ops: Operation[], refs: (string | null)[] }}
+ */
+export function shareTargets(targets) {
+  const doc = /** @type {Doc} */ (state.document);
+  /** @type {Map<string, Vertex[]>} */
+  const changes = new Map();
+  /** @type {(string | null)[]} */
+  const refs = targets.map(() => null);
+  /** @param {string} id */
+  const verticesNow = (id) => changes.get(id) ?? verticesOf(/** @type {DocObject} */ (findObject(doc, id)));
+  // 1. Points added on lines, the last stretch first so the earlier ones keep their index.
+  /** @type {Map<string, { i: number, segment: number, t: number }[]>} */
+  const onLines = new Map();
+  targets.forEach((target, i) => {
+    if (target && !('key' in target)) onLines.set(target.part.id, [...(onLines.get(target.part.id) ?? []), { i, segment: target.segment, t: target.t }]);
+  });
+  /** @type {Map<number, { part: string, index: number }>} where each added point ended up */
+  const added = new Map();
+  /** @type {Map<string, number[]>} the stretches split in each part (to shift the indices of its other points) */
+  const split = new Map();
+  for (const [id, list] of onLines) {
+    list.sort((a, b) => b.segment - a.segment || b.t - a.t);
+    /** @type {{ segment: number, t: number } | null} */
+    let previous = null;
+    for (const item of list) {
+      // A second point on a stretch already split falls on its first half.
+      const t = previous && previous.segment === item.segment ? item.t / previous.t : item.t;
+      const part = /** @type {DocObject} */ (findObject(doc, id));
+      const { vertices, index } = insertVertex({ ...part, vertices: verticesNow(id) }, item.segment, t);
+      for (const place of added.values()) if (place.part === id && place.index >= index) place.index++;
+      added.set(item.i, { part: id, index });
+      changes.set(id, vertices);
+      previous = item;
+    }
+    split.set(id, list.map((item) => item.segment));
+  }
+  // 2. The points shared: named if they have no name yet.
+  /** @type {Map<string, Set<string>>} */
+  const given = new Map();
+  targets.forEach((target, i) => {
+    if (!target) return;
+    let id;
+    let index;
+    if ('key' in target) {
+      [id, index] = parseKey(target.key);
+      const at = index;
+      index += (split.get(id) ?? []).filter((segment) => segment + 1 <= at).length;
+    } else ({ part: id, index } = /** @type {{ part: string, index: number }} */ (added.get(i)));
+    const vertices = verticesNow(id);
+    const v = vertices[index];
+    if (v.ref) {
+      refs[i] = v.ref;
+      return;
+    }
+    let name = v.name;
+    if (!name) {
+      const taken = given.get(id) ?? new Set();
+      name = nextPointName({ .../** @type {DocObject} */ (findObject(doc, id)), vertices }, taken);
+      taken.add(name);
+      given.set(id, taken);
+      const named = name;
+      changes.set(id, vertices.map((w, j) => (j === index ? { ...w, name: named } : w)));
+    }
+    refs[i] = `${id}.${name}`;
+  });
+  return { ops: vertexOps(changes), refs };
+}
+
+/** The points of a layer as small dots, to weld to while drawing (not editable). @param {SVGGElement} overlay @param {string} layer */
+export function paintLayerPoints(overlay, layer) {
+  const size = screen(4);
+  for (const part of editableParts(state.document, layer)) {
+    for (const v of verticesOf(part)) {
+      overlay.append(element('rect', { x: v.x - size / 2, y: v.y - size / 2, width: size, height: size, class: `layer-point${v.ref ? ' shared' : ''}` }));
+    }
+  }
+}
+
 /** Esc: ends point editing (the main part stays picked). */
 export function stopEditing() {
   if (!state.editing) return false;
@@ -708,6 +872,9 @@ function paintPoints(overlay, doc) {
 
 export function setupPointEdit() {
   addPainter(paintPoints);
+  addPainter((overlay) => {
+    if (weldHint) overlay.append(element('circle', { cx: weldHint.x, cy: weldHint.y, r: screen(WELD_HINT), class: `weld-hint${hintKind === 'continue' ? ' continue' : ''}` }));
+  });
   svg.addEventListener('pointermove', (event) => {
     if (!state.editing || event.buttons) return;
     const target = /** @type {Element} */ (event.target);

@@ -7,8 +7,9 @@
 /**
  * @typedef {[number, number, number, number, number, number]} Matrix
  * @typedef {{ x: number, y: number }} Point
- * @typedef {{ x: number, y: number, in?: Point, out?: Point, name?: string, ref?: string }} Vertex
- *   name: a named point ("chin"); ref: a point shared with another part ("jaw.chin"), see points.js
+ * @typedef {{ x: number, y: number, in?: Point, out?: Point, name?: string, ref?: string, follow?: string, way?: string }} Vertex
+ *   name: a named point ("chin"); ref: a point shared with another part ("jaw.chin"); follow: the stretch to the next
+ *   vertex follows that part's outline (way "long": the long way round); see points.js
  * @typedef {import('./document.js').DocObject} DocObject
  * @typedef {{ x: number, y: number, width: number, height: number }} Box
  */
@@ -48,13 +49,25 @@ export const applyVector = (m, v) => ({ x: m[0] * v.x + m[2] * v.y, y: m[1] * v.
 /** The name or the shared point of a vertex (what survives a transform, and what two welded vertices keep). @param {Vertex} v */
 const pointOnly = (v) => (v.ref ? { ref: v.ref } : v.name ? { name: v.name } : {});
 
+/** What a vertex keeps through a transform besides its place: its name or shared point, and what it follows. @param {Vertex} v */
+const extrasOf = (v) => ({ ...pointOnly(v), ...(v.follow ? { follow: v.follow } : {}), ...(v.way ? { way: v.way } : {}) });
+
+/**
+ * Where a part's outline really goes, when some of its stretches follow another part (set by resolveDoc in
+ * points.js; never saved). Drawing, bounds and the editor's outlines use it; editing uses the part's own vertices.
+ */
+export const OUTLINE = Symbol('outline');
+
+/** The vertices a part draws through: its outline with followed stretches, or its own vertices. @param {DocObject} part @returns {Vertex[]} */
+export const outlineOf = (part) => /** @type {Vertex[]} */ (/** @type {any} */ (part)[OUTLINE] ?? part.vertices ?? []);
+
 /** @param {number} n */
 export const round2 = (n) => Math.round(n * 100) / 100 || 0;
 
 /** A vertex with its numbers rounded to 2 decimals (what is saved). @param {Vertex} v @returns {Vertex} */
 export function roundVertex(v) {
   return {
-    ...pointOnly(v),
+    ...extrasOf(v),
     x: round2(v.x),
     y: round2(v.y),
     ...(v.in ? { in: { x: round2(v.in.x), y: round2(v.in.y) } } : {}),
@@ -66,7 +79,7 @@ export function roundVertex(v) {
 export function transformVertex(v, m) {
   const p = apply(m, v);
   /** @type {Vertex} */
-  const out = { ...pointOnly(v), x: p.x, y: p.y };
+  const out = { ...extrasOf(v), x: p.x, y: p.y };
   if (v.in) out.in = applyVector(m, v.in);
   if (v.out) out.out = applyVector(m, v.out);
   return out;
@@ -137,7 +150,7 @@ export function vertexBounds(vertices) {
 }
 
 /** The box around some parts. @param {DocObject[]} parts */
-export const bounds = (parts) => vertexBounds(parts.flatMap(verticesOf));
+export const bounds = (parts) => vertexBounds(parts.flatMap(outlineOf));
 
 /**
  * The origin of a part or a layer, if it has one set (null: it uses the center of its box).
@@ -278,6 +291,8 @@ export function nearestOnOutline(part, p) {
   let best = null;
   const STEPS = 48;
   for (let segment = 0; segment < stretchCount(part); segment++) {
+    // A stretch that follows another part is that part's: points are added there, not here.
+    if (vertices[segment].follow) continue;
     const c = controlsOf(vertices, segment);
     /** @param {number} t */
     const at = (t) => splitCubic(c, t).at;

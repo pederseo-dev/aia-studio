@@ -281,3 +281,29 @@ foresaw. Agreed with the user:
 - **Point groups** belong to the vector layer: `groups: { "upper_lid": ["lid.top", "brow.mid"] }`. While editing
   points, the Groups menu picks a group's points, makes a group of the picked points, adds or takes them out, and
   deletes a group (its points stay).
+
+**Trying Design mode, step 9 (2026-11-16):** drawing connected to what is already there, as in Moho. With the Pen,
+the points of the active layer show as small dots, and with Auto weld on (its switch is in the Pen's bar too), a
+click on one of them, or on a line of the layer, welds the new vertex there: it shares that point (named at once if
+it had no name; on a line, a point is added first). There is no need to finish the drawing and weld in point editing
+afterwards. A green ring shows where a weld will happen, both while drawing with the Pen and while dragging a point
+in point editing.
+
+The Pen then became Moho's Add Point (the user's choice): press and drag, and the new point follows the pointer
+until it is released (before, a click put a point and a drag pulled curve handles, as in Illustrator). Pressing on
+an open end of a line of the layer continues that line (an accent ring shows it); anywhere else starts a new line of
+two points. Points come out smooth, an automatic curve through their neighbors; the Sharp corners switch, or Alt,
+makes corners. Released on the other end of the same line, it closes into a shape with the auto fill. Each stretch is
+saved when released (one undo step), so there is no Enter to finish and no outline left half done.
+
+**Trying Design mode, step 10 (2026-11-16): shared curves.** Shared points kept two parts together at their
+points, but each part had its own curve between them, so a fill under a line did not follow it when the line was
+curved. Now a stretch of an outline can follow another part's outline (decision 6, «what v1's `loops` did»):
+`{ "ref": "jaw.ear_l", "follow": "jaw" }, { "ref": "jaw.ear_r" }` draws from `ear_l` to `ear_r` along `jaw`, through
+its points and curves in between. Both ends share points of the part followed; on a closed part it goes the short
+way, and `"way": "long"` the other. The JSON stays short (jaw's points are not copied): the core expands it when
+drawing (`resolveDoc` and `followStretch` in `src/core/points.js`), and bounds and the editor's outlines use the
+expanded outline. Renaming the followed part follows; a batch that breaks a stretch is refused; in the editor,
+deleting the followed part leaves a plain stretch. In point editing, the **Follow** button makes the stretch between
+two picked neighbor points follow the part they share points with (Alt+click: the long way), and **Unfollow** undoes
+it. The Fill tool will make these by itself.

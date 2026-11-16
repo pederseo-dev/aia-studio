@@ -3,7 +3,7 @@
 // Every part is one <path>; hidden layers and parts are left out.
 
 import { childrenOf } from './document.js';
-import { verticesOf } from './geometry.js';
+import { outlineOf } from './geometry.js';
 import { resolveDoc } from './points.js';
 
 /**
@@ -48,7 +48,7 @@ export function pathData(vertices, closed) {
  * @param {DocObject} part
  */
 export function partData(part) {
-  return pathData(verticesOf(part), part.closed !== false);
+  return pathData(outlineOf(part), part.closed !== false);
 }
 
 /**

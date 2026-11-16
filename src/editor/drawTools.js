@@ -1,13 +1,19 @@
-// The drawing tools. Every shape is a path (decision 8): Pen (P) clicks corners and drags curves (a click on the
-// first point closes the outline, Enter ends an open line, Esc cancels); Rectangle (R) and Ellipse (E) drag out a
-// path with that shape (Shift: square or circle). New parts go into the active vector layer; with none, a new layer
-// is made in the same batch. Then a small box asks for the part's name (optional).
+// The drawing tools. Every shape is a path (decision 8). Rectangle (R) and Ellipse (E) drag out a path with that
+// shape (Shift: square or circle), then a small box asks for its name (optional). New parts go into the active
+// vector layer; with none, a new layer is made in the same batch.
+// The Pen (P) works as Moho's Add Point: press and drag, and the new point follows the pointer until it is released.
+// Pressing on an open end of a line of the layer continues that line; anywhere else starts a new line of two points.
+// Points come out smooth (an automatic curve through their neighbors); Sharp corners, or Alt, makes corners.
+// Released on the other end of the same line, it closes it into a shape. The points of the layer show as small dots,
+// and with Auto weld on a point pressed or released on a point or a line of the layer is welded there (it shares
+// that point). A ring shows where: green to weld, the accent color on an end that would be continued.
+// Each stretch is saved when it is released: one step to undo.
 
 import { childrenOf, findObject, idFromName } from '../core/document.js';
-import { pathData } from '../core/draw.js';
-import { ellipseVertices, rectVertices, round2, roundVertex } from '../core/geometry.js';
+import { ellipseVertices, rectVertices, round2, roundVertex, verticesOf } from '../core/geometry.js';
 import { askName } from './namePrompt.js';
-import { activeVector, drawStyle, isLocked, notify, run, state } from './state.js';
+import { activeVector, autoWeld, drawStyle, isHidden, isLocked, notify, penOptions, run, state } from './state.js';
+import { paintLayerPoints, shapePoint, shareTargets, showWeldHint, weldPlace, weldTargetNear } from './pointEdit.js';
 import { addPainter, onToolDown, paintOverlay } from './canvas.js';
 import { drag, element, screen, svg, toDoc } from './view.js';
 
@@ -17,12 +23,6 @@ import { drag, element, screen, svg, toDoc } from './view.js';
  * @typedef {import('./view.js').Point} Point
  */
 
-const CLOSE_DISTANCE = 8; // screen px: a pen click this close to the first point closes the outline
-
-/** @type {Vertex[]} the pen's outline in progress */
-let pen = [];
-/** @type {Point | null} the pointer, for the pen's rubber band */
-let pointer = null;
 
 /**
  * The vector layer new parts go into, and the ops that make one if there is none.
@@ -56,8 +56,10 @@ export function targetLayer() {
  * @param {string} base the name it gets until it is named: shape_1, line_1…
  * @param {Record<string, unknown>} props
  * @param {string} note
+ * @param {Operation[]} [before] ops that go first in the same batch (points of other parts the new one shares)
+ * @param {boolean} [ask] whether to ask for its name afterwards
  */
-async function addPart(base, props, note) {
+async function addPart(base, props, note, before = [], ask = true) {
   const doc = state.document;
   const target = targetLayer();
   if (!doc || !target) return;
@@ -68,8 +70,8 @@ async function addPart(base, props, note) {
     stroke: drawStyle.stroke,
     ...(drawStyle.stroke ? { strokeWidth: drawStyle.strokeWidth } : {}),
   };
-  await run([...target.ops, { op: 'create', type: 'path', id, parent: target.layer, props: { ...props, ...style } }], { select: id, note });
-  if (state.document && findObject(state.document, id)) askName(id);
+  await run([...target.ops, ...before, { op: 'create', type: 'path', id, parent: target.layer, props: { ...props, ...style } }], { select: id, note });
+  if (ask && state.document && findObject(state.document, id)) askName(id);
 }
 
 /** @param {PointerEvent} event @param {'rect' | 'ellipse'} type */
@@ -116,61 +118,166 @@ function boxDown(event, type) {
   );
 }
 
-/** @param {boolean} closed */
-function finishPen(closed) {
-  const vertices = pen.map(roundVertex);
-  pen = [];
-  pointer = null;
-  if (vertices.length < 2) return paintOverlay();
-  addPart(closed ? 'shape' : 'line', closed ? { vertices } : { vertices, closed: false }, closed ? 'Pen: shape' : 'Pen: line');
+const END_REACH = 8; // screen px: a press this close to an open end of a line continues that line
+
+/**
+ * @typedef {import('./pointEdit.js').WeldTarget} WeldTarget
+ * @typedef {{ from: Point, to: Point }} Stretch
+ */
+
+/** @type {Stretch | null} the stretch being dragged out */
+let stretch = null;
+
+/** The parts of the active layer the Pen can continue or weld to. */
+function layerParts() {
+  const doc = state.document;
+  const layer = activeVector();
+  if (!doc || !layer || isLocked(layer.id)) return [];
+  return doc.objects.filter((o) => o.parent === layer.id && !isHidden(o.id));
 }
 
-/** Esc with the pen: drops the outline in progress. */
-export function cancelPen() {
-  if (!pen.length) return false;
-  pen = [];
-  pointer = null;
-  paintOverlay();
-  return true;
+/**
+ * The open end of a line of the active layer at `p`, if any: the Pen continues that line from there.
+ * @param {Point} p
+ * @returns {{ part: import('../core/document.js').DocObject, index: number } | null}
+ */
+function openEndAt(p) {
+  /** @type {{ part: import('../core/document.js').DocObject, index: number } | null} */
+  let best = null;
+  let bestDistance = screen(END_REACH);
+  for (const part of layerParts()) {
+    const vertices = verticesOf(part);
+    if (part.closed !== false || vertices.length < 2) continue;
+    for (const index of [0, vertices.length - 1]) {
+      const d = Math.hypot(vertices[index].x - p.x, vertices[index].y - p.y);
+      if (d <= bestDistance) {
+        best = { part, index };
+        bestDistance = d;
+      }
+    }
+  }
+  return best;
 }
 
-/** Enter with the pen: ends the outline as an open line. */
-export function finishPenLine() {
-  if (!pen.length) return false;
-  finishPen(false);
-  return true;
+/** Where the Pen would weld at `p` (Auto weld on, in the active layer). @param {Point} p @param {string} [except] "part:index" */
+function penWeld(p, except = '') {
+  const layer = activeVector();
+  return autoWeld.on && layer && !isLocked(layer.id) ? weldTargetNear(p, except, layer.id) : null;
 }
 
-/** @param {PointerEvent} event */
+/** Whether new points are corners: the Sharp corners switch, turned around while Alt is held. @param {PointerEvent} e */
+const sharp = (e) => penOptions.sharp !== e.altKey;
+
+/**
+ * Smooths the vertices at `indices` (handles along their neighbors, as Moho's automatic curvature), unless they are
+ * corners. Changes the vertices in place.
+ * @param {Vertex[]} vertices @param {number[]} indices @param {boolean} closed
+ */
+function smooth(vertices, indices, closed) {
+  for (const i of indices) if (i >= 0 && i < vertices.length) shapePoint(vertices, i, closed, false);
+}
+
+/** Whether a vertex is smooth (it has a handle): a corner stays a corner when the line goes on. @param {Vertex} v */
+const isSmooth = (v) => !!(v.in || v.out);
+
+/**
+ * Pen down: press on an open end of a line to continue it, anywhere else to start a new line; drag to where the new
+ * point goes, as Moho's Add Point. Released on a point or a line of the layer, the new point welds there; on the
+ * other end of the same line, it closes it. Each stretch is one step.
+ * @param {PointerEvent} event
+ */
 function penDown(event) {
   const p = toDoc(event);
-  const first = pen[0];
-  if (first && pen.length > 2 && Math.hypot(p.x - first.x, p.y - first.y) <= screen(CLOSE_DISTANCE)) {
-    finishPen(true);
-    return;
-  }
-  if (pen.length === 0 && !targetLayer()) return;
-  /** @type {Vertex} */
-  const vertex = { x: p.x, y: p.y };
-  pen.push(vertex);
-  paintOverlay();
+  const end = openEndAt(p);
+  if (!end && !targetLayer()) return;
+  const endVertex = end ? verticesOf(end.part)[end.index] : null;
+  const startWeld = end ? null : penWeld(p);
+  const from = endVertex ? { x: endVertex.x, y: endVertex.y } : startWeld ? weldPlace(startWeld) : p;
+  const except = end ? `${end.part.id}:${end.index}` : '';
+  /** @type {WeldTarget | null} */
+  let weld = null;
+  let moved = false;
+  stretch = { from, to: from };
+  showWeldHint(null);
   drag(
     event,
     (q) => {
-      // Dragging pulls a curve out of the point: "out" follows the pointer and "in" mirrors it.
-      const out = { x: q.x - vertex.x, y: q.y - vertex.y };
-      if (Math.hypot(out.x, out.y) < screen(3)) {
-        delete vertex.out;
-        delete vertex.in;
-      } else {
-        vertex.out = out;
-        vertex.in = { x: -out.x, y: -out.y };
-      }
-      pointer = null;
+      moved ||= Math.hypot(q.x - from.x, q.y - from.y) > screen(3);
+      weld = moved ? penWeld(q, except) : null;
+      const place = weld ? weldPlace(weld) : null;
+      stretch = { from, to: place ?? q };
+      showWeldHint(place);
       paintOverlay();
     },
-    () => paintOverlay(),
+    (q, e) => {
+      const to = stretch?.to ?? q;
+      stretch = null;
+      showWeldHint(null);
+      if (!moved) return paintOverlay();
+      if (end) continueLine(end, to, weld, sharp(e));
+      else newLine(from, to, startWeld, weld, sharp(e));
+    },
   );
+}
+
+/**
+ * A new line of two points, each welded where it was pressed or released if it was on a point or a line.
+ * @param {Point} from @param {Point} to @param {WeldTarget | null} fromWeld @param {WeldTarget | null} toWeld @param {boolean} corners
+ */
+function newLine(from, to, fromWeld, toWeld, corners) {
+  if (fromWeld && toWeld && 'key' in fromWeld && 'key' in toWeld && fromWeld.key === toWeld.key) return paintOverlay();
+  /** @type {Vertex[]} */
+  let vertices = [{ x: from.x, y: from.y }, { x: to.x, y: to.y }];
+  if (!corners) smooth(vertices, [0, 1], false);
+  const { ops, refs } = fromWeld || toWeld ? shareTargets([fromWeld, toWeld]) : { ops: [], refs: [] };
+  vertices = vertices.map((v, i) => roundVertex(refs[i] ? { ...v, ref: /** @type {string} */ (refs[i]) } : v));
+  addPart('line', { vertices, closed: false }, `Pen: line${refs.some(Boolean) ? ', welded' : ''}`, ops, false);
+}
+
+/**
+ * Continues a line from one of its open ends with a new point (or closes it, if the point is its other end).
+ * @param {{ part: import('../core/document.js').DocObject, index: number }} end @param {Point} to
+ * @param {WeldTarget | null} weld @param {boolean} corners
+ */
+function continueLine(end, to, weld, corners) {
+  const { part } = end;
+  const atStart = end.index === 0;
+  let vertices = verticesOf(part).map((v) => ({ ...v }));
+  const otherEnd = atStart ? vertices.length - 1 : 0;
+  // Dropped on the other end of the same line: it closes, as a shape with the auto fill. Other points of the same
+  // line are not welded to (a part does not share its own points).
+  const own = !!weld && 'key' in weld && weld.key.startsWith(`${part.id}:`);
+  if (own && vertices.length > 2 && weld && 'key' in weld && weld.key === `${part.id}:${otherEnd}`) {
+    smooth(vertices, [0, vertices.length - 1].filter((i) => isSmooth(vertices[i])), true);
+    /** @type {Record<string, unknown>} */
+    const props = { vertices: vertices.map(roundVertex), closed: true };
+    if (part.fill === null && drawStyle.fill) props.fill = drawStyle.fill;
+    run([{ op: 'set', target: part.id, props }], { select: part.id, note: `Pen: close ${part.id}` });
+    return;
+  }
+  if (own) weld = null;
+  /** @type {Vertex} */
+  const added = { x: to.x, y: to.y };
+  if (atStart) vertices.unshift(added);
+  else vertices.push(added);
+  const index = atStart ? 0 : vertices.length - 1;
+  const neighbor = atStart ? 1 : vertices.length - 2;
+  smooth(vertices, [...(corners ? [] : [index]), ...(isSmooth(vertices[neighbor]) ? [neighbor] : [])], false);
+  /** @type {Operation[]} */
+  let ops = [];
+  if (weld) {
+    const shared = shareTargets([weld]);
+    ops = shared.ops;
+    if (shared.refs[0]) vertices[index] = { ...vertices[index], ref: shared.refs[0] };
+  }
+  vertices = vertices.map(roundVertex);
+  run([...ops, { op: 'set', target: part.id, props: { vertices } }], { select: part.id, note: `Pen: continue ${part.id}${weld ? ', welded' : ''}` });
+}
+
+/** Esc and changing tools: nothing of the Pen is left half done (each stretch is saved when released). */
+export function cancelPen() {
+  showWeldHint(null);
+  return false;
 }
 
 export function setupDrawTools() {
@@ -178,19 +285,26 @@ export function setupDrawTools() {
   onToolDown('ellipse', (event) => boxDown(event, 'ellipse'));
   onToolDown('pen', penDown);
   svg.addEventListener('pointermove', (event) => {
-    if (state.tool !== 'pen' || !pen.length || event.buttons) return;
-    pointer = toDoc(event);
-    paintOverlay();
+    if (state.tool !== 'pen' || event.buttons) return;
+    const p = toDoc(event);
+    const end = openEndAt(p);
+    if (end) {
+      const v = verticesOf(end.part)[end.index];
+      return showWeldHint({ x: v.x, y: v.y }, 'continue');
+    }
+    const weld = penWeld(p);
+    showWeldHint(weld ? weldPlace(weld) : null);
   });
   addPainter((overlay) => {
-    if (state.tool !== 'pen' || !pen.length) return;
-    const preview = pointer ? [...pen, { x: pointer.x, y: pointer.y }] : pen;
-    overlay.append(element('path', { d: pathData(preview, false), class: 'pen-line' }));
-    for (const [i, v] of pen.entries()) {
-      for (const h of [v.out, v.in]) {
-        if (h) overlay.append(element('line', { x1: v.x, y1: v.y, x2: v.x + h.x, y2: v.y + h.y, class: 'pen-handle' }));
-      }
-      overlay.append(element('circle', { cx: v.x, cy: v.y, r: screen(i === 0 ? 4.5 : 3.5), class: i === 0 ? 'pen-start' : 'pen-point' }));
-    }
+    if (state.tool !== 'pen') return;
+    const layer = activeVector();
+    if (layer) paintLayerPoints(overlay, layer.id);
+    if (!stretch) return;
+    const { from, to } = stretch;
+    overlay.append(
+      element('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: 'pen-line' }),
+      element('circle', { cx: from.x, cy: from.y, r: screen(3.5), class: 'pen-point' }),
+      element('circle', { cx: to.x, cy: to.y, r: screen(4.5), class: 'pen-start' }),
+    );
   });
 }

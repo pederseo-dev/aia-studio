@@ -5,12 +5,15 @@
 import { findObject, idFromName } from '../core/document.js';
 import { icon } from './icons.js';
 import {
+  canFollow,
   canUnweld,
   canWeld,
+  followPicked,
   deletePoints,
   editGroup,
   pickGroup,
   pickedAreCorners,
+  pickedFollows,
   pickedPoint,
   pointGroups,
   renamePickedPoint,
@@ -19,7 +22,7 @@ import {
   unweldPicked,
   weldPicked,
 } from './pointEdit.js';
-import { autoWeld, drawStyle, editPoints, isDrawTool, run, setDrawStyle, state, toggleAutoWeld } from './state.js';
+import { autoWeld, drawStyle, editPoints, isDrawTool, penOptions, run, setDrawStyle, state, toggleAutoWeld, toggleSharpCorners } from './state.js';
 import { colorSwatch } from './colorSwatch.js';
 import { isPart } from './schema.js';
 
@@ -51,7 +54,7 @@ bar.append(style, kind, label, actions);
 let styleFrom = '';
 
 function renderStyle() {
-  const key = isDrawTool(state.tool) ? JSON.stringify(drawStyle) : '';
+  const key = isDrawTool(state.tool) ? JSON.stringify({ ...drawStyle, pen: state.tool === 'pen', weld: autoWeld.on, sharp: penOptions.sharp }) : '';
   if (key === styleFrom) return;
   styleFrom = key;
   style.replaceChildren();
@@ -78,6 +81,12 @@ function renderStyle() {
     colorSwatch({ value: drawStyle.stroke, nullable: true, title: 'The stroke new shapes get (None: no stroke)', onChange: (c) => setDrawStyle({ stroke: c }) }),
     width,
   );
+  if (state.tool === 'pen') {
+    style.append(
+      toggle('Sharp corners', 'New points are corners instead of smooth curves (Alt while drawing does the other)', penOptions.sharp, toggleSharpCorners),
+      toggle('Auto weld', 'A point pressed or released on a point or a line of the layer is welded there (a green ring shows where)', autoWeld.on, toggleAutoWeld),
+    );
+  }
 }
 
 /**
@@ -162,10 +171,27 @@ export function renderOptions() {
     button('delete', 'Delete', 'Delete the picked points (Del)', () => deletePoints(), { disabled: !picked }),
     weldButton(),
     button('unweld', 'Unweld', 'The picked points stop sharing: each one keeps its place as a point of its own', unweldPicked, { disabled: !canUnweld() }),
+    followButton(),
     toggle('Auto weld', 'Drop a point on a point or a line of another part to weld them (Alt: two open ends become one line)', autoWeld.on, toggleAutoWeld),
     groupsMenu(),
     button('check', 'Done', 'Stop editing points (Esc)', () => stopEditing(), { main: true }),
   );
+}
+
+/** The Follow button: the stretch between two picked shared points follows the curve of the part they share. */
+function followButton() {
+  const follows = pickedFollows();
+  const b = button(
+    'curve',
+    follows ? 'Unfollow' : 'Follow',
+    follows
+      ? 'The stretch between the picked points stops following the other part (Alt+click: follow it the other way round)'
+      : 'The stretch between the two picked points follows the curve of the part they share points with (Alt+click: the long way round)',
+    () => {},
+    { disabled: !canFollow() },
+  );
+  b.addEventListener('click', (event) => followPicked(event.altKey));
+  return b;
 }
 
 /** The Weld button: Alt+click joins two open ends into one line. */
