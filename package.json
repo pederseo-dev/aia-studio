@@ -50,6 +50,7 @@
       "mcp/**",
       "server/**",
       "src/core/**",
+      "src/runtime/**",
       "schema/**"
     ],
     "win": {

@@ -2,7 +2,7 @@
 // The `aia` CLI: the command language for agents with a terminal (Claude Code, Cursor, Codex). It works on the
 // documents folder directly, so the app does not need to be open; when it is, the editor shows the changes live.
 //   aia help · aia guide start · aia ops <doc> '<batch>' · aia render <doc> …
-// `aia ops <doc> -` reads the batch from stdin. `aia render` writes the PNG to --out, or to the temp folder.
+// `aia ops <doc> -` reads the batch from stdin. `aia render` and `aia export` write to --out, or to the temp folder.
 // --documents <folder> or AIA_DOCUMENTS choose the folder (as for the app).
 
 import fs from 'node:fs/promises';
@@ -32,7 +32,11 @@ const outAt = argv.indexOf('--out');
 const out = outAt >= 0 ? argv.splice(outAt, 2)[1] : undefined;
 const result = await aia.run(argv);
 
-if (result.image) {
+if (result.file) {
+  const file = path.resolve(out ?? path.join(os.tmpdir(), `aia-${result.file.name}`));
+  await fs.writeFile(file, result.file.data);
+  process.stdout.write(`${result.text}\nSaved to ${file}\n`);
+} else if (result.image) {
   const file = path.resolve(out ?? path.join(os.tmpdir(), `aia-${result.name ?? 'render.png'}`));
   await fs.writeFile(file, result.image);
   process.stdout.write(`${result.text}\nSaved to ${file}\n`);

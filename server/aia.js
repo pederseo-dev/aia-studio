@@ -12,10 +12,12 @@ import { applyTransformOps, transformOf, transformProps } from '../src/core/tran
 import { movePointsOps, pointsNamed, resolveDoc } from '../src/core/points.js';
 import { followOps, groupOps, namePoint, unweld, weld } from '../src/core/weld.js';
 import { svgToPng } from './png.js';
+import { bundleRuntime } from './bundle.js';
 
 /**
  * @typedef {import('../src/core/operations.js').Operation} Operation
- * @typedef {{ ok: boolean, text: string, image?: Buffer, name?: string }} Result
+ * @typedef {{ ok: boolean, text: string, image?: Buffer, name?: string, file?: { name: string, data: string } }} Result
+ *   image: a PNG to look at; file: something to save (the CLI writes it, the MCP returns it)
  * @typedef {{ positional: string[], flags: Record<string, string | true> }} Args
  * @typedef {{ usage: string, summary: string, details?: string, run: (args: Args) => Promise<Result> }} Command
  */
@@ -526,6 +528,23 @@ export function createAia({ store, schema }) {
       },
     },
 
+    export: {
+      usage: 'aia export <doc> --format svg|html [--out file]',
+      summary: 'The document as a file to use outside aia-studio: a still SVG, or a web page that plays it',
+      details:
+        'svg: the drawing as it looks now. html: one page with the document and the runtime inside, which plays it in\n' +
+        'any browser with no server and nothing else (the runtime is the same drawing code as the editor). From the\n' +
+        'CLI the file goes to --out, or to the temp folder (the path is printed).',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const format = args.flags.format ?? 'svg';
+        if (format !== 'svg' && format !== 'html') throw new AiaError('--format is svg or html');
+        const { document } = await store.get(id, ORIGIN);
+        const data = format === 'svg' ? toSvg(document) : htmlPage(document);
+        return { ok: true, text: `${id}.${format}: ${Math.round(data.length / 102.4) / 10} KB`, file: { name: `${id}.${format}`, data } };
+      },
+    },
+
     render: {
       usage: 'aia render <doc> [--width N] [--out file.png]',
       summary: 'A PNG of the document, to check your work by eye',
@@ -584,4 +603,33 @@ function changes(before, after) {
     deleted.length ? `gone: ${deleted.join(', ')}` : '',
   ].filter(Boolean);
   return parts.length ? `${parts.join('; ')}.` : 'Nothing changed.';
+}
+
+/**
+ * A web page that plays a document with the runtime, with nothing else to load.
+ * @param {import('../src/core/document.js').Doc} doc
+ */
+function htmlPage(doc) {
+  /** @param {string} text */
+  const escape = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const json = JSON.stringify(doc).replace(/</g, '\\u003c');
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escape(String(doc.meta.name ?? 'aia-studio'))}</title>
+<style>html, body { margin: 0; height: 100%; } body { display: grid; place-items: center; background: #2b2a33; } svg { max-width: 100vw; max-height: 100vh; height: auto; }</style>
+</head>
+<body>
+<svg id="aia" xmlns="http://www.w3.org/2000/svg"></svg>
+<script type="application/json" id="aia-document">${json}</script>
+<script>
+${bundleRuntime()}</script>
+<script>
+aiaRuntime.createPlayer(document.getElementById('aia'), JSON.parse(document.getElementById('aia-document').textContent));
+</script>
+</body>
+</html>
+`;
 }

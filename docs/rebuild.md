@@ -142,6 +142,7 @@ transform a part by name, weld by name) come after the first AI test shows what 
 | `aia undo <doc>` · `aia redo <doc>` | Only the AI's own steps (undo per origin) |
 | `aia history <doc>` | The steps, the user's marked, so the AI does not overwrite them |
 | `aia render <doc> [--out file.png] [--width N]` | A PNG drawn by the same `drawDocument` |
+| `aia export <doc> --format svg\|html [--out file]` | A still SVG, or one web page that plays the document with the runtime (step 12) |
 | `aia help [command]` · `aia guide [topic]` | Help step by step; the type topics come from the schema |
 
 - The document is always an explicit argument: there is no hidden «current document».
@@ -182,6 +183,16 @@ Parts are still only geometry: transforming them rewrites their vertices, in the
   transform into its parts' vertices and leaves it without one.
 - **AI:** `aia transform <doc> <id> --move dx,dy --rotate deg --scale s` changes a layer's transform or rewrites a
   part's vertices, around its origin (the high-level transform by name that decision 8 promised).
+
+**Step 12 (2026-11-16): the runtime as the contract (decision 5)**, before the final format is decided (topics 1 and
+6 stay open). `src/runtime/player.js` plays a document in any web page with no dependencies:
+`createPlayer(svgElement, doc)` and `player.update(doc)`; it draws with the same `drawDocument` as the editor and the
+AI's previews (shared points, followed stretches, layer transforms), and will later play clips and take parameters.
+`aia export <doc> --format html` writes one page with the document and the runtime inside, which plays from a double
+click (`server/bundle.js` turns the runtime's modules into one classic script, each module in its own scope);
+`--format svg` writes the still drawing. A contract test (`tests/runtime.test.js`) plays a document with each feature
+so far, as the module and as the bundled script, and checks that nothing breaks and both draw the same; every new
+feature adds its fixture there.
 
 ## Open topics
 

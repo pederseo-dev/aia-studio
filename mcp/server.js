@@ -34,6 +34,7 @@ function reply(result) {
   /** @type {any[]} */
   const content = [{ type: 'text', text: result.text }];
   if (result.image) content.push({ type: 'image', data: result.image.toString('base64'), mimeType: 'image/png' });
+  if (result.file) content.push({ type: 'text', text: result.file.data });
   return { content, ...(result.ok ? {} : { isError: true }) };
 }
 
