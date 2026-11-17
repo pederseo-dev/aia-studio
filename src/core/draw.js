@@ -1,6 +1,7 @@
 // How a document looks, as a tree of SVG elements ({ tag, attrs, children }). It does not use the DOM, so the same
 // function draws the editor's canvas (which turns it into elements), the AI's previews and, later, the runtime.
-// Every part is one <path>; hidden layers and parts are left out.
+// Every part is one <path>, every image layer one <image>; hidden layers and parts are left out. Where an image's file
+// is found depends on who draws: the editor asks the server, the PNG and the export put the file inside (data URLs).
 
 import { childrenOf } from './document.js';
 import { outlineOf } from './geometry.js';
@@ -12,7 +13,12 @@ import { svgTransform } from './transform.js';
  * @typedef {import('./document.js').DocObject} DocObject
  * @typedef {import('./geometry.js').Vertex} Vertex
  * @typedef {{ tag: string, attrs: Record<string, string | number>, children: SvgNode[] }} SvgNode
+ * @typedef {{ assetUrl?: (src: string) => string | null }} DrawOptions assetUrl: the href of an asset file (null: it is
+ *   not there, so nothing is drawn); by default "assets/<src>", next to the document
  */
+
+/** @param {string} src */
+const besideTheDocument = (src) => `assets/${src}`;
 
 const DEFAULTS = { fill: '#c8c2d4', stroke: '#2b2926', strokeWidth: 2 };
 
@@ -55,16 +61,18 @@ export function partData(part) {
 /**
  * @param {Doc} doc
  * @param {string | null} parent
+ * @param {Required<DrawOptions>} options
  * @returns {SvgNode[]}
  */
-function drawChildren(doc, parent) {
+function drawChildren(doc, parent, options) {
   /** @type {SvgNode[]} */
   const nodes = [];
   for (const object of childrenOf(doc, parent)) {
     if (object.visible === false) continue;
-    if (object.type === 'group' || object.type === 'vector') {
+    if (object.type === 'group' || object.type === 'vector' || object.type === 'image') {
       const transform = svgTransform(doc, object);
-      nodes.push({ tag: 'g', attrs: { 'data-id': object.id, ...(transform ? { transform } : {}) }, children: drawChildren(doc, object.id) });
+      const children = object.type === 'image' ? drawImage(object, options) : drawChildren(doc, object.id, options);
+      nodes.push({ tag: 'g', attrs: { 'data-id': object.id, ...(transform ? { transform } : {}) }, children });
       continue;
     }
     const fill = object.fill === undefined ? DEFAULTS.fill : object.fill;
@@ -83,27 +91,43 @@ function drawChildren(doc, parent) {
 }
 
 /**
+ * An image layer's picture, from (0, 0) to (width, height) in its own coordinates.
+ * @param {DocObject} layer @param {Required<DrawOptions>} options
+ * @returns {SvgNode[]}
+ */
+function drawImage(layer, options) {
+  const href = typeof layer.src === 'string' ? options.assetUrl(layer.src) : null;
+  if (!href) return [];
+  /** @type {Record<string, string | number>} */
+  const attrs = { href, width: Number(layer.width ?? 100), height: Number(layer.height ?? 100), preserveAspectRatio: 'none' };
+  if (layer.opacity !== undefined && layer.opacity !== 1) attrs.opacity = Number(layer.opacity);
+  return [{ tag: 'image', attrs, children: [] }];
+}
+
+/**
  * The drawing of a document: its artboard size and the elements inside it.
  * @param {Doc} doc
+ * @param {DrawOptions} [options]
  * @returns {{ width: number, height: number, background: string | null, nodes: SvgNode[] }}
  */
-export function drawDocument(doc) {
+export function drawDocument(doc, { assetUrl = besideTheDocument } = {}) {
   doc = resolveDoc(doc);
   const background = doc.meta.background === undefined ? '#ffffff' : doc.meta.background;
   return {
     width: Number(doc.meta.width ?? 800),
     height: Number(doc.meta.height ?? 600),
     background: background === null ? null : String(background),
-    nodes: drawChildren(doc, null),
+    nodes: drawChildren(doc, null, { assetUrl }),
   };
 }
 
 /**
  * The drawing as SVG text (for previews and files).
  * @param {Doc} doc
+ * @param {DrawOptions} [options]
  */
-export function toSvg(doc) {
-  const { width, height, background, nodes } = drawDocument(doc);
+export function toSvg(doc, options) {
+  const { width, height, background, nodes } = drawDocument(doc, options);
   /** @param {string} text */
   const escape = (text) => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   /** @param {SvgNode} node @returns {string} */

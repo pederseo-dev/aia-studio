@@ -16,6 +16,8 @@ id of its parent (null at the root). The list is in tree order; siblings draw in
 Layers (at the root or inside a group):
   group    holds other layers
   vector   holds parts: the drawing
+  image    a picture (PNG, JPEG, WebP, SVG), for example a reference to draw over: aia image <doc> <file>
+           (aia guide image). Lower its opacity and lock it to trace over it.
 Parts (inside a vector layer):
   path     an outline of vertices with fill and stroke. Every shape is a path: a rectangle is 4 corners, an ellipse
            4 vertices with curve handles. Coordinates are the layer's (the artboard's, for now).

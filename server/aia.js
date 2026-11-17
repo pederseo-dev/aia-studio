@@ -4,11 +4,13 @@
 // Everything it changes has the origin "ai", so the person's own steps are never undone by the AI.
 
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { findObject, subtree } from '../src/core/document.js';
 import { toSvg } from '../src/core/draw.js';
 import { guide } from '../src/core/guide.js';
 import { around, bounds, insertVertex, multiply, nearestOnOutline, originOf, rotate, scale, transformPart, translate, verticesOf } from '../src/core/geometry.js';
-import { applyTransformOps, transformOf, transformProps } from '../src/core/transform.js';
+import { addImageOps, replaceImageOps } from '../src/core/images.js';
+import { applyTransformOps, isLayer as isLayerObject, transformOf, transformProps } from '../src/core/transform.js';
 import { movePointsOps, pointsNamed, resolveDoc } from '../src/core/points.js';
 import { followOps, groupOps, namePoint, unweld, weld } from '../src/core/weld.js';
 import { svgToPng } from './png.js';
@@ -312,7 +314,7 @@ export function createAia({ store, schema }) {
       usage: 'aia transform <doc> <id> [--move dx,dy] [--rotate deg] [--scale s | sx,sy] | --apply',
       summary: 'Moves, turns and scales a layer (its own transform) or a part (its vertices), around its origin',
       details:
-        'A layer (vector or group) keeps its drawing and changes its x, y, rotation, scaleX, scaleY; the first time,\n' +
+        'A layer (vector, image or group) keeps its drawing and changes its x, y, rotation, scaleX, scaleY; the first time,\n' +
         'its origin is fixed where its center is, so it stays put when its content changes. A part is only geometry:\n' +
         'its vertices are rewritten. --move is in the coordinates the object lives in (a part: its layer’s).\n' +
         '--apply puts a vector layer’s transform into its parts’ vertices and leaves it without one.\n' +
@@ -323,7 +325,7 @@ export function createAia({ store, schema }) {
         const doc = await resolved(id);
         const object = findObject(doc, target);
         if (!object) throw new AiaError(`${id} has no object "${target}"`);
-        const isLayer = object.type === 'vector' || object.type === 'group';
+        const isLayer = isLayerObject(object);
         if (args.flags.apply === true) {
           let ops;
           try {
@@ -528,6 +530,64 @@ export function createAia({ store, schema }) {
       },
     },
 
+    image: {
+      usage: 'aia image <doc> <file> [--id name] [--in group] [--at x,y] [--width N | --height N] [--opacity 0.5] | --replace <layer>',
+      summary: 'Adds an image layer from a picture file (PNG, JPEG, WebP or SVG), for example a reference to draw over',
+      details:
+        'The file is copied into the document’s assets folder; <file> is a path on this computer (relative to where\n' +
+        'aia runs, or absolute). The layer goes on top of the root (--in: of a group), as big as the picture made\n' +
+        'smaller to fit the artboard, centered (--at: on that point of the artboard). The picture is drawn from (0, 0)\n' +
+        'in the layer’s coordinates: x, y place it, and aia transform moves, turns and scales it as any layer.\n' +
+        'A reference to trace: --opacity 0.5, then lock it (set locked: true) so it is not picked by mistake.\n' +
+        '--replace changes the picture of an image layer (keeps its width, takes the new proportion).\n' +
+        'Example: aia image robot C:/refs/robot_front.png --id ref --opacity 0.4',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const file = need(args, 1, 'the picture file');
+        let bytes;
+        try {
+          bytes = new Uint8Array(await fs.readFile(path.resolve(file)));
+        } catch {
+          throw new AiaError(`Can't read the file "${file}"`);
+        }
+        const { src, naturalWidth, naturalHeight, reused } = await store.saveAsset(id, path.basename(file), bytes);
+        const { document } = await store.get(id, ORIGIN);
+        const replace = args.flags.replace;
+        const opacity = args.flags.opacity === undefined ? undefined : Number(args.flags.opacity);
+        if (opacity !== undefined && !(opacity >= 0 && opacity <= 1)) throw new AiaError('--opacity is a number from 0 to 1');
+        /** @type {{ id: string, ops: Operation[] }} */
+        let plan;
+        try {
+          if (typeof replace === 'string') plan = { id: replace, ops: replaceImageOps(document, replace, { src, naturalWidth, naturalHeight }) };
+          else {
+            const parent = typeof args.flags.in === 'string' ? args.flags.in : null;
+            if (parent !== null && findObject(document, parent)?.type !== 'group') throw new AiaError(`${id} has no group "${parent}"`);
+            plan = addImageOps(document, {
+              src,
+              naturalWidth,
+              naturalHeight,
+              id: typeof args.flags.id === 'string' ? args.flags.id : undefined,
+              parent,
+              at: pair(args, 'at'),
+              width: number(args, 'width'),
+              height: number(args, 'height'),
+            });
+          }
+        } catch (e) {
+          throw new AiaError(e.message);
+        }
+        if (opacity !== undefined) plan.ops.push({ op: 'set', target: plan.id, props: { opacity } });
+        const note = typeof replace === 'string' ? `${plan.id}: picture ${src}` : `Image layer ${plan.id}`;
+        await store.apply(id, plan.ops, { origin: ORIGIN, note });
+        const layer = findObject((await store.get(id, ORIGIN)).document, plan.id);
+        const size = `${naturalWidth} × ${naturalHeight} px${reused ? ', already in assets' : ''}`;
+        return ok(
+          `${typeof replace === 'string' ? 'Changed the picture of' : 'Added the image layer'} ${plan.id}: ${src} (${size}), ` +
+            `drawn ${layer?.width} × ${layer?.height} at ${layer?.x ?? 0}, ${layer?.y ?? 0}.`,
+        );
+      },
+    },
+
     export: {
       usage: 'aia export <doc> --format svg|html [--out file]',
       summary: 'The document as a file to use outside aia-studio: a still SVG, or a web page that plays it',
@@ -540,7 +600,8 @@ export function createAia({ store, schema }) {
         const format = args.flags.format ?? 'svg';
         if (format !== 'svg' && format !== 'html') throw new AiaError('--format is svg or html');
         const { document } = await store.get(id, ORIGIN);
-        const data = format === 'svg' ? toSvg(document) : htmlPage(document);
+        const assets = await store.assetUrls(id, document);
+        const data = format === 'svg' ? toSvg(document, { assetUrl: (src) => assets[src] ?? null }) : htmlPage(document, assets);
         return { ok: true, text: `${id}.${format}: ${Math.round(data.length / 102.4) / 10} KB`, file: { name: `${id}.${format}`, data } };
       },
     },
@@ -558,7 +619,8 @@ export function createAia({ store, schema }) {
         const docWidth = Number(document.meta.width ?? 800);
         const docHeight = Number(document.meta.height ?? 600);
         const width = Math.min(RENDER_MAX, number(args, 'width') ?? docWidth);
-        const image = svgToPng(toSvg(document), width);
+        const assets = await store.assetUrls(id, document);
+        const image = svgToPng(toSvg(document, { assetUrl: (src) => assets[src] ?? null }), width);
         const height = Math.round((width * docHeight) / docWidth);
         return { ok: true, text: `${id}: ${width} × ${height} px`, image, name: `${id}.png` };
       },
@@ -606,13 +668,14 @@ function changes(before, after) {
 }
 
 /**
- * A web page that plays a document with the runtime, with nothing else to load.
- * @param {import('../src/core/document.js').Doc} doc
+ * A web page that plays a document with the runtime, with nothing else to load (its pictures go inside).
+ * @param {import('../src/core/document.js').Doc} doc @param {Record<string, string>} assets data URLs by name
  */
-function htmlPage(doc) {
+function htmlPage(doc, assets) {
   /** @param {string} text */
   const escape = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const json = JSON.stringify(doc).replace(/</g, '\\u003c');
+  const assetJson = JSON.stringify(assets).replace(/</g, '\\u003c');
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -624,10 +687,12 @@ function htmlPage(doc) {
 <body>
 <svg id="aia" xmlns="http://www.w3.org/2000/svg"></svg>
 <script type="application/json" id="aia-document">${json}</script>
+<script type="application/json" id="aia-assets">${assetJson}</script>
 <script>
 ${bundleRuntime()}</script>
 <script>
-aiaRuntime.createPlayer(document.getElementById('aia'), JSON.parse(document.getElementById('aia-document').textContent));
+const read = (id) => JSON.parse(document.getElementById(id).textContent);
+aiaRuntime.createPlayer(document.getElementById('aia'), read('aia-document'), { assets: read('aia-assets') });
 </script>
 </body>
 </html>

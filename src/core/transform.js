@@ -1,4 +1,4 @@
-// Layer transforms, as Moho's Transform Layer: a layer (vector or group) has x, y, rotation, scaleX and scaleY that
+// Layer transforms, as Moho's Transform Layer: a layer (vector, image or group) has x, y, rotation, scaleX and scaleY that
 // move, turn and scale everything inside it without changing its parts' vertices. They apply around the layer's
 // origin (originX/originY in the layer's own coordinates; null = the center of its content). Groups compose: a
 // layer inside a group is transformed by the group too. Parts are only geometry: transforming a part rewrites its
@@ -19,7 +19,8 @@ import { apply, applyVector, around, bounds, IDENTITY, multiply, originOf, rotat
  * @typedef {{ x: number, y: number, rotation: number, scaleX: number, scaleY: number }} LayerTransform
  */
 
-const isLayer = (/** @type {DocObject | undefined} */ o) => o?.type === 'vector' || o?.type === 'group';
+/** Whether an object is a layer (anything in Layers), not a part. @param {DocObject | undefined} o */
+export const isLayer = (o) => o?.type === 'vector' || o?.type === 'image' || o?.type === 'group';
 
 /** A layer's transform, with the defaults filled in. @param {DocObject} layer @returns {LayerTransform} */
 export function transformOf(layer) {
@@ -64,12 +65,13 @@ export function mapBox(box, m) {
 }
 
 /**
- * The box around a layer's content, in the layer's own coordinates (its parts, and its child layers as they are
- * drawn inside it), or null if it is empty.
+ * The box around a layer's content, in the layer's own coordinates (its parts, its child layers as they are drawn
+ * inside it, an image layer's picture), or null if it is empty.
  * @param {Doc} doc @param {DocObject} layer
  * @returns {Box | null}
  */
 export function contentBounds(doc, layer) {
+  if (layer.type === 'image') return { x: 0, y: 0, width: Number(layer.width ?? 100), height: Number(layer.height ?? 100) };
   /** @type {Box[]} */
   const boxes = [];
   for (const child of childrenOf(doc, layer.id)) {

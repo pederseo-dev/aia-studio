@@ -13,6 +13,7 @@ import { renderToolbar, setupToolbar } from './toolbar.js';
 import { renderOptions } from './options.js';
 import { renderInspector } from './inspector.js';
 import { render as renderJson, setupJson } from './json.js';
+import { setupImageDrop } from './images.js';
 import { followChanges, onChange, redo, restore, setTool, state, undo, walkParts } from './state.js';
 
 placeIcons(document);
@@ -25,6 +26,7 @@ setupDrawTools();
 setupSelectTool();
 setupPointEdit();
 setupJson();
+setupImageDrop();
 
 let lastTool = state.tool;
 onChange(() => {

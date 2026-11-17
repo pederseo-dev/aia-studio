@@ -7,9 +7,12 @@
 //   DELETE /api/documents/<id>
 //   POST   /api/documents/<id>/ops          { ops, note? } → applies a batch
 //   POST   /api/documents/<id>/undo | redo
+//   POST   /api/documents/<id>/assets?name=<file name>   the picture's bytes → { src, naturalWidth, naturalHeight, … }
+//   GET    /api/documents/<id>/assets/<name>             an asset file, as it is
 //   GET    /api/events                      live notices of changes on disk (Server-Sent Events, see events.js)
 
 import { readFileSync } from 'node:fs';
+import { IMAGE_MAX } from '../src/core/images.js';
 import { StoreError } from './store.js';
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -42,14 +45,27 @@ async function readBody(req) {
   }
 }
 
+/** The raw bytes of a request (an uploaded picture). @param {import('node:http').IncomingMessage} req */
+async function readBytes(req) {
+  /** @type {Buffer[]} */
+  const pieces = [];
+  let size = 0;
+  for await (const piece of req) {
+    size += piece.length;
+    if (size > IMAGE_MAX) throw new StoreError(`The image is too big (at most ${IMAGE_MAX / 1048576} MB)`, 413);
+    pieces.push(piece);
+  }
+  return new Uint8Array(Buffer.concat(pieces));
+}
+
 /**
  * @param {{ store: ReturnType<typeof import('./store.js').createStore>, events?: ReturnType<typeof import('./events.js').createEvents> }} options
  * @returns {(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => Promise<boolean>}
  *   true when the request was an API route and has been answered
  */
 export function createApi({ store, events }) {
-  /** @param {import('node:http').IncomingMessage} req @param {string[]} parts */
-  async function route(req, parts) {
+  /** @param {import('node:http').IncomingMessage} req @param {string[]} parts @param {URLSearchParams} query */
+  async function route(req, parts, query) {
     const method = req.method;
     if (parts[0] === 'status' && parts.length === 1 && method === 'GET') {
       return { app: 'aia-studio', version, documents: store.folder };
@@ -65,6 +81,9 @@ export function createApi({ store, events }) {
       if (method === 'GET') return store.get(id, ORIGIN);
       if (method === 'DELETE') return store.remove(id).then(() => ({ deleted: id }));
       return null;
+    }
+    if (action === 'assets' && parts.length === 3 && method === 'POST') {
+      return store.saveAsset(id, query.get('name') ?? 'image', await readBytes(req));
     }
     if (method !== 'POST' || parts.length !== 3) return null;
     if (action === 'ops') {
@@ -85,7 +104,19 @@ export function createApi({ store, events }) {
     }
     try {
       const parts = pathname.slice('/api/'.length).split('/').filter(Boolean).map(decodeURIComponent);
-      const result = await route(req, parts);
+      if (parts[0] === 'documents' && parts[2] === 'assets' && parts.length === 4 && req.method === 'GET') {
+        const { bytes, mime } = await store.readAsset(parts[1], parts[3]);
+        res.statusCode = 200;
+        res.setHeader('Content-Type', mime);
+        // An asset's name never gets other bytes (a new picture gets a new name), so it can be kept.
+        res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        if (mime === 'image/svg+xml') res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+        res.end(bytes);
+        return true;
+      }
+      const query = new URL(req.url ?? '/', 'http://localhost').searchParams;
+      const result = await route(req, parts, query);
       if (result === null) respond(res, 404, { error: 'Not found' });
       else respond(res, 200, result);
     } catch (e) {

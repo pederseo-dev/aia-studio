@@ -58,7 +58,7 @@ const HANDLES = /** @type {const} */ ({
 /** @param {Box} b @param {number} hx @param {number} hy */
 const onFrame = (b, hx, hy) => ({ x: b.x + ((hx + 1) / 2) * b.width, y: b.y + ((hy + 1) / 2) * b.height });
 
-const isLayerType = (/** @type {string | undefined} */ type) => type === 'vector' || type === 'group';
+const isLayerType = (/** @type {string | undefined} */ type) => type === 'vector' || type === 'image' || type === 'group';
 
 /**
  * What the tools transform: the selected layer (its own transform), or the picked parts.
@@ -160,6 +160,17 @@ export function partAt(target) {
   const id = /** @type {Element} */ (target)?.closest?.('.content [data-id]')?.getAttribute('data-id');
   const object = id && state.document ? findObject(state.document, id) : undefined;
   return object && isPart(object.type) && !isLocked(object.id) ? object : undefined;
+}
+
+/**
+ * The image layer under the pointer that can be picked (not locked: a locked reference lets clicks through). An image
+ * layer has no parts, so a click on its picture picks the layer itself.
+ * @param {EventTarget | null} target
+ */
+export function imageAt(target) {
+  const id = /** @type {Element} */ (target)?.closest?.('.content [data-id]')?.getAttribute('data-id');
+  const object = id && state.document ? findObject(state.document, id) : undefined;
+  return object?.type === 'image' && !isLocked(object.id) ? object : undefined;
 }
 
 /** The selected layer, if the part is inside it (then dragging the part moves the layer). @param {DocObject} part */
@@ -392,6 +403,14 @@ function selectDown(event) {
   if (handle === 'rotate') return rotateDrag(event);
   if (handle) return handleScale(event, /** @type {keyof typeof HANDLES} */ (handle));
   const part = partAt(event.target);
+  const image = part ? undefined : imageAt(event.target);
+  if (image) {
+    // Inside a selected group, dragging it moves the group, as for parts; otherwise it is picked and dragged.
+    const group = selectedLayerHolding(image);
+    if (group) return moveDrag(event, group, () => select(image.id));
+    if (state.selected !== image.id) select(image.id);
+    return moveDrag(event, subject());
+  }
   if (!part) return marquee(event);
   // With its layer selected, dragging a part moves the layer, and a click picks the part.
   const layer = !event.shiftKey && selectedLayerHolding(part);
@@ -414,6 +433,8 @@ const singleTool = (act) => (/** @type {PointerEvent} */ event) => {
   if (handle && handle !== 'rotate' && state.tool === 'scale') return handleScale(event, /** @type {keyof typeof HANDLES} */ (handle));
   const part = partAt(event.target);
   if (part && !selectedLayerHolding(part) && !pick(event, part)) return;
+  const image = part ? undefined : imageAt(event.target);
+  if (image && !selectedLayerHolding(image) && state.selected !== image.id) select(image.id);
   if (!hasSubject(subject())) return marquee(event);
   act(event);
 };

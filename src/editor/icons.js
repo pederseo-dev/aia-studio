@@ -14,6 +14,7 @@ export const ICONS = {
   delete: stroke('<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5M10 11v5M14 11v5"/>'),
   group: stroke('<path d="M3.5 7.5V18a1 1 0 0 0 1 1h15a1 1 0 0 0 1-1V9.5a1 1 0 0 0-1-1h-8l-2-3h-5a1 1 0 0 0-1 1z"/>'),
   vector: stroke('<path d="M5 18.5C7.5 9 16.5 9 19 18.5"/><path d="M6.5 11.5h11"/><circle cx="6.5" cy="11.5" r="1.2" fill="currentColor"/><circle cx="17.5" cy="11.5" r="1.2" fill="currentColor"/><rect x="3.3" y="17" width="3.4" height="3.4" fill="currentColor"/><rect x="17.3" y="17" width="3.4" height="3.4" fill="currentColor"/>'),
+  image: stroke('<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17.5 5-5 3.5 3.5 2.5-2.5 5 4.5"/>'),
   eye: stroke('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>'),
   eyeOff: stroke('<path d="M4 4l16 16"/><path d="M9.6 6A10 10 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.9 3.6M6.3 7.6A17 17 0 0 0 2.5 12S6 18.5 12 18.5c1.6 0 3-.4 4.2-1"/>'),
   lock: stroke('<rect x="5.5" y="10.5" width="13" height="9.5" rx="1.5"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/>'),

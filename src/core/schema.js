@@ -4,7 +4,7 @@
 
 /**
  * @typedef {{
- *   type: 'string' | 'number' | 'boolean' | 'color' | 'vertices' | 'pointGroups',
+ *   type: 'string' | 'number' | 'boolean' | 'color' | 'asset' | 'vertices' | 'pointGroups',
  *   default: unknown, nullable?: boolean, min?: number, max?: number,
  *   description: string, help: string,
  * }} PropertySpec
@@ -54,6 +54,9 @@ import { POINT_REF, groupsError } from './points.js';
 
 const COLOR = /^#[0-9a-f]{6}$/i;
 
+/** The name of a file in a document's assets folder: "face_ref.png". */
+export const ASSET_FILE = /^[a-z0-9][a-z0-9_-]{0,63}\.(png|jpg|webp|svg)$/;
+
 /**
  * Why a value does not fit a property, or null if it does.
  * @param {PropertySpec} spec
@@ -68,6 +71,10 @@ export function valueError(spec, value) {
       return typeof value === 'boolean' ? null : 'must be true or false';
     case 'color':
       return typeof value === 'string' && COLOR.test(value) ? null : 'must be a color like "#ff8800"';
+    case 'asset':
+      return typeof value === 'string' && ASSET_FILE.test(value)
+        ? null
+        : 'must be the name of a file in the assets folder, like "face_ref.png" (lowercase letters, digits, _ and -; png, jpg, webp or svg)';
     case 'number':
       if (typeof value !== 'number' || !Number.isFinite(value)) return 'must be a number';
       if (spec.min !== undefined && value < spec.min) return `must be at least ${spec.min}`;

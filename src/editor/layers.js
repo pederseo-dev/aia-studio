@@ -3,6 +3,7 @@
 
 import { childrenOf, findObject, idFromName } from '../core/document.js';
 import { icon } from './icons.js';
+import { chooseImages } from './images.js';
 import { run, select, state, toggleSelect } from './state.js';
 import { canContain, isPart, schema } from './schema.js';
 
@@ -19,24 +20,33 @@ let dragged = null;
 
 const taken = (/** @type {string} */ id) => !!state.document && (id === 'meta' || !!findObject(state.document, id));
 
+/**
+ * Where a new layer goes, as in Moho: above the selected layer, or inside it (on top) if it is a group; with a part
+ * selected, next to its vector layer; at the top of the root with nothing selected.
+ * @returns {{ parent: string | null, index?: number }}
+ */
+export function newLayerPlace() {
+  const doc = state.document;
+  let selected = doc && state.selected ? findObject(doc, state.selected) : undefined;
+  if (!doc || !selected) return { parent: null };
+  if (isPart(selected.type)) selected = findObject(doc, /** @type {string} */ (selected.parent));
+  if (!selected) return { parent: null };
+  if (selected.type === 'group') {
+    folded.delete(selected.id);
+    return { parent: selected.id };
+  }
+  return { parent: selected.parent, index: childrenOf(doc, selected.parent).indexOf(selected) + 1 };
+}
+
 /** @param {'vector' | 'group'} type */
 export function addLayer(type) {
-  const doc = state.document;
-  if (!doc) return;
+  if (!state.document) return;
   const id = idFromName(`${type === 'group' ? 'group' : 'layer'}_1`, taken);
-  let selected = state.selected ? findObject(doc, state.selected) : undefined;
-  // With a part selected, the new layer goes next to its vector layer.
-  if (selected && isPart(selected.type)) selected = findObject(doc, /** @type {string} */ (selected.parent));
+  const { parent, index } = newLayerPlace();
   /** @type {Operation} */
-  let create = { op: 'create', type, id };
-  // Like Moho: above the selected layer; inside it (on top) if it is a group.
-  if (selected?.type === 'group') {
-    create.parent = selected.id;
-    folded.delete(selected.id);
-  } else if (selected) {
-    create.parent = selected.parent;
-    create.index = childrenOf(doc, selected.parent).indexOf(selected) + 1;
-  }
+  const create = { op: 'create', type, id };
+  if (parent) create.parent = parent;
+  if (index !== undefined) create.index = index;
   // Then its name is asked right away (optional), as for parts.
   run([create], { select: id, note: `New ${type} layer` }).then(() => state.selected === id && renameSelected());
 }
@@ -145,8 +155,8 @@ function row(object, depth) {
 
   const kind = document.createElement('span');
   kind.className = 'kind';
-  kind.title = { group: 'Group layer', vector: 'Vector layer', rect: 'Rectangle part', ellipse: 'Ellipse part', path: 'Outline part' }[object.type] ?? object.type;
-  kind.innerHTML = icon(/** @type {any} */ (object.type in { group: 1, vector: 1, rect: 1, ellipse: 1, path: 1 } ? object.type : 'vector'));
+  kind.title = { group: 'Group layer', vector: 'Vector layer', image: 'Image layer', path: 'Outline part' }[object.type] ?? object.type;
+  kind.innerHTML = icon(/** @type {any} */ (object.type in { group: 1, vector: 1, image: 1, path: 1 } ? object.type : 'vector'));
   if (isPart(object.type)) line.classList.add('part');
 
   const name = document.createElement('span');
@@ -258,7 +268,8 @@ export function render() {
 
 export function setupLayers() {
   for (const item of document.querySelectorAll('#layer-menu [data-type]')) {
-    item.addEventListener('click', () => addLayer(/** @type {'vector' | 'group'} */ (item.getAttribute('data-type'))));
+    const type = item.getAttribute('data-type');
+    item.addEventListener('click', () => (type === 'image' ? chooseImages() : addLayer(/** @type {'vector' | 'group'} */ (type))));
   }
   document.getElementById('layer-delete')?.addEventListener('click', deleteSelected);
   // A click on the empty part of the panel clears the selection, so a new layer goes to the root.

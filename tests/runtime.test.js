@@ -74,6 +74,11 @@ const FIXTURES = {
     { op: 'create', type: 'path', id: 'hand', parent: 'arm', props: { vertices: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }] } },
     { op: 'set', target: 'meta', props: { background: null, width: 400, height: 300 } },
   ],
+  image: [
+    { op: 'create', type: 'group', id: 'refs', props: { x: 10, rotation: 5 } },
+    { op: 'create', type: 'image', id: 'photo', parent: 'refs', props: { src: 'photo.png', width: 200, height: 150, x: 20, y: 30, opacity: 0.5, scaleX: 2, originX: 100, originY: 75 } },
+    { op: 'create', type: 'image', id: 'gone', props: { src: 'not_there.png' } },
+  ],
 };
 
 /** @param {string} name */
@@ -100,6 +105,19 @@ test('the runtime draws what the editor draws: shared points, followed stretches
   createPlayer(/** @type {any} */ (moved), fixture('transformed'));
   assert.match(String(moved.children[0].attributes.get('transform')), /^matrix\(/);
   assert.equal(moved.children.length, 1, 'no background rect when the background is none');
+});
+
+test('the runtime finds an image layer’s picture in its assets, or beside the page', () => {
+  const svg = new FakePage().createElementNS('', 'svg');
+  createPlayer(/** @type {any} */ (svg), fixture('image'), { assets: { 'photo.png': 'data:image/png;base64,AAAA' } });
+  const [, refs, gone] = svg.children;
+  const [photo] = refs.children;
+  const [picture] = photo.children;
+  assert.equal(picture.tag, 'image');
+  assert.equal(picture.attributes.get('href'), 'data:image/png;base64,AAAA');
+  assert.equal(picture.attributes.get('opacity'), '0.5');
+  assert.match(String(photo.attributes.get('transform')), /^matrix\(2 0 0 1 /);
+  assert.equal(gone.children[0].attributes.get('href'), 'assets/not_there.png');
 });
 
 test('the bundled runtime of exported pages runs on its own and draws the same', () => {

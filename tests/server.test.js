@@ -91,3 +91,18 @@ test('the server does not serve files outside dist/', async () => {
   const { status } = await request('/..%2f..%2fpackage.json');
   assert.equal(status, 404);
 });
+
+test('the editor uploads a picture to a document’s assets and gets it back', async () => {
+  const base = `http://127.0.0.1:${server.port}/api/documents`;
+  const created = await fetch(base, { method: 'POST', body: JSON.stringify({ name: 'Pics' }), headers: { 'Content-Type': 'application/json' } });
+  assert.equal(created.status, 200);
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="40" height="30"/></svg>';
+  const upload = await fetch(`${base}/pics/assets?name=${encodeURIComponent('My Ref.svg')}`, { method: 'POST', body: svg });
+  assert.deepEqual(await upload.json(), { src: 'my_ref.svg', format: 'svg', naturalWidth: 40, naturalHeight: 30, reused: false });
+  const file = await fetch(`${base}/pics/assets/my_ref.svg`);
+  assert.equal(file.headers.get('content-type'), 'image/svg+xml');
+  assert.match(String(file.headers.get('content-security-policy')), /sandbox/);
+  assert.equal(await file.text(), svg);
+  assert.equal((await fetch(`${base}/pics/assets/nope.png`)).status, 404);
+  assert.equal((await fetch(`${base}/pics/assets?name=x.png`, { method: 'POST', body: 'not a picture' })).status, 400);
+});

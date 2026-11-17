@@ -141,6 +141,7 @@ transform a part by name, weld by name) come after the first AI test shows what 
 | `aia follow <doc> <point> <point>` (`--long`, `--off`) · `aia group <doc> <layer>.<group> <point>...` | Followed stretches; point groups |
 | `aia undo <doc>` · `aia redo <doc>` | Only the AI's own steps (undo per origin) |
 | `aia history <doc>` | The steps, the user's marked, so the AI does not overwrite them |
+| `aia image <doc> <file>` (`--id`, `--in`, `--at`, `--width`, `--opacity`, `--replace <layer>`) | An image layer from a picture file, copied into the document's assets (step 13) |
 | `aia render <doc> [--out file.png] [--width N]` | A PNG drawn by the same `drawDocument` |
 | `aia export <doc> --format svg\|html [--out file]` | A still SVG, or one web page that plays the document with the runtime (step 12) |
 | `aia help [command]` · `aia guide [topic]` | Help step by step; the type topics come from the schema |
@@ -193,6 +194,26 @@ click (`server/bundle.js` turns the runtime's modules into one classic script, e
 `--format svg` writes the still drawing. A contract test (`tests/runtime.test.js`) plays a document with each feature
 so far, as the module and as the bundled script, and checks that nothing breaks and both draw the same; every new
 feature adds its fixture there.
+
+**Step 13 (2026-11-17): image layers**, to try the drawing tools over a reference (asked by the user). As in v1 and
+Moho, an `image` layer sits in Layers next to vector and group layers (at the root or in a group; it holds no parts):
+`{ "type": "image", "src": "face_ref.png", "width": 600, "height": 400, "opacity": 0.5 }`. The picture (PNG, JPEG,
+WebP or SVG) is a file in the document's own `assets/` folder (`<documents>/<id>/assets/`), named after the original
+file; the same bytes are saved once, and an asset is never deleted while the document lives, so undo can always bring
+a layer back. The picture draws from (0, 0) to (width, height) in the layer's coordinates, so it is placed, turned and
+scaled with the layer transform of step 11, like any layer; `opacity` (0–1) is its own, to draw over it.
+- **Core:** `src/core/images.js` reads a picture's format and size from its header, names assets and builds the
+  operations (`addImageOps`: fitted to 90 % of the artboard and centered, or on a given point; `replaceImageOps`).
+  `drawDocument(doc, { assetUrl })` draws it as an `<image>`; where the file is found depends on who draws: the editor
+  asks the server (`GET /api/documents/<id>/assets/<name>`), `aia render` and `aia export` put it inside as a data
+  URL, and the runtime takes `createPlayer(svg, doc, { assets })` (the exported page carries them) or `assets/<name>`
+  next to the page.
+- **Editor:** Image… in the Layers menu (the system's file picker) or dropping picture files on the canvas; a click on
+  the picture picks the layer and drags it, and the Transform tools turn and scale it. Lock it so clicks pass through
+  while drawing over it.
+- **AI:** `aia image <doc> <file>` copies the file and adds the layer (`--opacity 0.5` for a reference); `aia guide
+  image` comes from the schema.
+Not yet: layer opacity for other layers, pasting a picture from the clipboard, deleting assets no layer uses.
 
 ## Open topics
 
