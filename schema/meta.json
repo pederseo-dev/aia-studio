@@ -2,7 +2,7 @@
   "name": "meta",
   "description": "The document itself: its name and the size of its artboard. Its children are the layers at the root. Changed with `set` on the target \"meta\".",
   "help": "The document: name and artboard size.",
-  "childTypes": ["vector", "group"],
+  "childTypes": ["vector", "image", "group"],
   "properties": {
     "name": { "type": "string", "default": "Untitled", "description": "Name of the document, as the tabs show it.", "help": "Name of the document." },
     "width": { "type": "number", "default": 800, "min": 1, "description": "Width of the artboard in px.", "help": "Artboard width in px." },

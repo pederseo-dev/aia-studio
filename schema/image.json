@@ -1,0 +1,36 @@
+{
+  "name": "image",
+  "extends": "layer",
+  "description": "Image layer, as in Moho: a picture (PNG, JPEG, WebP or a whole SVG) drawn from (0, 0) to (width, height) in the layer's own coordinates, for example a reference to draw over. The file lives in the document's assets folder and src is its name; add one with `aia image <doc> <file>` (it copies the file and sizes the layer). Move, turn and scale it with the layer transform (aia transform), as any layer. It holds no parts.",
+  "help": "Image layer: a picture (PNG, JPEG, WebP or SVG), for example a reference to draw over.",
+  "properties": {
+    "src": {
+      "type": "asset",
+      "default": "missing.png",
+      "description": "Name of the file in the document's assets folder (\"face_ref.png\"). aia image copies the file there and sets it; a name that is not there draws nothing.",
+      "help": "The image file, in the document's assets folder."
+    },
+    "width": {
+      "type": "number",
+      "default": 100,
+      "min": 0,
+      "description": "Width of the picture in px, in the layer's own coordinates (it is stretched to fit). aia image sets it from the file's size, fitted to the artboard.",
+      "help": "Width in px (the picture is stretched to fit)."
+    },
+    "height": {
+      "type": "number",
+      "default": 100,
+      "min": 0,
+      "description": "Height of the picture in px, in the layer's own coordinates (it is stretched to fit).",
+      "help": "Height in px (the picture is stretched to fit)."
+    },
+    "opacity": {
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "description": "How opaque the picture is, from 0 (invisible) to 1. A reference to draw over is often 0.4–0.6.",
+      "help": "Opacity, 0 to 1 (lower it to draw over a reference)."
+    }
+  }
+}

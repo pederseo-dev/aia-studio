@@ -6,6 +6,9 @@
 //   const player = createPlayer(document.querySelector('svg'), doc);  // doc: the document's JSON
 //   player.update(changedDoc);
 //
+// Image layers find their files in `assets/<name>` next to the page, or in `options.assets` ({ "face.png": url }),
+// which is how the exported page carries them inside.
+//
 // It draws with the same drawDocument as the editor and the AI's previews (src/core/draw.js), so what is made in the
 // editor is what plays.
 
@@ -22,8 +25,11 @@ const NS = 'http://www.w3.org/2000/svg';
  * A player on an <svg> element: it sizes it to the artboard and draws the document inside.
  * @param {SVGSVGElement} svg
  * @param {Doc} doc
+ * @param {{ assets?: Record<string, string> }} [options] assets: the URL of each asset file by its name
  */
-export function createPlayer(svg, doc) {
+export function createPlayer(svg, doc, { assets = {} } = {}) {
+  /** @param {string} src */
+  const assetUrl = (src) => (Object.prototype.hasOwnProperty.call(assets, src) ? assets[src] : `assets/${src}`);
   const page = svg.ownerDocument;
   /** @param {SvgNode} node @returns {Element} */
   const build = (node) => {
@@ -36,7 +42,7 @@ export function createPlayer(svg, doc) {
   let current = doc;
 
   function draw() {
-    const { width, height, background, nodes } = drawDocument(current);
+    const { width, height, background, nodes } = drawDocument(current, { assetUrl });
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
     if (!svg.hasAttribute('width') && !svg.hasAttribute('height')) {
       svg.setAttribute('width', String(width));

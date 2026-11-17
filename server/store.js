@@ -1,4 +1,6 @@
-// Documents on disk: <documents>/<id>/document.json and its history, <documents>/<id>/history.jsonl.
+// Documents on disk: <documents>/<id>/document.json and its history, <documents>/<id>/history.jsonl. The pictures
+// of its image layers live in <documents>/<id>/assets/. An asset is never deleted while the document lives (an undo
+// may bring back the layer that showed it), and the same bytes saved twice are one file.
 //
 // Every change is a batch of operations with its origin ("user" for the editor, "ai" for the AI) and its inverse.
 // Undo and redo are per origin: each side undoes only its own batches, newest first, and a new batch of a side clears
@@ -9,6 +11,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { idFromName, newDocument, subtree } from '../src/core/document.js';
+import { assetMime, assetName, freeAssetName, readImage, usedAssets } from '../src/core/images.js';
+import { ASSET_FILE } from '../src/core/schema.js';
 import { applyOps } from '../src/core/operations.js';
 import { settleBatch } from '../src/core/settle.js';
 
@@ -39,6 +43,13 @@ export function createStore({ folder, schema }) {
   };
   const documentFile = (id) => path.join(dir(id), 'document.json');
   const historyFile = (id) => path.join(dir(id), 'history.jsonl');
+  /** @param {string} id */
+  const assetsDir = (id) => path.join(dir(id), 'assets');
+  /** @param {string} id @param {string} name */
+  const assetFile = (id, name) => {
+    if (!ASSET_FILE.test(name)) throw new StoreError(`"${name}" is not an asset name`, 400);
+    return path.join(assetsDir(id), name);
+  };
 
   /** @param {string} id @returns {Promise<Doc>} */
   async function read(id) {
@@ -183,6 +194,17 @@ export function createStore({ folder, schema }) {
     }
   }
 
+  /** The bytes and MIME type of an asset. @param {string} id @param {string} name */
+  async function readAsset(id, name) {
+    const file = assetFile(id, name);
+    try {
+      return { bytes: new Uint8Array(await fs.readFile(file)), mime: /** @type {string} */ (assetMime(name)) };
+    } catch (e) {
+      if (e.code === 'ENOENT') throw new StoreError(`${id} has no asset "${name}"`, 404);
+      throw e;
+    }
+  }
+
   return {
     folder,
 
@@ -242,6 +264,61 @@ export function createStore({ folder, schema }) {
         await save(id, document, { origin, kind: 'batch', ...(note ? { note } : {}), ops, inverse });
         return state(id, document, origin);
       });
+    },
+
+    /**
+     * Saves a picture in the document's assets folder, named after its file, and gives its name and size. The same
+     * bytes already there are not copied again (reused: true).
+     * @param {string} id @param {string} original the file's own name @param {Uint8Array} bytes
+     * @returns {Promise<{ src: string, format: string, naturalWidth: number, naturalHeight: number, reused: boolean }>}
+     */
+    async saveAsset(id, original, bytes) {
+      await read(id);
+      /** @type {import('../src/core/images.js').ImageInfo} */
+      let info;
+      try {
+        info = readImage(bytes);
+      } catch (e) {
+        throw new StoreError(e.message, 400);
+      }
+      const name = assetName(original, info.format);
+      await fs.mkdir(assetsDir(id), { recursive: true });
+      const there = new Set(await fs.readdir(assetsDir(id)));
+      const same = /** @param {string} candidate */ async (candidate) =>
+        there.has(candidate) && Buffer.from(bytes).equals(await fs.readFile(assetFile(id, candidate)));
+      // The same picture saved before, under its name or a numbered one, is reused.
+      const stem = name.replace(/\.[a-z]+$/, '');
+      const extension = name.slice(stem.length);
+      for (const candidate of [name, ...[...there].filter((f) => f.startsWith(`${stem}_`) && f.endsWith(extension))]) {
+        if (await same(candidate)) return { src: candidate, ...info, reused: true };
+      }
+      const src = freeAssetName(name, (candidate) => there.has(candidate));
+      await fs.writeFile(assetFile(id, src), bytes);
+      return { src, ...info, reused: false };
+    },
+
+    readAsset,
+
+    /** The names of the document's asset files. @param {string} id @returns {Promise<string[]>} */
+    async assets(id) {
+      await read(id);
+      return (await fs.readdir(assetsDir(id)).catch(() => [])).filter((name) => ASSET_FILE.test(name)).sort();
+    },
+
+    /**
+     * The pictures a document shows, as data URLs by name (for drawings that carry them inside: PNG, export).
+     * Missing files are left out, so their layers draw nothing.
+     * @param {string} id @param {Doc} document
+     * @returns {Promise<Record<string, string>>}
+     */
+    async assetUrls(id, document) {
+      /** @type {Record<string, string>} */
+      const urls = {};
+      for (const name of usedAssets(document)) {
+        const asset = await readAsset(id, name).catch(() => null);
+        if (asset) urls[name] = `data:${asset.mime};base64,${Buffer.from(asset.bytes).toString('base64')}`;
+      }
+      return urls;
     },
 
     /**

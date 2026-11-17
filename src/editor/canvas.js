@@ -5,6 +5,7 @@
 import { childrenOf } from '../core/document.js';
 import { drawDocument, partData } from '../core/draw.js';
 import { syncShared } from '../core/points.js';
+import { assetUrl } from './images.js';
 import { state } from './state.js';
 import { area, element, screen, svg, view } from './view.js';
 
@@ -52,7 +53,7 @@ export function render() {
   svg.style.display = doc ? '' : 'none';
   svg.dataset.tool = state.tool;
   if (!doc) return;
-  const drawing = drawDocument(doc);
+  const drawing = drawDocument(doc, { assetUrl });
   const box = area.getBoundingClientRect();
   view.scale = Math.max(0.05, Math.min((box.width - MARGIN * 2) / drawing.width, (box.height - MARGIN * 2) / drawing.height));
   view.x = (box.width - drawing.width * view.scale) / 2;
