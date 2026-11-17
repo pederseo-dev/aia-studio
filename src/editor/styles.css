@@ -185,7 +185,7 @@ dialog h2 { margin-bottom: 12px; }
 .tools button.icon.active { background: var(--accent); color: var(--on-accent); }
 .separator { width: 1px; height: 20px; background: var(--border); margin: 0 6px; }
 #canvas[data-tool="rect"], #canvas[data-tool="ellipse"], #canvas[data-tool="pen"] { cursor: crosshair; }
-#canvas[data-tool="select"] .content [data-id] { cursor: move; }
+#canvas[data-tool="select"] .content [data-id] { cursor: default; }
 #canvas .overlay * { vector-effect: non-scaling-stroke; pointer-events: none; }
 #canvas .selection-box { fill: none; stroke-linejoin: round; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
 #canvas .draft { fill: color-mix(in srgb, var(--accent) 20%, transparent); stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
@@ -228,7 +228,7 @@ dialog h2 { margin-bottom: 12px; }
 
 /* Point editing. */
 #canvas .edit-outline { fill: none; stroke: var(--accent); stroke-width: 1; }
-#canvas .overlay .handle.point { fill: #fff; stroke: var(--accent); stroke-width: 1.2; cursor: move; }
+#canvas .overlay .handle.point { fill: #fff; stroke: var(--accent); stroke-width: 1.2; cursor: default; }
 #canvas .overlay .handle.point.picked { fill: var(--accent); stroke: #fff; }
 #canvas .overlay .handle.knob { fill: var(--accent); stroke: #fff; stroke-width: 1; cursor: pointer; }
 #canvas .knob-line { stroke: var(--accent); stroke-width: 1; }
@@ -295,7 +295,7 @@ dialog h2 { margin-bottom: 12px; }
 .options .action.toggle.on .led { background: var(--accent); border-color: var(--accent); }
 #canvas .selection-box.layer { stroke-dasharray: 8 4; }
 #canvas .origin-cross { stroke: var(--accent); stroke-width: 1.5; }
-#canvas .overlay .handle.origin { fill: var(--panel); stroke: var(--accent); stroke-width: 1.5; cursor: move; }
+#canvas .overlay .handle.origin { fill: var(--panel); stroke: var(--accent); stroke-width: 1.5; cursor: default; }
 #canvas .overlay .handle.origin.set { fill: var(--accent); }
 
 /* Ghost outlines: parts that draw nothing (hidden, or without fill and stroke), only with the Transform tools. */
