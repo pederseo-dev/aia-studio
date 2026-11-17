@@ -1,0 +1,8 @@
+#!/bin/sh
+# Before each commit: the tests and the type check must pass (CLAUDE.md, «Checks»).
+# Enabled once per clone with: git config core.hooksPath .githooks
+set -e
+echo "pre-commit: npm test"
+npm test --silent > /dev/null 2>&1 || { echo "pre-commit: npm test failed (run it to see why)"; exit 1; }
+echo "pre-commit: npm run typecheck"
+npm run typecheck --silent || { echo "pre-commit: npm run typecheck failed"; exit 1; }
