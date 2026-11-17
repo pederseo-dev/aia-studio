@@ -2,19 +2,20 @@
 //
 // Every change is a batch of operations with its origin ("user" for the editor, "ai" for the AI) and its inverse.
 // Undo and redo are per origin: each side undoes only its own batches, newest first, and a new batch of a side clears
-// that side's redo. The history is append-only (one JSON line per batch, undo or redo), so it is also the record of
+// that side's redo. An undo that would take away or overwrite what the other side did after that step is refused,
+// with the reason; `skip` then drops that step from the side's undo, so it can go on undoing older ones. The history is append-only (one JSON line per batch, undo or redo), so it is also the record of
 // who did what.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { idFromName, newDocument } from '../src/core/document.js';
+import { idFromName, newDocument, subtree } from '../src/core/document.js';
 import { applyOps } from '../src/core/operations.js';
-import { settleOps } from '../src/core/points.js';
+import { settleBatch } from '../src/core/settle.js';
 
 /**
  * @typedef {import('../src/core/document.js').Doc} Doc
  * @typedef {import('../src/core/operations.js').Operation} Operation
- * @typedef {{ n: number, time: string, origin: string, kind: 'batch' | 'undo' | 'redo', of?: number,
+ * @typedef {{ n: number, time: string, origin: string, kind: 'batch' | 'undo' | 'redo' | 'skip', of?: number,
  *   note?: string, ops: Operation[], inverse: Operation[] }} HistoryEntry
  * @typedef {{ document: Doc, canUndo: boolean, canRedo: boolean }} DocumentState
  */
@@ -75,9 +76,69 @@ export function createStore({ folder, schema }) {
       } else if (entry.kind === 'redo') {
         undone.pop();
         done.push(entry);
+      } else if (entry.kind === 'skip') {
+        done.pop();
       }
     }
     return { done, undone };
+  }
+
+  /** Who an origin is, in a message. @param {string} origin */
+  const who = (origin) => (origin === 'user' ? 'the person' : origin === 'ai' ? 'the AI' : origin);
+
+  /**
+   * What the other sides did after step `n`: for each object, the properties they set, or '*' when they made,
+   * deleted, moved or renamed it.
+   * @param {HistoryEntry[]} entries @param {string} origin @param {number} n
+   * @returns {Map<string, { keys: Set<string>, by: string }>}
+   */
+  function touchedSince(entries, origin, n) {
+    /** @type {Map<string, { keys: Set<string>, by: string }>} */
+    const touched = new Map();
+    /** @param {unknown} id @param {string} key @param {string} by */
+    const mark = (id, key, by) => {
+      if (typeof id !== 'string') return;
+      const entry = touched.get(id) ?? { keys: new Set(), by };
+      entry.keys.add(key);
+      touched.set(id, entry);
+    };
+    for (const entry of entries) {
+      if (entry.n <= n || entry.origin === origin || entry.kind === 'skip') continue;
+      for (const op of entry.ops) {
+        if (op.op === 'set') for (const key of Object.keys(op.props ?? {})) mark(op.target, key, entry.origin);
+        else if (op.op === 'create') mark(op.id, '*', entry.origin);
+        else if (op.op === 'rename') {
+          mark(op.target, '*', entry.origin);
+          mark(op.id, '*', entry.origin);
+        } else mark(op.target, '*', entry.origin);
+      }
+    }
+    return touched;
+  }
+
+  /**
+   * Why undoing a step would take away or overwrite what another side did after it, or null.
+   * @param {Doc} document @param {HistoryEntry[]} entries @param {HistoryEntry} target @param {string} origin
+   */
+  function conflict(document, entries, target, origin) {
+    const touched = touchedSince(entries, origin, target.n);
+    if (!touched.size) return null;
+    for (const op of target.inverse) {
+      if (op.op === 'delete') {
+        for (const o of subtree(document, op.target)) {
+          const t = touched.get(o.id);
+          if (t) return `it would delete ${o.id}, which ${who(t.by)} ${o.id === op.target ? 'changed' : 'made or changed inside it'} after that step`;
+        }
+      } else if (op.op === 'set') {
+        const t = touched.get(op.target);
+        const key = t && Object.keys(op.props ?? {}).find((k) => t.keys.has(k) || t.keys.has('*'));
+        if (t && key) return `it would overwrite ${op.target}.${key}, which ${who(t.by)} changed after that step`;
+      } else if (op.op === 'move' || op.op === 'rename') {
+        const t = touched.get(op.target);
+        if (t) return `it would ${op.op} ${op.target}, which ${who(t.by)} changed after that step`;
+      }
+    }
+    return null;
   }
 
   /** @param {string} id @param {Doc} document @param {string} origin @returns {Promise<DocumentState>} */
@@ -107,7 +168,7 @@ export function createStore({ folder, schema }) {
   function settled(document, ops) {
     if (!Array.isArray(ops) || !ops.length) return ops;
     try {
-      return settleOps(document, ops, (d, o) => applyOps(schema, d, o, { checkPoints: false }).document);
+      return settleBatch(document, ops, (d, o) => applyOps(schema, d, o, { checkPoints: false }).document);
     } catch (e) {
       throw new StoreError(e.message, 400);
     }
@@ -168,8 +229,9 @@ export function createStore({ folder, schema }) {
     },
 
     /**
-     * Applies a batch, settled first as for everyone (settleOps in core/points.js): a shared vertex given a place
-     * moves the point it shares, and deleting a shared point leaves the vertices that shared it where they were.
+     * Applies a batch, settled first as for everyone (settleBatch in core/settle.js): a shared vertex given a place
+     * moves the point it shares, deleting a shared point leaves the vertices that shared it where they were, and
+     * a transformed layer keeps its origin.
      * @param {string} id @param {Operation[]} ops @param {{ origin: string, note?: string }} by
      */
     apply(id, ops, { origin, note }) {
@@ -182,14 +244,35 @@ export function createStore({ folder, schema }) {
       });
     },
 
-    /** @param {string} id @param {string} origin */
-    undo(id, origin) {
+    /**
+     * Undoes the origin's last step, unless that would take away or overwrite what another side did after it.
+     * With skip, that step is dropped from the origin's undo instead (nothing changes in the document).
+     * @param {string} id @param {string} origin @param {{ skip?: boolean }} [options]
+     */
+    undo(id, origin, { skip = false } = {}) {
       return queued(id, async () => {
-        const target = stacks(await history(id), origin).done.at(-1);
+        const entries = await history(id);
+        const target = stacks(entries, origin).done.at(-1);
         if (!target) throw new StoreError('Nothing to undo', 409);
-        const { document, inverse } = apply(await read(id), target.inverse);
-        await save(id, document, { origin, kind: 'undo', of: target.n, ops: target.inverse, inverse });
-        return state(id, document, origin);
+        const current = await read(id);
+        if (skip) {
+          await save(id, current, { origin, kind: 'skip', of: target.n, ops: [], inverse: [] });
+          return state(id, current, origin);
+        }
+        const step = `step #${target.n}${target.note ? ` (${target.note})` : ''}`;
+        const refusal = (/** @type {string} */ why) =>
+          new StoreError(`Cannot undo ${step}: ${why}. Skip it to undo older steps (aia undo --skip; in the editor, undo again).`, 409);
+        const why = conflict(current, entries, target, origin);
+        if (why) throw refusal(why);
+        let result;
+        try {
+          const ops = settled(current, target.inverse);
+          result = { ops, ...apply(current, ops) };
+        } catch (e) {
+          throw refusal(e.message);
+        }
+        await save(id, result.document, { origin, kind: 'undo', of: target.n, ops: result.ops, inverse: result.inverse });
+        return state(id, result.document, origin);
       });
     },
 
@@ -198,9 +281,16 @@ export function createStore({ folder, schema }) {
       return queued(id, async () => {
         const target = stacks(await history(id), origin).undone.at(-1);
         if (!target) throw new StoreError('Nothing to redo', 409);
-        const { document, inverse } = apply(await read(id), target.inverse);
-        await save(id, document, { origin, kind: 'redo', of: target.of, ops: target.inverse, inverse });
-        return state(id, document, origin);
+        const current = await read(id);
+        let result;
+        try {
+          const ops = settled(current, target.inverse);
+          result = { ops, ...apply(current, ops) };
+        } catch (e) {
+          throw new StoreError(`Cannot redo: ${e.message}`, 409);
+        }
+        await save(id, result.document, { origin, kind: 'redo', of: target.of, ops: result.ops, inverse: result.inverse });
+        return state(id, result.document, origin);
       });
     },
   };

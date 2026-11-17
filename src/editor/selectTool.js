@@ -28,7 +28,7 @@ import {
   transformProps,
   worldOf,
 } from '../core/transform.js';
-import { copyOps } from './clipboard.js';
+import { copyOps } from '../core/copy.js';
 import { addPainter, onToolDown, showPreview } from './canvas.js';
 import { editPoints, inShownLayer, isLocked, run, select, selectMany, selectedParts, state, toggleSelect } from './state.js';
 import { isPart } from './schema.js';

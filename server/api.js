@@ -6,7 +6,7 @@
 //   GET    /api/documents/<id>              { document, canUndo, canRedo }
 //   DELETE /api/documents/<id>
 //   POST   /api/documents/<id>/ops          { ops, note? } → applies a batch
-//   POST   /api/documents/<id>/undo | redo
+//   POST   /api/documents/<id>/undo | redo   undo takes { skip: true } to drop a step that cannot be undone
 //   GET    /api/events                      live notices of changes on disk (Server-Sent Events, see events.js)
 
 import { readFileSync } from 'node:fs';
@@ -71,7 +71,7 @@ export function createApi({ store, events }) {
       const { ops, note } = await readBody(req);
       return store.apply(id, ops, { origin: ORIGIN, note: typeof note === 'string' ? note : undefined });
     }
-    if (action === 'undo') return store.undo(id, ORIGIN);
+    if (action === 'undo') return store.undo(id, ORIGIN, { skip: (await readBody(req)).skip === true });
     if (action === 'redo') return store.redo(id, ORIGIN);
     return null;
   }

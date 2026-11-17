@@ -189,7 +189,25 @@ export function run(ops, { note, select } = {}) {
   });
 }
 
-export const undo = () => state.active && state.canUndo && guarded(async () => take(await api.undo(state.active)));
+/** @type {string | null} the document whose last undo was refused: undoing again skips that step */
+let refusedUndo = null;
+
+/** Undo: the person's last step. When it was refused (it would undo the AI's later work), undoing again skips it. */
+export const undo = () =>
+  state.active &&
+  state.canUndo &&
+  guarded(async () => {
+    const id = /** @type {string} */ (state.active);
+    const skip = refusedUndo === id;
+    refusedUndo = null;
+    try {
+      take(await api.undo(id, skip));
+      if (skip) state.notice = 'Skipped that step: it stays as it is. Undo goes on with the older ones.';
+    } catch (e) {
+      refusedUndo = id;
+      throw new Error(e.message.replace(/ Skip it to undo older steps \(.*\)\.$/, ' Undo again to skip it and go on with older steps.'));
+    }
+  });
 export const redo = () => state.active && state.canRedo && guarded(async () => take(await api.redo(state.active)));
 
 /** @param {string[]} ids */

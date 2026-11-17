@@ -343,3 +343,47 @@ export function insertVertex(part, segment, t) {
   vertices.splice(index, 0, added);
   return { vertices: vertices.map(roundVertex), index };
 }
+
+/**
+ * Makes a vertex a smooth curve (handles along the line between its neighbors, a third of the way to each) or, with
+ * corner, takes its handles away. Changes the vertices in place.
+ * @param {Vertex[]} vertices @param {number} index @param {boolean} closed @param {boolean} corner
+ */
+export function shapePoint(vertices, index, closed, corner) {
+  const v = vertices[index];
+  delete v.in;
+  delete v.out;
+  if (corner) return;
+  const prev = vertices[index - 1] ?? (closed ? vertices.at(-1) : undefined);
+  const next = vertices[index + 1] ?? (closed ? vertices[0] : undefined);
+  const a = prev ?? v;
+  const b = next ?? v;
+  const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const dir = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
+  const reach = (/** @type {Vertex | undefined} */ n) => (n ? Math.hypot(n.x - v.x, n.y - v.y) / 3 : 0);
+  if (prev) v.in = { x: -dir.x * reach(prev), y: -dir.y * reach(prev) };
+  if (next) v.out = { x: dir.x * reach(next), y: dir.y * reach(next) };
+}
+
+/**
+ * The vertices of an ellipse inside a box with `count` points (4 or more), evenly round, the first one at the top and
+ * going clockwise, so its points can be shared by name (for example 8 or 12 for a head with ears).
+ * @param {Box} box @param {number} count
+ * @returns {Vertex[]}
+ */
+export function ellipsePoints({ x, y, width: w, height: h }, count) {
+  const n = Math.max(3, Math.round(count));
+  const rx = w / 2;
+  const ry = h / 2;
+  const cx = x + rx;
+  const cy = y + ry;
+  // The handle of a circle's arc of angle a is (4/3)·tan(a/4) of the radius.
+  const k = (4 / 3) * Math.tan(Math.PI / (2 * n));
+  return Array.from({ length: n }, (_, i) => {
+    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const tangent = { x: -sin * rx * k, y: cos * ry * k };
+    return { x: cx + cos * rx, y: cy + sin * ry, in: { x: -tangent.x, y: -tangent.y }, out: tangent };
+  });
+}

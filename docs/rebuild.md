@@ -135,7 +135,9 @@ transform a part by name, weld by name) come after the first AI test shows what 
 | `aia show <doc> [id]` | The JSON as it is saved: the whole document or one object |
 | `aia ops <doc> [--note "…"] <batch>` (or `--file <path>`) | Applies a batch with the editor's engine, origin `ai`; errors carry the engine's message |
 | `aia move <doc> <point>... --by dx,dy \| --to x,y` | Moves points by name: `head.chin`, `head.3` (by index) or a point group `face.upper_lid`; what shares them follows (added after the first AI test) |
-| `aia transform <doc> <id> --move dx,dy --rotate deg --scale s` · `--apply` | A layer's own transform, or a part's vertices; Apply transform |
+| `aia transform <doc> <id>... --move dx,dy --rotate deg --scale s [--around x,y]` · `--apply` | A layer's own transform, or parts' vertices (several together); Apply transform |
+| `aia rect` · `aia ellipse <doc> <layer> <id> --box x,y,w,h` (`--points n`, `--names …`, style) | Shapes by name, as the Rectangle and Ellipse tools (step 13) |
+| `aia delete-point` · `aia curve` · `aia corner <doc> <point>...` · `aia copy <doc> <part>...` | Point editing and copies (step 13) |
 | `aia weld <doc> <point> <target>` (`--join`, `--on <part>`) · `aia unweld <doc> <point>...` | Welding by name, as in point editing |
 | `aia name <doc> <point> <name>` · `aia add-point <doc> <part> --at x,y` | Name a point; add one on a line without changing its shape |
 | `aia follow <doc> <point> <point>` (`--long`, `--off`) · `aia group <doc> <layer>.<group> <point>...` | Followed stretches; point groups |
@@ -193,6 +195,19 @@ click (`server/bundle.js` turns the runtime's modules into one classic script, e
 `--format svg` writes the still drawing. A contract test (`tests/runtime.test.js`) plays a document with each feature
 so far, as the module and as the bundled script, and checks that nothing breaks and both draw the same; every new
 feature adds its fixture there.
+
+**First audit (2026-11-17)**, of steps 1 to 12: [docs/audits/2026-11-17-design-mode.md](audits/2026-11-17-design-mode.md).
+What the store does to every batch is now one place, `settleBatch` (`src/core/settle.js`): the point rules mend only
+what the batch itself took away and refuse typos; a transformed layer always has an origin, and moving it makes up
+with x, y. An undo that would take away or overwrite the other side's later work is refused with the reason, and can
+be skipped (`aia undo --skip`, or undoing again in the editor).
+
+**Step 13 (2026-11-17): the parity gaps the audit found.** The AI now does by name what the editor does by hand:
+`aia rect` and `aia ellipse` (into a vector layer, made if missing; an ellipse can have more points, evenly round, and
+names for them: `ellipsePoints` in `src/core/geometry.js`), `aia delete-point`, `aia curve` and `aia corner` (the same
+`shapePoint` as point editing, now in the core), `aia copy` (the same `copyOps` as the editor, now `src/core/copy.js`),
+`aia transform` with several parts of one layer around one point, and `aia render --labels`, which marks the named
+and shared points where they are on the artboard.
 
 ## Open topics
 

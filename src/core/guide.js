@@ -18,7 +18,8 @@ Layers (at the root or inside a group):
   vector   holds parts: the drawing
 Parts (inside a vector layer):
   path     an outline of vertices with fill and stroke. Every shape is a path: a rectangle is 4 corners, an ellipse
-           4 vertices with curve handles. Coordinates are the layer's (the artboard's, for now).
+           4 vertices with curve handles. A part's vertices are in its layer's own coordinates: the same as the
+           artboard's until the layer (or a group it is in) is moved, turned or scaled with its transform.
 
 Work like this:
   1. aia show <doc>                 read the document as it is saved
@@ -29,7 +30,19 @@ Work like this:
 The person sees your changes live in the editor and can change anything by hand.
 Layers have a transform of their own (x, y, rotation, scaleX, scaleY around their origin) that moves the whole
 layer without changing its vertices: aia transform <doc> <layer> --rotate 20. Transforming a part rewrites its
-vertices: aia transform <doc> <part> --move 10,0.
+vertices: aia transform <doc> <part> --move 10,0. A transformed layer always keeps an origin (it is set where it
+turns the first time), and changing the origin moves its x, y too, so the layer stays where it is.
+Coordinates: every command that takes a place (move --to, add-point --at, --move) works in the coordinates of the
+layer the points belong to, like their vertices; in a turned layer they differ from the artboard's. render shows
+the artboard.
+
+Undo: aia undo takes back your own steps only. It is refused when it would take away or overwrite what the person
+did after that step (it says what); aia undo --skip then leaves that step as it is and goes on with older ones.
+
+Drawing by name, without writing vertices (the layer is made if it is not there):
+  aia rect face mouth_box --box 100,80,200,60 --radius 8 --fill #e05555
+  aia ellipse face head --box 200,100,400,400 --points 8 --names top,tr,right,br,bottom,bl,left,tl
+  aia copy face ear_l --move 300,0 · aia transform face eye_l eye_r --scale 1.2 (together, around their center)
 
 Topics: aia guide ops · aia guide paths · aia guide points · aia guide types · aia guide <type>`,
   },
@@ -88,13 +101,16 @@ What batches do with shared points, the same for you and for the person in the e
   - renaming a part (rename) updates the references to its points
 
 The commands do this by name, without writing vertices (points are part.point or part.index, from 0):
-  aia weld face mouth.0 jaw.chin      mouth.0 shares jaw.chin from now on (jaw.3 gets a name if it has none)
+  aia weld face mouth.0 jaw.chin      mouth.0 shares jaw.chin from now on (a target without a name gets one)
   aia weld face mouth.2 --on jaw      onto jaw's line, where it is nearest (a point is added there)
   aia weld face line.0 line.5         the two ends of one line close it; --join makes two lines one
   aia unweld face mouth.0             it keeps its place, as a point of its own
   aia name face head.3 chin           names a point (shares and groups follow a new name)
   aia add-point face head --at 120,40 a point on the line, where it is nearest, without changing its shape
   aia show face --resolved            each shared vertex with the x, y of the point it shares
+  aia delete-point face head.3        (whoever shared it keeps its place)
+  aia curve face head.3 · aia corner face head.3    smooth curve or corner, as in point editing
+  aia render face --labels            the picture with named points labeled and shared points ringed
 
 Following a curve: a stretch of an outline can go along another part's outline instead of having its own curve,
 so a fill and a line drawn over the same points stay together when the line is curved:

@@ -2,48 +2,20 @@
 // it (into the active vector layer, in the same place) and Alt+drag with Select drags a copy (selectTool.js; the
 // arrow keys nudge there too). Copies get free names from their originals: rect_1 → rect_2.
 
-import { findObject, idFromName } from '../core/document.js';
-import { IDENTITY, transformPart, translate } from '../core/geometry.js';
+import { copyOps } from '../core/copy.js';
+import { IDENTITY, translate } from '../core/geometry.js';
 import { targetLayer } from './drawTools.js';
 import { notify, run, selectedParts, state } from './state.js';
 
 /**
  * @typedef {import('../core/document.js').Doc} Doc
  * @typedef {import('../core/document.js').DocObject} DocObject
- * @typedef {import('../core/geometry.js').Matrix} Matrix
- * @typedef {import('../core/operations.js').Operation} Operation
  */
 
 const DUPLICATE_OFFSET = 10;
 
 /** @type {DocObject[]} what Ctrl+C copied */
 let copied = [];
-
-/**
- * The ops that create copies of parts, each moved by `m`, in the layer `layer` (or each in its own layer).
- * @param {Doc} doc
- * @param {DocObject[]} parts
- * @param {Matrix | ((part: DocObject) => Matrix)} m the same for all, or one for each part (in its layer's coordinates)
- * @param {string} [layer]
- * @returns {{ ops: Operation[], ids: string[] }}
- */
-export function copyOps(doc, parts, m, layer) {
-  /** @type {Set<string>} */
-  const used = new Set();
-  /** @type {Operation[]} */
-  const ops = [];
-  for (const part of parts) {
-    const id = idFromName(part.id, (x) => x === 'meta' || !!findObject(doc, x) || used.has(x));
-    used.add(id);
-    const { id: _id, type, parent, ...props } = structuredClone(part);
-    const matrix = typeof m === 'function' ? m(part) : m;
-    Object.assign(props, matrix === IDENTITY ? {} : transformPart(part, matrix));
-    // A copy does not share the original's points: its shared vertices stay where they are, as its own.
-    if (Array.isArray(props.vertices)) props.vertices = props.vertices.map(({ ref: _ref, ...v }) => v);
-    ops.push({ op: 'create', type, id, parent: layer ?? parent, props });
-  }
-  return { ops, ids: [...used] };
-}
 
 export function duplicate() {
   const doc = state.document;

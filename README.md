@@ -9,8 +9,11 @@ previews.
 **The human comes second, but has the last word.** Everything the AI makes opens in a visual editor where a person
 sees it live and can change all of it by hand.
 
-> **Status: rebuild in progress.** This branch rebuilds aia-studio from scratch, in parts. Only the base is here so
-> far: the desktop app shell, the local server, and Design mode with Layers and a live Document JSON panel. The decisions and open topics are in
+> **Status: rebuild in progress.** This branch rebuilds aia-studio from scratch, in parts. Here so far: the desktop
+> app shell and local server; Design mode (vector layers with paths, named and shared points, followed curves, point
+> groups, layer transforms, the Pen, Rectangle and Ellipse, point editing, a live Document JSON panel); the `aia`
+> command language with its CLI and a thin MCP; rendered previews; and a minimal runtime that exported pages carry.
+> Animation, bones and the final export format are still to come. The decisions and open topics are in
 > [docs/rebuild.md](docs/rebuild.md). The previous version stays on `main` until this one replaces it.
 
 ## Why HTML, CSS, JS and SVG
@@ -68,12 +71,12 @@ choose another one.
 | `src/runtime/` | The runtime: plays a document in any web page, with no dependencies (the export carries it). |
 | `bin/`, `mcp/` | The `aia` CLI and the thin MCP server, both over the interpreter in `server/aia.js`. |
 | `server/` | The local server on `127.0.0.1` (and the same API inside Vite in development), the documents on disk with their history, the documents folder. |
-| `src/editor/` | The visual editor (plain JS, built with Vite): Design mode with Layers and the Document JSON panel so far. |
+| `src/editor/` | The visual editor (plain JS, built with Vite): Design mode with Layers, the canvas tools, the Inspector and the Document JSON panel. |
 | `tests/` | Tests (`node --test`). |
 | `docs/` | [rebuild.md](docs/rebuild.md) and, in [docs/v1/](docs/v1/), the records and design docs of the previous version. |
 
-Planned, once their design is decided: the drawing (parts), the `aia` command language with its CLI and MCP, the
-renderer and the runtime.
+Planned, once their design is decided: animation (poses, clips, parameters), bones and binding, the `.aia`
+format and the other exports (video, Lottie), and `aia open` to open the editor from the AI's side.
 
 ## Credits
 

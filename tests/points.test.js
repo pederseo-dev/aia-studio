@@ -28,7 +28,7 @@ test('a shared vertex sits where the point it shares is', () => {
   assert.match(String(mouth.attrs.d), /50 80$/);
 });
 
-test('broken points are refused with a message that says why', () => {
+test('the engine refuses broken points with a message that says why (the store too: see store.test.js)', () => {
   const doc = face();
   const refuses = (ops, pattern) => assert.throws(() => apply(doc, ops), pattern);
   refuses([{ op: 'set', target: 'mouth', props: { vertices: [{ x: 0, y: 0 }, { ref: 'jaw.nose' }] } }], /no such point/);

@@ -7,8 +7,28 @@ import fs from 'node:fs/promises';
 import { findObject, subtree } from '../src/core/document.js';
 import { toSvg } from '../src/core/draw.js';
 import { guide } from '../src/core/guide.js';
-import { around, bounds, insertVertex, multiply, nearestOnOutline, originOf, rotate, scale, transformPart, translate, verticesOf } from '../src/core/geometry.js';
-import { applyTransformOps, transformOf, transformProps } from '../src/core/transform.js';
+import {
+  IDENTITY,
+  apply as applyMatrix,
+  around,
+  bounds,
+  ellipsePoints,
+  ellipseVertices,
+  insertVertex,
+  multiply,
+  nearestOnOutline,
+  originOf,
+  rectVertices,
+  rotate,
+  roundVertex,
+  scale,
+  shapePoint,
+  transformPart,
+  translate,
+  verticesOf,
+} from '../src/core/geometry.js';
+import { copyOps } from '../src/core/copy.js';
+import { applyTransformOps, transformOf, transformProps, worldOf } from '../src/core/transform.js';
 import { movePointsOps, pointsNamed, resolveDoc } from '../src/core/points.js';
 import { followOps, groupOps, namePoint, unweld, weld } from '../src/core/weld.js';
 import { svgToPng } from './png.js';
@@ -24,7 +44,7 @@ import { bundleRuntime } from './bundle.js';
 
 export class AiaError extends Error {}
 
-const BOOLEAN_FLAGS = new Set(['yes', 'all', 'join', 'long', 'off', 'none', 'add', 'remove', 'delete', 'resolved', 'apply']);
+const BOOLEAN_FLAGS = new Set(['yes', 'all', 'join', 'long', 'off', 'none', 'add', 'remove', 'delete', 'resolved', 'apply', 'skip', 'labels']);
 const RENDER_MAX = 2000;
 
 /**
@@ -157,6 +177,102 @@ export function createAia({ store, schema }) {
     }
   };
 
+  /**
+   * Several parts of one layer moved, turned and scaled together around one point.
+   * @param {Args} args @param {string} id @param {any} doc @param {string[]} names
+   */
+  const transformParts = async (args, id, doc, names) => {
+    const parts = names.map((n) => {
+      const part = findObject(doc, n);
+      if (!part || part.type !== 'path') throw new AiaError(`"${n}" is not a part: layers turn one at a time, around their origin`);
+      return part;
+    });
+    if (new Set(parts.map((p) => p.parent)).size > 1) throw new AiaError('the parts are in different layers: transform them layer by layer');
+    const box = bounds(parts);
+    const pivot = pair(args, 'around') ?? (box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : { x: 0, y: 0 });
+    const move = pair(args, 'move') ?? { x: 0, y: 0 };
+    const degrees = args.flags.rotate === undefined ? 0 : Number(args.flags.rotate);
+    const scaleText = args.flags.scale;
+    const [sx, sy = sx] = typeof scaleText === 'string' ? scaleText.split(',').map(Number) : [1, 1];
+    if (!Number.isFinite(degrees) || !Number.isFinite(sx) || !Number.isFinite(sy) || !sx || !sy) throw new AiaError('--rotate is degrees and --scale a number (or sx,sy), not 0');
+    const m = multiply(translate(move.x, move.y), around(pivot, multiply(rotate(degrees), scale(sx, sy))));
+    const ops = parts.map((part) => ({ op: 'set', target: part.id, props: transformPart(part, m) }));
+    await store.apply(id, ops, { origin: ORIGIN, note: `Transform ${names.join(', ')}` });
+    return ok(`Transformed ${names.join(', ')} around ${round(pivot.x)}, ${round(pivot.y)}.`);
+  };
+
+  /** @param {number} n */
+  const round = (n) => Math.round(n * 100) / 100;
+
+  /** --box x,y,w,h. @param {Args} args */
+  const boxFlag = (args) => {
+    const value = args.flags.box;
+    const n = typeof value === 'string' ? value.split(',').map((v) => Number(v.trim())) : [];
+    if (n.length !== 4 || n.some((v) => !Number.isFinite(v)) || n[2] <= 0 || n[3] <= 0) {
+      throw new AiaError('--box must be x,y,width,height (for example 100,80,200,150)');
+    }
+    return { x: n[0], y: n[1], width: n[2], height: n[3] };
+  };
+
+  /** --fill, --stroke (a color or none) and --stroke-width, as part props. @param {Args} args */
+  const styleFlags = (args) => {
+    /** @type {Record<string, unknown>} */
+    const props = {};
+    for (const key of ['fill', 'stroke']) {
+      const value = args.flags[key];
+      if (typeof value === 'string') props[key] = value === 'none' ? null : value;
+    }
+    const width = args.flags['stroke-width'];
+    if (width !== undefined) {
+      const n = Number(width);
+      if (!Number.isFinite(n) || n < 0) throw new AiaError('--stroke-width must be a number, 0 or more');
+      props.strokeWidth = n;
+    }
+    return props;
+  };
+
+  /**
+   * Draws a shape's vertices as a new part of a vector layer (made if there is none).
+   * @param {Args} args @param {string} id @param {import('../src/core/geometry.js').Vertex[]} vertices @param {string} kind
+   */
+  const drawShape = async (args, id, vertices, kind) => {
+    const layer = need(args, 1, 'the vector layer');
+    const partId = need(args, 2, 'the new part’s id');
+    const doc = (await store.get(id, ORIGIN)).document;
+    const holder = findObject(doc, layer);
+    if (holder && holder.type !== 'vector') throw new AiaError(`${layer} is a ${holder.type}: shapes go into a vector layer`);
+    const names = typeof args.flags.names === 'string' ? args.flags.names.split(',').map((n) => n.trim()) : [];
+    if (names.length > vertices.length) throw new AiaError(`--names has ${names.length} names for ${vertices.length} points`);
+    const shaped = vertices.map((v, i) => roundVertex(names[i] ? { ...v, name: names[i] } : v));
+    /** @type {import('../src/core/operations.js').Operation[]} */
+    const ops = [
+      ...(holder ? [] : [{ op: 'create', type: 'vector', id: layer }]),
+      { op: 'create', type: 'path', id: partId, parent: layer, props: { vertices: shaped, ...styleFlags(args) } },
+    ];
+    await store.apply(id, ops, { origin: ORIGIN, note: `Draw ${kind} ${partId}` });
+    const named = names.filter(Boolean).length ? `, named ${names.filter(Boolean).map((n) => `${partId}.${n}`).join(', ')}` : '';
+    return ok(`Drew the ${kind} ${partId} in ${layer}${holder ? '' : ' (a new layer)'}: ${shaped.length} points${named}.`);
+  };
+
+  /** curve / corner: reshapes points as point editing does. @param {Args} args @param {boolean} corner */
+  const shapeCommand = async (args, corner) => {
+    const id = need(args, 0, 'the document id');
+    const doc = await resolved(id);
+    const names = args.positional.slice(1);
+    if (!names.length) throw new AiaError(`Missing the points to make ${corner ? 'corners' : 'curves'}`);
+    /** @type {Map<string, import('../src/core/geometry.js').Vertex[]>} */
+    const changes = new Map();
+    for (const at of points(doc, names)) {
+      const part = /** @type {any} */ (findObject(doc, at.part));
+      const vertices = changes.get(at.part) ?? verticesOf(part).map((v) => ({ ...v }));
+      shapePoint(vertices, at.index, part.closed !== false, corner);
+      changes.set(at.part, vertices);
+    }
+    const ops = [...changes].map(([target, vertices]) => ({ op: 'set', target, props: { vertices: vertices.map(roundVertex) } }));
+    await store.apply(id, ops, { origin: ORIGIN, note: `${corner ? 'Corner' : 'Curve'} at ${names.join(', ')}` });
+    return ok(`${names.join(', ')}: ${corner ? 'corners' : 'smooth curves'} now.`);
+  };
+
   /** A flag with two numbers, "10,-5". @param {Args} args @param {string} name */
   const pair = (args, name) => {
     const value = args.flags[name];
@@ -286,6 +402,7 @@ export function createAia({ store, schema }) {
         'A point is part.point (head.chin), part.index (head.3, from 0) or layer.group (face.upper_lid: all its\n' +
         'points). --by moves them all by an offset; --to places one point. Their curve handles go along, and the\n' +
         'vertices that share them follow (a shared vertex named here moves the point it shares). One step to undo.\n' +
+        'Places and offsets are in the coordinates of the layer the points belong to (as their vertices).\n' +
         'Example: aia move face head.ear_l_top head.ear_l_bot --by -10,0',
       run: async (args) => {
         const id = need(args, 0, 'the document id');
@@ -308,19 +425,109 @@ export function createAia({ store, schema }) {
       },
     },
 
+    rect: {
+      usage: 'aia rect <doc> <layer> <id> --box x,y,w,h [--radius r] [--names a,b,c,d] [--fill c|none] [--stroke c|none] [--stroke-width n]',
+      summary: 'Draws a rectangle (a path of 4 corners, or 8 points with rounded corners) into a vector layer',
+      details:
+        'The layer is made if there is none with that id. The box is in the layer’s coordinates. --names names its\n' +
+        'points in order, clockwise from the top-left one. Without --fill or --stroke it gets the schema’s defaults.',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const box = boxFlag(args);
+        const radius = args.flags.radius === undefined ? 0 : Number(args.flags.radius);
+        if (!Number.isFinite(radius) || radius < 0) throw new AiaError('--radius must be a number, 0 or more');
+        return drawShape(args, id, rectVertices(box, radius), 'rectangle');
+      },
+    },
+
+    ellipse: {
+      usage: 'aia ellipse <doc> <layer> <id> --box x,y,w,h [--points n] [--names a,b,…] [--fill c|none] [--stroke c|none]',
+      summary: 'Draws an ellipse (a path of evenly round points, 4 by default) into a vector layer',
+      details:
+        'The layer is made if there is none with that id. The box is in the layer’s coordinates. --points gives more\n' +
+        'points to weld or bind to (8, 12…); the first is at the top, then clockwise. --names names them in that order.',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const box = boxFlag(args);
+        const count = args.flags.points === undefined ? 4 : Number(args.flags.points);
+        if (!Number.isInteger(count) || count < 3 || count > 64) throw new AiaError('--points must be a whole number from 3 to 64');
+        return drawShape(args, id, count === 4 ? ellipseVertices(box) : ellipsePoints(box, count), 'ellipse');
+      },
+    },
+
+    'delete-point': {
+      usage: 'aia delete-point <doc> <point>...',
+      summary: 'Deletes points of outlines (an outline keeps at least 2)',
+      details: 'Whoever shared a deleted point keeps its place, as a point of its own; groups drop it.',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const doc = await resolved(id);
+        const names = args.positional.slice(1);
+        if (!names.length) throw new AiaError('Missing the points to delete');
+        /** @type {Map<string, Set<number>>} */
+        const byPart = new Map();
+        for (const at of points(doc, names)) byPart.set(at.part, new Set([...(byPart.get(at.part) ?? []), at.index]));
+        const ops = [...byPart].map(([part, indices]) => {
+          const kept = verticesOf(/** @type {any} */ (findObject(doc, part))).filter((_, i) => !indices.has(i));
+          if (kept.length < 2) throw new AiaError(`${part} would keep fewer than 2 points: delete the part instead`);
+          return { op: 'set', target: part, props: { vertices: kept } };
+        });
+        await store.apply(id, ops, { origin: ORIGIN, note: `Delete ${names.join(', ')}` });
+        return ok(`Deleted ${names.join(', ')} (the points after them moved down one index).`);
+      },
+    },
+
+    curve: {
+      usage: 'aia curve <doc> <point>...',
+      summary: 'Makes points smooth curves (handles along their neighbors), as Curve in point editing',
+      run: async (args) => shapeCommand(args, false),
+    },
+
+    corner: {
+      usage: 'aia corner <doc> <point>...',
+      summary: 'Makes points corners (no handles), as Corner in point editing',
+      run: async (args) => shapeCommand(args, true),
+    },
+
+    copy: {
+      usage: 'aia copy <doc> <part>... [--to <layer>] [--move dx,dy]',
+      summary: 'Copies parts (into their layer, or another), moved by an offset; each copy gets a free name',
+      details: 'A copy does not share the original’s points: its shared vertices stay where they are, as its own.',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const doc = await resolved(id);
+        const names = args.positional.slice(1);
+        if (!names.length) throw new AiaError('Missing the parts to copy');
+        const parts = names.map((n) => {
+          const part = findObject(doc, n);
+          if (!part || part.type !== 'path') throw new AiaError(`there is no part "${n}"`);
+          return part;
+        });
+        const to = typeof args.flags.to === 'string' ? args.flags.to : undefined;
+        if (to && findObject(doc, to)?.type !== 'vector') throw new AiaError(`there is no vector layer "${to}"`);
+        const move = pair(args, 'move') ?? { x: 0, y: 0 };
+        const { ops, ids } = copyOps(doc, parts, move.x || move.y ? translate(move.x, move.y) : IDENTITY, to);
+        await store.apply(id, ops, { origin: ORIGIN, note: `Copy ${names.join(', ')}` });
+        return ok(`Made ${ids.join(', ')}.`);
+      },
+    },
+
     transform: {
-      usage: 'aia transform <doc> <id> [--move dx,dy] [--rotate deg] [--scale s | sx,sy] | --apply',
+      usage: 'aia transform <doc> <id>... [--move dx,dy] [--rotate deg] [--scale s | sx,sy] [--around x,y] | --apply',
       summary: 'Moves, turns and scales a layer (its own transform) or a part (its vertices), around its origin',
       details:
         'A layer (vector or group) keeps its drawing and changes its x, y, rotation, scaleX, scaleY; the first time,\n' +
         'its origin is fixed where its center is, so it stays put when its content changes. A part is only geometry:\n' +
         'its vertices are rewritten. --move is in the coordinates the object lives in (a part: its layer’s).\n' +
+        'Several parts of one layer turn and scale together around the center of their box, or --around x,y.\n' +
         '--apply puts a vector layer’s transform into its parts’ vertices and leaves it without one.\n' +
         'Example: aia transform robot arm_l --rotate -20',
       run: async (args) => {
         const id = need(args, 0, 'the document id');
         const target = need(args, 1, 'the layer or part');
         const doc = await resolved(id);
+        const many = args.positional.slice(1);
+        if (many.length > 1 || args.flags.around !== undefined) return transformParts(args, id, doc, many);
         const object = findObject(doc, target);
         if (!object) throw new AiaError(`${id} has no object "${target}"`);
         const isLayer = object.type === 'vector' || object.type === 'group';
@@ -428,6 +635,7 @@ export function createAia({ store, schema }) {
     'add-point': {
       usage: 'aia add-point <doc> <part> --at x,y [--name <name>]',
       summary: 'Adds a point on a part’s line where it is nearest to x,y, without changing its shape',
+      details: 'x,y is in the coordinates of the part’s layer (as its vertices).',
       run: async (args) => {
         const id = need(args, 0, 'the document id');
         const doc = await resolved(id);
@@ -490,12 +698,17 @@ export function createAia({ store, schema }) {
     },
 
     undo: {
-      usage: 'aia undo <doc>',
+      usage: 'aia undo <doc> [--skip]',
       summary: 'Undoes your last step (never the person’s)',
+      details:
+        'It is refused, with the reason, when it would take away or overwrite what the person did after that step.\n' +
+        '--skip then drops that step from your undo (nothing changes), so you can undo older ones.',
       run: async (args) => {
         const id = need(args, 0, 'the document id');
-        const { canUndo } = await store.undo(id, ORIGIN);
-        return ok(`Undid your last step on ${id}.${canUndo ? '' : ' Nothing more of yours to undo.'}`);
+        const skip = args.flags.skip === true;
+        const { canUndo } = await store.undo(id, ORIGIN, { skip });
+        const done = skip ? `Skipped your last step on ${id} (it stays as it is).` : `Undid your last step on ${id}.`;
+        return ok(`${done}${canUndo ? '' : ' Nothing more of yours to undo.'}`);
       },
     },
 
@@ -546,19 +759,21 @@ export function createAia({ store, schema }) {
     },
 
     render: {
-      usage: 'aia render <doc> [--width N] [--out file.png]',
+      usage: 'aia render <doc> [--width N] [--labels] [--out file.png]',
       summary: 'A PNG of the document, to check your work by eye',
       details:
         'The image is the artboard as the editor and the export draw it, --width px wide (its own width by default).\n' +
         'From the CLI it is saved to --out, or to aia-<doc>.png in the temp folder (the path is printed); over MCP it\n' +
-        'comes back as an image.',
+        'comes back as an image. --labels marks the named points (labeled) and the shared ones (rings) where they\n' +
+        'are on the artboard, to check welds and names.',
       run: async (args) => {
         const id = need(args, 0, 'the document id');
         const { document } = await store.get(id, ORIGIN);
         const docWidth = Number(document.meta.width ?? 800);
         const docHeight = Number(document.meta.height ?? 600);
         const width = Math.min(RENDER_MAX, number(args, 'width') ?? docWidth);
-        const image = svgToPng(toSvg(document), width);
+        const svg = args.flags.labels === true ? withPoints(document, toSvg(document), docWidth / width) : toSvg(document);
+        const image = svgToPng(svg, width, { text: args.flags.labels === true });
         const height = Math.round((width * docHeight) / docWidth);
         return { ok: true, text: `${id}: ${width} × ${height} px`, image, name: `${id}.png` };
       },
@@ -632,4 +847,30 @@ aiaRuntime.createPlayer(document.getElementById('aia'), JSON.parse(document.getE
 </body>
 </html>
 `;
+}
+
+/**
+ * The drawing with its named and shared points marked and labeled where they are on the artboard (aia render
+ * --labels), to check welds and names by eye.
+ * @param {import('../src/core/document.js').Doc} doc @param {string} svg @param {number} unit document px per image px
+ */
+function withPoints(doc, svg, unit) {
+  const shown = resolveDoc(doc);
+  /** @type {string[]} */
+  const marks = [];
+  /** @param {string} text */
+  const escape = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  for (const part of shown.objects) {
+    const w = worldOf(shown, part.id);
+    for (const [i, v] of verticesOf(part).entries()) {
+      if (!v.name && !v.ref) continue;
+      const p = applyMatrix(w, v);
+      const shared = !!v.ref;
+      // A shared vertex sits on its point: only the point itself gets a label.
+      marks.push(`<circle cx="${p.x}" cy="${p.y}" r="${4 * unit}" fill="${shared ? 'none' : '#e0306a'}" stroke="#e0306a" stroke-width="${1.5 * unit}"/>`);
+      if (!shared) marks.push(`<text x="${p.x + 6 * unit}" y="${p.y - 6 * unit}" font-family="Arial" font-size="${11 * unit}" fill="#e0306a" stroke="#ffffff" stroke-width="${3 * unit}" paint-order="stroke">${escape(`${part.id}.${v.name}`)}</text>`);
+      void i;
+    }
+  }
+  return svg.replace(/<\/svg>$/, `${marks.join('')}</svg>`);
 }

@@ -17,7 +17,7 @@
 import { findObject } from '../core/document.js';
 import { pointOf } from '../core/points.js';
 import { followOps, groupOps, isShared, namePoint, shareTargets as shareTargetsIn, stretchBetween, unweld, weld } from '../core/weld.js';
-import { insertVertex, nearestOnOutline, roundVertex, transformVertices, translate, verticesOf } from '../core/geometry.js';
+import { insertVertex, nearestOnOutline, roundVertex, shapePoint, transformVertices, translate, verticesOf } from '../core/geometry.js';
 import { partData } from '../core/draw.js';
 import { addPainter, paintOverlay, showPreview } from './canvas.js';
 import { isPart } from './schema.js';
@@ -186,27 +186,6 @@ function knobDown(event, part, index, side) {
     },
     () => (moved ? save(new Map([[part.id, vertices]]), `Curve a point of ${part.id}`) : showPreview(null)),
   );
-}
-
-/**
- * Makes a vertex a smooth curve (handles along the line between its neighbors, a third of the way to each) or, with
- * corner, takes its handles away. Changes the vertices in place.
- * @param {Vertex[]} vertices @param {number} index @param {boolean} closed @param {boolean} corner
- */
-export function shapePoint(vertices, index, closed, corner) {
-  const v = vertices[index];
-  delete v.in;
-  delete v.out;
-  if (corner) return;
-  const prev = vertices[index - 1] ?? (closed ? vertices.at(-1) : undefined);
-  const next = vertices[index + 1] ?? (closed ? vertices[0] : undefined);
-  const a = prev ?? v;
-  const b = next ?? v;
-  const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-  const dir = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
-  const reach = (/** @type {Vertex | undefined} */ n) => (n ? Math.hypot(n.x - v.x, n.y - v.y) / 3 : 0);
-  if (prev) v.in = { x: -dir.x * reach(prev), y: -dir.y * reach(prev) };
-  if (next) v.out = { x: dir.x * reach(next), y: dir.y * reach(next) };
 }
 
 /** Alt+click: a curve point becomes a corner, a corner becomes a smooth curve. @param {DocObject} part @param {number} index */

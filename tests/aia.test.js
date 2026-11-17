@@ -52,9 +52,11 @@ test('the AI makes a document, changes it, looks at it and undoes only its own s
   const render = await aia.run('render face --width 200');
   assert.ok(render.ok && render.image && render.image.subarray(1, 4).toString() === 'PNG');
   assert.match(render.text, /200 × 150/);
-  await ok('undo face');
+  // Undoing its batch would delete the jaw the person recolored afterwards: refused, and the AI can skip it.
+  assert.match((await aia.run('undo face')).text, /Cannot undo step #1 \(the head\): it would delete jaw, which the person changed/);
+  await ok('undo face --skip');
   const { document } = await store.get('face', 'ai');
-  assert.deepEqual(document.objects, [], 'the AI undid its batch');
+  assert.equal(document.objects.length, 2, 'nothing changed');
   assert.equal((await aia.run('undo face')).text, 'Nothing to undo');
 });
 
@@ -158,4 +160,35 @@ test('aia transform turns a layer without touching its vertices, and --apply put
   ({ document } = await store.get('robot', 'ai'));
   assert.deepEqual(document.objects[1].vertices[0], { x: 85, y: 25 });
   assert.match((await aia.run('transform robot arm')).text, /Say what to do/);
+});
+
+test('the AI draws, reshapes, deletes and copies by name, as the editor does', async () => {
+  await ok('new Face');
+  assert.match(await ok('ellipse face face head --box 0,0,200,200 --points 8 --names top,tr,right,br,bottom,bl,left,tl'), /8 points, named head.top/);
+  assert.match(await ok('rect face face box --box 300,0,100,50 --fill none --stroke-width 4'), /4 points/);
+  let doc = (await store.get('face', 'ai')).document;
+  const head = /** @type {any[]} */ (doc.objects.find((o) => o.id === 'head')?.vertices);
+  assert.deepEqual([head[0].x, head[0].y, head[0].name], [100, 0, 'top']);
+  assert.deepEqual([Math.round(head[2].x), Math.round(head[2].y)], [200, 100]);
+  assert.deepEqual(doc.objects.find((o) => o.id === 'box'), {
+    id: 'box', type: 'path', parent: 'face', fill: null, strokeWidth: 4,
+    vertices: [{ x: 300, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 50 }, { x: 300, y: 50 }],
+  });
+  await ok('corner face head.top');
+  doc = (await store.get('face', 'ai')).document;
+  assert.equal(/** @type {any[]} */ (doc.objects[1].vertices)[0].in, undefined);
+  await ok('curve face head.top');
+  await ok('weld face box.0 head.right');
+  await ok('delete-point face head.right');
+  doc = (await store.get('face', 'ai')).document;
+  assert.equal(/** @type {any[]} */ (doc.objects[1].vertices).length, 7);
+  assert.deepEqual(/** @type {any[]} */ (doc.objects[2].vertices)[0], { x: 200, y: 100 }, 'the shared vertex kept its place');
+  assert.match(await ok('copy face box --move 0,100'), /Made box_2/);
+  assert.match(await ok('transform face box box_2 --rotate 90 --around 0,0'), /around 0, 0/);
+  doc = (await store.get('face', 'ai')).document;
+  assert.deepEqual(/** @type {any[]} */ (doc.objects.find((o) => o.id === 'box_2')?.vertices)[1], { x: -100, y: 400 });
+  const labeled = await aia.run('render face --labels --width 300');
+  assert.ok(labeled.ok && labeled.image);
+  assert.match((await aia.run('delete-point face box.0 box.1 box.2')).text, /fewer than 2 points/);
+  assert.match((await aia.run('transform face box face')).text, /layers turn one at a time/);
 });

@@ -75,3 +75,58 @@ test('remove deletes the document folder', async () => {
   assert.deepEqual(await store.list(), []);
   await assert.rejects(store.remove('../outside'), (/** @type {any} */ e) => e.status === 400);
 });
+
+// From the first audit: what the store does to every batch, whoever sends it.
+const face = [
+  { op: 'create', type: 'vector', id: 'face' },
+  { op: 'create', type: 'path', id: 'jaw', parent: 'face', props: { vertices: [{ x: 0, y: 0 }, { x: 100, y: 100, name: 'chin' }, { x: 200, y: 0 }] } },
+];
+const object = (state, id) => state.document.objects.find((o) => o.id === id);
+
+test('a reference that never named a point is refused; one whose point this batch deletes keeps its place', async () => {
+  const { id } = await store.create({ name: 'Doc' });
+  await store.apply(id, face, { origin: 'ai' });
+  const refused = (ops, pattern) => assert.rejects(store.apply(id, ops, { origin: 'ai' }), (/** @type {any} */ e) => e.status === 400 && pattern.test(e.message));
+  await refused([{ op: 'create', type: 'path', id: 'm', parent: 'face', props: { vertices: [{ x: 5, y: 5 }, { ref: 'jaw.chinn' }] } }], /no such point/);
+  await refused([{ op: 'set', target: 'face', props: { groups: { lid: ['jaw.nose', 'jaw.chin'] } } }], /"jaw.nose", but there is no such point/);
+  await refused([{ op: 'create', type: 'path', id: 'm', parent: 'face', props: { vertices: [{ ref: 'jaw.chin', follow: 'jw' }, { x: 1, y: 1 }] } }], /no such part/);
+  await refused(/** @type {any} */ ([null]), /unknown op/);
+  await refused([{ op: 'set', target: 'jaw', props: { vertices: 'abc' } }], /must be a list of vertices/);
+  const state = await store.apply(id, [
+    { op: 'create', type: 'path', id: 'm', parent: 'face', props: { closed: false, vertices: [{ ref: 'jaw.chin' }, { x: 9, y: 9 }] } },
+    { op: 'delete', target: 'jaw' },
+  ], { origin: 'ai' });
+  assert.deepEqual(object(state, 'm').vertices[0], { x: 100, y: 100 });
+});
+
+test('a transformed layer keeps its origin, and moving the origin keeps the layer in place', async () => {
+  const { id } = await store.create({ name: 'Doc' });
+  await store.apply(id, face, { origin: 'ai' });
+  let state = await store.apply(id, [{ op: 'set', target: 'face', props: { rotation: 90 } }], { origin: 'user' });
+  assert.deepEqual([object(state, 'face').originX, object(state, 'face').originY], [100, 50]);
+  // Adding content far away does not move what was there.
+  state = await store.apply(id, [{ op: 'create', type: 'path', id: 'far', parent: 'face', props: { vertices: [{ x: 500, y: 500 }, { x: 510, y: 500 }, { x: 510, y: 510 }] } }], { origin: 'ai' });
+  assert.deepEqual([object(state, 'face').originX, object(state, 'face').originY], [100, 50]);
+  // The Inspector (or the AI) sets only the origin: x, y make up for it.
+  state = await store.apply(id, [{ op: 'set', target: 'face', props: { originX: 0, originY: 0 } }], { origin: 'user' });
+  const layer = object(state, 'face');
+  assert.deepEqual([layer.originX, layer.originY, layer.x, layer.y], [0, 0, 150, -50]);
+});
+
+test('an undo that would take away or overwrite the other side\'s later work is refused, and can be skipped', async () => {
+  const { id } = await store.create({ name: 'Doc' });
+  await store.apply(id, face, { origin: 'ai', note: 'the face' });
+  // The person draws inside the AI's layer.
+  await store.apply(id, [{ op: 'create', type: 'path', id: 'mouth', parent: 'face', props: { vertices: [{ x: 1, y: 1 }, { x: 2, y: 2 }] } }], { origin: 'user' });
+  await assert.rejects(store.undo(id, 'ai'), /Cannot undo step #1 \(the face\): it would delete mouth, which the person made or changed inside it/);
+  let state = await store.undo(id, 'ai', { skip: true });
+  assert.equal(state.document.objects.length, 3, 'skipping changes nothing');
+  assert.equal(state.canUndo, false);
+  // A rename by the AI after the person's change: the person's undo is refused instead of failing, and skipping
+  // lets the person undo older steps.
+  await store.apply(id, [{ op: 'set', target: 'mouth', props: { fill: '#ff0000' } }], { origin: 'user' });
+  await store.apply(id, [{ op: 'rename', target: 'mouth', id: 'lips' }], { origin: 'ai' });
+  await assert.rejects(store.undo(id, 'user'), /it would overwrite mouth.fill|it would .* mouth/);
+  await store.undo(id, 'user', { skip: true });
+  await assert.rejects(store.undo(id, 'user'), /Cannot undo/);
+});

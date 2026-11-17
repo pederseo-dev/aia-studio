@@ -50,14 +50,14 @@
       "type": "number",
       "default": null,
       "nullable": true,
-      "description": "X of the origin: the point the layer turns and scales around, in the layer's own coordinates. null = the center of its content (the editor and aia set it when the layer is first transformed, so it stays put).",
+      "description": "X of the origin: the point the layer turns and scales around, in the layer's own coordinates. null = the center of its content. A transformed layer always gets one (where it turns), so adding content does not move it; changing the origin of a transformed layer moves its x, y too, so the layer stays where it is.",
       "help": "Origin X: the point it rotates and scales around. Empty = its center."
     },
     "originY": {
       "type": "number",
       "default": null,
       "nullable": true,
-      "description": "Y of the origin: the point the layer turns and scales around, in the layer's own coordinates. null = the center of its content (the editor and aia set it when the layer is first transformed, so it stays put).",
+      "description": "Y of the origin: the point the layer turns and scales around, in the layer's own coordinates. null = the center of its content. A transformed layer always gets one (where it turns), so adding content does not move it; changing the origin of a transformed layer moves its x, y too, so the layer stays where it is.",
       "help": "Origin Y: the point it rotates and scales around. Empty = its center."
     }
   }

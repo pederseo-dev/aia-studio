@@ -10,10 +10,10 @@
 // Each stretch is saved when it is released: one step to undo.
 
 import { childrenOf, findObject, idFromName } from '../core/document.js';
-import { ellipseVertices, rectVertices, round2, roundVertex, transformVertex, verticesOf } from '../core/geometry.js';
+import { ellipseVertices, rectVertices, round2, roundVertex, shapePoint, transformVertex, verticesOf } from '../core/geometry.js';
 import { askName } from './namePrompt.js';
 import { activeVector, autoWeld, drawStyle, isHidden, isLocked, notify, penOptions, run, state } from './state.js';
-import { fromLayer, layerScreen, paintLayerPoints, shapePoint, shareTargets, showWeldHint, toLayer, weldPlace, weldTargetNear } from './pointEdit.js';
+import { fromLayer, layerScreen, paintLayerPoints, shareTargets, showWeldHint, toLayer, weldPlace, weldTargetNear } from './pointEdit.js';
 import { invert, worldOf } from '../core/transform.js';
 import { addPainter, onToolDown, paintOverlay } from './canvas.js';
 import { drag, element, screen, svg, toDoc } from './view.js';

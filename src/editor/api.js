@@ -31,8 +31,8 @@ export const api = {
   remove: (id) => call(doc(id), { method: 'DELETE' }),
   /** @param {string} id @param {Operation[]} ops @param {string} [note] @returns {Promise<DocumentState>} */
   ops: (id, ops, note) => call(`${doc(id)}/ops`, { method: 'POST', body: { ops, note } }),
-  /** @param {string} id @returns {Promise<DocumentState>} */
-  undo: (id) => call(`${doc(id)}/undo`, { method: 'POST' }),
+  /** @param {string} id @param {boolean} [skip] drop the step instead (one that cannot be undone) @returns {Promise<DocumentState>} */
+  undo: (id, skip = false) => call(`${doc(id)}/undo`, { method: 'POST', body: skip ? { skip: true } : {} }),
   /** @param {string} id @returns {Promise<DocumentState>} */
   redo: (id) => call(`${doc(id)}/redo`, { method: 'POST' }),
 };

@@ -4,6 +4,7 @@ import {
   apply,
   around,
   bounds,
+  ellipsePoints,
   ellipseVertices,
   insertVertex,
   nearestOnOutline,
@@ -129,4 +130,14 @@ test('a point added on a straight side is a corner, also on the closing side', (
   assert.deepEqual(vertices[4], { x: 0, y: 5 });
   // An open line has no closing side.
   assert.equal(nearestOnOutline({ ...line, closed: false }, { x: 10, y: 20 })?.segment, 0);
+});
+
+test('an ellipse with more points is still round', () => {
+  const vertices = ellipsePoints({ x: 0, y: 0, width: 100, height: 100 }, 12);
+  assert.equal(vertices.length, 12);
+  const circle = { id: 'c', type: 'path', parent: 'layer', vertices };
+  for (const probe of [{ x: 120, y: 30 }, { x: -20, y: 70 }, { x: 50, y: 130 }]) {
+    const on = nearestOnOutline(circle, probe);
+    assert.ok(on && Math.abs(Math.hypot(on.point.x - 50, on.point.y - 50) - 50) < 0.05);
+  }
 });

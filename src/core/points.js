@@ -281,6 +281,8 @@ export function syncShared(doc, base) {
  * @returns {Operation[]}
  */
 export function settleOps(doc, ops, apply) {
+  // A batch that is not well formed goes as it is: the operations engine says what is wrong with it.
+  if (!wellFormed(ops)) return ops;
   const resolved = resolveDoc(doc);
   /** @param {Operation} op */
   const stripped = (op) =>
@@ -309,30 +311,47 @@ export function settleOps(doc, ops, apply) {
     if (vertices.some((v, i) => v !== verticesOf(o)[i])) fix(o, { vertices });
   }
   if (fixes.size) after = apply(after, [...fixes].map(([target, props]) => ({ op: 'set', target, props })));
+  // Only what this batch took away is mended: a point that was there before and is gone now. A reference that
+  // never named a point (a typo) is left as it is, so the batch is refused with the reason.
+  /** @param {string} ref */
+  const lost = (ref) => !!pointOf(doc, ref) && !pointOf(after, ref);
+  /** @type {Set<string>} "part:index" of the vertices that stopped sharing here */
+  const unshared = new Set();
   // Shared vertices whose point is gone stay where they were, as points of their own.
   for (const o of after.objects) {
-    if (!verticesOf(o).some((v) => v.ref && !pointOf(after, v.ref))) continue;
+    if (!verticesOf(o).some((v) => v.ref && lost(v.ref))) continue;
     const there = findObject(wanted, o.id);
     const vertices = verticesOf(o).map((v, i) => {
-      if (!v.ref || pointOf(after, v.ref)) return v;
-      const at = verticesOf(there ?? o)[i] ?? pointOf(resolved, v.ref)?.vertex;
-      return ownVertex({ ...v, x: at?.x ?? 0, y: at?.y ?? 0 });
+      if (!v.ref || !lost(v.ref)) return v;
+      // Where the editor put it, else where its point was before this batch.
+      const meant = verticesOf(there ?? o)[i];
+      const at = meant && Number.isFinite(meant.x) && Number.isFinite(meant.y) ? meant : pointOf(resolved, v.ref)?.vertex;
+      unshared.add(`${o.id}:${i}`);
+      return ownVertex({ ...v, x: Number(at?.x ?? 0), y: Number(at?.y ?? 0) });
     });
     fix(o, { vertices });
   }
   // Group members whose point is gone leave the group.
   for (const o of after.objects) {
     const groups = /** @type {PointGroups | undefined} */ (o.groups);
-    if (!groups || Object.values(groups).every((members) => members.every((m) => pointOf(after, m)))) continue;
-    fix(o, { groups: Object.fromEntries(Object.entries(groups).map(([g, members]) => [g, members.filter((m) => pointOf(after, m))])) });
+    if (!groups || Object.values(groups).every((members) => members.every((m) => !lost(m)))) continue;
+    fix(o, { groups: Object.fromEntries(Object.entries(groups).map(([g, members]) => [g, members.filter((m) => !lost(m))])) });
   }
-  // Followed stretches whose ends no longer share points of the part they follow (or whose part is gone) become
-  // plain stretches.
+  // Followed stretches broken by what this batch took away (the part they follow, or the points at their ends)
+  // become plain stretches.
   const final = fixes.size ? apply(after, [...fixes].map(([target, props]) => ({ op: 'set', target, props }))) : after;
   const shown = resolveDoc(final);
   for (const o of final.objects) {
     const vertices = verticesOf(o);
-    const broken = vertices.map((v, i) => !!v.follow && 'error' in followStretch(shown, o, i));
+    const n = vertices.length;
+    /** @param {number} i */
+    const tookAway = (i) => {
+      const followed = String(vertices[i].follow);
+      if (!findObject(doc, followed)) return false;
+      const next = i + 1 < n ? i + 1 : 0;
+      return !findObject(final, followed) || unshared.has(`${o.id}:${i}`) || unshared.has(`${o.id}:${next}`);
+    };
+    const broken = vertices.map((v, i) => !!v.follow && 'error' in followStretch(shown, o, i) && tookAway(i));
     if (!broken.some(Boolean)) continue;
     fix(o, {
       vertices: vertices.map((v, i) => {
@@ -347,6 +366,19 @@ export function settleOps(doc, ops, apply) {
 
 /** @param {unknown} value */
 const isName = (value) => typeof value === 'string' && ID.test(value);
+
+/** Whether a batch has the shape settleOps can look at: operations as objects, and vertices as lists of objects. @param {unknown} ops */
+function wellFormed(ops) {
+  if (!Array.isArray(ops)) return false;
+  return ops.every((op) => {
+    if (!op || typeof op !== 'object') return false;
+    const props = /** @type {any} */ (op).props;
+    if (props === undefined) return true;
+    if (!props || typeof props !== 'object') return false;
+    const vertices = props.vertices;
+    return vertices === undefined || (Array.isArray(vertices) && vertices.every((v) => v && typeof v === 'object'));
+  });
+}
 
 /**
  * Why a value is not a list of point groups, or null. @param {unknown} value
