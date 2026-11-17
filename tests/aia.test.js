@@ -174,6 +174,11 @@ test('the AI draws, reshapes, deletes and copies by name, as the editor does', a
     id: 'box', type: 'path', parent: 'face', fill: null, strokeWidth: 4,
     vertices: [{ x: 300, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 50 }, { x: 300, y: 50 }],
   });
+  await ok('rect face face glass --box 0,300,50,50 --fill-opacity 0.4 --stroke-opacity 0');
+  doc = (await store.get('face', 'ai')).document;
+  const glass = /** @type {any} */ (doc.objects.find((o) => o.id === 'glass'));
+  assert.deepEqual([glass.fillOpacity, glass.strokeOpacity], [0.4, 0]);
+  assert.match((await aia.run('rect face face bad --box 0,0,10,10 --fill-opacity 2')).text, /--fill-opacity must be a number from 0 to 1/);
   await ok('corner face head.top');
   doc = (await store.get('face', 'ai')).document;
   assert.equal(/** @type {any[]} */ (doc.objects[1].vertices)[0].in, undefined);

@@ -7,7 +7,8 @@
 // Released on the other end of the same line, it closes it into a shape. The points of the layer show as small dots,
 // and with Auto weld on a point pressed or released on a point or a line of the layer is welded there (it shares
 // that point). A ring shows where: green to weld, the accent color on an end that would be continued.
-// Each stretch is saved when it is released: one step to undo.
+// Each stretch is saved when it is released: one step to undo. The Pen does not ask for names (a box after every
+// stretch got in the way): a line keeps its given name (line_1…) until it is renamed in the options bar (F2).
 
 import { childrenOf, findObject, idFromName } from '../core/document.js';
 import { ellipseVertices, rectVertices, round2, roundVertex, shapePoint, transformVertex, verticesOf } from '../core/geometry.js';
@@ -23,6 +24,7 @@ import { drag, element, screen, svg, toDoc } from './view.js';
  * @typedef {import('../core/operations.js').Operation} Operation
  * @typedef {import('./view.js').Point} Point
  */
+
 
 
 /**
@@ -66,10 +68,13 @@ async function addPart(base, props, note, before = [], ask = true) {
   if (!doc || !target) return;
   const id = idFromName(`${base}_1`, (x) => x === 'meta' || !!findObject(doc, x) || target.ops.some((o) => o.id === x));
   // The auto fill and auto stroke of the tools (an open line never gets a fill).
+  const fill = props.closed === false ? null : drawStyle.fill;
   const style = {
-    fill: props.closed === false ? null : drawStyle.fill,
+    fill,
     stroke: drawStyle.stroke,
+    ...(fill && drawStyle.fillOpacity !== 1 ? { fillOpacity: drawStyle.fillOpacity } : {}),
     ...(drawStyle.stroke ? { strokeWidth: drawStyle.strokeWidth } : {}),
+    ...(drawStyle.stroke && drawStyle.strokeOpacity !== 1 ? { strokeOpacity: drawStyle.strokeOpacity } : {}),
   };
   await run([...target.ops, ...before, { op: 'create', type: 'path', id, parent: target.layer, props: { ...props, ...style } }], { select: id, note });
   if (ask && state.document && findObject(state.document, id)) askName(id);
@@ -258,7 +263,10 @@ function continueLine(end, to, weld, corners) {
     smooth(vertices, [0, vertices.length - 1].filter((i) => isSmooth(vertices[i])), true);
     /** @type {Record<string, unknown>} */
     const props = { vertices: vertices.map(roundVertex), closed: true };
-    if (part.fill === null && drawStyle.fill) props.fill = drawStyle.fill;
+    if (part.fill === null && drawStyle.fill) {
+      props.fill = drawStyle.fill;
+      if (drawStyle.fillOpacity !== 1) props.fillOpacity = drawStyle.fillOpacity;
+    }
     run([{ op: 'set', target: part.id, props }], { select: part.id, note: `Pen: close ${part.id}` });
     return;
   }

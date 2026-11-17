@@ -358,10 +358,10 @@ const STYLE_KEY = 'aia.style';
 /**
  * The style new shapes get from the drawing tools (Moho's auto fill and auto stroke): null turns it off. An open
  * line never gets a fill. Kept per person in this browser.
- * @type {{ fill: string | null, stroke: string | null, strokeWidth: number }}
+ * @type {{ fill: string | null, stroke: string | null, strokeWidth: number, fillOpacity: number, strokeOpacity: number }}
  */
 export const drawStyle = (() => {
-  const fallback = { fill: '#c8c2d4', stroke: '#2b2926', strokeWidth: 2 };
+  const fallback = { fill: '#c8c2d4', stroke: '#2b2926', strokeWidth: 2, fillOpacity: 1, strokeOpacity: 1 };
   try {
     return { ...fallback, ...JSON.parse(localStorage.getItem(STYLE_KEY) ?? '{}') };
   } catch {

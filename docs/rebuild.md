@@ -136,7 +136,7 @@ transform a part by name, weld by name) come after the first AI test shows what 
 | `aia ops <doc> [--note "…"] <batch>` (or `--file <path>`) | Applies a batch with the editor's engine, origin `ai`; errors carry the engine's message |
 | `aia move <doc> <point>... --by dx,dy \| --to x,y` | Moves points by name: `head.chin`, `head.3` (by index) or a point group `face.upper_lid`; what shares them follows (added after the first AI test) |
 | `aia transform <doc> <id>... --move dx,dy --rotate deg --scale s [--around x,y]` · `--apply` | A layer's own transform, or parts' vertices (several together); Apply transform |
-| `aia rect` · `aia ellipse <doc> <layer> <id> --box x,y,w,h` (`--points n`, `--names …`, style) | Shapes by name, as the Rectangle and Ellipse tools (step 13) |
+| `aia rect` · `aia ellipse <doc> <layer> <id> --box x,y,w,h` (`--points n`, `--names …`, style) | Shapes by name, as the Rectangle and Ellipse tools (step 13); style is `--fill`, `--stroke`, `--stroke-width`, `--fill-opacity`, `--stroke-opacity` |
 | `aia delete-point` · `aia curve` · `aia corner <doc> <point>...` · `aia copy <doc> <part>...` | Point editing and copies (step 13) |
 | `aia weld <doc> <point> <target>` (`--join`, `--on <part>`) · `aia unweld <doc> <point>...` | Welding by name, as in point editing |
 | `aia name <doc> <point> <name>` · `aia add-point <doc> <part> --at x,y` | Name a point; add one on a line without changing its shape |
@@ -382,3 +382,13 @@ expanded outline. Renaming the followed part follows; a batch that breaks a stre
 deleting the followed part leaves a plain stretch. In point editing, the **Follow** button makes the stretch between
 two picked neighbor points follow the part they share points with (Alt+click: the long way), and **Unfollow** undoes
 it. The Fill tool will make these by itself.
+
+**Step 15 (2026-11-17): editor touches asked by the user.** The Pen was tried asking for a new line's name, and it got in the
+way after every stretch, so it does not ask: a line keeps its given name (`line_1`…) until it is renamed (F2).
+Ctrl+X cuts the picked parts (copy and delete in one step), so Ctrl+V moves them into the active layer, or another one
+picked before pasting. The undo and redo buttons left the bar (Ctrl+Z, Ctrl+Shift+Z). The Inspector has a Flip row
+(horizontal, vertical) for the selected parts, across the middle of their box, or for a selected layer, through its
+own transform; while editing points it flips the picked points instead. Colors: the popover's first chip is None (a
+crossed-out square) and an Opacity slider sets the part's new `fillOpacity` / `strokeOpacity` (0 to 1; also
+`--fill-opacity`, `--stroke-opacity` in `aia rect` and `aia ellipse`); any 0-to-1 number, such as an image
+layer's opacity, is a slider.

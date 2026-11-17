@@ -71,3 +71,20 @@ test('drawDocument keeps the drawing order and leaves out what is hidden', () =>
   assert.match(svg, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="800" height="600"/);
   assert.doesNotMatch(svg, /ghost/);
 });
+
+test('fill and stroke opacity draw as fill-opacity and stroke-opacity, and are kept from 0 to 1', () => {
+  const doc = build([
+    { op: 'create', type: 'vector', id: 'face' },
+    { op: 'create', type: 'path', id: 'shadow', parent: 'face', props: { vertices: square, fill: '#000000', fillOpacity: 0.3, strokeOpacity: 0.5 } },
+    { op: 'create', type: 'path', id: 'solid', parent: 'face', props: { vertices: square, fill: null, strokeOpacity: 1 } },
+  ]);
+  const [shadow, solid] = drawDocument(doc).nodes[0].children;
+  assert.equal(shadow.attrs['fill-opacity'], 0.3);
+  assert.equal(shadow.attrs['stroke-opacity'], 0.5);
+  assert.equal(solid.attrs['fill-opacity'], undefined);
+  assert.equal(solid.attrs['stroke-opacity'], undefined);
+  assert.throws(
+    () => build([{ op: 'create', type: 'vector', id: 'face' }, { op: 'create', type: 'path', id: 'x', parent: 'face', props: { vertices: square, fillOpacity: 1.5 } }]),
+    /fillOpacity.*at most 1/,
+  );
+});

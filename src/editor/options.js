@@ -76,9 +76,9 @@ function renderStyle() {
   strokeLabel.textContent = 'Auto stroke';
   style.append(
     fillLabel,
-    colorSwatch({ value: drawStyle.fill, nullable: true, title: 'The fill new shapes get (None: no fill)', onChange: (c) => setDrawStyle({ fill: c }) }),
+    colorSwatch({ value: drawStyle.fill, opacity: drawStyle.fillOpacity, nullable: true, title: 'The fill new shapes get (None: no fill)', onChange: (c, a) => setDrawStyle({ fill: c, ...(a === undefined ? {} : { fillOpacity: a }) }) }),
     strokeLabel,
-    colorSwatch({ value: drawStyle.stroke, nullable: true, title: 'The stroke new shapes get (None: no stroke)', onChange: (c) => setDrawStyle({ stroke: c }) }),
+    colorSwatch({ value: drawStyle.stroke, opacity: drawStyle.strokeOpacity, nullable: true, title: 'The stroke new shapes get (None: no stroke)', onChange: (c, a) => setDrawStyle({ stroke: c, ...(a === undefined ? {} : { strokeOpacity: a }) }) }),
     width,
   );
   if (state.tool === 'pen') {

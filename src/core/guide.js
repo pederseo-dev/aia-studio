@@ -72,7 +72,8 @@ The properties of each type: aia guide types, then aia guide <type>.`,
   },
   paths: {
     title: 'Paths: vertices, curves, open lines',
-    text: `A path is { vertices, closed } plus the part's style (fill, stroke, strokeWidth, visible).
+    text: `A path is { vertices, closed } plus the part's style (fill, stroke, strokeWidth, fillOpacity,
+strokeOpacity, visible).
 A vertex is { "x": 10, "y": 20 } (a corner). A curve vertex adds tangent handles relative to it:
   "in"  { x, y }  toward the previous vertex
   "out" { x, y }  toward the next one
@@ -83,7 +84,8 @@ A smooth curve has in and out pointing opposite ways. A circle of radius r cente
    { "x": cx,     "y": cy + r, "in": { "x": k, "y": 0 },  "out": { "x": -k, "y": 0 } },
    { "x": cx - r, "y": cy,     "in": { "x": 0, "y": k },  "out": { "x": 0, "y": -k } }]
 closed: true (the default) joins the last vertex to the first. An open line is "closed": false, usually with
-"fill": null. fill or stroke null = none.`,
+"fill": null. fill or stroke null = none. fillOpacity and strokeOpacity (0 to 1, default 1) make each one
+see-through: a shadow is a dark fill with "fillOpacity": 0.3.`,
   },
   points: {
     title: 'Named points, shared points (welding) and point groups',

@@ -216,7 +216,7 @@ export function createAia({ store, schema }) {
     return { x: n[0], y: n[1], width: n[2], height: n[3] };
   };
 
-  /** --fill, --stroke (a color or none) and --stroke-width, as part props. @param {Args} args */
+  /** --fill, --stroke (a color or none), --stroke-width and --fill-opacity, --stroke-opacity (0 to 1), as part props. @param {Args} args */
   const styleFlags = (args) => {
     /** @type {Record<string, unknown>} */
     const props = {};
@@ -229,6 +229,12 @@ export function createAia({ store, schema }) {
       const n = Number(width);
       if (!Number.isFinite(n) || n < 0) throw new AiaError('--stroke-width must be a number, 0 or more');
       props.strokeWidth = n;
+    }
+    for (const [flag, key] of [['fill-opacity', 'fillOpacity'], ['stroke-opacity', 'strokeOpacity']]) {
+      if (args.flags[flag] === undefined) continue;
+      const n = Number(args.flags[flag]);
+      if (!Number.isFinite(n) || n < 0 || n > 1) throw new AiaError(`--${flag} must be a number from 0 to 1`);
+      props[key] = n;
     }
     return props;
   };
@@ -428,7 +434,7 @@ export function createAia({ store, schema }) {
     },
 
     rect: {
-      usage: 'aia rect <doc> <layer> <id> --box x,y,w,h [--radius r] [--names a,b,c,d] [--fill c|none] [--stroke c|none] [--stroke-width n]',
+      usage: 'aia rect <doc> <layer> <id> --box x,y,w,h [--radius r] [--names a,b,c,d] [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1]',
       summary: 'Draws a rectangle (a path of 4 corners, or 8 points with rounded corners) into a vector layer',
       details:
         'The layer is made if there is none with that id. The box is in the layer’s coordinates. --names names its\n' +
@@ -443,7 +449,7 @@ export function createAia({ store, schema }) {
     },
 
     ellipse: {
-      usage: 'aia ellipse <doc> <layer> <id> --box x,y,w,h [--points n] [--names a,b,…] [--fill c|none] [--stroke c|none]',
+      usage: 'aia ellipse <doc> <layer> <id> --box x,y,w,h [--points n] [--names a,b,…] [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1]',
       summary: 'Draws an ellipse (a path of evenly round points, 4 by default) into a vector layer',
       details:
         'The layer is made if there is none with that id. The box is in the layer’s coordinates. --points gives more\n' +
@@ -523,7 +529,7 @@ export function createAia({ store, schema }) {
         'its vertices are rewritten. --move is in the coordinates the object lives in (a part: its layer’s).\n' +
         'Several parts of one layer turn and scale together around the center of their box, or --around x,y.\n' +
         '--apply puts a vector layer’s transform into its parts’ vertices and leaves it without one.\n' +
-        'Example: aia transform robot arm_l --rotate -20',
+        '--scale -1,1 flips horizontally and --scale 1,-1 vertically (the editor’s Flip). Example: aia transform robot arm_l --rotate -20',
       run: async (args) => {
         const id = need(args, 0, 'the document id');
         const target = need(args, 1, 'the layer or part');

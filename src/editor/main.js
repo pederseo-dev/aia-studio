@@ -8,7 +8,7 @@ import { render as renderCanvas, setupCanvas } from './canvas.js';
 import { cancelPen, setupDrawTools } from './drawTools.js';
 import { nudgeSelection, setupSelectTool } from './selectTool.js';
 import { deletePoints, nudgePoints, setupPointEdit, stopEditing } from './pointEdit.js';
-import { copy, duplicate, paste } from './clipboard.js';
+import { copy, cut, duplicate, paste } from './clipboard.js';
 import { renderToolbar, setupToolbar } from './toolbar.js';
 import { renderOptions } from './options.js';
 import { renderInspector } from './inspector.js';
@@ -59,6 +59,8 @@ document.addEventListener('keydown', (event) => {
   else if (ctrl && key === 'd') duplicate();
   else if (ctrl && key === 'c') {
     if (!copy()) return;
+  } else if (ctrl && key === 'x') {
+    if (!cut()) return;
   } else if (ctrl && key === 'v') {
     if (!paste()) return;
   } else if (event.altKey && key === 'w') actions.close();

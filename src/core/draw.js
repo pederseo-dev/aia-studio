@@ -79,8 +79,10 @@ function drawChildren(doc, parent, options) {
     const stroke = object.stroke === undefined ? DEFAULTS.stroke : object.stroke;
     /** @type {Record<string, string | number>} */
     const attrs = { 'data-id': object.id, d: partData(object), fill: fill === null ? 'none' : String(fill) };
+    if (fill !== null && object.fillOpacity !== undefined && object.fillOpacity !== 1) attrs['fill-opacity'] = Number(object.fillOpacity);
     if (stroke !== null) {
       attrs.stroke = String(stroke);
+      if (object.strokeOpacity !== undefined && object.strokeOpacity !== 1) attrs['stroke-opacity'] = Number(object.strokeOpacity);
       attrs['stroke-width'] = Number(object.strokeWidth ?? DEFAULTS.strokeWidth);
       attrs['stroke-linejoin'] = 'round';
       attrs['stroke-linecap'] = 'round';

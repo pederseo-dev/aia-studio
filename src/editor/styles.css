@@ -86,8 +86,8 @@ button.icon:hover:not(:disabled), button.icon[aria-expanded="true"] { background
 #tab-new { align-self: flex-end; margin: 0 0 3px -2px; width: 24px; height: 24px; }
 #notice { align-self: center; margin: 0 0 6px auto; color: var(--error); max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* The bar uses the same columns as the panels below: tools over Layers, the selection over the canvas, undo/redo and
-   the modes over the right panel. */
+/* The bar uses the same columns as the panels below: tools over Layers, the selection over the canvas, and the
+   modes over the right panel. */
 #bar { display: grid; grid-template-columns: var(--left) minmax(0, 1fr) var(--right); align-items: center; min-height: 36px; }
 #bar > .tools { padding: 0 8px; border-right: 1px solid var(--border); height: 100%; align-items: center; }
 #bar > .options { padding: 0 10px; }
@@ -265,12 +265,14 @@ dialog h2 { margin-bottom: 12px; }
 /* ---------- Color swatches ---------- */
 
 .swatch {
-  --color: transparent;
+  --color: transparent; --alpha: 1;
   width: 22px; height: 22px; min-width: 0; padding: 0; border-radius: 4px; border: 1px solid var(--border);
-  background: linear-gradient(var(--color), var(--color)), repeating-conic-gradient(#d9d9d9 0 25%, #fff 0 50%) 0 0 / 8px 8px;
+  background:
+    linear-gradient(color-mix(in srgb, var(--color) calc(var(--alpha) * 100%), transparent) 0 0),
+    repeating-conic-gradient(#d9d9d9 0 25%, #fff 0 50%) 0 0 / 8px 8px;
   box-shadow: inset 0 0 0 1px #ffffff22;
 }
-.swatch.empty { background: #fff linear-gradient(to top right, transparent 46%, #e05555 46% 54%, transparent 54%); }
+.swatch.empty, .color-popover .chip.none { background: #fff linear-gradient(to top right, transparent 44%, #e05555 44% 56%, transparent 56%); }
 .swatch.mixed { background: repeating-linear-gradient(45deg, var(--panel-2) 0 4px, var(--panel) 4px 8px); }
 .color-popover {
   position: fixed; z-index: 20; display: flex; flex-direction: column; gap: 8px; padding: 10px; width: 200px;
@@ -281,7 +283,12 @@ dialog h2 { margin-bottom: 12px; }
 .color-popover .row { display: flex; gap: 6px; align-items: center; }
 .color-popover input[type="color"] { width: 36px; height: 26px; padding: 1px; }
 .color-popover .hex { flex: 1; min-width: 0; font-family: ui-monospace, Consolas, monospace; }
-.color-popover .none { margin-right: auto; }
+.color-popover .buttons { justify-content: flex-end; }
+.color-popover .opacity { font-size: 11px; color: var(--soft); }
+.color-popover .opacity input[type="range"] { flex: 1; min-width: 0; }
+.color-popover .opacity input[type="number"] { width: 46px; }
+.inspector .prop .controls input.slider { flex: 1; min-width: 0; }
+.inspector .prop .controls input.slider + input[type="number"] { flex: 0 0 58px; }
 .inspector .prop .controls { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .inspector .prop .controls input[type="number"] { flex: 1; min-width: 0; }
 .inspector .prop .controls input.width { flex: 0 0 64px; }

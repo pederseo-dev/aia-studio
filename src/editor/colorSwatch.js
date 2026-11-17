@@ -1,15 +1,17 @@
 // A color swatch: a small square with the color (crossed out when there is none). A click opens a popover to pick a
-// color (a palette, the system's picker and a hex field) or to take the color off. While the color is being picked,
-// `onInput` lets the canvas show it live; `onChange` saves it.
+// color (a palette, the system's picker and a hex field), to take the color off (the crossed-out chip, first in the
+// palette) and, when the swatch has an opacity, to set it with a slider. While they are being picked, `onInput` lets
+// the canvas show them live; `onChange` saves them.
 
 /**
  * @typedef {{
  *   value: string | null | undefined,
  *   nullable?: boolean,
  *   mixed?: boolean,
+ *   opacity?: number | null,
  *   title?: string,
- *   onInput?: (color: string | null) => void,
- *   onChange: (color: string | null) => void,
+ *   onInput?: (color: string | null, opacity?: number) => void,
+ *   onChange: (color: string | null, opacity?: number) => void,
  *   onCancel?: () => void,
  * }} SwatchOptions
  */
@@ -26,7 +28,7 @@ popover.setAttribute('role', 'dialog');
 popover.setAttribute('aria-label', 'Pick a color');
 document.body.append(popover);
 
-/** @type {(SwatchOptions & { color: string | null, anchor: HTMLElement }) | null} what the popover is editing */
+/** @type {(SwatchOptions & { color: string | null, alpha: number | undefined, anchor: HTMLElement }) | null} what the popover is editing */
 let open = null;
 
 function close(save = false) {
@@ -35,7 +37,8 @@ function close(save = false) {
   open = null;
   popover.hidden = true;
   // Nothing is saved when the color did not change (no empty step in the history).
-  if (save && (current.color !== (current.value ?? null) || current.mixed)) current.onChange(current.color);
+  const changed = current.color !== (current.value ?? null) || current.alpha !== (current.opacity ?? undefined) || current.mixed;
+  if (save && changed) current.onChange(current.color, current.alpha);
   else current.onCancel?.();
 }
 
@@ -54,7 +57,7 @@ document.addEventListener('keydown', (event) => {
 /** @param {HTMLElement} anchor @param {SwatchOptions} options */
 function openFor(anchor, options) {
   if (open) close(true);
-  open = { ...options, color: options.value ?? null, anchor };
+  open = { ...options, color: options.value ?? null, alpha: options.opacity ?? undefined, anchor };
   const state = open;
   popover.replaceChildren();
 
@@ -63,12 +66,21 @@ function openFor(anchor, options) {
     picker.value = color ?? picker.value;
     hex.value = color ?? 'none';
     if (commit) close(true);
-    else state.onInput?.(color);
+    else state.onInput?.(color, state.alpha);
   };
 
   const palette = document.createElement('div');
   palette.className = 'palette';
-  for (const color of PALETTE) {
+  if (options.nullable) {
+    const none = document.createElement('button');
+    none.type = 'button';
+    none.className = 'chip none';
+    none.title = 'None: take the color off';
+    none.setAttribute('aria-label', 'None');
+    none.addEventListener('click', () => set(null, true));
+    palette.append(none);
+  }
+  for (const color of options.nullable ? PALETTE.slice(1) : PALETTE) {
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'chip';
@@ -98,17 +110,47 @@ function openFor(anchor, options) {
   });
   row.append(picker, hex);
 
-  const buttons = document.createElement('div');
-  buttons.className = 'row';
-  if (options.nullable) {
-    const none = document.createElement('button');
-    none.type = 'button';
-    none.className = 'none';
-    none.textContent = 'None';
-    none.title = 'Take the color off';
-    none.addEventListener('click', () => set(null, true));
-    buttons.append(none);
+  /** @type {HTMLElement[]} */
+  const extra = [];
+  if (options.opacity !== undefined) {
+    const line = document.createElement('div');
+    line.className = 'row opacity';
+    line.title = 'Opacity: 0 is invisible, 100 is solid';
+    const label = document.createElement('span');
+    label.textContent = 'Opacity';
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '100';
+    slider.step = '1';
+    const percent = document.createElement('input');
+    percent.type = 'number';
+    percent.min = '0';
+    percent.max = '100';
+    percent.step = '1';
+    const start = options.opacity === null ? '' : String(Math.round((options.opacity ?? 1) * 100));
+    slider.value = start || '100';
+    percent.value = start;
+    percent.placeholder = options.opacity === null ? 'mixed' : '';
+    const setAlpha = (/** @type {string} */ text, /** @type {HTMLInputElement} */ from) => {
+      const n = Number(text);
+      if (text === '' || !Number.isFinite(n)) return;
+      const value = Math.min(100, Math.max(0, n));
+      if (from !== slider) slider.value = String(value);
+      if (from !== percent) percent.value = String(value);
+      state.alpha = value / 100;
+      state.onInput?.(state.color, state.alpha);
+    };
+    slider.addEventListener('input', () => setAlpha(slider.value, slider));
+    percent.addEventListener('input', () => setAlpha(percent.value, percent));
+    const sign = document.createElement('span');
+    sign.textContent = '%';
+    line.append(label, slider, percent, sign);
+    extra.push(line);
   }
+
+  const buttons = document.createElement('div');
+  buttons.className = 'row buttons';
   const done = document.createElement('button');
   done.type = 'button';
   done.className = 'main';
@@ -116,7 +158,7 @@ function openFor(anchor, options) {
   done.addEventListener('click', () => close(true));
   buttons.append(done);
 
-  popover.append(palette, row, buttons);
+  popover.append(palette, row, ...extra, buttons);
   popover.hidden = false;
   const box = anchor.getBoundingClientRect();
   const width = popover.offsetWidth;
@@ -134,6 +176,7 @@ export function colorSwatch(options) {
   swatch.className = `swatch${options.value === null ? ' empty' : ''}${options.mixed ? ' mixed' : ''}`;
   swatch.title = options.title ?? (options.value === null ? 'None' : (options.value ?? ''));
   if (typeof options.value === 'string' && !options.mixed) swatch.style.setProperty('--color', options.value);
+  if (typeof options.opacity === 'number' && options.opacity < 1) swatch.style.setProperty('--alpha', String(options.opacity));
   swatch.addEventListener('click', () => (open?.anchor === swatch ? close(true) : openFor(swatch, options)));
   return swatch;
 }

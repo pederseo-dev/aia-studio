@@ -1,8 +1,9 @@
-// The top bar: the main menu (☰), the document tabs, undo and redo, and the dialogs the menu opens.
+// The top bar: the main menu (☰), the document tabs and the dialogs the menu opens. Undo and redo are Ctrl+Z and
+// Ctrl+Shift+Z (main.js).
 
 import { api } from './api.js';
 import { icon } from './icons.js';
-import { close, createDocument, deleteDocument, notify, open, redo, run, state, undo } from './state.js';
+import { close, createDocument, deleteDocument, notify, open, run, state } from './state.js';
 
 const $ = (/** @type {string} */ selector) => /** @type {HTMLElement} */ (document.querySelector(selector));
 
@@ -94,8 +95,6 @@ export function setupHeader() {
     if (action && action in actions) actions[/** @type {keyof typeof actions} */ (action)]();
   });
   $('#tab-new').addEventListener('click', () => actions.new());
-  $('#undo').addEventListener('click', () => undo());
-  $('#redo').addEventListener('click', () => redo());
 
   form(newDialog).addEventListener('submit', () => {
     const data = new FormData(form(newDialog));
@@ -142,8 +141,6 @@ export function renderHeader() {
     }),
   );
   $('#notice').textContent = state.notice;
-  /** @type {HTMLButtonElement} */ ($('#undo')).disabled = !state.canUndo;
-  /** @type {HTMLButtonElement} */ ($('#redo')).disabled = !state.canRedo;
   for (const item of document.querySelectorAll('[data-requires-doc]')) {
     /** @type {HTMLButtonElement} */ (item).disabled = !state.document;
   }

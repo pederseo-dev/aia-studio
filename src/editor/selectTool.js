@@ -507,6 +507,20 @@ export function nudgeSelection(dx, dy) {
   return true;
 }
 
+/**
+ * Flip horizontal / vertical of what is selected: the picked parts mirror across the middle of their box (their
+ * vertices change), a selected layer across the middle of its content (its own transform changes, its parts stay).
+ * @param {boolean} horizontal
+ */
+export function flipSelection(horizontal) {
+  const s = subject();
+  const frame = hasSubject(s) ? frameOf(s) : null;
+  if (!frame) return false;
+  const local = around(onFrame(frame.box, 0, 0), horizontal ? scale(-1, 1) : scale(1, -1));
+  commit(s, multiply(frame.f, multiply(local, invert(frame.f))), horizontal ? 'Flip horizontally' : 'Flip vertically');
+  return true;
+}
+
 export function setupSelectTool() {
   onToolDown('select', selectDown);
   onToolDown('move', singleTool((event) => moveDrag(event, subject())));

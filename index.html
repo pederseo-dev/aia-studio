@@ -31,14 +31,11 @@
         <span id="notice" role="status"></span>
       </div>
       <!-- Row 2, in the columns of the panels below: the tools (over Layers), the selection (over the canvas), and
-           undo, redo and the modes (over the right panel) -->
+           the modes (over the right panel) -->
       <div id="bar" role="toolbar" aria-label="Tools">
         <div id="tools" class="tools"></div>
         <div id="options" class="options" aria-label="Options of the selection"></div>
         <div class="bar-end">
-        <button id="undo" type="button" class="icon" title="Undo (Ctrl+Z)" aria-label="Undo" data-icon="undo"></button>
-        <button id="redo" type="button" class="icon" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" data-icon="redo"></button>
-        <span class="separator"></span>
         <div id="modes" role="tablist" aria-label="Mode">
           <button type="button" role="tab" aria-selected="true" class="active">Design</button>
         </div>
@@ -133,7 +130,7 @@
         <tr><td>Drag a point · its round knobs</td><td>Move the picked points · bend the curve (Alt: a corner)</td></tr>
         <tr><td><kbd>Alt</kbd>+click a point</td><td>Corner ↔ curve</td></tr>
         <tr><td><kbd>Del</kbd> · <kbd>Esc</kbd> or click on empty space</td><td>Delete the picked points · done</td></tr>
-        <tr><td><kbd>Ctrl+D</kbd> · <kbd>Ctrl+C</kbd> · <kbd>Ctrl+V</kbd></td><td>Duplicate · copy · paste into the active layer, in the same place</td></tr>
+        <tr><td><kbd>Ctrl+D</kbd> · <kbd>Ctrl+C</kbd> · <kbd>Ctrl+X</kbd> · <kbd>Ctrl+V</kbd></td><td>Duplicate · copy · cut · paste into the active layer (pick another layer first to paste there), in the same place</td></tr>
         <tr><th colspan="2">Draw</th></tr>
         <tr><td><kbd>P</kbd></td><td>Pen: click for corners, drag for curves; click the first point to close, <kbd>Enter</kbd> ends a line, <kbd>Esc</kbd> cancels</td></tr>
         <tr><td><kbd>R</kbd> · <kbd>E</kbd></td><td>Rectangle · ellipse: drag on the canvas (Shift: square · circle). Every shape is a path</td></tr>

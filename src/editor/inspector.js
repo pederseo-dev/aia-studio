@@ -1,17 +1,20 @@
 // The Inspector: the properties of what is selected, built from the schema (each row's tooltip is the property's
 // `help`). With nothing selected it shows the document's own properties; with several parts, what they share (a
-// value they do not agree on shows empty, and setting it sets it on all of them). Colors are swatches, the stroke
-// has its width on the same row, and the origin is one row with X and Y. While a value is being changed (a color
+// value they do not agree on shows empty, and setting it sets it on all of them). Colors are swatches (their opacity
+// is set in the swatch's popover), the stroke has its width on the same row, the origin is one row with X and Y, and a
+// number from 0 to 1 (an opacity) is a slider. While a value is being changed (a color
 // being picked, a number being typed) the canvas shows it live; it is saved as one batch when done.
 // With a drawing tool active, a «New shapes» section sets the auto fill and auto stroke the tool gives new shapes.
-// While editing points, a «Points» section flips the picked points horizontally or vertically.
+// While editing points, a «Points» section flips the picked points horizontally or vertically; otherwise a Flip row
+// flips the selected parts, or the selected layer.
 
 import { findObject } from '../core/document.js';
 import { applyTransformOps, isTransformed } from '../core/transform.js';
 import { showPreview } from './canvas.js';
 import { colorSwatch } from './colorSwatch.js';
 import { flipPoints } from './pointEdit.js';
-import { drawStyle, isDrawTool, run, setDrawStyle, state } from './state.js';
+import { flipSelection } from './selectTool.js';
+import { drawStyle, isDrawTool, isLocked, run, setDrawStyle, state } from './state.js';
 import { schema } from './schema.js';
 
 /**
@@ -27,7 +30,9 @@ const labelOf = (key) => key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.t
 
 /** Properties shown inside another one's row instead of their own. */
 const COMPANIONS = /** @type {Record<string, string>} */ ({ stroke: 'strokeWidth', originX: 'originY' });
-const SHOWN_WITH = new Set(Object.values(COMPANIONS));
+/** A color's opacity, set in its swatch's popover. */
+const OPACITY_OF = /** @type {Record<string, string>} */ ({ fill: 'fillOpacity', stroke: 'strokeOpacity' });
+const SHOWN_WITH = new Set([...Object.values(COMPANIONS), ...Object.values(OPACITY_OF)]);
 
 const MIXED = Symbol('mixed');
 
@@ -93,6 +98,53 @@ function numberField(spec, value, onInput, onChange, placeholder = '') {
 }
 
 /**
+ * A number from 0 to 1 (an opacity) as a slider and a field in percent: dragging previews, letting go saves.
+ * @param {unknown} value @param {(n: number) => void} onInput @param {(n: number) => void} onChange
+ * @returns {HTMLInputElement[]}
+ */
+function unitSlider(value, onInput, onChange) {
+  const mixed = value === MIXED;
+  const start = mixed ? '' : String(Math.round((typeof value === 'number' ? value : 1) * 100));
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.className = 'slider';
+  slider.min = '0';
+  slider.max = '100';
+  slider.step = '1';
+  slider.value = start || '100';
+  const percent = document.createElement('input');
+  percent.type = 'number';
+  percent.min = '0';
+  percent.max = '100';
+  percent.step = '1';
+  percent.value = start;
+  percent.placeholder = mixed ? 'mixed' : '%';
+  percent.title = 'Percent: 0 is invisible, 100 is solid';
+  /** @param {string} text @returns {number | undefined} */
+  const read = (text) => {
+    const n = Number(text);
+    return text === '' || !Number.isFinite(n) ? undefined : Math.min(100, Math.max(0, n)) / 100;
+  };
+  slider.addEventListener('input', () => {
+    percent.value = slider.value;
+    onInput(Number(slider.value) / 100);
+  });
+  slider.addEventListener('change', () => onChange(Number(slider.value) / 100));
+  percent.addEventListener('input', () => {
+    const n = read(percent.value);
+    if (n === undefined) return;
+    slider.value = String(Math.round(n * 100));
+    onInput(n);
+  });
+  percent.addEventListener('change', () => {
+    const n = read(percent.value);
+    if (n !== undefined) onChange(n);
+    else showPreview(null);
+  });
+  return [slider, percent];
+}
+
+/**
  * @param {string} label @param {string} help @param {...HTMLElement} controls
  */
 function row(label, help, ...controls) {
@@ -117,12 +169,18 @@ function propertyRow(key, spec, targets) {
   const live = (/** @type {unknown} */ v) => preview(targets, { [key]: v });
 
   if (spec.type === 'color') {
+    const opacityKey = OPACITY_OF[key];
+    const opacitySpec = opacityKey ? schema.get(typeOf(targets))?.properties[opacityKey] : undefined;
+    const opacity = opacitySpec ? valueOf(targets, /** @type {string} */ (opacityKey), opacitySpec) : undefined;
+    /** The color and, when the popover set one, its opacity. @param {string | null} color @param {number | undefined} alpha */
+    const props = (color, alpha) => ({ [key]: color, ...(opacityKey && alpha !== undefined ? { [opacityKey]: alpha } : {}) });
     const swatch = colorSwatch({
       value: mixed ? undefined : /** @type {string | null} */ (value),
       nullable: spec.nullable,
       mixed,
-      onInput: live,
-      onChange: change,
+      opacity: opacitySpec ? (opacity === MIXED ? null : /** @type {number} */ (opacity)) : undefined,
+      onInput: (color, alpha) => preview(targets, props(color, alpha)),
+      onChange: (color, alpha) => save(targets, props(color, alpha)),
       onCancel: () => showPreview(null),
     });
     const companion = COMPANIONS[key];
@@ -157,6 +215,7 @@ function propertyRow(key, spec, targets) {
     box.addEventListener('change', () => change(box.checked));
     return row(labelOf(key), spec.help, box);
   }
+  if (spec.type === 'number' && spec.min === 0 && spec.max === 1) return row(labelOf(key), spec.help, ...unitSlider(value, live, change));
   if (spec.type === 'number') return row(labelOf(key), spec.help, numberField(spec, value, live, change));
   if (spec.type === 'vertices') {
     const span = document.createElement('span');
@@ -226,6 +285,27 @@ function pointsSection() {
   return section;
 }
 
+/** Flip of the selected parts or layer. @param {boolean} enabled */
+function flipRow(enabled) {
+  /** @param {string} text @param {string} help @param {boolean} horizontal */
+  const flip = (text, help, horizontal) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'small';
+    button.textContent = text;
+    button.title = enabled ? help : `${help} (unlock it first)`;
+    button.disabled = !enabled;
+    button.addEventListener('click', () => flipSelection(horizontal));
+    return button;
+  };
+  return row(
+    'Flip',
+    'Mirror what is selected across the middle of its box.',
+    flip('Horizontal', 'Flip horizontally (left ↔ right)', true),
+    flip('Vertical', 'Flip vertically (top ↔ bottom)', false),
+  );
+}
+
 /** @param {Target[]} targets */
 const typeOf = (targets) => (targets[0].id === 'meta' ? 'meta' : String(targets[0].values.type));
 
@@ -237,15 +317,17 @@ function newShapesSection() {
   heading.textContent = 'New shapes';
   const fill = colorSwatch({
     value: drawStyle.fill,
+    opacity: drawStyle.fillOpacity,
     nullable: true,
     title: 'Auto fill: the fill new shapes get (None: no fill)',
-    onChange: (color) => setDrawStyle({ fill: color }),
+    onChange: (c, a) => setDrawStyle({ fill: c, ...(a === undefined ? {} : { fillOpacity: a }) }),
   });
   const stroke = colorSwatch({
     value: drawStyle.stroke,
+    opacity: drawStyle.strokeOpacity,
     nullable: true,
     title: 'Auto stroke: the stroke new shapes get (None: no stroke)',
-    onChange: (color) => setDrawStyle({ stroke: color }),
+    onChange: (c, a) => setDrawStyle({ stroke: c, ...(a === undefined ? {} : { strokeOpacity: a }) }),
   });
   const widthSpec = /** @type {PropertySpec} */ (schema.get('part')?.properties.strokeWidth);
   const width = numberField(widthSpec, drawStyle.strokeWidth, () => {}, (n) => n !== null && setDrawStyle({ strokeWidth: n }));
@@ -301,6 +383,8 @@ export function renderInspector() {
       help.className = 'type-help';
       help.textContent = spec.help;
       parts.push(help);
+      const flippable = objects.length > 0 && !state.editing && objects.every((o) => o.type !== 'meta');
+      if (flippable) parts.push(flipRow(objects.every((o) => !isLocked(o.id))));
       for (const [name, property] of Object.entries(spec.properties)) {
         if (!SHOWN_WITH.has(name)) parts.push(propertyRow(name, property, targets));
       }

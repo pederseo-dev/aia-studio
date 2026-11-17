@@ -1,5 +1,6 @@
 // Copies of parts: Ctrl+D duplicates the selection (a little down and to the right), Ctrl+C / Ctrl+V copy and paste
-// it (into the active vector layer, in the same place) and Alt+drag with Select drags a copy (selectTool.js; the
+// it (into the active vector layer, in the same place: pick another layer first to paste it there), Ctrl+X cuts it
+// (copies it and deletes it, so Ctrl+V moves it) and Alt+drag with Select drags a copy (selectTool.js; the
 // arrow keys nudge there too). Copies get free names from their originals: rect_1 → rect_2.
 
 import { copyOps } from '../core/copy.js';
@@ -30,6 +31,23 @@ export function copy() {
   if (!parts.length) return false;
   copied = structuredClone(parts);
   navigator.clipboard?.writeText(JSON.stringify(copied, null, 2)).catch(() => {});
+  return true;
+}
+
+/** Copies the picked parts and deletes them, in one step. @returns {boolean} whether there was something to cut */
+export function cut() {
+  const doc = state.document;
+  const parts = selectedParts();
+  if (!doc || !parts.length) {
+    if (state.selected) notify('Cut works on parts for now');
+    return !!state.selected;
+  }
+  copy();
+  const layer = parts[0].parent;
+  run(
+    parts.map((part) => ({ op: 'delete', target: part.id })),
+    { select: layer ?? undefined, note: `Cut ${parts.length > 1 ? `${parts.length} parts` : parts[0].id}` },
+  );
   return true;
 }
 
