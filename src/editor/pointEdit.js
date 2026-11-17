@@ -17,7 +17,7 @@
 import { findObject } from '../core/document.js';
 import { pointOf } from '../core/points.js';
 import { followOps, groupOps, isShared, namePoint, shareTargets as shareTargetsIn, stretchBetween, unweld, weld } from '../core/weld.js';
-import { insertVertex, nearestOnOutline, roundVertex, shapePoint, transformVertices, translate, verticesOf } from '../core/geometry.js';
+import { flipAcross, insertVertex, nearestOnOutline, roundVertex, shapePoint, transformVertices, translate, verticesOf } from '../core/geometry.js';
 import { partData } from '../core/draw.js';
 import { addPainter, paintOverlay, showPreview } from './canvas.js';
 import { isPart } from './schema.js';
@@ -351,6 +351,18 @@ export function deletePoints() {
 export function nudgePoints(dx, dy) {
   if (!state.editing || !state.points.length) return false;
   save(movedPicked(translate(dx, dy)), `Nudge ${pointsWord(state.points.length)}`);
+  return true;
+}
+
+/**
+ * Flip horizontal / vertical while editing points: the picked points (and their curve handles) mirror across the
+ * middle of their box, in the layer's coordinates, as Moho's Flip Points. @param {boolean} horizontal
+ */
+export function flipPoints(horizontal) {
+  if (!state.editing || !state.points.length) return false;
+  const places = state.points.map((key) => pointAt(key)?.vertex).filter((v) => !!v);
+  if (!places.length) return false;
+  save(movedPicked(flipAcross(places, horizontal)), `Flip ${pointsWord(state.points.length)} ${horizontal ? 'horizontally' : 'vertically'}`);
   return true;
 }
 

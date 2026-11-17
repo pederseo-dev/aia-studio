@@ -6,6 +6,7 @@ import {
   bounds,
   ellipsePoints,
   ellipseVertices,
+  flipAcross,
   insertVertex,
   nearestOnOutline,
   multiply,
@@ -62,6 +63,18 @@ test('transformVertices changes only the picked points', () => {
   assert.deepEqual(transformVertices(line, [1], translate(5, 5)), {
     vertices: [{ x: 0, y: 0, out: { x: 10, y: 0 } }, { x: 25, y: 15, in: { x: 0, y: -5 } }],
   });
+});
+
+test('flipAcross mirrors points and their handles across the middle of their box', () => {
+  const picked = line.vertices;
+  assert.deepEqual(transformVertices(line, [0, 1], flipAcross(picked, true)).vertices, [
+    { x: 20, y: 0, out: { x: -10, y: 0 } },
+    { x: 0, y: 10, in: { x: 0, y: -5 } },
+  ]);
+  assert.deepEqual(transformVertices(line, [0, 1], flipAcross(picked, false)).vertices, [
+    { x: 0, y: 10, out: { x: 10, y: 0 } },
+    { x: 20, y: 0, in: { x: 0, y: 5 } },
+  ]);
 });
 
 test('bounds include the curve handles', () => {

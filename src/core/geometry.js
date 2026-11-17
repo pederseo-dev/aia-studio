@@ -41,8 +41,20 @@ export function rotate(degrees) {
 /** A matrix applied around a point. @param {Point} p @param {Matrix} m */
 export const around = (p, m) => multiply(translate(p.x, p.y), multiply(m, translate(-p.x, -p.y)));
 
+/**
+ * The mirror of some points across the middle of their box: horizontal swaps left and right, vertical top and bottom.
+ * @param {Point[]} points @param {boolean} horizontal
+ * @returns {Matrix}
+ */
+export function flipAcross(points, horizontal) {
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const middle = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
+  return around(middle, horizontal ? scale(-1, 1) : scale(1, -1));
+}
+
 /** @param {Matrix} m @param {Point} p @returns {Point} */
-export const apply = (m, p) => ({ x: m[0] * p.x + m[2] * p.y + m[4], y: m[1] * p.x + m[3] * p.y + m[5] });
+export const apply =(m, p) => ({ x: m[0] * p.x + m[2] * p.y + m[4], y: m[1] * p.x + m[3] * p.y + m[5] });
 /** Without the translation: for handles, which are relative. @param {Matrix} m @param {Point} v @returns {Point} */
 export const applyVector = (m, v) => ({ x: m[0] * v.x + m[2] * v.y, y: m[1] * v.x + m[3] * v.y });
 

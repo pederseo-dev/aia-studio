@@ -4,11 +4,13 @@
 // has its width on the same row, and the origin is one row with X and Y. While a value is being changed (a color
 // being picked, a number being typed) the canvas shows it live; it is saved as one batch when done.
 // With a drawing tool active, a «New shapes» section sets the auto fill and auto stroke the tool gives new shapes.
+// While editing points, a «Points» section flips the picked points horizontally or vertically.
 
 import { findObject } from '../core/document.js';
 import { applyTransformOps, isTransformed } from '../core/transform.js';
 import { showPreview } from './canvas.js';
 import { colorSwatch } from './colorSwatch.js';
+import { flipPoints } from './pointEdit.js';
 import { drawStyle, isDrawTool, run, setDrawStyle, state } from './state.js';
 import { schema } from './schema.js';
 
@@ -194,6 +196,36 @@ function applyTransformRow(layer) {
   return row;
 }
 
+/** The «Points» section while editing points: what applies to the picked points. */
+function pointsSection() {
+  const section = document.createElement('div');
+  section.className = 'points-section';
+  const heading = document.createElement('h3');
+  heading.textContent = 'Points';
+  const picked = state.points.length > 0;
+  /** @param {string} text @param {string} help @param {boolean} horizontal */
+  const flip = (text, help, horizontal) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'small';
+    button.textContent = text;
+    button.title = picked ? help : `${help} (pick some points first)`;
+    button.disabled = !picked;
+    button.addEventListener('click', () => flipPoints(horizontal));
+    return button;
+  };
+  section.append(
+    heading,
+    row(
+      'Flip',
+      'Mirror the picked points and their curve handles across the middle of their box.',
+      flip('Horizontal', 'Flip the picked points horizontally (left ↔ right)', true),
+      flip('Vertical', 'Flip the picked points vertically (top ↔ bottom)', false),
+    ),
+  );
+  return section;
+}
+
 /** @param {Target[]} targets */
 const typeOf = (targets) => (targets[0].id === 'meta' ? 'meta' : String(targets[0].values.type));
 
@@ -249,13 +281,14 @@ export function renderInspector() {
     targets = objects.map((o) => ({ id: o.id, values: o }));
     heading = objects.length > 1 ? `${objects.length} parts` : objects[0].id;
   } else heading = `${objects.length} selected`;
-  const key = JSON.stringify([state.active, targets, drawing && drawStyle]);
+  const key = JSON.stringify([state.active, targets, drawing && drawStyle, state.editing, state.points.length > 0]);
   if (key === builtFrom) return;
   builtFrom = key;
   title.textContent = heading;
   /** @type {HTMLElement[]} */
   const parts = [];
   if (drawing) parts.push(newShapesSection());
+  if (state.editing) parts.push(pointsSection());
   if (!targets.length) {
     const p = document.createElement('p');
     p.className = 'empty';
