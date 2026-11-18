@@ -7,9 +7,7 @@ import { icon } from './icons.js';
 import {
   canFollow,
   canUnweld,
-  canWeld,
   followPicked,
-  deletePoints,
   editGroup,
   pickGroup,
   pickedAreCorners,
@@ -20,15 +18,15 @@ import {
   stopEditing,
   toggleCornersPicked,
   unweldPicked,
-  weldPicked,
 } from './pointEdit.js';
-import { autoWeld, drawStyle, editPoints, isDrawTool, penOptions, run, setDrawStyle, state, toggleAutoWeld, toggleSharpCorners } from './state.js';
+import { addPoint, autoWeld, drawStyle, editPoints, isDrawTool, penOptions, run, setDrawStyle, state, toggleAddPoint, toggleAutoWeld, toggleSharpCorners } from './state.js';
 import { colorSwatch } from './colorSwatch.js';
 import { isPart } from './schema.js';
 
 const KINDS = /** @type {Record<string, string>} */ ({
   vector: 'Vector layer',
   group: 'Group layer',
+  image: 'Image layer',
   path: 'Shape',
 });
 
@@ -76,15 +74,15 @@ function renderStyle() {
   strokeLabel.textContent = 'Auto stroke';
   style.append(
     fillLabel,
-    colorSwatch({ value: drawStyle.fill, opacity: drawStyle.fillOpacity, nullable: true, title: 'The fill new shapes get (None: no fill)', onChange: (c, a) => setDrawStyle({ fill: c, ...(a === undefined ? {} : { fillOpacity: a }) }) }),
+    colorSwatch({ kind: 'fill', value: drawStyle.fill, opacity: drawStyle.fillOpacity, nullable: true, title: 'The fill new shapes get (None: no fill)', onChange: (c, a) => setDrawStyle({ fill: c, ...(a === undefined ? {} : { fillOpacity: a }) }) }),
     strokeLabel,
-    colorSwatch({ value: drawStyle.stroke, opacity: drawStyle.strokeOpacity, nullable: true, title: 'The stroke new shapes get (None: no stroke)', onChange: (c, a) => setDrawStyle({ stroke: c, ...(a === undefined ? {} : { strokeOpacity: a }) }) }),
+    colorSwatch({ kind: 'stroke', value: drawStyle.stroke, opacity: drawStyle.strokeOpacity, nullable: true, title: 'The stroke new shapes get (None: no stroke)', onChange: (c, a) => setDrawStyle({ stroke: c, ...(a === undefined ? {} : { strokeOpacity: a }) }) }),
     width,
   );
   if (state.tool === 'pen') {
     style.append(
-      toggle('Sharp corners', 'New points are corners instead of smooth curves (Alt while drawing does the other)', penOptions.sharp, toggleSharpCorners),
-      toggle('Auto weld', 'A point pressed or released on a point or a line of the layer is welded there (a green ring shows where)', autoWeld.on, toggleAutoWeld),
+      toggle('corner', 'Sharp corners', 'New points are corners instead of smooth curves (Alt while drawing does the other)', penOptions.sharp, toggleSharpCorners),
+      toggle('weld', 'Auto weld', 'A point pressed or released on a point or a line of the layer is welded there (a green ring shows where)', autoWeld.on, toggleAutoWeld),
     );
   }
 }
@@ -104,14 +102,17 @@ function button(name, text, title, onClick, { disabled = false, main = false } =
   return b;
 }
 
-/** @param {string} text @param {string} title @param {boolean} on @param {() => void} onClick */
-function toggle(text, title, on, onClick) {
+/**
+ * A switch: its icon and name, lit while it is on.
+ * @param {Parameters<typeof icon>[0]} name @param {string} text @param {string} title @param {boolean} on @param {() => void} onClick
+ */
+function toggle(name, text, title, on, onClick) {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = `action toggle${on ? ' on' : ''}`;
   b.title = title;
   b.setAttribute('aria-pressed', String(on));
-  b.innerHTML = `<span class="led"></span><span>${text}</span>`;
+  b.innerHTML = `${icon(name)}<span>${text}</span>`;
   b.addEventListener('click', onClick);
   return b;
 }
@@ -168,11 +169,10 @@ export function renderOptions() {
   actions.append(
     pointField(),
     button(corners ? 'curve' : 'corner', corners ? 'Curve' : 'Corner', 'Make the picked points smooth curves, or corners (Alt+click a point does it for one)', toggleCornersPicked, { disabled: !picked }),
-    button('delete', 'Delete', 'Delete the picked points (Del)', () => deletePoints(), { disabled: !picked }),
-    weldButton(),
     button('unweld', 'Unweld', 'The picked points stop sharing: each one keeps its place as a point of its own', unweldPicked, { disabled: !canUnweld() }),
+    toggle('addPoint', 'Add point', 'On: a click on a line adds a point there without changing its shape. Off: a click on a line or inside a shape picks all its points (Shift: adds them)', addPoint.on, toggleAddPoint),
+    toggle('weld', 'Auto weld', 'Drop a point on a point or a line of another part to weld them; drop an open end on the other end of its line to close it (Alt: two open ends become one line)', autoWeld.on, toggleAutoWeld),
     followButton(),
-    toggle('Auto weld', 'Drop a point on a point or a line of another part to weld them (Alt: two open ends become one line)', autoWeld.on, toggleAutoWeld),
     groupsMenu(),
     button('check', 'Done', 'Stop editing points (Esc)', () => stopEditing(), { main: true }),
   );
@@ -191,19 +191,6 @@ function followButton() {
     { disabled: !canFollow() },
   );
   b.addEventListener('click', (event) => followPicked(event.altKey));
-  return b;
-}
-
-/** The Weld button: Alt+click joins two open ends into one line. */
-function weldButton() {
-  const b = button(
-    'weld',
-    'Weld',
-    'The first picked point shares the second from now on (the two ends of a line close it). Alt+click: two open ends of two lines become one line',
-    () => {},
-    { disabled: !canWeld() },
-  );
-  b.addEventListener('click', (event) => weldPicked(event.altKey));
   return b;
 }
 

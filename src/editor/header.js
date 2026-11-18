@@ -4,6 +4,7 @@
 import { api } from './api.js';
 import { icon } from './icons.js';
 import { close, createDocument, deleteDocument, notify, open, run, state } from './state.js';
+import { forgetView, zoomFit } from './navigate.js';
 
 const $ = (/** @type {string} */ selector) => /** @type {HTMLElement} */ (document.querySelector(selector));
 
@@ -79,7 +80,7 @@ export const actions = {
   },
   delete() {
     const tab = state.tabs.find((t) => t.id === state.active);
-    if (tab && confirm(`Delete «${tab.name}» and its history? This cannot be undone.`)) deleteDocument(tab.id);
+    if (tab && confirm(`Delete «${tab.name}» and its history? This cannot be undone.`)) deleteDocument(tab.id).then(() => forgetView(tab.id));
   },
   shortcuts() {
     shortcutsDialog.showModal();
@@ -98,7 +99,8 @@ export function setupHeader() {
 
   form(newDialog).addEventListener('submit', () => {
     const data = new FormData(form(newDialog));
-    createDocument({ name: String(data.get('name')).trim(), width: Number(data.get('width')), height: Number(data.get('height')) });
+    // A new document may take the id of a deleted one: it starts fitted, not with the old one's view.
+    createDocument({ name: String(data.get('name')).trim(), width: Number(data.get('width')), height: Number(data.get('height')) }).then(() => zoomFit());
   });
 
   form(settingsDialog).addEventListener('submit', () => {

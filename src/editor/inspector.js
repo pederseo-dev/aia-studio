@@ -175,6 +175,7 @@ function propertyRow(key, spec, targets) {
     /** The color and, when the popover set one, its opacity. @param {string | null} color @param {number | undefined} alpha */
     const props = (color, alpha) => ({ [key]: color, ...(opacityKey && alpha !== undefined ? { [opacityKey]: alpha } : {}) });
     const swatch = colorSwatch({
+      kind: key === 'fill' || key === 'stroke' ? key : undefined,
       value: mixed ? undefined : /** @type {string | null} */ (value),
       nullable: spec.nullable,
       mixed,
@@ -316,6 +317,7 @@ function newShapesSection() {
   const heading = document.createElement('h3');
   heading.textContent = 'New shapes';
   const fill = colorSwatch({
+    kind: 'fill',
     value: drawStyle.fill,
     opacity: drawStyle.fillOpacity,
     nullable: true,
@@ -323,6 +325,7 @@ function newShapesSection() {
     onChange: (c, a) => setDrawStyle({ fill: c, ...(a === undefined ? {} : { fillOpacity: a }) }),
   });
   const stroke = colorSwatch({
+    kind: 'stroke',
     value: drawStyle.stroke,
     opacity: drawStyle.strokeOpacity,
     nullable: true,

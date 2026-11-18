@@ -395,6 +395,17 @@ export function toggleSharpCorners() {
   changed();
 }
 
+/**
+ * Point editing's Add point, as Moho's Add Point: while it is on, a click on a line adds a point there; while it is
+ * off, a click on a line or inside a shape picks all its points. Off when the editor starts.
+ */
+export const addPoint = { on: false };
+
+export function toggleAddPoint() {
+  addPoint.on = !addPoint.on;
+  changed();
+}
+
 export function toggleAutoWeld() {
   autoWeld.on = !autoWeld.on;
   try {

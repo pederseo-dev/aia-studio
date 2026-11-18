@@ -127,7 +127,8 @@ test('aia image adds a reference to trace, and render and export carry the pictu
   assert.match(added.text, /Added the image layer ref: robot_front.png \(400 × 200 px\), drawn 180 × 90 at 10, 5/);
   const { document } = await store.get('trace', 'ai');
   assert.deepEqual(document.objects, [
-    { id: 'ref', type: 'image', parent: null, src: 'robot_front.png', width: 180, height: 90, x: 10, y: 5, opacity: 0.5 },
+    // Placed with x, y it is a transformed layer, so its origin is fixed at the middle of the picture, as any layer's.
+    { id: 'ref', type: 'image', parent: null, src: 'robot_front.png', width: 180, height: 90, x: 10, y: 5, opacity: 0.5, originX: 90, originY: 45 },
   ]);
   assert.match((await store.history('trace')).at(-1)?.note ?? '', /Image layer ref/);
 

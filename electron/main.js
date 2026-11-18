@@ -2,7 +2,7 @@
 // Documents: `--documents <folder>` or AIA_DOCUMENTS if given; otherwise the user's data folder when installed
 // (on Windows %APPDATA%\aia-studio\documents) and the repo's documents/ when run from source (`npm run app`).
 
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, Menu, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveDocumentsFolder } from '../server/folder.js';
@@ -64,7 +64,6 @@ function createWindow(url) {
     minHeight: 600,
     backgroundColor: '#353330',
     title: 'aia-studio',
-    autoHideMenuBar: true,
     show: false,
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
@@ -79,6 +78,12 @@ function createWindow(url) {
     event.preventDefault();
     if (/^https?:/.test(target)) shell.openExternal(target);
   });
+  // Without the native menu there is no shortcut for the developer tools: F12 opens them when run from source.
+  if (!app.isPackaged) {
+    window.webContents.on('before-input-event', (_, input) => {
+      if (input.type === 'keyDown' && input.key === 'F12') window.webContents.toggleDevTools();
+    });
+  }
   window.once('ready-to-show', () => window.show());
   window.loadURL(url);
   return window;
@@ -86,6 +91,11 @@ function createWindow(url) {
 
 // Not `await app.whenReady()` at the top level: with an ES module as main, Electron emits `ready` only after the module
 // has finished evaluating, so awaiting it here would never return.
+// No native menu bar (File, Edit, View, Window) on Windows and Linux: the editor has its own ☰ menu, and Alt is the
+// editor's modifier (corner ↔ curve, joining lines), so it must not show and hide a menu bar. macOS keeps the default
+// menu, which its Cmd+C / Cmd+V and Quit need.
+if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
+
 const server = await start();
 /** @type {BrowserWindow | undefined} */
 let window;

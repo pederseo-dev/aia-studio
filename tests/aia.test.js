@@ -194,6 +194,8 @@ test('the AI draws, reshapes, deletes and copies by name, as the editor does', a
   assert.deepEqual(/** @type {any[]} */ (doc.objects.find((o) => o.id === 'box_2')?.vertices)[1], { x: -100, y: 400 });
   const labeled = await aia.run('render face --labels --width 300');
   assert.ok(labeled.ok && labeled.image);
-  assert.match((await aia.run('delete-point face box.0 box.1 box.2')).text, /fewer than 2 points/);
+  // As Del in the editor: a part left with fewer than 2 points goes with them.
+  assert.match(await ok('delete-point face box_2.0 box_2.1 box_2.2'), /box_2 kept fewer than 2 points/);
+  assert.equal((await store.get('face', 'ai')).document.objects.some((o) => o.id === 'box_2'), false);
   assert.match((await aia.run('transform face box face')).text, /layers turn one at a time/);
 });

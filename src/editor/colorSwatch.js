@@ -2,6 +2,10 @@
 // color (a palette, the system's picker and a hex field), to take the color off (the crossed-out chip, first in the
 // palette) and, when the swatch has an opacity, to set it with a slider. While they are being picked, `onInput` lets
 // the canvas show them live; `onChange` saves them.
+// A fill or stroke swatch (`kind`) is a bean instead of a square, as the Fill and Stroke icons: filled with the
+// color, or outlined with it, so the two are told apart at a glance.
+
+import { BEAN } from './icons.js';
 
 /**
  * @typedef {{
@@ -10,6 +14,7 @@
  *   mixed?: boolean,
  *   opacity?: number | null,
  *   title?: string,
+ *   kind?: 'fill' | 'stroke',
  *   onInput?: (color: string | null, opacity?: number) => void,
  *   onChange: (color: string | null, opacity?: number) => void,
  *   onCancel?: () => void,
@@ -173,7 +178,14 @@ function openFor(anchor, options) {
 export function colorSwatch(options) {
   const swatch = document.createElement('button');
   swatch.type = 'button';
-  swatch.className = `swatch${options.value === null ? ' empty' : ''}${options.mixed ? ' mixed' : ''}`;
+  swatch.className = `swatch${options.value === null ? ' empty' : ''}${options.mixed ? ' mixed' : ''}${options.kind ? ` bean ${options.kind}` : ''}`;
+  if (options.kind) {
+    // The bean, under it a faint halo so a dark color still shows on the dark panel; None adds a red slash.
+    const bean = `d="${BEAN}" transform="rotate(-30 12 12)"`;
+    swatch.innerHTML =
+      `<svg viewBox="0 0 24 24" aria-hidden="true"><path class="halo" ${bean}/><path class="paint" ${bean}/>` +
+      `${options.value === null ? '<path class="slash" d="M5 19 19 5"/>' : ''}</svg>`;
+  }
   swatch.title = options.title ?? (options.value === null ? 'None' : (options.value ?? ''));
   if (typeof options.value === 'string' && !options.mixed) swatch.style.setProperty('--color', options.value);
   if (typeof options.opacity === 'number' && options.opacity < 1) swatch.style.setProperty('--alpha', String(options.opacity));

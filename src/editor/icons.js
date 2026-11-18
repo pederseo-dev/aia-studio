@@ -4,12 +4,13 @@
 const stroke = (body) =>
   `<svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 
+// A bean, as v1's Fill and Stroke icons: the fill and stroke swatches draw it (colorSwatch.js).
+export const BEAN = 'M4 12.5c0-3.6 2.4-6 5.3-6 1.8 0 2.5 1.1 3.9 1.1s2.1-1.1 3.9-1.1c2.4 0 3.9 2.2 3.9 4.9 0 4.3-4.1 7.1-8.9 7.1-4.3 0-8.1-2.5-8.1-6z';
+
 export const ICONS = {
   menu: stroke('<path d="M4.5 7h15M4.5 12h15M4.5 17h15"/>'),
   add: stroke('<path d="M12 6v12M6 12h12"/>'),
   close: stroke('<path d="M7 7l10 10M17 7 7 17"/>'),
-  undo: stroke('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
-  redo: stroke('<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>'),
   folderPlus: stroke('<path d="M20.5 11V9.5a1 1 0 0 0-1-1h-8l-2-3h-5a1 1 0 0 0-1 1V18a1 1 0 0 0 1 1h8.5"/><path d="M18 14v6M15 17h6"/>'),
   delete: stroke('<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5M10 11v5M14 11v5"/>'),
   group: stroke('<path d="M3.5 7.5V18a1 1 0 0 0 1 1h15a1 1 0 0 0 1-1V9.5a1 1 0 0 0-1-1h-8l-2-3h-5a1 1 0 0 0-1 1z"/>'),
@@ -31,6 +32,8 @@ export const ICONS = {
   points: stroke('<path d="M5 18 9 6l10 4-4 9z" stroke-dasharray="2 2"/><rect x="3.5" y="16.5" width="3" height="3" fill="currentColor"/><rect x="7.5" y="4.5" width="3" height="3" fill="currentColor"/><rect x="17.5" y="8.5" width="3" height="3" fill="currentColor"/><rect x="13.5" y="17.5" width="3" height="3" fill="currentColor"/>'),
   weld: stroke('<path d="M4 17c3 0 5-2 7-5M20 17c-3 0-5-2-7-5"/><circle cx="12" cy="11" r="2.2" fill="currentColor"/>'),
   unweld: stroke('<path d="M3.5 17c3 0 4.5-2 6-4.5M20.5 17c-3 0-4.5-2-6-4.5"/><circle cx="9.5" cy="11" r="1.8" fill="currentColor"/><circle cx="14.5" cy="11" r="1.8" fill="currentColor"/>'),
+  // Add point: a curved line with a point on it and a plus.
+  addPoint: stroke('<path d="M3.5 18c3-8 8-10 12-8"/><rect x="8.3" y="10.8" width="3" height="3" fill="currentColor"/><path d="M18 3.5v6M15 6.5h6"/>'),
   check: stroke('<path d="m5 12.5 4.5 4.5L19 7.5"/>'),
   corner: stroke('<path d="M5 19 12 6l7 13"/><rect x="10.5" y="4.5" width="3" height="3" fill="currentColor"/>'),
   curve: stroke('<path d="M5 19C7 9 17 9 19 19"/><path d="M6 10h12" stroke-dasharray="2 2"/><rect x="10.5" y="9.5" width="3" height="3" fill="currentColor"/>'),

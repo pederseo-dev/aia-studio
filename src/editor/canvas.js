@@ -8,6 +8,7 @@ import { syncShared } from '../core/points.js';
 import { assetUrl } from './images.js';
 import { state } from './state.js';
 import { area, element, screen, svg, view } from './view.js';
+import { placeView, showZoom } from './navigate.js';
 
 /**
  * @typedef {import('../core/document.js').Doc} Doc
@@ -18,7 +19,6 @@ import { area, element, screen, svg, view } from './view.js';
  */
 
 const empty = /** @type {HTMLElement} */ (document.getElementById('empty'));
-const MARGIN = 40;
 
 /** @type {Painter[]} each tool adds what it draws on the overlay */
 const painters = [];
@@ -52,12 +52,12 @@ export function render() {
   empty.hidden = !!state.document;
   svg.style.display = doc ? '' : 'none';
   svg.dataset.tool = state.tool;
+  showZoom(!!doc);
   if (!doc) return;
   const drawing = drawDocument(doc, { assetUrl });
+  // Where the artboard sits: the document's kept view, or the artboard fitted (navigate.js).
+  placeView(drawing);
   const box = area.getBoundingClientRect();
-  view.scale = Math.max(0.05, Math.min((box.width - MARGIN * 2) / drawing.width, (box.height - MARGIN * 2) / drawing.height));
-  view.x = (box.width - drawing.width * view.scale) / 2;
-  view.y = (box.height - drawing.height * view.scale) / 2;
   svg.setAttribute('width', String(box.width));
   svg.setAttribute('height', String(box.height));
 

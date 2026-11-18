@@ -155,9 +155,9 @@ function row(object, depth) {
 
   const kind = document.createElement('span');
   kind.className = 'kind';
-  kind.title = { group: 'Group layer', vector: 'Vector layer', image: 'Image layer', path: 'Outline part' }[object.type] ?? object.type;
-  kind.innerHTML = icon(/** @type {any} */ (object.type in { group: 1, vector: 1, image: 1, path: 1 } ? object.type : 'vector'));
-  if (isPart(object.type)) line.classList.add('part');
+  // Layers lists only layers (a part is named in the options bar).
+  kind.title = { group: 'Group layer', vector: 'Vector layer', image: 'Image layer' }[object.type] ?? object.type;
+  kind.innerHTML = icon(/** @type {any} */ (object.type in { group: 1, vector: 1, image: 1 } ? object.type : 'vector'));
 
   const name = document.createElement('span');
   name.className = 'name';
@@ -181,8 +181,7 @@ function row(object, depth) {
   const locked = object.locked === true;
 
   line.append(fold, kind, name);
-  if (!isPart(object.type)) line.append(toggle('locked', locked, locked ? 'Unlock' : 'Lock on the canvas'));
-  line.append(toggle('visible', visible, visible ? 'Hide' : 'Show'));
+  line.append(toggle('locked', locked, locked ? 'Unlock' : 'Lock on the canvas'), toggle('visible', visible, visible ? 'Hide' : 'Show'));
   line.addEventListener('click', (event) => {
     if (event.shiftKey || event.ctrlKey || event.metaKey) toggleSelect(object.id);
     else if (state.selection.length !== 1 || object.id !== state.selected) select(object.id);

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  alignHandle,
   apply,
   around,
   bounds,
@@ -8,6 +9,7 @@ import {
   ellipseVertices,
   flipAcross,
   insertVertex,
+  isSmooth,
   nearestOnOutline,
   multiply,
   rectVertices,
@@ -153,4 +155,24 @@ test('an ellipse with more points is still round', () => {
     const on = nearestOnOutline(circle, probe);
     assert.ok(on && Math.abs(Math.hypot(on.point.x - 50, on.point.y - 50) - 50) < 0.05);
   }
+});
+
+test('isSmooth reads a smooth point from its handles', () => {
+  assert.equal(isSmooth({ x: 0, y: 0, in: { x: -10, y: 0 }, out: { x: 4, y: 0 } }), true);
+  assert.equal(isSmooth({ x: 0, y: 0, in: { x: -10, y: 0.2 }, out: { x: 4, y: 0 } }), true, 'rounding stays smooth');
+  assert.equal(isSmooth({ x: 0, y: 0, in: { x: -10, y: 0 }, out: { x: 0, y: 4 } }), false, 'a broken point');
+  assert.equal(isSmooth({ x: 0, y: 0, out: { x: 4, y: 0 } }), false, 'one handle');
+  assert.equal(isSmooth({ x: 0, y: 0, in: { x: 0, y: 0 }, out: { x: 4, y: 0 } }), false, 'a handle with no length');
+});
+
+test('alignHandle turns the other handle opposite, keeping its length', () => {
+  const v = { x: 0, y: 0, in: { x: 0, y: -5 }, out: { x: 3, y: 4 } };
+  alignHandle(v, 'out');
+  assert.deepEqual(v.in, { x: -3, y: -4 });
+  const lone = { x: 0, y: 0, out: { x: 3, y: 4 } };
+  alignHandle(lone, 'out');
+  assert.equal(lone.in, undefined);
+  const flat = { x: 0, y: 0, in: { x: 0, y: 0 }, out: { x: 3, y: 4 } };
+  alignHandle(flat, 'in');
+  assert.deepEqual(flat.out, { x: 3, y: 4 }, 'a lead with no length leaves it');
 });

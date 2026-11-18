@@ -187,7 +187,7 @@ function smooth(vertices, indices, closed) {
 }
 
 /** Whether a vertex is smooth (it has a handle): a corner stays a corner when the line goes on. @param {Vertex} v */
-const isSmooth = (v) => !!(v.in || v.out);
+const hasHandles = (v) => !!(v.in || v.out);
 
 /**
  * Pen down: press on an open end of a line to continue it, anywhere else to start a new line; drag to where the new
@@ -260,7 +260,7 @@ function continueLine(end, to, weld, corners) {
   // line are not welded to (a part does not share its own points).
   const own = !!weld && weld.part === part.id;
   if (own && vertices.length > 2 && weld && 'index' in weld && weld.index === otherEnd) {
-    smooth(vertices, [0, vertices.length - 1].filter((i) => isSmooth(vertices[i])), true);
+    smooth(vertices, [0, vertices.length - 1].filter((i) => hasHandles(vertices[i])), true);
     /** @type {Record<string, unknown>} */
     const props = { vertices: vertices.map(roundVertex), closed: true };
     if (part.fill === null && drawStyle.fill) {
@@ -277,7 +277,7 @@ function continueLine(end, to, weld, corners) {
   else vertices.push(added);
   const index = atStart ? 0 : vertices.length - 1;
   const neighbor = atStart ? 1 : vertices.length - 2;
-  smooth(vertices, [...(corners ? [] : [index]), ...(isSmooth(vertices[neighbor]) ? [neighbor] : [])], false);
+  smooth(vertices, [...(corners ? [] : [index]), ...(hasHandles(vertices[neighbor]) ? [neighbor] : [])], false);
   /** @type {Operation[]} */
   let ops = [];
   if (weld) {

@@ -363,18 +363,27 @@ export function shareTargets(doc, targets) {
   return { ops: vertexOps(changes), refs };
 }
 
-/** The place of a weld target. @param {Doc} doc resolved @param {WeldTarget} target */
-export function targetPlace(doc, target) {
-  if ('index' in target) {
-    const v = verticesOf(needPart(doc, target.part))[target.index];
-    return { x: v.x, y: v.y };
+/**
+ * Deleting points, the same for the editor (Del) and the AI (aia delete-point), in one batch: each part loses its
+ * picked points, and a part left with fewer than 2 (an outline needs 2) is deleted with them. Whoever shared a deleted
+ * point, or followed a deleted part, keeps its place (settleBatch mends that).
+ * @param {Doc} doc resolved @param {PointAt[]} points
+ * @returns {{ ops: Operation[], gone: string[] }} gone: the parts deleted whole
+ */
+export function deletePointsOps(doc, points) {
+  /** @type {Map<string, Set<number>>} */
+  const byPart = new Map();
+  for (const at of points) byPart.set(at.part, new Set([...(byPart.get(at.part) ?? []), at.index]));
+  /** @type {Operation[]} */
+  const ops = [];
+  /** @type {string[]} */
+  const gone = [];
+  for (const [id, indices] of byPart) {
+    const kept = verticesOf(needPart(doc, id)).filter((_, i) => !indices.has(i));
+    if (kept.length < 2) {
+      ops.push({ op: 'delete', target: id });
+      gone.push(id);
+    } else ops.push({ op: 'set', target: id, props: { vertices: kept.map(roundVertex) } });
   }
-  const part = needPart(doc, target.part);
-  return insertVertex(part, target.segment, target.t).vertices[target.segment + 1];
+  return { ops, gone };
 }
-
-/** @param {Doc} doc @param {string} ref */
-export const pointAtRef = (doc, ref) => {
-  const at = pointOf(doc, ref);
-  return at ? { part: at.part.id, index: at.index } : null;
-};

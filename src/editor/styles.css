@@ -165,6 +165,13 @@ dialog h2 { margin-bottom: 12px; }
 
 #canvas-area { position: relative; background: var(--canvas); overflow: hidden; }
 #canvas { position: absolute; inset: 0; }
+/* Moving the view: a hand while Space is held, a closed hand while dragging. */
+#canvas.pan-ready, #canvas.pan-ready * { cursor: grab !important; }
+#canvas.panning, #canvas.panning * { cursor: grabbing !important; }
+.zoom-control { position: absolute; right: 10px; bottom: 10px; z-index: 2; }
+.zoom-control > button { min-width: 56px; height: 24px; padding: 0 8px; font-variant-numeric: tabular-nums; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; }
+.menu.up { top: auto; bottom: calc(100% + 4px); }
+.menu kbd { color: var(--faint); font-size: 11px; }
 #canvas .artboard { stroke: #0005; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .empty-state { position: absolute; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--soft); }
 
@@ -193,9 +200,6 @@ dialog h2 { margin-bottom: 12px; }
 #canvas .pen-point { fill: #fff; stroke: var(--accent); stroke-width: 1.5; }
 #canvas .pen-start { fill: var(--accent); stroke: #fff; stroke-width: 1.5; }
 #canvas .pen-handle { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 2; }
-.row.part .kind { color: var(--faint); }
-.row.part .name { color: var(--soft); }
-.row.part.selected .name { color: var(--text); }
 
 /* Tool groups: the group's tool and an arrow for its menu. */
 .tools-group { display: flex; align-items: center; border-radius: 5px; }
@@ -210,7 +214,7 @@ dialog h2 { margin-bottom: 12px; }
 .options { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--soft); }
 .options .kind { color: var(--faint); white-space: nowrap; }
 .options .name-field { display: inline-flex; align-items: center; gap: 6px; }
-.options .name-field input { width: 160px; height: 22px; }
+.options .name-field input { width: 120px; height: 22px; }
 
 /* Select: the frame, its handles and the marquee. */
 #canvas .overlay .handle { pointer-events: all; fill: #fff; stroke: var(--accent); stroke-width: 1.5; }
@@ -232,6 +236,10 @@ dialog h2 { margin-bottom: 12px; }
 #canvas .overlay .handle.point.picked { fill: var(--accent); stroke: #fff; }
 #canvas .overlay .handle.knob { fill: var(--accent); stroke: #fff; stroke-width: 1; cursor: pointer; }
 #canvas .knob-line { stroke: var(--accent); stroke-width: 1; }
+/* The handles of the other lines that meet at a picked welded point, and the line of the handle under the pointer. */
+#canvas .overlay .handle.knob.joined { fill: #fff; stroke: var(--accent); }
+#canvas .knob-line.joined { stroke-dasharray: 3 2; }
+#canvas .knob-line.hover { stroke-width: 2; }
 
 /* The box that asks for a new part's name. */
 .name-prompt {
@@ -242,9 +250,10 @@ dialog h2 { margin-bottom: 12px; }
 .name-prompt .help { color: var(--faint); font-size: 11px; }
 #canvas .edit-outline { opacity: 0.55; }
 #canvas .edit-outline.main { opacity: 1; stroke-width: 1.5; }
+#canvas .edit-outline.knob-hover { opacity: 1; stroke-width: 2.5; }
 #bar > .bar-end { border-left: 1px solid var(--border); height: 100%; }
 .options .actions { display: flex; align-items: center; gap: 4px; }
-.options .action { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px 0 5px; }
+.options .action { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; height: 24px; padding: 0 8px 0 5px; }
 .options .action .ico { width: 15px; height: 15px; }
 .options .count { color: var(--faint); margin-right: 4px; white-space: nowrap; }
 
@@ -274,6 +283,16 @@ dialog h2 { margin-bottom: 12px; }
 }
 .swatch.empty, .color-popover .chip.none { background: #fff linear-gradient(to top right, transparent 44%, #e05555 44% 56%, transparent 56%); }
 .swatch.mixed { background: repeating-linear-gradient(45deg, var(--panel-2) 0 4px, var(--panel) 4px 8px); }
+/* Fill and stroke swatches: a bean filled or outlined with the color (None: a faint outline with a red slash). */
+.swatch.bean { width: 26px; height: 24px; background: none; border-color: transparent; box-shadow: none; display: inline-flex; align-items: center; justify-content: center; }
+.swatch.bean:hover { border-color: var(--border); background: var(--panel-2); }
+.swatch.bean svg { width: 22px; height: 22px; overflow: visible; }
+.swatch.bean .halo { fill: none; stroke: #ffffff40; stroke-width: 1; }
+.swatch.bean.fill .paint { fill: color-mix(in srgb, var(--color) calc(var(--alpha) * 100%), transparent); stroke: none; }
+.swatch.bean.stroke .halo { stroke-width: 4.6; stroke: #ffffff2a; }
+.swatch.bean.stroke .paint { fill: none; stroke: color-mix(in srgb, var(--color) calc(var(--alpha) * 100%), transparent); stroke-width: 2.6; }
+.swatch.bean:is(.empty, .mixed) .paint { fill: none; stroke: var(--faint); stroke-width: 1.2; stroke-dasharray: 2 2; }
+.swatch.bean .slash { stroke: #e05555; stroke-width: 1.6; stroke-linecap: round; }
 .color-popover {
   position: fixed; z-index: 20; display: flex; flex-direction: column; gap: 8px; padding: 10px; width: 200px;
   background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 28px #0009;
@@ -297,9 +316,10 @@ dialog h2 { margin-bottom: 12px; }
 .inspector h3 { margin: 0 0 4px; font-size: 11px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
 .options .draw-style { display: flex; align-items: center; gap: 6px; padding-right: 10px; margin-right: 2px; border-right: 1px solid var(--border); white-space: nowrap; color: var(--soft); }
 .options .draw-style input[type="number"] { width: 52px; height: 22px; }
-.options .action.toggle { padding-left: 7px; }
-.options .action .led { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--faint); }
-.options .action.toggle.on .led { background: var(--accent); border-color: var(--accent); }
+/* A switch is lit while on: its icon and name in the accent color, on a tinted background. */
+.options .action.toggle { color: var(--faint); }
+.options .action.toggle.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+
 #canvas .selection-box.layer { stroke-dasharray: 8 4; }
 #canvas .origin-cross { stroke: var(--accent); stroke-width: 1.5; }
 #canvas .overlay .handle.origin { fill: var(--panel); stroke: var(--accent); stroke-width: 1.5; cursor: default; }
@@ -311,7 +331,7 @@ dialog h2 { margin-bottom: 12px; }
 #canvas .ghost.hidden .ghost-line { opacity: 0.4; }
 #canvas .add-point { fill: #fff; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 2 2; }
 #canvas .overlay .handle.point.shared { stroke-width: 2; }
-.options .point-name input { width: 120px; }
+.options .point-name input { width: 80px; }
 .groups-menu { min-width: 240px; padding: 6px; gap: 2px; }
 .groups-menu .group-row { display: flex; align-items: center; gap: 2px; }
 .groups-menu .group-pick { flex: 1; }

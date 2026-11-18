@@ -32,7 +32,7 @@ import { copyOps } from '../src/core/copy.js';
 import { addImageOps, replaceImageOps } from '../src/core/images.js';
 import { applyTransformOps, isLayer as isLayerObject, transformOf, transformProps, worldOf } from '../src/core/transform.js';
 import { movePointsOps, pointsNamed, resolveDoc } from '../src/core/points.js';
-import { followOps, groupOps, namePoint, unweld, weld } from '../src/core/weld.js';
+import { deletePointsOps, followOps, groupOps, namePoint, unweld, weld } from '../src/core/weld.js';
 import { svgToPng } from './png.js';
 import { bundleRuntime } from './bundle.js';
 
@@ -465,23 +465,19 @@ export function createAia({ store, schema }) {
 
     'delete-point': {
       usage: 'aia delete-point <doc> <point>...',
-      summary: 'Deletes points of outlines (an outline keeps at least 2)',
-      details: 'Whoever shared a deleted point keeps its place, as a point of its own; groups drop it.',
+      summary: 'Deletes points of outlines, as Del in point editing (a part left with fewer than 2 points is deleted)',
+      details:
+        'Whoever shared a deleted point keeps its place, as a point of its own; groups drop it. A part left with fewer\n' +
+        'than 2 points (an outline needs 2) is deleted with them, in the same step.',
       run: async (args) => {
         const id = need(args, 0, 'the document id');
         const doc = await resolved(id);
         const names = args.positional.slice(1);
         if (!names.length) throw new AiaError('Missing the points to delete');
-        /** @type {Map<string, Set<number>>} */
-        const byPart = new Map();
-        for (const at of points(doc, names)) byPart.set(at.part, new Set([...(byPart.get(at.part) ?? []), at.index]));
-        const ops = [...byPart].map(([part, indices]) => {
-          const kept = verticesOf(/** @type {any} */ (findObject(doc, part))).filter((_, i) => !indices.has(i));
-          if (kept.length < 2) throw new AiaError(`${part} would keep fewer than 2 points: delete the part instead`);
-          return { op: 'set', target: part, props: { vertices: kept } };
-        });
+        const { ops, gone } = deletePointsOps(doc, points(doc, names));
         await store.apply(id, ops, { origin: ORIGIN, note: `Delete ${names.join(', ')}` });
-        return ok(`Deleted ${names.join(', ')} (the points after them moved down one index).`);
+        const whole = gone.length ? ` ${gone.join(', ')} kept fewer than 2 points, so ${gone.length > 1 ? 'they were' : 'it was'} deleted.` : '';
+        return ok(`Deleted ${names.join(', ')} (the points after them moved down one index).${whole}`);
       },
     },
 

@@ -14,6 +14,7 @@ import { renderOptions } from './options.js';
 import { renderInspector } from './inspector.js';
 import { render as renderJson, setupJson } from './json.js';
 import { setupImageDrop } from './images.js';
+import { setupNavigation, zoomActual, zoomFit, zoomSelection, zoomStep } from './navigate.js';
 import { followChanges, onChange, redo, restore, setTool, state, undo, walkParts } from './state.js';
 
 placeIcons(document);
@@ -27,6 +28,7 @@ setupSelectTool();
 setupPointEdit();
 setupJson();
 setupImageDrop();
+setupNavigation(renderCanvas);
 
 let lastTool = state.tool;
 onChange(() => {
@@ -54,7 +56,13 @@ document.addEventListener('keydown', (event) => {
   const ctrl = event.ctrlKey || event.metaKey;
   const key = event.key.toLowerCase();
   const arrow = ARROWS[event.key];
-  if (ctrl && key === 'z') event.shiftKey ? redo() : undo();
+  // The view: Ctrl + / Ctrl − (by key or by place on the keyboard), Ctrl+0 fit, Ctrl+1 100 %, Shift+2 the selection.
+  if (ctrl && (event.key === '+' || event.key === '=' || event.code === 'Equal' || event.code === 'NumpadAdd')) zoomStep(1);
+  else if (ctrl && (event.key === '-' || event.code === 'Minus' || event.code === 'NumpadSubtract')) zoomStep(-1);
+  else if (ctrl && (event.code === 'Digit0' || event.code === 'Numpad0')) zoomFit();
+  else if (ctrl && (event.code === 'Digit1' || event.code === 'Numpad1')) zoomActual();
+  else if (!ctrl && event.shiftKey && event.code === 'Digit2') zoomSelection();
+  else if (ctrl && key === 'z') event.shiftKey ? redo() : undo();
   else if (ctrl && key === 'y') redo();
   else if (ctrl && key === 'd') duplicate();
   else if (ctrl && key === 'c') {

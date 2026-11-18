@@ -8,16 +8,13 @@
 import { findObject } from './document.js';
 import { originOf, round2 } from './geometry.js';
 import { settleOps } from './points.js';
-import { contentBounds, isTransformed, moveLayerOrigin, pivotOf } from './transform.js';
+import { contentBounds, isLayer, isTransformed, moveLayerOrigin, pivotOf } from './transform.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc
  * @typedef {import('./document.js').DocObject} DocObject
  * @typedef {import('./operations.js').Operation} Operation
  */
-
-/** @param {DocObject | undefined} o */
-const isLayer = (o) => o?.type === 'vector' || o?.type === 'group';
 
 /**
  * The batch the store really applies.

@@ -15,7 +15,7 @@
 // stays where it was as a point of its own.
 
 import { ID, findObject } from './document.js';
-import { OUTLINE } from './geometry.js';
+import { OUTLINE, round2, verticesOf } from './geometry.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc
@@ -31,9 +31,6 @@ export const POINT_REF = /^([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)$/;
 
 /** @param {string} ref @returns {[string, string]} the part and the point name */
 export const splitRef = (ref) => /** @type {[string, string]} */ (ref.split('.'));
-
-/** @param {DocObject} part @returns {Vertex[]} */
-const verticesOf = (part) => /** @type {Vertex[]} */ (part.vertices ?? []);
 
 /**
  * The vertex a reference names, and where it is.
@@ -464,13 +461,12 @@ export function movePointsOps(doc, points, { by, to }) {
   if (to && points.length !== 1) throw new Error(`--to places one point, and these are ${points.length}: use --by to move them together`);
   /** @type {Map<string, Vertex[]>} */
   const changes = new Map();
-  const round = (/** @type {number} */ n) => Math.round(n * 100) / 100 || 0;
   for (const { part, index } of points) {
     const object = /** @type {DocObject} */ (findObject(doc, part));
     const vertices = changes.get(part) ?? verticesOf(object).map((v) => ({ ...v }));
     const v = vertices[index];
-    if (to) Object.assign(v, { x: round(to.x), y: round(to.y) });
-    else if (by) Object.assign(v, { x: round(v.x + by.x), y: round(v.y + by.y) });
+    if (to) Object.assign(v, { x: round2(to.x), y: round2(to.y) });
+    else if (by) Object.assign(v, { x: round2(v.x + by.x), y: round2(v.y + by.y) });
     changes.set(part, vertices);
   }
   return [...changes].map(([target, vertices]) => ({ op: 'set', target, props: { vertices } }));

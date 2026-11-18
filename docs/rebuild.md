@@ -1,7 +1,7 @@
 # Rebuild
 
-> Status: **under debate** (started 2026-11-16). The decisions below are agreed with the user; the rest of the
-> topics are still open. Nothing of the current code is changed by this document.
+> Status: **in progress** (started 2026-11-16). The decisions below are agreed with the user and built on the
+> `rebuild` branch; the open topics are listed below. `main` keeps the v1 app until `rebuild` replaces it.
 
 ## Why
 
@@ -137,7 +137,7 @@ transform a part by name, weld by name) come after the first AI test shows what 
 | `aia move <doc> <point>... --by dx,dy \| --to x,y` | Moves points by name: `head.chin`, `head.3` (by index) or a point group `face.upper_lid`; what shares them follows (added after the first AI test) |
 | `aia transform <doc> <id>... --move dx,dy --rotate deg --scale s [--around x,y]` · `--apply` | A layer's own transform, or parts' vertices (several together); Apply transform |
 | `aia rect` · `aia ellipse <doc> <layer> <id> --box x,y,w,h` (`--points n`, `--names …`, style) | Shapes by name, as the Rectangle and Ellipse tools (step 13); style is `--fill`, `--stroke`, `--stroke-width`, `--fill-opacity`, `--stroke-opacity` |
-| `aia delete-point` · `aia curve` · `aia corner <doc> <point>...` · `aia copy <doc> <part>...` | Point editing and copies (step 13) |
+| `aia delete-point` · `aia curve` · `aia corner <doc> <point>...` · `aia copy <doc> <part>...` | Point editing and copies (step 13); `delete-point` deletes a part left with fewer than 2 points, as Del in the editor (step 16) |
 | `aia weld <doc> <point> <target>` (`--join`, `--on <part>`) · `aia unweld <doc> <point>...` | Welding by name, as in point editing |
 | `aia name <doc> <point> <name>` · `aia add-point <doc> <part> --at x,y` | Name a point; add one on a line without changing its shape |
 | `aia follow <doc> <point> <point>` (`--long`, `--off`) · `aia group <doc> <layer>.<group> <point>...` | Followed stretches; point groups |
@@ -168,8 +168,8 @@ The first one built: `aia move` (points by name, index or group, by an offset or
 the commands above, so a weld is the same whoever makes it. The store settles every batch for every origin
 (`settleOps`): giving a shared vertex a place moves the point it shares, and deleting a shared point (or its part)
 leaves the vertices that shared it where they were. Before, the editor did this and the AI's same batch was refused.
-`aia show --resolved` gives shared vertices their x, y. Still without a command: turning points into corners or
-curves (the AI writes the handles).
+`aia show --resolved` gives shared vertices their x, y. (Turning points into corners or curves got its commands in
+step 13: `aia curve`, `aia corner`.)
 
 **Trying Design mode, step 11 (2026-11-16): the layer transform**, as Moho's Transform Layer (agreed with the user).
 A layer, vector or group, has `x`, `y`, `rotation`, `scaleX`, `scaleY` that move, turn and scale everything in it
@@ -253,9 +253,9 @@ not start while the open topics it depends on are undecided. «From v1» names t
 | Part | What | From v1 | Depends on |
 | --- | --- | --- | --- |
 | 1 ✅ | **Base** | `electron/main.js`, `server/folder.js`, `server/app.js` (rewrite) | — |
-| 2 | **Thin slice, end to end**, with simple shapes (rect, ellipse, path, group, styles): document, schema, operations, store with history and undo by origin, live notices, SVG/PNG render, a minimal runtime, the `aia` CLI with `help` and `guide <topic>`, the thin MCP (`aia(command)` + `render`) | keep: `geometry`, `curves`, `paths`, `render/svg`, `server/png`, `server/events`; rewrite: `document`, `schema`, `operations` (no sugars inside `set`), `server/store`, `guide` | topics 2 (the basics) and 3 |
-| 3 | **Editor base**: canvas, Layers, an inspector generated from the schema, selection and transform, a console with the `aia` commands | rewrite: `editor/state`, `canvas`, `layers`, `inspector`, `transform` (small files, no global state) | topic 5 |
-| 4 | **Drawing**: one drawing model, regions, Fill / Stroke | rewrite: `core/mesh`, `regions`, `meshTransform`; editor drawing tools | topic 2 |
+| 2 ✅ | **Thin slice, end to end**, with simple shapes (rect, ellipse, path, group, styles): document, schema, operations, store with history and undo by origin, live notices, SVG/PNG render, a minimal runtime, the `aia` CLI with `help` and `guide <topic>`, the thin MCP (`aia(command)` + `render`) | keep: `geometry`, `curves`, `paths`, `render/svg`, `server/png`, `server/events`; rewrite: `document`, `schema`, `operations` (no sugars inside `set`), `server/store`, `guide` | topics 2 (the basics) and 3 |
+| 3 (mostly) | **Editor base**: canvas, Layers, an inspector generated from the schema, selection and transform, a console with the `aia` commands (built in the Design mode steps; the console is still missing) | rewrite: `editor/state`, `canvas`, `layers`, `inspector`, `transform` (small files, no global state) | topic 5 |
+| 4 | **Drawing**: one drawing model (paths with named, shared and followed points: decisions 6 and 8, no mesh), the Fill tool for regions, Fill / Stroke | the idea of v1's `regions` (painting between lines); written new on `core/points`, `core/weld`; editor drawing tools | topic 2 (its drawing part) |
 | 5 | **Skeleton and binding** | rewrite: `core/skeleton`, `bindPoints`; `editor/bones` | topic 2 |
 | 6 | **Animation**: poses and clips, params and drivers, the timeline | rewrite: `core/animation`, `blend`, `poseValues`; `editor/timeline`, `poses`, `parameters` | topic 2 |
 | 7 | **Runtime and export**: `.aia` + the JS runtime for apps, the manifest, video and Lottie | rewrite: `core/live`, `manifest` | topics 1 and 6 |
@@ -264,7 +264,7 @@ not start while the open topics it depends on are undecided. «From v1» names t
 
 Not brought over: the `painted` type and the coexisting drawing models, the 46 KB guide (replaced by
 `aia guide <topic>`), the 20 MCP tools (replaced by `aia(command)` + `render`), the `.claude/agents/` written for
-them (rewritten when the `aia` commands exist).
+them (rewritten for the `aia` commands: `architecture`, `auditor`, `ai-tester`).
 
 The craft recipes (topic 4; draft in `docs/v1/plan.md`, «Pendiente: guía de oficio») go into the guide topic of the
 part they belong to: drawing from a reference in 4, rig order in 5, clips and the walk cycle in 6.
@@ -392,3 +392,58 @@ own transform; while editing points it flips the picked points instead. Colors: 
 crossed-out square) and an Opacity slider sets the part's new `fillOpacity` / `strokeOpacity` (0 to 1; also
 `--fill-opacity`, `--stroke-opacity` in `aia rect` and `aia ellipse`); any 0-to-1 number, such as an image
 layer's opacity, is a slider.
+
+**Step 16 (2026-11-18): curve handles, as in Moho (agreed with the user).** A point remembers whether it is smooth or
+broken, read from its handles (`isSmooth` in `src/core/geometry.js`: both handles there, pointing opposite ways; no
+new property, so the AI keeps writing `in` / `out`). Dragging a handle of a smooth point turns the other with it
+(`alignHandle`); on a broken point each handle moves alone, so a corner made by hand is no longer lost on the next
+drag. **Shift** while dragging, the user's choice from Moho, does the opposite while it is held: it breaks a smooth
+point, or lines up a broken one (it was Alt before, and the break was forgotten). At a welded point every line that
+meets there has its own vertex with its own handles, but only the picked vertex showed them: now picking a welded
+point shows the handles of every line on it (the other lines' ones hollow, with a dashed stem), and hovering a handle
+lights up the line it bends (and the handle grows a little, in screen pixels, so it keeps its size at any zoom).
+The desktop window lost Electron's native menu bar (File, Edit, View, Window) on Windows and Linux: pressing Alt, the
+editor's own modifier, showed and hid it. The editor has its own ☰ menu; F12 opens the developer tools when run
+from source, and macOS keeps its default menu.
+The point editing bar got lighter (asked by the user): the Weld button left, as Auto weld does the same by dropping a
+point (and Alt joins two open ends); Auto weld sits next to Unweld; the name fields are narrower. Switches carry an icon (Sharp corners the corner, Auto
+weld the weld) and light up in the accent color while on. The fill and stroke swatches, in the bar and the
+Inspector, are v1's bean instead of a square: filled with the color, or outlined with it (a faint halo keeps a dark
+color visible; None is a dashed bean with a red slash); a click opens the color popover as before.
+Point editing without its Delete button (Del does it), and with clicks that pick, asked by the user: a click on a
+line or inside a shape of the edited layer picks all its points (Shift adds them or takes them out; a drag moves
+them). Adding a point on a line, which a click did before, is now the **Add point** switch in the bar (as Moho's
+Add Point, off when the editor starts): while it is on, a click on a line adds a point there and the mark shows where.
+Del deletes every picked point in one step; a part left with fewer than 2 goes with them (before, it was refused),
+and point editing goes on with a part that stays.
+
+**Step 17 (2026-11-18): moving around the canvas** (asked by the user; before, the artboard was always fitted to the
+canvas, with no zoom). As in Moho and every drawing app: the wheel zooms around the pointer (Ctrl+wheel and a
+trackpad pinch too), Shift+wheel or a sideways scroll moves the view sideways, and Space+drag or a middle-button drag
+moves it with any tool. Ctrl + / Ctrl − step through the zoom levels around the middle, Ctrl+0 fits the artboard,
+Ctrl+1 is 100 %, Shift+2 zooms to the selection (to the picked points while editing them). The zoom shows in the
+canvas's corner with a menu of the same. The view is not part of the document (the AI never needs it): each
+document's is kept in the browser as its scale and the point at the middle of the screen, and a document seen for the
+first time, or after Ctrl+0, fits the artboard and follows the window. The math is `src/editor/viewMath.js` (no DOM,
+with tests), the events `src/editor/navigate.js`. The Electron window has no native menu (step 16), so these keys
+are the editor's, not the window's zoom. The keyboard shortcuts dialog got a View section and up-to-date Points and
+Pen rows.
+
+**Review of steps 16 and 17 (2026-11-18)**, by the `auditor` and `architecture` agents, and what was fixed:
+- Deleting points is one rule in the core, `deletePointsOps` in `src/core/weld.js`, for Del in the editor and
+  `aia delete-point` alike (before, the AI's command refused what the editor did). A refused delete keeps the points
+  picked.
+- Shift+2 gives room in document units (a quarter of the artboard around a point), so pressing it again changes
+  nothing (before, it zoomed in about 9× each time); on a selection that draws nothing it leaves the view alone. A
+  deleted document's view is forgotten, and a new document starts fitted even when it takes an old id. The wheel does
+  not zoom during a drag (a marquee would lose its frame).
+- Handles of a stretch that follows another part are not shown (they do nothing there); only the handle under the
+  pointer grows.
+- Cleanup: `isLayer` comes from `core/transform.js` everywhere (settle.js left out image layers, so a moved image
+  layer did not get its origin fixed), unused `targetPlace` / `pointAtRef` / undo and redo icons and Layers' branches
+  for parts removed, the Pen's local `isSmooth` renamed `hasHandles`, `navigate.js` no longer imports `canvas.js`.
+- Found for the next stage (not fixed yet): a stretch can follow a part only between points of that part, so a fill
+  cannot go on along another line from a junction where the second line only shares the point; the Fill tool needs
+  that first. Also: no curve crossings or region search yet, `pointsError` resolves the document once per followed
+  stretch, `server/aia.js` (≈950 lines) should be split by topic when `aia fill` comes, and the editor still does a
+  few things with no command (flip points, move one handle).

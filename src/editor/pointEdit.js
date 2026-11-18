@@ -2,26 +2,29 @@
 // every part of its vector layer (hidden ones too, as ghosts; locked layers excepted).
 //   Click a point: pick it (Shift: add or take out); its part becomes the main one. Drag a point: move the picked
 //   points, whatever part they belong to (Shift: straight). Drag on empty space: a marquee over the points.
-//   The round knobs of a picked point are its curve handles: dragging one keeps the curve smooth (the other handle
-//   turns with it); with Alt it moves alone, making a corner. Alt+click a point: corner ↔ curve. Del: delete the
-//   picked points. Click on the line of an outline: add a point there without changing its shape, as Moho's Add
-//   Point (drag to move it at once). Click a part of the layer: make it the main one. A click on empty space, or Esc,
-//   ends it.
+//   The round knobs of a picked point are its curve handles: on a smooth point the other handle turns with the one
+//   dragged; on a broken one each moves alone. Shift while dragging, as in Moho, breaks a smooth point or makes a
+//   broken one smooth. A welded point shows the handles of every line that meets there (hover one: its line lights
+//   up), so each line's curve can be set. Alt+click a point: corner ↔ curve. Del: delete the picked points (a part
+//   left with fewer than 2 goes with them). Click on a line or inside a shape of the layer: pick all its points
+//   (Shift: add them or take them out) and drag to move them. With Add point on, as Moho's Add Point, a click on a
+//   line adds a point there without changing its shape instead (drag to move it at once). A click on empty space, or
+//   Esc, ends it.
 // Weld (decision 6): a point dropped on a point of another part shares it from then on ({ ref: "jaw.chin" }; the
 //   target point gets a name if it has none), dropped on a line of another part it shares a point added there, and
 //   the two ends of one line close it. Alt: two open ends of different lines become one line. Shared points show
-//   round. Unweld makes them separate points again. A picked point can be named, and picked points gathered in the
-//   point groups of the layer.
+//   round. Unweld makes them separate points again (there is no Weld button: Auto weld does it). A picked point can
+//   be named, and picked points gathered in the point groups of the layer.
 // Each change is one batch, even when it touches several parts.
 
 import { findObject } from '../core/document.js';
 import { pointOf } from '../core/points.js';
-import { followOps, groupOps, isShared, namePoint, shareTargets as shareTargetsIn, stretchBetween, unweld, weld } from '../core/weld.js';
-import { flipAcross, insertVertex, nearestOnOutline, roundVertex, shapePoint, transformVertices, translate, verticesOf } from '../core/geometry.js';
+import { deletePointsOps, followOps, groupOps, isShared, namePoint, shareTargets as shareTargetsIn, stretchBetween, unweld, weld } from '../core/weld.js';
+import { alignHandle, flipAcross, insertVertex, isSmooth, nearestOnOutline, roundVertex, shapePoint, transformVertices, translate, verticesOf } from '../core/geometry.js';
 import { partData } from '../core/draw.js';
 import { addPainter, paintOverlay, showPreview } from './canvas.js';
 import { isPart } from './schema.js';
-import { autoWeld, editPoints, inShownLayer, isLocked, notify, pickPoints, run, select, state } from './state.js';
+import { addPoint, autoWeld, editPoints, inShownLayer, isLocked, notify, pickPoints, run, select, state } from './state.js';
 import { drag, element, screen, svg, toDoc } from './view.js';
 import { IDENTITY, apply } from '../core/geometry.js';
 import { invert, worldOf } from '../core/transform.js';
@@ -167,24 +170,51 @@ function pointDown(event, part, index) {
 function knobDown(event, part, index, side) {
   const vertices = structuredClone(verticesOf(part));
   const vertex = vertices[index];
-  const other = side === 'in' ? 'out' : 'in';
-  const otherLength = vertex[other] ? Math.hypot(vertex[other].x, vertex[other].y) : 0;
+  // What the point is now decides: a smooth point turns its other handle with this one, a broken one moves only this
+  // one. Shift, as in Moho, does the opposite while it is held: it breaks a smooth point, or makes a broken one smooth.
+  const smooth = isSmooth(vertex);
   let moved = false;
   drag(
     event,
     (world, e) => {
       const p = toLayer(state.editing, world);
       moved = true;
-      const handle = { x: p.x - vertex.x, y: p.y - vertex.y };
-      vertex[side] = handle;
-      // Smooth: the other handle points the opposite way, keeping its own length. Alt breaks it into a corner.
-      if (!e.altKey && vertex[other]) {
-        const length = Math.hypot(handle.x, handle.y) || 1;
-        vertex[other] = { x: (-handle.x / length) * otherLength, y: (-handle.y / length) * otherLength };
-      }
+      vertex[side] = { x: p.x - vertex.x, y: p.y - vertex.y };
+      if (smooth !== e.shiftKey) alignHandle(vertex, side);
       showPreview(withVertices(new Map([[part.id, vertices]])));
     },
     () => (moved ? save(new Map([[part.id, vertices]]), `Curve a point of ${part.id}`) : showPreview(null)),
+  );
+}
+
+/**
+ * A click on a line or inside a shape of the edited layer: picks all its points and drags them (Shift: adds them to
+ * the picked ones, or takes them out if they all were).
+ * @param {PointerEvent} event @param {DocObject} part
+ */
+function partDown(event, part) {
+  const keys = verticesOf(part).map((_, index) => keyOf(part.id, index));
+  if (event.shiftKey) {
+    const all = keys.every((k) => state.points.includes(k));
+    pickPoints(all ? state.points.filter((k) => !keys.includes(k)) : [...state.points, ...keys], part.id);
+    return;
+  }
+  pickPoints(keys, part.id);
+  const start = pointerInLayer(event);
+  /** @type {Map<string, Vertex[]> | null} */
+  let changes = null;
+  drag(
+    event,
+    (world, e) => {
+      const p = toLayer(state.editing, world);
+      let dx = p.x - start.x;
+      let dy = p.y - start.y;
+      if (e.shiftKey) Math.abs(dx) > Math.abs(dy) ? (dy = 0) : (dx = 0);
+      if (!changes && Math.hypot(dx, dy) < screen(2)) return;
+      changes = movedPicked(translate(dx, dy));
+      showPreview(withVertices(changes));
+    },
+    () => (changes ? save(changes, `Move ${part.id}`) : showPreview(null)),
   );
 }
 
@@ -295,6 +325,10 @@ function addPointDown(event, part, segment, t) {
 
 /** @type {Point | null} where a click would add a point (shown while the pointer is near a line) */
 let hover = null;
+/** @type {string | null} the part whose curve handle is under the pointer (its line lights up) */
+let knobPart = null;
+/** @type {string | null} the curve handle under the pointer, "part|index|side" (it grows a little) */
+let knobKey = null;
 
 /** The pointerdown of the Transform tools while points are being edited. @param {PointerEvent} event */
 export function pointEditDown(event) {
@@ -312,38 +346,37 @@ export function pointEditDown(event) {
     return pointDown(event, part, Number(index));
   }
   const onLine = lineAt(pointerInLayer(event));
-  if (onLine) return addPointDown(event, onLine.part, onLine.segment, onLine.t);
+  if (onLine && addPoint.on) return addPointDown(event, onLine.part, onLine.segment, onLine.t);
+  if (onLine) return partDown(event, onLine.part);
   const id = target.closest?.('.content [data-id]')?.getAttribute('data-id');
   const other = id ? findObject(doc, id) : undefined;
   if (other && isPart(other.type) && !isLocked(other.id)) {
-    // A part of the same layer becomes the main one; a part of another layer ends point editing and is picked.
-    if (other.parent === state.editing) return pickPoints(state.points, other.id);
+    // A shape of the same layer: all its points; a part of another layer ends point editing and is picked.
+    if (other.parent === state.editing) return partDown(event, other);
     return select(other.id);
   }
   pointMarquee(event);
 }
 
-/** Del while editing points: removes the picked ones (an outline keeps at least 2). */
+/**
+ * Del while editing points: removes the picked ones, in one step. A part left with fewer than 2 points (an outline
+ * needs 2) is deleted with them; points of other parts welded to it stay where they were, as points of their own.
+ */
 export function deletePoints() {
   const doc = state.document;
   if (!doc || !state.editing || !state.points.length) return false;
-  /** @type {Map<string, Vertex[]>} */
-  const changes = new Map();
-  const tooFew = [];
-  for (const [id, indices] of pickedByPart()) {
-    const part = findObject(doc, id);
-    if (!part) continue;
-    const kept = verticesOf(part).filter((_, i) => !indices.includes(i));
-    if (kept.length < 2) tooFew.push(id);
-    else changes.set(id, kept);
-  }
-  if (tooFew.length) {
-    notify(`${tooFew.join(', ')} would keep fewer than 2 points; delete the part instead`);
-    return true;
-  }
   const count = state.points.length;
-  pickPoints([]);
-  save(changes, `Delete ${pointsWord(count)}`);
+  const { ops, gone } = deletePointsOps(doc, state.points.map(atOf));
+  // Point editing goes on with a part of the layer that stays (the main one before the batch lands, so editing does
+  // not end with the deleted one); with none left, the layer is selected. The picked points clear only once it is
+  // saved, so a refused batch leaves them picked.
+  const stays = state.selected && !gone.includes(state.selected) ? state.selected : editableParts(doc).find((p) => !gone.includes(p.id))?.id;
+  if (stays) pickPoints(state.points, stays);
+  const picked = state.points;
+  const note = gone.length ? `Delete ${pointsWord(count)} and ${gone.join(', ')}` : `Delete ${pointsWord(count)}`;
+  run(ops, { select: stays ?? state.editing, note }).then(() => {
+    if (!state.notice && state.points === picked) pickPoints([]);
+  });
   return true;
 }
 
@@ -457,25 +490,6 @@ function weldOps(moving, target, merge = false) {
 function applyWeld(w) {
   pickPoints(w.pick.map((at) => keyOf(at.part, at.index)), w.keep);
   return run(w.ops, { select: w.keep, note: w.note });
-}
-
-/** Whether the two picked points can be welded. */
-export function canWeld() {
-  return state.points.length === 2 && !!weldOps(state.points[0], atOf(state.points[1]));
-}
-
-/**
- * The Weld button: the first picked point goes to the second and shares it (the two ends of one line close it).
- * Alt+click: two open ends of different lines become one line.
- * @param {boolean} [merge]
- */
-export function weldPicked(merge = false) {
-  if (!state.document || state.points.length !== 2) return notify('Pick two points to weld: points of two parts of this layer, or the two ends of a line');
-  try {
-    applyWeld(weld(state.document, atOf(state.points[0]), atOf(state.points[1]), { merge }));
-  } catch (e) {
-    notify(`Cannot weld: ${e.message}`);
-  }
 }
 
 /** A picked point as { part, index, vertex }. @param {string} key */
@@ -627,7 +641,8 @@ function paintPoints(overlay, doc) {
   // The outlines are drawn in the layer's coordinates; the points and knobs on the artboard, so they keep their size.
   const outlines = element('g', { transform: `matrix(${w.join(' ')})` });
   for (const part of parts) {
-    outlines.append(element('path', { d: partData(part), class: `edit-outline${part.id === state.selected ? ' main' : ''}` }));
+    const kind = `${part.id === state.selected ? ' main' : ''}${part.id === knobPart ? ' knob-hover' : ''}`;
+    outlines.append(element('path', { d: partData(part), class: `edit-outline${kind}` }));
   }
   overlay.append(outlines);
   /** @param {Point} p */
@@ -637,19 +652,40 @@ function paintPoints(overlay, doc) {
     overlay.append(element('circle', { cx: h.x, cy: h.y, r: screen(KNOB), class: 'add-point' }));
   }
   const sharedNames = new Set(parts.flatMap((part) => verticesOf(part).flatMap((v) => (v.ref ? [v.ref] : []))));
+  /** The welded point a vertex stands on ("part.name"), if any. @param {DocObject} part @param {Vertex} v */
+  const weldedAt = (part, v) => v.ref ?? (v.name && sharedNames.has(`${part.id}.${v.name}`) ? `${part.id}.${v.name}` : null);
+  // A picked welded point shows the handles of every line that meets there, not only the picked vertex's.
+  const pickedWelds = new Set(
+    parts.flatMap((part) =>
+      verticesOf(part).flatMap((v, index) => {
+        const at = state.points.includes(keyOf(part.id, index)) && weldedAt(part, v);
+        return at ? [at] : [];
+      }),
+    ),
+  );
   const size = screen(POINT);
   for (const part of parts) {
     const vertices = verticesOf(part);
+    const closed = part.closed !== false;
     for (const [index, v] of vertices.entries()) {
-      if (!state.points.includes(keyOf(part.id, index))) continue;
+      const picked = state.points.includes(keyOf(part.id, index));
+      const at = weldedAt(part, v);
+      if (!picked && !(at && pickedWelds.has(at))) continue;
+      const before = vertices[index - 1] ?? (closed ? vertices.at(-1) : undefined);
       for (const side of /** @type {const} */ (['in', 'out'])) {
         const h = v[side];
         if (!h) continue;
+        // A stretch that follows another part draws that part's curve: its own handles there do nothing, so they
+        // are not shown (the out of a vertex that follows, the in of the vertex after it).
+        if (side === 'out' ? v.follow : before?.follow) continue;
         const end = on({ x: v.x + h.x, y: v.y + h.y });
-        const at = on(v);
+        const from = on(v);
+        const key = `${part.id}|${index}|${side}`;
+        const kind = `${picked ? '' : ' joined'}${key === knobKey ? ' hover' : ''}`;
         overlay.append(
-          element('line', { x1: at.x, y1: at.y, x2: end.x, y2: end.y, class: 'knob-line' }),
-          element('circle', { cx: end.x, cy: end.y, r: screen(KNOB), class: 'handle knob', 'data-knob': `${part.id}|${index}|${side}` }),
+          element('line', { x1: from.x, y1: from.y, x2: end.x, y2: end.y, class: `knob-line${kind}` }),
+          // Its size is in screen px (screen()), so it stays the same at any zoom; a little bigger under the pointer.
+          element('circle', { cx: end.x, cy: end.y, r: screen(key === knobKey ? KNOB + 1.5 : KNOB), class: `handle knob${kind}`, 'data-knob': key }),
         );
       }
     }
@@ -682,10 +718,15 @@ export function setupPointEdit() {
   svg.addEventListener('pointermove', (event) => {
     if (!state.editing || event.buttons) return;
     const target = /** @type {Element} */ (event.target);
-    const onHandle = target.getAttribute?.('data-point') || target.getAttribute?.('data-knob');
-    const next = onHandle ? null : (lineAt(pointerInLayer(event))?.point ?? null);
-    if (next?.x === hover?.x && next?.y === hover?.y) return;
+    const knob = target.getAttribute?.('data-knob');
+    const onHandle = target.getAttribute?.('data-point') || knob;
+    // The mark where a click adds a point shows only while Add point is on.
+    const next = onHandle || !addPoint.on ? null : (lineAt(pointerInLayer(event))?.point ?? null);
+    const nextPart = knob ? knob.split('|')[0] : null;
+    if (next?.x === hover?.x && next?.y === hover?.y && (knob ?? null) === knobKey) return;
     hover = next;
+    knobPart = nextPart;
+    knobKey = knob ?? null;
     paintOverlay();
   });
 }

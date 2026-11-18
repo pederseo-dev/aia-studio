@@ -377,6 +377,38 @@ export function shapePoint(vertices, index, closed, corner) {
   if (next) v.out = { x: dir.x * reach(next), y: dir.y * reach(next) };
 }
 
+const SMOOTH_TOLERANCE = (3 * Math.PI) / 180; // how far from opposite two handles may point and still be smooth
+
+/**
+ * Whether a vertex is a smooth point: both handles there, pointing opposite ways (within a few degrees, as saved
+ * handles are rounded). Dragging one handle of a smooth point turns the other; a broken one moves alone. Nothing is
+ * stored for it: it is read from the handles.
+ * @param {Vertex} v
+ */
+export function isSmooth(v) {
+  if (!v.in || !v.out) return false;
+  const a = Math.hypot(v.in.x, v.in.y);
+  const b = Math.hypot(v.out.x, v.out.y);
+  if (!a || !b) return false;
+  return (v.in.x * v.out.x + v.in.y * v.out.y) / (a * b) <= -Math.cos(SMOOTH_TOLERANCE);
+}
+
+/**
+ * Turns the other handle of a vertex to point opposite `side`'s, keeping its own length (a smooth point). Changes the
+ * vertex in place; nothing happens if either handle is missing or `side`'s has no length.
+ * @param {Vertex} v @param {'in' | 'out'} side the handle that leads
+ */
+export function alignHandle(v, side) {
+  const lead = v[side];
+  const other = side === 'in' ? 'out' : 'in';
+  const follower = v[other];
+  if (!lead || !follower) return;
+  const length = Math.hypot(lead.x, lead.y);
+  if (!length) return;
+  const reach = Math.hypot(follower.x, follower.y);
+  v[other] = { x: (-lead.x / length) * reach, y: (-lead.y / length) * reach };
+}
+
 /**
  * The vertices of an ellipse inside a box with `count` points (4 or more), evenly round, the first one at the top and
  * going clockwise, so its points can be shared by name (for example 8 or 12 for a head with ears).
