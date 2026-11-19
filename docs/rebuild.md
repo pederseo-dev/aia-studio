@@ -606,3 +606,6 @@ over the same way; Shift+box toggles each point in it; Shift+click again in a pi
 top or bottom); a part's Vertices, Holes, Closed and Origin are no longer shown (they are edited on the canvas); the
 Shapes row became a **Shape** dropdown just above Fill and Stroke, with the line and the shapes that follow it,
 picking one selects it. `select` takes the controls' dark style.
+The Shape row also has Raise and Lower (Shift+click: top or bottom) and Delete for the part picked in it, so with
+one part selected the Order row is not shown (it stays for a layer or several parts); the row shows for a lone line
+too, with its dropdown disabled.

@@ -7,15 +7,16 @@
 // With a drawing tool active, a «New shapes» section sets the auto fill and auto stroke the tool gives new shapes.
 // While editing points, a «Points» section flips the picked points horizontally or vertically; otherwise a Flip row
 // flips the selected parts, or the selected layer, and an Order row raises or lowers them (icon buttons). A part's
-// points, holes, closing and pivot are edited on the canvas, so they are not shown; above its Fill, a Shape dropdown
-// lists its line and the shapes that follow it, to pick one.
+// points, holes, closing and pivot are edited on the canvas, so they are not shown; above its Fill, the Shape row
+// lists its line and the shapes that follow it, to pick one, and raises, lowers or deletes the one picked (for one
+// part it takes the place of the Order row).
 
 import { findObject } from '../core/document.js';
 import { applyTransformOps, isTransformed } from '../core/transform.js';
 import { showPreview } from './canvas.js';
 import { colorSwatch } from './colorSwatch.js';
 import { flipPoints } from './pointEdit.js';
-import { orderSelected } from './layers.js';
+import { deleteSelected, orderSelected } from './layers.js';
 import { flipSelection } from './selectTool.js';
 import { drawStyle, isDrawTool, isLocked, run, select, setDrawStyle, state } from './state.js';
 import { followsOthers } from '../core/fill.js';
@@ -291,7 +292,7 @@ function pointsSection() {
 
 /**
  * The parts that go together with a part, for the Shape dropdown: the lines (those it follows, or itself) and the
- * shapes that follow them (Create Shape adds one each time, as Moho). Null when it is alone.
+ * shapes that follow them (Create Shape adds one each time, as Moho). Null for anything but a part.
  * @param {import('../core/document.js').Doc} doc @param {import('../core/document.js').DocObject} part
  * @returns {{ id: string, lines: string[], shapes: string[] } | null}
  */
@@ -301,11 +302,15 @@ function linksOf(doc, part) {
   const followed = (o) => new Set([...(/** @type {any[]} */ (o.vertices ?? [])), ...(/** @type {any[][]} */ (o.holes ?? [])).flat()].map((v) => v.follow).filter(Boolean));
   const lines = followsOthers(part) ? [...followed(part)] : [part.id];
   const shapes = doc.objects.filter((o) => o.parent === part.parent && followsOthers(o) && lines.some((l) => followed(o).has(l))).map((o) => o.id);
-  return lines.length + shapes.length > 1 ? { id: part.id, lines, shapes } : null;
+  return { id: part.id, lines, shapes };
 }
 
-/** The Shape dropdown: the line and the shapes that follow it; picking one selects it. @param {{ id: string, lines: string[], shapes: string[] }} links */
-function linksRow(links) {
+/**
+ * The Shape row: a dropdown with the line and the shapes that follow it (picking one selects it), and buttons that
+ * raise, lower or delete the one selected.
+ * @param {{ id: string, lines: string[], shapes: string[] }} links @param {boolean} enabled
+ */
+function linksRow(links, enabled) {
   const choose = document.createElement('select');
   choose.className = 'shape-select';
   for (const [group, ids] of /** @type {const} */ ([['Line', links.lines], ['Shapes', links.shapes]])) {
@@ -316,10 +321,14 @@ function linksRow(links) {
     choose.append(box);
   }
   choose.addEventListener('change', () => select(choose.value));
+  choose.disabled = links.lines.length + links.shapes.length < 2;
   return row(
     'Shape',
-    'The line and the shapes that follow it (Create Shape adds one each time): pick one to see and change its fill and stroke.',
+    'The line and the shapes that follow it (Create Shape adds one each time): pick one to see and change its fill and stroke, raise or lower it, or delete it.',
     choose,
+    iconButton('raise', `Raise ${links.id} one place (Page Up); Shift+click: to the top`, enabled, (e) => orderSelected(e.shiftKey ? 'top' : 'up')),
+    iconButton('lower', `Lower ${links.id} one place (Page Down); Shift+click: to the bottom`, enabled, (e) => orderSelected(e.shiftKey ? 'bottom' : 'down')),
+    iconButton('delete', `Delete ${links.id} (Del); shapes that follow a deleted line keep their outline`, enabled, () => deleteSelected()),
   );
 }
 
@@ -443,12 +452,14 @@ export function renderInspector() {
       const flippable = objects.length > 0 && !state.editing && objects.every((o) => o.type !== 'meta');
       if (flippable) {
         const unlocked = objects.every((o) => !isLocked(o.id));
-        parts.push(flipRow(unlocked), orderRow(unlocked));
+        // One part raises and lowers from its Shape row.
+        parts.push(flipRow(unlocked));
+        if (!links) parts.push(orderRow(unlocked));
       }
       for (const [name, property] of Object.entries(spec.properties)) {
         if (SHOWN_WITH.has(name) || (isPart(typeOf(targets)) && HIDDEN_FOR_PARTS.has(name))) continue;
         // The Shape dropdown goes just above Fill and Stroke, which it is for.
-        if (name === 'fill' && links) parts.push(linksRow(links));
+        if (name === 'fill' && links) parts.push(linksRow(links, objects.every((o) => !isLocked(o.id))));
         parts.push(propertyRow(name, property, targets));
       }
       const only = objects.length === 1 ? objects[0] : null;
