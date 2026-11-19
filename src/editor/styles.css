@@ -318,7 +318,7 @@ dialog h2 { margin-bottom: 12px; }
 .color-popover .opacity input[type="number"] { width: 46px; }
 .inspector .prop .controls input.slider { flex: 1; min-width: 0; }
 .inspector .prop .controls input.slider + input[type="number"] { flex: 0 0 58px; }
-.inspector .prop .controls { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.inspector .prop .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .inspector .prop .controls input[type="number"] { flex: 1; min-width: 0; }
 .inspector .prop .controls input.width { flex: 0 0 64px; }
 .inspector button.small { height: 22px; padding: 0 6px; font-size: 11px; }

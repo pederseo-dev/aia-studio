@@ -208,14 +208,14 @@ test('the AI draws, reshapes, deletes and copies by name, as the editor does', a
 test('aia fill fills the gap the lines close, under them, and recolors it the second time', async () => {
   await ok('new "Face" --width 400 --height 300');
   await ok('rect face ink box --box 0,0,100,100 --fill none');
-  assert.match(await ok('fill face ink --at 50,50 --fill #f0c040'), /Made fill_1, following box, under them/);
+  assert.match(await ok('fill face ink --at 50,50 --fill #f0c040'), /Made box_fill, following box, under them/);
   let doc = (await store.get('face', 'ai')).document;
-  assert.deepEqual(doc.objects.filter((o) => o.parent === 'ink').map((o) => o.id), ['fill_1', 'box']);
-  assert.equal(/** @type {any} */ (doc.objects.find((o) => o.id === 'fill_1')).stroke, null);
+  assert.deepEqual(doc.objects.filter((o) => o.parent === 'ink').map((o) => o.id), ['box_fill', 'box']);
+  assert.equal(/** @type {any} */ (doc.objects.find((o) => o.id === 'box_fill')).stroke, null);
   assert.match(await ok('fill face ink --at 20,20'), /already fills that gap/);
-  assert.match(await ok('fill face ink --at 20,20 --fill #3366cc'), /Recolored fill_1/);
+  assert.match(await ok('fill face ink --at 20,20 --fill #3366cc'), /Recolored box_fill/);
   doc = (await store.get('face', 'ai')).document;
-  assert.equal(/** @type {any} */ (doc.objects.find((o) => o.id === 'fill_1')).fill, '#3366cc');
+  assert.equal(/** @type {any} */ (doc.objects.find((o) => o.id === 'box_fill')).fill, '#3366cc');
   assert.match((await aia.run('fill face ink --at 300,300')).text, /no lines of ink close a gap/);
   assert.match((await aia.run('fill face ink')).text, /--at x,y/);
 });
@@ -231,6 +231,6 @@ test('aia crossings welds lines that cross, and aia shape makes a shape from the
   const doc = (await store.get('face', 'ai')).document;
   const named = doc.objects.flatMap((o) => (/** @type {any[]} */ (o.vertices ?? [])).filter((v) => v.name).map((v) => `${o.id}.${v.name}`));
   assert.equal(named.length, 2, 'b got a named point at each crossing');
-  assert.match(await ok(`shape face ink ${named.join(' ')} a.2 b.4`), /Made fill_1/);
+  assert.match(await ok(`shape face ink ${named.join(' ')} a.2 b.4`), /Made (a|b)_fill./);
   assert.match((await aia.run('shape face ink a.0')).text, /do not close a shape/);
 });

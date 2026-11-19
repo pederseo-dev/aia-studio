@@ -15,7 +15,8 @@ import { colorSwatch } from './colorSwatch.js';
 import { flipPoints } from './pointEdit.js';
 import { orderSelected } from './layers.js';
 import { flipSelection } from './selectTool.js';
-import { drawStyle, isDrawTool, isLocked, run, setDrawStyle, state } from './state.js';
+import { drawStyle, isDrawTool, isLocked, run, select, setDrawStyle, state } from './state.js';
+import { followsOthers } from '../core/fill.js';
 import { schema } from './schema.js';
 
 /**
@@ -294,6 +295,44 @@ function pointsSection() {
   return section;
 }
 
+/**
+ * The shapes that go with a part: for a line, the fills that follow it (Create Shape adds one each time, as Moho);
+ * for a fill, the lines it follows. Null for anything else.
+ * @param {import('../core/document.js').Doc} doc @param {import('../core/document.js').DocObject} part
+ * @returns {{ label: string, help: string, ids: string[] } | null}
+ */
+function linksOf(doc, part) {
+  if (part.type !== 'path') return null;
+  /** @param {import('../core/document.js').DocObject} o */
+  const followed = (o) => new Set([...(/** @type {any[]} */ (o.vertices ?? [])), ...(/** @type {any[][]} */ (o.holes ?? [])).flat()].map((v) => v.follow).filter(Boolean));
+  if (followsOthers(part)) return { label: 'Follows', help: 'The lines this shape follows: bend them and it bends with them.', ids: [...followed(part)] };
+  const ids = doc.objects.filter((o) => o.parent === part.parent && followsOthers(o) && followed(o).has(part.id)).map((o) => o.id);
+  return { label: 'Shapes', help: 'The fills that follow this line (Create Shape adds one each time). Click one to select it.', ids };
+}
+
+/** The shapes or lines that go with the selected part, each a button that selects it. @param {{ label: string, help: string, ids: string[] }} links */
+function linksRow(links) {
+  if (!links.ids.length) {
+    const none = document.createElement('span');
+    none.className = 'faint';
+    none.textContent = 'None';
+    return row(links.label, links.help, none);
+  }
+  const buttons = links.ids.map((id) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'small';
+    button.textContent = id;
+    button.title = `Select ${id}`;
+    button.addEventListener('click', () => select(id));
+    return button;
+  });
+  const count = document.createElement('span');
+  count.className = 'faint';
+  count.textContent = String(links.ids.length);
+  return row(links.label, links.help, count, ...buttons);
+}
+
 /** Flip of the selected parts or layer. @param {boolean} enabled */
 function flipRow(enabled) {
   /** @param {string} text @param {string} help @param {boolean} horizontal */
@@ -397,7 +436,8 @@ export function renderInspector() {
     targets = objects.map((o) => ({ id: o.id, values: o }));
     heading = objects.length > 1 ? `${objects.length} parts` : objects[0].id;
   } else heading = `${objects.length} selected`;
-  const key = JSON.stringify([state.active, targets, drawing && drawStyle, state.editing, state.points.length > 0]);
+  const links = objects.length === 1 && state.document ? linksOf(state.document, objects[0]) : null;
+  const key = JSON.stringify([state.active, targets, drawing && drawStyle, state.editing, state.points.length > 0, links]);
   if (key === builtFrom) return;
   builtFrom = key;
   title.textContent = heading;
@@ -427,6 +467,7 @@ export function renderInspector() {
       }
       const only = objects.length === 1 ? objects[0] : null;
       if (only?.type === 'vector' && isTransformed(only)) parts.push(applyTransformRow(only));
+      if (links) parts.push(linksRow(links));
     }
   }
   panel.replaceChildren(...parts);

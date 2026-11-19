@@ -5,7 +5,7 @@
 //   { op: 'set',    target: 'head' | 'meta', props: { locked: true } }   ← the default value removes the property
 //   { op: 'delete', target: 'head' }                                     ← with everything inside it
 //   { op: 'move',   target: 'head', parent: 'body' | null, index?: 0 }   ← index among the new siblings; none = on top
-//   { op: 'rename', target: 'head', id: 'face' }
+//   { op: 'rename', target: 'head', id: 'face' }   ← references follow; fills named after it (head_fill) too
 
 import { ID, childrenOf, findObject, subtree, treeOrder } from './document.js';
 import { valueError } from './schema.js';
@@ -115,6 +115,19 @@ const HANDLERS = {
     object.id = id;
     for (const o of doc.objects) if (o.parent === target) o.parent = id;
     renamePointRefs(doc, target, id);
+    // Fills still named after it (head_fill, head_fill_2, as Create Shape names them) that follow it take the new
+    // name; a fill named otherwise keeps its name. Undoing the rename renames them back the same way.
+    const derived = new RegExp(`^${target}_fill(_[0-9]+)?$`);
+    for (const o of doc.objects) {
+      const match = derived.exec(o.id);
+      if (!match) continue;
+      const follows = [...((/** @type {any[]} */ (o.vertices)) ?? []), ...((/** @type {any[][]} */ (o.holes)) ?? []).flat()].some((v) => v.follow === id);
+      const next = `${id}_fill${match[1] ?? ''}`;
+      if (!follows || findObject(doc, next)) continue;
+      const old = o.id;
+      o.id = next;
+      renamePointRefs(doc, old, next);
+    }
     return [{ op: 'rename', target: id, id: target }];
   },
 };

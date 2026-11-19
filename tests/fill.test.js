@@ -172,7 +172,7 @@ test('picked points make a shape as in Moho: all around it, with the holes picke
   const { ops } = shapeFromPointsOps(doc, 'ink', nodesOf('outer', 'inner'), { fill: '#ff0000' });
   const after = apply(layer(circle('outer', 200), circle('inner', 100), { id: 'hair', closed: false, fill: null, vertices: [{ x: 0, y: 0 }, { x: 5, y: 5 }] }), ops);
   assert.equal(pointsError(after), null);
-  assert.equal(find(after, 'fill_1').holes.length, 1);
+  assert.equal(find(after, 'outer_fill').holes.length, 1);
   // Clicking in a gap gives its points.
   const gap = gapAt(doc, 'ink', { x: 100, y: 20 });
   assert.ok(!('error' in gap));
@@ -196,4 +196,20 @@ test('lines that cross without a point are found, and welding a crossing opens t
   assert.ok(fillHolds(lens.after, lens.id, { x: 80, y: 50 }) && !fillHolds(lens.after, lens.id, { x: 20, y: 50 }) && !fillHolds(lens.after, lens.id, { x: 140, y: 50 }));
   const moon = fill(lens.after, { x: 20, y: 50 });
   assert.ok(fillHolds(moon.after, moon.id, { x: 20, y: 50 }) && !fillHolds(moon.after, moon.id, { x: 80, y: 50 }));
+});
+
+test('a fill is named after the line it follows most, and renaming the line renames its fills', () => {
+  const first = fill(layer(square), { x: 50, y: 50 });
+  assert.equal(first.id, 'box_fill');
+  const second = fill(first.after, { x: 50, y: 50 });
+  assert.equal(second.made, false, 'aia fill on a filled gap recolors it');
+  const two = apply(first.after, shapeFromPointsOps(resolveDoc(first.after), 'ink', /** @type {any} */ (gapAt(resolveDoc(first.after), 'ink', { x: 50, y: 50 })).nodes, { fill: '#00ff00' }).ops);
+  assert.ok(find(two, 'box_fill_2'), 'Create Shape on the same points adds another, as in Moho');
+  const three = apply(two, shapeFromPointsOps(resolveDoc(two), 'ink', /** @type {any} */ (gapAt(resolveDoc(two), 'ink', { x: 50, y: 50 })).nodes, { fill: '#0000ff' }).ops);
+  const mine = apply(three, [{ op: 'rename', target: 'box_fill_2', id: 'shine' }]);
+  const { document, inverse } = applyOps(schema, mine, [{ op: 'rename', target: 'box', id: 'frame' }]);
+  assert.deepEqual(childrenOf(document, 'ink').map((o) => o.id).sort(), ['frame', 'frame_fill', 'frame_fill_3', 'shine']);
+  assert.ok(find(document, 'frame_fill').vertices.every((v) => v.follow === 'frame' && v.ref.startsWith('frame.')));
+  assert.equal(pointsError(document), null);
+  assert.deepEqual(applyOps(schema, document, inverse).document, mine, 'undo renames them back');
 });

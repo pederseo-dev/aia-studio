@@ -591,3 +591,13 @@ second sharing the first's), so they stay welded from then on, as in Moho. `aia 
 `aia crossings <doc> <layer> [--weld n | all]` do the same for the AI. With Select, lines without fill get an
 invisible band of 10 px around them to be picked by (`addLineHits` in the canvas). Code: `graphOf` now uses
 `facesOf` (shared with `shapeOf`), `gapOf` builds a gap with its holes and its `nodes`, `shapeOps` writes the part.
+
+**Shapes accumulate, named after their line (2026-11-19):** as in Moho, Create Shape on the same points adds another
+shape each time (useful for animation); `aia fill` on a filled gap still recolors it. Kept as they are: the two ways to
+paint (a part's own fill and stroke, or shapes that follow lines) live side by side, the designer's choice. A new shape
+is named after the line it goes along most (`head_fill`, `head_fill_2`). References already go by id and follow a
+rename (like SQL's ON UPDATE CASCADE); now the `rename` op also renames the shapes still named after the line that
+follow it (`head_fill_2` → `face_fill_2`), and leaves a shape named otherwise alone; undoing renames them back. The
+Inspector shows, for a line, a Shapes row with the shapes that follow it (a click selects one), and for a shape, a
+Follows row with its lines. In Create Shape, Shift on a point toggles it and dragging on toggles the points passed
+over the same way; Shift+box toggles each point in it; Shift+click again in a picked gap unpicks it.

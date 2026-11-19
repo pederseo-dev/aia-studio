@@ -24,7 +24,8 @@ import { nextPointName, pointIdOf } from './points.js';
  * @typedef {{ part: string, from: number, to: number, forward: boolean, a: string, b: string, points: Point[], twin: number }} HalfEdge
  *   one way along the stretch of `part` from vertex `from` to vertex `to` (forward: in the order of its vertices),
  *   between the nodes `a` and `b`
- * @typedef {{ part: string, from: number, to: number, a: string, b: string, forward: boolean }} Stretch
+ * @typedef {{ part: string, from: number, to: number, a: string, b: string, forward: boolean, length: number }} Stretch
+ *   length: how long it is (to name a fill after the line it goes along most)
  * @typedef {{ stretches: Stretch[], polygon: Point[], area: number, holes: Stretch[][], holePolygons: Point[][], nodes: string[] }} Gap
  *   area: inside its outline (its holes not taken away); nodes: the points around it and its holes
  * @typedef {{ fill?: string | null, stroke?: string | null, strokeWidth?: number, fillOpacity?: number, strokeOpacity?: number }} FillStyle
@@ -264,7 +265,8 @@ function stretchesOf(face, edges) {
   return runs.map((run) => {
     const first = run[0];
     const last = run[run.length - 1];
-    return { part: first.part, from: first.from, to: last.to, a: first.a, b: last.b, forward: first.forward };
+    const length = run.reduce((sum, h) => sum + h.points.reduce((s, p, i) => (i ? s + Math.hypot(p.x - h.points[i - 1].x, p.y - h.points[i - 1].y) : 0), 0), 0);
+    return { part: first.part, from: first.from, to: last.to, a: first.a, b: last.b, forward: first.forward, length };
   });
 }
 
@@ -478,11 +480,19 @@ function shapeOps(doc, layer, gap, props) {
   const holes = gap.holes.map((hole) => hole.map(vertexOf));
   const siblings = childrenOf(doc, layer);
   const index = Math.min(...[...gap.stretches, ...gap.holes.flat()].map((s) => siblings.findIndex((o) => o.id === s.part)));
-  const id = idFromName('fill_1', (x) => x === 'meta' || !!findObject(doc, x));
+  const id = idFromName(`${mainLine(gap)}_fill`, (x) => x === 'meta' || !!findObject(doc, x));
   /** @type {Operation[]} */
   const ops = [...renamed].map(([target, list]) => ({ op: 'set', target, props: { vertices: list.map(storedOnly) } }));
   ops.push({ op: 'create', type: 'path', id, parent: layer, index, props: { vertices, ...(holes.length ? { holes } : {}), ...props } });
   return { ops, id, note: `Create shape ${id}` };
+}
+
+/** The line a gap's outline goes along most: a fill is named after it (head_fill). @param {Gap} gap */
+function mainLine(gap) {
+  /** @type {Map<string, number>} */
+  const along = new Map();
+  for (const s of gap.stretches) along.set(s.part, (along.get(s.part) ?? 0) + s.length);
+  return [...along].sort((a, b) => b[1] - a[1])[0][0];
 }
 
 /** A vertex as it is saved: a shared one without the x, y resolving gave it. @param {Vertex} v */
