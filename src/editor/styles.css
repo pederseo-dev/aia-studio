@@ -197,11 +197,13 @@ dialog h2 { margin-bottom: 12px; }
 #canvas .selection-box { fill: none; stroke-linejoin: round; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
 #canvas .draft { fill: color-mix(in srgb, var(--accent) 20%, transparent); stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
 #canvas .pen-line { fill: none; stroke: var(--accent); stroke-width: 1.5; }
-/* Fill & Stroke: the gap under the pointer hatched with a dashed edge, the marked ones with a solid edge. */
+/* Create Shape: the gap under the pointer hatched with a dashed edge, the marked ones with a solid edge; a filled gap
+   only outlined. */
 #canvas #gap-hatch line { stroke: var(--accent); stroke-width: 1.5; }
 #canvas .gap { fill: url(#gap-hatch); stroke: var(--accent); }
 #canvas .gap.hover { stroke-width: 1.5; stroke-dasharray: 4 3; opacity: 0.75; }
 #canvas .gap.marked { stroke-width: 2.5; }
+#canvas .gap.filled { fill: none; }
 #canvas .pen-point { fill: #fff; stroke: var(--accent); stroke-width: 1.5; }
 #canvas .pen-start { fill: var(--accent); stroke: #fff; stroke-width: 1.5; }
 #canvas .pen-handle { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 2; }

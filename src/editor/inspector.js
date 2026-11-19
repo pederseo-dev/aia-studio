@@ -225,6 +225,13 @@ function propertyRow(key, spec, targets) {
     span.textContent = mixed ? 'mixed' : `${Array.isArray(value) ? value.length : 0} points (edit them on the canvas)`;
     return row(labelOf(key), spec.help, span);
   }
+  if (spec.type === 'holes') {
+    const span = document.createElement('span');
+    span.className = 'faint';
+    const count = Array.isArray(value) ? value.length : 0;
+    span.textContent = mixed ? 'mixed' : count ? `${count} (they follow the shapes inside)` : 'None';
+    return row(labelOf(key), spec.help, span);
+  }
   if (spec.type === 'pointGroups') {
     const span = document.createElement('span');
     span.className = 'faint';

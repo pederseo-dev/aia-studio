@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 import { loadSchema } from '../server/schema.js';
 import { childrenOf, findObject, newDocument } from '../src/core/document.js';
 import { applyOps } from '../src/core/operations.js';
-import { pointsError, resolveDoc } from '../src/core/points.js';
+import { pointsError, resolveDoc, settleOps } from '../src/core/points.js';
+import { drawDocument } from '../src/core/draw.js';
+import { copyOps } from '../src/core/copy.js';
 import { fillOps, gapAt, insidePolygon, styleProps } from '../src/core/fill.js';
-import { ellipsePoints, outlineOf } from '../src/core/geometry.js';
+import { ellipsePoints, outlineOf, translate } from '../src/core/geometry.js';
 
 const schema = loadSchema();
 const apply = (doc, ops) => applyOps(schema, doc, ops).document;
+const loose = (doc, ops) => applyOps(schema, doc, ops, { checkPoints: false }).document;
 /** @param {any} doc @param {string} id @returns {any} */
 const find = (doc, id) => findObject(doc, id);
 const STYLE = { fill: '#f0c040', stroke: null };
@@ -94,4 +97,40 @@ test('an open end inside a gap does not cut it, and filling a filled gap recolor
   assert.equal(again.id, first.id);
   assert.deepEqual(again.ops, [{ op: 'set', target: first.id, props: { fill: '#3366cc', stroke: '#000000', strokeWidth: 3 } }]);
   assert.equal(childrenOf(again.after, 'ink').length, 3, 'no new part');
+});
+
+test('a shape inside a gap is a hole of its fill; a shape inside that one is not', () => {
+  const circle = (id, size) => ({ id, vertices: ellipsePoints({ x: 100 - size / 2, y: 100 - size / 2, width: size, height: size }, 4) });
+  const doc = layer(circle('outer', 200), circle('inner', 100), circle('dot', 20));
+  const ring = fill(doc, { x: 100, y: 20 });
+  const part = find(ring.after, ring.id);
+  assert.equal(part.holes.length, 1, 'the inner circle is a hole; the dot inside it is not');
+  assert.ok(part.holes[0].every((v) => v.follow === 'inner'));
+  assert.ok(part.vertices.every((v) => v.follow === 'outer'));
+  const drawn = drawDocument(ring.after).nodes[0].children.find((n) => n.attrs['data-id'] === ring.id);
+  assert.equal(drawn.attrs['fill-rule'], 'evenodd');
+  assert.equal((String(drawn.attrs.d).match(/M/g) ?? []).length, 2, 'the outline and the hole');
+  // Inside the hole is another gap: the inner circle around the dot.
+  const middle = fill(ring.after, { x: 100, y: 70 });
+  assert.equal(middle.made, true);
+  assert.equal(find(middle.after, middle.id).holes.length, 1, 'the dot');
+  // The ring is filled: clicking it again finds that fill.
+  assert.equal(fill(middle.after, { x: 100, y: 15 }).made, false);
+  // Bending the inner circle bends the hole.
+  const bent = apply(ring.after, [{ op: 'set', target: 'inner', props: { vertices: find(ring.after, 'inner').vertices.map((v, i) => (i === 0 ? { ...v, y: v.y - 30 } : v)) } }]);
+  assert.match(String(drawDocument(bent).nodes[0].children.find((n) => n.attrs['data-id'] === ring.id).attrs.d), /20 /);
+  // Deleting the inner circle (as the store settles it) takes the hole away and keeps the fill.
+  const settled = applyOps(schema, ring.after, settleOps(ring.after, [{ op: 'delete', target: 'inner' }], loose)).document;
+  assert.equal(find(settled, ring.id).holes, undefined);
+});
+
+test('holes are checked like outlines, renamed with their lines, and copied as plain points', () => {
+  const doc = layer(square, { id: 'cut', vertices: [{ x: 20, y: 20, name: 'a' }, { x: 40, y: 20 }, { x: 30, y: 40 }] });
+  assert.throws(() => apply(doc, [{ op: 'create', type: 'path', id: 'f', parent: 'ink', props: { vertices: square.vertices, holes: [[{ ref: 'cut.zz' }, { x: 1, y: 1 }, { x: 2, y: 2 }]] } }]), /hole 0 of f shares "cut.zz", but there is no such point/);
+  assert.throws(() => apply(doc, [{ op: 'create', type: 'path', id: 'f', parent: 'ink', props: { vertices: square.vertices, holes: [[{ x: 0, y: 0, name: 'n' }, { x: 1, y: 1 }, { x: 2, y: 2 }]] } }]), /take no names/);
+  const withHole = apply(doc, [{ op: 'create', type: 'path', id: 'f', parent: 'ink', props: { vertices: square.vertices, holes: [[{ ref: 'cut.a' }, { x: 40, y: 20 }, { x: 30, y: 40 }]] } }]);
+  const renamed = apply(withHole, [{ op: 'rename', target: 'cut', id: 'slit' }]);
+  assert.deepEqual(find(renamed, 'f').holes[0][0], { ref: 'slit.a' });
+  const { ops } = copyOps(resolveDoc(withHole), [find(resolveDoc(withHole), 'f')], translate(10, 0));
+  assert.deepEqual(ops[0].props.holes[0][0], { x: 30, y: 20 });
 });

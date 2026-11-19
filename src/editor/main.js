@@ -6,7 +6,7 @@ import { actions, renderHeader, setupDropdowns, setupHeader } from './header.js'
 import { deleteSelected, orderSelected, render as renderLayers, renameSelected, setupLayers } from './layers.js';
 import { render as renderCanvas, setupCanvas } from './canvas.js';
 import { cancelPen, setupDrawTools } from './drawTools.js';
-import { clearMarks, fillMarked, setupFillTool } from './fillTool.js';
+import { clearMarks, createMarked, setupFillTool } from './fillTool.js';
 import { nudgeSelection, setupSelectTool } from './selectTool.js';
 import { deletePoints, nudgePoints, setupPointEdit, stopEditing } from './pointEdit.js';
 import { copy, cut, duplicate, paste } from './clipboard.js';
@@ -76,8 +76,8 @@ document.addEventListener('keydown', (event) => {
   } else if (event.altKey && key === 'w') actions.close();
   else if (event.key === 'Escape' && state.tool === 'fill' && clearMarks()) {
     // the marked gaps were cleared
-  } else if (event.key === 'Enter' && state.tool === 'fill' && fillMarked()) {
-    // the marked gaps were filled
+  } else if (event.key === 'Enter' && state.tool === 'fill' && createMarked()) {
+    // shapes were created in the marked gaps
   } else if (event.key === 'Escape' && stopEditing()) {
     // point editing ended
   } else if (arrow && !ctrl) {

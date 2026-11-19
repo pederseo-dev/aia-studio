@@ -1,6 +1,7 @@
-// Fill & Stroke (part 4 of docs/rebuild.md): the gap around a place, closed by the lines of a vector layer, and the
-// batch that fills it with a part whose outline follows those lines (decision 10), for the editor's Fill & Stroke
-// tool and `aia fill`.
+// Create Shape (part 4 of docs/rebuild.md): the gap around a place, closed by the lines of a vector layer, and the
+// batch that fills it with a part whose outline follows those lines (decision 10), for the editor's Create Shape
+// tool and `aia fill`. Groups of lines that lie inside a gap without touching it (the inside of a donut) are its
+// holes: the fill gets one hole per group, following its outside.
 //
 // The lines of a layer (its parts that do not follow others) make a graph: a node at each of their vertices (the
 // same node where two lines share a point), an edge along each stretch between two vertices. Only shared points join
@@ -10,7 +11,7 @@
 // line to the next one (unnamed points of the lines get a name in the same batch).
 
 import { childrenOf, findObject, idFromName } from './document.js';
-import { outlineOf, verticesOf } from './geometry.js';
+import { holeOutlinesOf, holesOf, outlineOf, verticesOf } from './geometry.js';
 import { nextPointName, pointIdOf } from './points.js';
 
 /**
@@ -23,7 +24,8 @@ import { nextPointName, pointIdOf } from './points.js';
  *   one way along the stretch of `part` from vertex `from` to vertex `to` (forward: in the order of its vertices),
  *   between the nodes `a` and `b`
  * @typedef {{ part: string, from: number, to: number, a: string, b: string, forward: boolean }} Stretch
- * @typedef {{ stretches: Stretch[], polygon: Point[], area: number }} Gap
+ * @typedef {{ stretches: Stretch[], polygon: Point[], area: number, holes: Stretch[][], holePolygons: Point[][] }} Gap
+ *   area: inside its outline (its holes not taken away)
  * @typedef {{ fill?: string | null, stroke?: string | null, strokeWidth?: number, fillOpacity?: number, strokeOpacity?: number }} FillStyle
  */
 
@@ -31,7 +33,7 @@ const SAMPLES = 12; // points along each curved stretch, to find the gaps
 const TINY = 1e-6;
 
 /** Whether a part follows others (a fill): those are not lines, so they close no gap. @param {DocObject} part */
-export const followsOthers = (part) => verticesOf(part).some((v) => v.follow);
+export const followsOthers = (part) => verticesOf(part).some((v) => v.follow) || holesOf(part).some((hole) => hole.some((v) => v.follow));
 
 /** The node of a vertex: the point it is ("part.point"), or a key of its own for an unnamed one. @param {DocObject} part @param {Vertex} v @param {number} i */
 const nodeOf = (part, v, i) => pointIdOf(part, v) ?? `${part.id}#${i}`;
@@ -83,7 +85,13 @@ export function insidePolygon(polygon, at) {
   return inside;
 }
 
-/** @type {WeakMap<Doc, Map<string, { edges: HalfEdge[], faces: number[][] }>>} the graph of each layer, per document */
+/**
+ * @typedef {{ face: number[], polygon: Point[], area: number, component: number }} Face a face without its spurs
+ * @typedef {{ edges: HalfEdge[], faces: Face[], outer: Map<number, Face> }} Graph outer: the outside of each
+ *   connected group of lines (its biggest face), which is a hole of the gap it lies in
+ */
+
+/** @type {WeakMap<Doc, Map<string, Graph>>} the graph of each layer, per document */
 const graphs = new WeakMap();
 
 /**
@@ -126,20 +134,46 @@ function graphOf(doc, layer) {
     const at = list.indexOf(h.twin);
     return list[(at - 1 + list.length) % list.length];
   });
-  /** @type {number[][]} */
+  // Lines joined by shared points are one group (union-find over the nodes).
+  /** @type {Map<string, string>} */
+  const root = new Map();
+  /** @param {string} x @returns {string} */
+  const find = (x) => {
+    const up = root.get(x) ?? x;
+    if (up === x) return x;
+    const top = find(up);
+    root.set(x, top);
+    return top;
+  };
+  for (const h of edges) root.set(find(h.a), find(h.b));
+  /** @type {Map<string, number>} */
+  const groups = new Map();
+  /** @type {Face[]} */
   const faces = [];
+  /** @type {Map<number, Face>} */
+  const outer = new Map();
   const seen = new Set();
   for (let k = 0; k < edges.length; k++) {
     if (seen.has(k)) continue;
     /** @type {number[]} */
-    const face = [];
+    const raw = [];
     for (let h = k; !seen.has(h); h = next[h]) {
       seen.add(h);
-      face.push(h);
+      raw.push(h);
     }
-    faces.push(face);
+    const face = withoutSpurs(raw, edges);
+    if (face.length < 2) continue;
+    const polygon = polygonOf(face, edges);
+    const area = Math.abs(signedArea(polygon));
+    if (area < TINY) continue;
+    const key = find(edges[k].a);
+    if (!groups.has(key)) groups.set(key, groups.size);
+    const component = /** @type {number} */ (groups.get(key));
+    const f = { face, polygon, area, component };
+    faces.push(f);
+    if (!outer.has(component) || /** @type {Face} */ (outer.get(component)).area < area) outer.set(component, f);
   }
-  const graph = { edges, faces };
+  const graph = { edges, faces, outer };
   byLayer.set(layer, graph);
   return graph;
 }
@@ -204,19 +238,26 @@ function stretchesOf(face, edges) {
 export function gapAt(doc, layer, at) {
   const object = findObject(doc, layer);
   if (!object || object.type !== 'vector') return { error: `there is no vector layer "${layer}"` };
-  const { edges, faces } = graphOf(doc, layer);
-  /** @type {Gap | null} */
+  const { edges, faces, outer } = graphOf(doc, layer);
+  /** @type {Face | null} */
   let best = null;
-  for (const raw of faces) {
-    const face = withoutSpurs(raw, edges);
-    if (face.length < 2) continue;
-    const polygon = polygonOf(face, edges);
-    const area = Math.abs(signedArea(polygon));
-    if (area < TINY || !insidePolygon(polygon, at)) continue;
-    if (best && best.area <= area) continue;
-    best = { stretches: stretchesOf(face, edges), polygon, area };
+  for (const f of faces) {
+    if (!insidePolygon(f.polygon, at)) continue;
+    if (!best || f.area < best.area) best = f;
   }
-  return best ?? { error: `no lines of ${layer} close a gap around ${round(at.x)}, ${round(at.y)} (lines that cross must be welded where they meet)` };
+  if (!best) return { error: `no lines of ${layer} close a gap around ${round(at.x)}, ${round(at.y)} (lines that cross must be welded where they meet)` };
+  // The holes: the outsides of the other groups of lines that lie inside it, but not inside one another (a shape
+  // inside a hole is in another gap).
+  const found = /** @type {Face} */ (best);
+  const inside = [...outer.values()].filter((o) => o.component !== found.component && o.area < found.area && o.polygon.every((p) => insidePolygon(found.polygon, p)));
+  const holes = inside.filter((o) => !inside.some((other) => other !== o && other.area > o.area && o.polygon.every((p) => insidePolygon(other.polygon, p))));
+  return {
+    stretches: stretchesOf(found.face, edges),
+    polygon: found.polygon,
+    area: found.area,
+    holes: holes.map((o) => stretchesOf(o.face, edges)),
+    holePolygons: holes.map((o) => o.polygon),
+  };
 }
 
 /** @param {number} n */
@@ -231,9 +272,13 @@ export function fillOfGap(doc, layer, gap, at) {
   return childrenOf(doc, layer).find((part) => {
     if (part.type !== 'path' || !followsOthers(part)) return false;
     const polygon = outlineSamples(part);
-    return insidePolygon(polygon, at) && Math.abs(Math.abs(signedArea(polygon)) - gap.area) <= gap.area * 0.02 + 1;
+    if (!insidePolygon(polygon, at) || holeOutlinesOf(part).some((hole) => insidePolygon(closedSamples(hole), at))) return false;
+    return Math.abs(Math.abs(signedArea(polygon)) - gap.area) <= gap.area * 0.02 + 1;
   });
 }
+
+/** @param {Vertex[]} outline @returns {Point[]} a closed outline as points */
+const closedSamples = (outline) => outline.flatMap((v, i) => sample(v, outline[(i + 1) % outline.length]).slice(0, -1));
 
 /** @param {DocObject} part @returns {Point[]} */
 function outlineSamples(part) {
@@ -290,18 +335,20 @@ export function fillOps(doc, layer, at, props, fresh = {}) {
     named.set(node, `${partId}.${name}`);
     return `${partId}.${name}`;
   };
-  /** @type {Record<string, string>[]} as saved: shared points, without x, y */
-  const vertices = gap.stretches.map((s) => {
+  /** @param {Stretch} s @returns {Record<string, string>} a vertex as saved: a shared point, without x, y */
+  const vertexOf = (s) => {
     const ref = pointAt(s.part, s.from, s.a);
     const followed = /** @type {DocObject} */ (findObject(doc, s.part));
     return { ref, follow: s.part, ...(longWay(followed, s) ? { way: 'long' } : {}) };
-  });
+  };
+  const vertices = gap.stretches.map(vertexOf);
+  const holes = gap.holes.map((hole) => hole.map(vertexOf));
   const siblings = childrenOf(doc, layer);
-  const index = Math.min(...gap.stretches.map((s) => siblings.findIndex((o) => o.id === s.part)));
+  const index = Math.min(...[...gap.stretches, ...gap.holes.flat()].map((s) => siblings.findIndex((o) => o.id === s.part)));
   const id = idFromName('fill_1', (x) => x === 'meta' || !!findObject(doc, x));
   /** @type {Operation[]} */
   const ops = [...renamed].map(([target, list]) => ({ op: 'set', target, props: { vertices: list.map(storedOnly) } }));
-  ops.push({ op: 'create', type: 'path', id, parent: layer, index, props: { vertices, ...fresh, ...props } });
+  ops.push({ op: 'create', type: 'path', id, parent: layer, index, props: { vertices, ...(holes.length ? { holes } : {}), ...fresh, ...props } });
   return { ops, id, made: true, note: `Fill a gap of ${layer}` };
 }
 

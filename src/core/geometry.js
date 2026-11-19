@@ -73,6 +73,15 @@ export const OUTLINE = Symbol('outline');
 /** The vertices a part draws through: its outline with followed stretches, or its own vertices. @param {DocObject} part @returns {Vertex[]} */
 export const outlineOf = (part) => /** @type {Vertex[]} */ (/** @type {any} */ (part)[OUTLINE] ?? part.vertices ?? []);
 
+/** The holes of a part as saved: closed outlines cut out of its fill. @param {DocObject} part @returns {Vertex[][]} */
+export const holesOf = (part) => /** @type {Vertex[][]} */ (part.holes ?? []);
+
+/** Where a part's holes really go, with their followed stretches (set by resolveDoc; never saved). */
+export const HOLES = Symbol('holes');
+
+/** The holes a part draws: with followed stretches, or as saved. @param {DocObject} part @returns {Vertex[][]} */
+export const holeOutlinesOf = (part) => /** @type {Vertex[][]} */ (/** @type {any} */ (part)[HOLES] ?? holesOf(part));
+
 /** @param {number} n */
 export const round2 = (n) => Math.round(n * 100) / 100 || 0;
 
@@ -193,7 +202,12 @@ export function transformOrigin(object, m) {
  * @returns {{ vertices: Vertex[], originX?: number, originY?: number }}
  */
 export function transformPart(part, m) {
-  return { vertices: verticesOf(part).map((v) => roundVertex(transformVertex(v, m))), ...transformOrigin(part, m) };
+  const holes = holesOf(part);
+  return {
+    vertices: verticesOf(part).map((v) => roundVertex(transformVertex(v, m))),
+    ...(holes.length ? { holes: holes.map((hole) => hole.map((v) => roundVertex(transformVertex(v, m)))) } : {}),
+    ...transformOrigin(part, m),
+  };
 }
 
 /** A vertex with its handles swapped (the outline walked the other way). @param {Vertex} v @returns {Vertex} */

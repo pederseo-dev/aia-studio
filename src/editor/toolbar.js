@@ -15,14 +15,14 @@ export const TOOLS = {
   pen: { name: 'Pen', key: 'P', icon: 'pen', help: 'Click for corners, drag for curves; the first point closes, Enter ends a line, Esc cancels' },
   rect: { name: 'Rectangle', key: 'R', icon: 'rect', help: 'Drag on the canvas for a rectangular path; Shift for a square' },
   ellipse: { name: 'Ellipse', key: 'E', icon: 'ellipse', help: 'Drag on the canvas for an elliptical path; Shift for a circle' },
-  fill: { name: 'Fill & Stroke', key: 'F', icon: 'bean', help: 'Click inside gaps closed by lines to mark them (Shift: several), then Fill (Enter) fills them; a filled gap gets recolored. Esc clears the marks' },
+  fill: { name: 'Create Shape', key: 'F', icon: 'bean', help: 'Click a gap closed by lines to mark it (Shift: several), then Create shape (Enter) fills it with a shape that follows them; a filled gap selects its shape. Esc clears the marks' },
 };
 
 /** @type {{ id: string, name: string, tools: Tool[] }[]} */
 const GROUPS = [
   { id: 'transform', name: 'Transform', tools: ['select', 'move', 'scale', 'rotate'] },
   { id: 'draw', name: 'Draw', tools: ['pen', 'rect', 'ellipse'] },
-  { id: 'paint', name: 'Fill & Stroke', tools: ['fill'] },
+  { id: 'paint', name: 'Create Shape', tools: ['fill'] },
 ];
 
 /** @type {Record<string, Tool>} the tool each group shows (the last one used in it) */

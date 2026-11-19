@@ -4,7 +4,7 @@
 // is found depends on who draws: the editor asks the server, the PNG and the export put the file inside (data URLs).
 
 import { childrenOf } from './document.js';
-import { outlineOf } from './geometry.js';
+import { holeOutlinesOf, outlineOf } from './geometry.js';
 import { resolveDoc } from './points.js';
 import { svgTransform } from './transform.js';
 
@@ -51,11 +51,13 @@ export function pathData(vertices, closed) {
 }
 
 /**
- * The outline of a part as path data.
+ * The outline of a part as path data, with its holes after it (drawn with the even-odd rule, so they cut the fill).
  * @param {DocObject} part
  */
 export function partData(part) {
-  return pathData(outlineOf(part), part.closed !== false);
+  const closed = part.closed !== false;
+  const holes = closed ? holeOutlinesOf(part) : [];
+  return pathData(outlineOf(part), closed) + holes.map((hole) => pathData(hole, true)).join('');
 }
 
 /**
@@ -79,6 +81,7 @@ function drawChildren(doc, parent, options) {
     const stroke = object.stroke === undefined ? DEFAULTS.stroke : object.stroke;
     /** @type {Record<string, string | number>} */
     const attrs = { 'data-id': object.id, d: partData(object), fill: fill === null ? 'none' : String(fill) };
+    if (object.closed !== false && Array.isArray(object.holes) && object.holes.length) attrs['fill-rule'] = 'evenodd';
     if (fill !== null && object.fillOpacity !== undefined && object.fillOpacity !== 1) attrs['fill-opacity'] = Number(object.fillOpacity);
     if (stroke !== null) {
       attrs.stroke = String(stroke);

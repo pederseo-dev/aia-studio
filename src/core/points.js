@@ -17,7 +17,7 @@
 // stays where it was as a point of its own.
 
 import { ID, findObject } from './document.js';
-import { OUTLINE, round2, verticesOf } from './geometry.js';
+import { HOLES, OUTLINE, holesOf, round2, verticesOf } from './geometry.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc
@@ -47,8 +47,19 @@ export function pointOf(doc, ref) {
   return index < 0 ? null : { part, index, vertex: verticesOf(part)[index] };
 }
 
+/** Every vertex of a part: its outline's and its holes'. @param {DocObject} o */
+const allVertices = (o) => [...verticesOf(o), ...holesOf(o).flat()];
+
 /** Whether a document has any shared vertex. @param {Doc} doc */
-const hasRefs = (doc) => doc.objects.some((o) => verticesOf(o).some((v) => v.ref));
+const hasRefs = (doc) => doc.objects.some((o) => allVertices(o).some((v) => v.ref));
+
+/**
+ * A hole seen as a part of its own (a closed outline of the same part, in the same layer), so the rules for shared
+ * points and followed stretches apply to it as they do to the outline.
+ * @param {DocObject} part @param {Vertex[]} hole
+ * @returns {DocObject}
+ */
+export const holeAsPart = (part, hole) => ({ ...part, vertices: hole, closed: true, holes: undefined });
 
 /**
  * The document with every shared vertex at the place of the point it shares (its `ref` kept), and, for the parts
@@ -61,19 +72,21 @@ export function resolveDoc(doc) {
   const placed = {
     ...doc,
     objects: doc.objects.map((o) => {
-      if (!verticesOf(o).some((v) => v.ref)) return o;
-      return {
-        ...o,
-        vertices: verticesOf(o).map((v) => {
-          if (!v.ref) return v;
-          const shared = pointOf(doc, v.ref)?.vertex;
-          return shared && !shared.ref ? { ...v, x: shared.x, y: shared.y } : v;
-        }),
+      if (!allVertices(o).some((v) => v.ref)) return o;
+      /** @param {Vertex} v */
+      const place = (v) => {
+        if (!v.ref) return v;
+        const shared = pointOf(doc, v.ref)?.vertex;
+        return shared && !shared.ref ? { ...v, x: shared.x, y: shared.y } : v;
       };
+      const holes = holesOf(o);
+      return { ...o, vertices: verticesOf(o).map(place), ...(holes.length ? { holes: holes.map((hole) => hole.map(place)) } : {}) };
     }),
   };
   for (const o of placed.objects) {
     if (verticesOf(o).some((v) => v.follow)) /** @type {any} */ (o)[OUTLINE] = followedOutline(placed, o);
+    const holes = holesOf(o);
+    if (holes.some((hole) => hole.some((v) => v.follow))) /** @type {any} */ (o)[HOLES] = holes.map((hole) => followedOutline(placed, holeAsPart(o, hole)));
   }
   return placed;
 }
@@ -177,28 +190,43 @@ export function pointsError(doc) {
   // take seconds).
   /** @type {Doc | null} */
   let resolved = null;
-  for (const object of doc.objects) {
-    const vertices = verticesOf(object);
+  /**
+   * What is wrong with the points of one outline (a part's, or one of its holes), or null.
+   * @param {DocObject} object the part, or a hole as a part (holeAsPart)
+   * @param {string} label how its points are called: the part's id, or "hole 0 of fill_1"
+   * @param {number} hole which hole it is, or -1 for the part's own outline
+   */
+  const outlineError = (object, label, hole) => {
     /** @type {Set<string>} */
     const names = new Set();
-    for (const [i, v] of vertices.entries()) {
+    for (const [i, v] of verticesOf(object).entries()) {
       if (v.name) {
         if (names.has(v.name)) return `${object.id} has two points named "${v.name}"`;
         names.add(v.name);
       }
       if (v.follow) {
         resolved ??= resolveDoc(doc);
-        const stretch = followStretch(resolved, object, i);
-        if ('error' in stretch) return stretch.error;
+        const shown = /** @type {DocObject} */ (findObject(resolved, object.id));
+        const stretch = followStretch(resolved, hole < 0 ? shown : holeAsPart(shown, holesOf(shown)[hole]), i);
+        if ('error' in stretch) return hole < 0 ? stretch.error : `${label}: ${stretch.error}`;
       }
       if (!v.ref) continue;
       const [partId] = splitRef(v.ref);
       const shared = pointOf(doc, v.ref);
-      const where = `point ${i} of ${object.id} shares "${v.ref}"`;
+      const where = `point ${i} of ${label} shares "${v.ref}"`;
       if (!shared) return `${where}, but there is no such point (name the point in its part first)`;
       if (partId === object.id) return `${where}: a part cannot share a point with itself`;
       if (shared.part.parent !== object.parent) return `${where}, which is in another layer (only parts of the same layer share points)`;
       if (shared.vertex.ref) return `${where}, which itself shares "${shared.vertex.ref}": share that one instead`;
+    }
+    return null;
+  };
+  for (const object of doc.objects) {
+    const problem = outlineError(object, object.id, -1);
+    if (problem) return problem;
+    for (const [h, hole] of holesOf(object).entries()) {
+      const holeProblem = outlineError(holeAsPart(object, hole), `hole ${h} of ${object.id}`, h);
+      if (holeProblem) return holeProblem;
     }
     const groups = /** @type {PointGroups | undefined} */ (object.groups);
     for (const [group, members] of Object.entries(groups ?? {})) {
@@ -223,14 +251,11 @@ export function renamePointRefs(doc, from, to) {
     const [part, name] = splitRef(ref);
     return part === from ? `${to}.${name}` : ref;
   };
+  /** @param {Vertex} v */
+  const renamed = (v) => ({ ...v, ...(v.ref ? { ref: rename(v.ref) } : {}), ...(v.follow === from ? { follow: to } : {}) });
   for (const o of doc.objects) {
-    if (verticesOf(o).some((v) => v.ref || v.follow)) {
-      o.vertices = verticesOf(o).map((v) => ({
-        ...v,
-        ...(v.ref ? { ref: rename(v.ref) } : {}),
-        ...(v.follow === from ? { follow: to } : {}),
-      }));
-    }
+    if (verticesOf(o).some((v) => v.ref || v.follow)) o.vertices = verticesOf(o).map(renamed);
+    if (holesOf(o).length) o.holes = holesOf(o).map((hole) => hole.map(renamed));
     const groups = /** @type {PointGroups | undefined} */ (o.groups);
     if (groups) o.groups = Object.fromEntries(Object.entries(groups).map(([g, members]) => [g, members.map(rename)]));
   }
@@ -304,8 +329,13 @@ export function settleOps(doc, ops, apply) {
   if (!wellFormed(ops)) return ops;
   const resolved = resolveDoc(doc);
   /** @param {Operation} op */
-  const stripped = (op) =>
-    op.props?.vertices ? { ...op, props: { ...op.props, vertices: op.props.vertices.map(storedVertex) } } : op;
+  const stripped = (op) => {
+    if (!op.props?.vertices && !op.props?.holes) return op;
+    const props = { ...op.props };
+    if (Array.isArray(props.vertices)) props.vertices = props.vertices.map(storedVertex);
+    if (Array.isArray(props.holes)) props.holes = props.holes.map((/** @type {unknown} */ hole) => (Array.isArray(hole) ? hole.map(storedVertex) : hole));
+    return { ...op, props };
+  };
   const first = ops.map(stripped);
   // What the editor meant: shared vertices where it put them.
   /** @type {Map<string, Vertex[]>} */
@@ -349,6 +379,21 @@ export function settleOps(doc, ops, apply) {
       return ownVertex({ ...v, x: Number(at?.x ?? 0), y: Number(at?.y ?? 0) });
     });
     fix(o, { vertices });
+  }
+  // A hole that shared a point that is gone goes with it (its shape came from that line); a hole's stretch that
+  // followed a part that is gone becomes a plain stretch.
+  /** @param {Vertex} v */
+  const followsGone = (v) => !!v.follow && !!findObject(doc, String(v.follow)) && !findObject(after, String(v.follow));
+  /** @param {Vertex} v @returns {Vertex} */
+  const plain = (v) => {
+    const { follow: _follow, way: _way, ...rest } = v;
+    return rest;
+  };
+  for (const o of after.objects) {
+    const holes = holesOf(o);
+    if (!holes.some((hole) => hole.some((v) => (v.ref && lost(v.ref)) || followsGone(v)))) continue;
+    const kept = holes.filter((hole) => !hole.some((v) => v.ref && lost(v.ref))).map((hole) => hole.map((v) => (followsGone(v) ? plain(v) : v)));
+    fix(o, { holes: kept });
   }
   // Group members whose point is gone leave the group.
   for (const o of after.objects) {

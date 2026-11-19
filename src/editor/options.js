@@ -20,7 +20,7 @@ import {
   unweldPicked,
 } from './pointEdit.js';
 import { addPoint, autoWeld, drawStyle, editPoints, fillStyle, isDrawTool, penOptions, run, setDrawStyle, setFillStyle, state, toggleAddPoint, toggleAutoWeld, toggleSharpCorners } from './state.js';
-import { fillMarked, markedCount } from './fillTool.js';
+import { createMarked, markedCount } from './fillTool.js';
 import { colorSwatch } from './colorSwatch.js';
 import { isPart } from './schema.js';
 
@@ -52,7 +52,7 @@ bar.append(style, kind, label, actions);
 /** @type {string} what the style controls were last built from */
 let styleFrom = '';
 
-/** The Fill & Stroke tool's bar: the style it fills with, and Fill for the marked gaps. */
+/** The Create Shape tool's bar: the style of the shapes it creates, and Create shape for the marked gaps. */
 function renderFillStyle() {
   const marked = markedCount();
   const key = JSON.stringify({ fill: true, ...fillStyle, marked });
@@ -65,7 +65,7 @@ function renderFillStyle() {
   width.min = '0';
   width.step = 'any';
   width.value = String(fillStyle.strokeWidth);
-  width.title = 'Stroke width of the fills';
+  width.title = 'Stroke width of the shapes it creates';
   width.addEventListener('change', () => {
     const n = Number(width.value);
     if (width.value !== '' && n >= 0) setFillStyle({ strokeWidth: n });
@@ -76,11 +76,11 @@ function renderFillStyle() {
   strokeLabel.textContent = 'Stroke';
   style.append(
     fillLabel,
-    colorSwatch({ kind: 'fill', value: fillStyle.fill, opacity: fillStyle.fillOpacity, nullable: true, title: 'The fill the gaps get (None: no fill)', onChange: (c, a) => setFillStyle({ fill: c, ...(a === undefined ? {} : { fillOpacity: a }) }) }),
+    colorSwatch({ kind: 'fill', value: fillStyle.fill, opacity: fillStyle.fillOpacity, nullable: true, title: 'The fill of the shapes it creates (None: no fill)', onChange: (c, a) => setFillStyle({ fill: c, ...(a === undefined ? {} : { fillOpacity: a }) }) }),
     strokeLabel,
-    colorSwatch({ kind: 'stroke', value: fillStyle.stroke, opacity: fillStyle.strokeOpacity, nullable: true, title: 'The stroke around the gaps (None: only the lines’ own)', onChange: (c, a) => setFillStyle({ stroke: c, ...(a === undefined ? {} : { strokeOpacity: a }) }) }),
+    colorSwatch({ kind: 'stroke', value: fillStyle.stroke, opacity: fillStyle.strokeOpacity, nullable: true, title: 'The stroke of the shapes it creates (None: only the lines’ own)', onChange: (c, a) => setFillStyle({ stroke: c, ...(a === undefined ? {} : { strokeOpacity: a }) }) }),
     width,
-    button('bean', marked > 1 ? `Fill ${marked} gaps` : 'Fill', 'Fill the marked gaps with this style; a gap already filled is recolored (Enter)', () => fillMarked(), { disabled: !marked, main: true }),
+    button('bean', marked > 1 ? `Create ${marked} shapes` : 'Create shape', 'Create a shape in each marked gap, following the lines around it, with this fill and stroke (Enter)', () => createMarked(), { disabled: !marked, main: true }),
   );
 }
 

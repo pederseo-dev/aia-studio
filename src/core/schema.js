@@ -4,7 +4,7 @@
 
 /**
  * @typedef {{
- *   type: 'string' | 'number' | 'boolean' | 'color' | 'asset' | 'vertices' | 'pointGroups',
+ *   type: 'string' | 'number' | 'boolean' | 'color' | 'asset' | 'vertices' | 'holes' | 'pointGroups',
  *   default: unknown, nullable?: boolean, min?: number, max?: number,
  *   description: string, help: string,
  * }} PropertySpec
@@ -82,6 +82,8 @@ export function valueError(spec, value) {
       return null;
     case 'vertices':
       return verticesError(value);
+    case 'holes':
+      return holesError(value);
     case 'pointGroups':
       return groupsError(value);
     default:
@@ -96,6 +98,18 @@ const isPoint = (value) =>
   Object.keys(value).every((k) => k === 'x' || k === 'y') &&
   Number.isFinite(/** @type {any} */ (value).x) &&
   Number.isFinite(/** @type {any} */ (value).y);
+
+/** A list of holes: closed outlines of vertices without names. @param {unknown} value */
+function holesError(value) {
+  if (!Array.isArray(value)) return 'must be a list of holes, each a list of vertices [[{ x, y }, …], …]';
+  for (const [h, hole] of value.entries()) {
+    const problem = verticesError(hole);
+    if (problem) return `hole ${h}: ${problem}`;
+    if (hole.length < 2 || (hole.length === 2 && !hole.some((v) => v.follow))) return `hole ${h} needs at least 3 vertices, or 2 that follow lines`;
+    if (hole.some((v) => v.name !== undefined)) return `hole ${h}: the points of a hole take no names (name them in a line and share them)`;
+  }
+  return null;
+}
 
 /** @param {unknown} value */
 function verticesError(value) {

@@ -523,11 +523,12 @@ export function createAia({ store, schema }) {
       usage: 'aia fill <doc> <layer> --at x,y [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1]',
       summary: 'Fills the gap around x,y that the lines of a vector layer close (or recolors the fill already there)',
       details:
-        'As the editor’s Fill & Stroke tool. x,y is in the layer’s coordinates. The new part follows the lines around\n' +
+        'As the editor’s Create Shape tool. x,y is in the layer’s coordinates. The new part follows the lines around\n' +
         'the gap (bend a line and the fill bends with it) and goes just under the lowest of them; unnamed points of\n' +
-        'those lines get a name so the fill can share them. Without --stroke it has no stroke. Only welded points join\n' +
-        'lines: two lines that cross without a weld do not close a gap. On a gap already filled it changes that fill’s\n' +
-        'style instead. Example: aia fill face ink --at 120,80 --fill #f0c040',
+        'those lines get a name so the fill can share them. Shapes inside the gap that do not touch its lines (the\n' +
+        'middle of a donut) become holes of the fill, each following its shape. Without --stroke it has no stroke.\n' +
+        'Only welded points join lines: two lines that cross without a weld do not close a gap. On a gap already\n' +
+        'filled it changes that fill’s style instead. Example: aia fill face ink --at 120,80 --fill #f0c040',
       run: async (args) => {
         const id = need(args, 0, 'the document id');
         const layer = need(args, 1, 'the vector layer');

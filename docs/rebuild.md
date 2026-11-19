@@ -249,6 +249,9 @@ binding, pose vs clip, and params and drivers stay open.
   by default on a closed part; the Fill tool always writes it.
 - **Point groups** belong to the vector layer (`groups: { upper_lid: ["lid.top", …] }`).
 - **Layers:** vector (holds parts), group, image; any of them with a transform (x, y, rotation, scale, origin).
+- **Holes** (2026-11-19): a `path` may have `holes`, closed outlines cut out of its fill (drawn even-odd), each a list
+  of vertices like its own but without names; they share points and follow lines as the outline does. A hole whose
+  shared point is deleted goes away with it.
 - **No mesh and no region type.** A fill is a `path` whose outline follows the lines around it, made by the Fill tool
   (the paint bucket) or `aia fill`, and placed under those lines. Moving or bending a line moves the fills that follow
   it, because they are drawn from it.
@@ -482,6 +485,12 @@ changes instead of redrawing each frame (parts 6 and 7), and lookups by id walk 
 
 ## Next: Fill & Stroke (part 4)
 
+**Changed later on 2026-11-19:** the tool is **Create Shape** (F, the bean) and does only the fill for now; the stroke
+(stretches on / off, caps, joins) is thought out after it. Over a gap it shows it hatched, with its holes clear. A click
+selects: an empty gap is marked (Shift: several), a filled gap selects its fill part; **Create shape** in the bar (or
+Enter) fills the marked gaps. Shapes inside a gap that do not touch its lines (a donut's middle) are **holes** of the
+fill (decision 10 grew `holes`). The plan below is the earlier one, kept for its steps.
+
 Agreed on 2026-11-19, on decision 10 (replaces the paint bucket plan of 2026-11-18). Not a paint bucket: a **Fill &
 Stroke tool (F)** that works as a selector of its own. Over a closed gap between lines it shows the gap hatched, over a
 stretch of a line (between two points) it shows it thicker; a click marks or unmarks it (Shift: several), and the marks
@@ -544,6 +553,17 @@ Fill & Stroke tool (F, the bean icon, its own group): the gap under the pointer 
 unmarks; Shift: several), Fill in the bar or Enter fills the marked gaps in one step, Esc clears them. Its fill and
 stroke (default: no stroke) are kept apart from the drawing tools' auto style. Not yet: stroke on / off of stretches
 and caps / joins (step 3), marking stretches with the tool, and the split of `server/aia.js` (now ≈1050 lines).
+
+**Create Shape and holes (2026-11-19):** the tool became Create Shape (see the note at the top of this section). The
+model: `holes` on `path` (schema type `holes`: lists of vertices without names, at least 3, or 2 that follow lines);
+`resolveDoc` places their shared points and sets `part[HOLES]` for the followed ones (`holeAsPart` checks a hole as a
+part of its own), `pointsError` checks them, renaming a part renames them, `settleOps` drops a hole whose shared point
+is gone, `transformPart` and copies carry them (copies as plain points), and `partData` draws them after the outline
+with `fill-rule: evenodd`. A `set` to an empty list now removes a property whose default is an empty list. The gap
+search: lines joined by shared points are one group; the outside (biggest face) of every other group that lies inside
+the gap, and not inside another such group, is a hole, and `fillOps` writes one hole per group, following it. In the
+editor a click on an empty gap marks it, on a filled one selects its fill (Shift: adds), the hover shows a filled gap
+only outlined, Create shape (Enter) makes the marked ones and selects them, and the Inspector shows a part's holes.
 
 Left for later: a stroke width per point (Moho's Line Width: SVG has no variable-width stroke, so the core and the
 runtime would have to build its outline), gaps with holes (a ring: one part has one outline), a point added by

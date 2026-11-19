@@ -37,7 +37,7 @@ export const ICONS = {
   check: stroke('<path d="m5 12.5 4.5 4.5L19 7.5"/>'),
   corner: stroke('<path d="M5 19 12 6l7 13"/><rect x="10.5" y="4.5" width="3" height="3" fill="currentColor"/>'),
   curve: stroke('<path d="M5 19C7 9 17 9 19 19"/><path d="M6 10h12" stroke-dasharray="2 2"/><rect x="10.5" y="9.5" width="3" height="3" fill="currentColor"/>'),
-  // Fill & Stroke: the bean of the fill and stroke swatches.
+  // Create Shape: the bean of the fill and stroke swatches.
   bean: stroke(`<path d="${BEAN}" transform="rotate(-30 12 12)"/>`),
   path: stroke('<path d="M4 17c3-9 6-11 9-6s5 3 7-4"/><circle cx="4" cy="17" r="1.3" fill="currentColor"/><circle cx="20" cy="7" r="1.3" fill="currentColor"/>'),
 };

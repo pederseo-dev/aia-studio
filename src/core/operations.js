@@ -171,7 +171,9 @@ function writeProps(spec, holder, props) {
     if (error) throw new Error(`${key} ${error}`);
   }
   for (const [key, value] of Object.entries(props)) {
-    if (value === spec.properties[key].default) delete holder[key];
+    const fallback = spec.properties[key].default;
+    const empty = Array.isArray(fallback) && fallback.length === 0 && Array.isArray(value) && value.length === 0;
+    if (value === fallback || empty) delete holder[key];
     else holder[key] = value;
   }
 }

@@ -10,7 +10,11 @@ import { IDENTITY, transformPart } from './geometry.js';
  * @typedef {import('./document.js').DocObject} DocObject
  * @typedef {import('./geometry.js').Matrix} Matrix
  * @typedef {import('./operations.js').Operation} Operation
+ * @typedef {import('./geometry.js').Vertex} Vertex
  */
+
+/** A vertex of a copy: where it is, as a point of its own. @param {Vertex} v @returns {Vertex} */
+const own = ({ ref: _ref, follow: _follow, way: _way, ...v }) => v;
 
 /**
  * The ops that create copies of parts, each moved by `m`, in the layer `layer` (or each in its own layer).
@@ -32,7 +36,8 @@ export function copyOps(doc, parts, m, layer) {
     const matrix = typeof m === 'function' ? m(part) : m;
     Object.assign(props, matrix === IDENTITY ? {} : transformPart(part, matrix));
     // A copy does not share the original's points: its shared vertices stay where they are, as its own.
-    if (Array.isArray(props.vertices)) props.vertices = props.vertices.map(({ ref: _ref, follow: _follow, way: _way, ...v }) => v);
+    if (Array.isArray(props.vertices)) props.vertices = props.vertices.map(own);
+    if (Array.isArray(props.holes)) props.holes = props.holes.map((/** @type {Vertex[]} */ hole) => hole.map(own));
     ops.push({ op: 'create', type, id, parent: layer ?? parent, props });
   }
   return { ops, ids: [...used] };
