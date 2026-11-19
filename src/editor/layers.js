@@ -72,7 +72,15 @@ const ORDER_NOTES = { up: 'Raise', down: 'Lower', top: 'Raise to the top', botto
  */
 export function orderSelected(how) {
   const doc = state.document;
-  const ids = state.selection.filter((id) => doc && findObject(doc, id));
+  orderObjects(state.selection.filter((id) => doc && findObject(doc, id)), how);
+}
+
+/**
+ * Raises or lowers some parts or layers (the Inspector's ▲ ▼ for an element or a shape's fill or stroke).
+ * @param {string[]} ids @param {import('../core/order.js').OrderMove} how
+ */
+export function orderObjects(ids, how) {
+  const doc = state.document;
   if (!doc || !ids.length) return;
   if (ids.some(isLocked)) return notify('Unlock it first');
   const ops = orderOps(doc, ids, how);

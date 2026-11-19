@@ -11,6 +11,7 @@
 import { ID, childrenOf, findObject, subtree, treeOrder } from './document.js';
 import { valueError } from './schema.js';
 import { followedLines, pointsError, renamePointRefs } from './points.js';
+import { shapePartName, shapePartOf } from './shapes.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc
@@ -121,12 +122,11 @@ const HANDLERS = {
     if (alone) return back;
     // Shapes still named after it (head_fill, head_stroke_2, as Create Shape names them) that follow it take the new
     // name; a shape named otherwise keeps its name. Undo renames back exactly these, each alone.
-    const derived = new RegExp(`^${target}_(fill|stroke)(_[0-9]+)?$`);
     for (const o of doc.objects) {
-      const match = derived.exec(o.id);
-      if (!match) continue;
+      const name = shapePartOf(o.id);
+      if (name?.base !== target) continue;
       const follows = followedLines(o).has(id);
-      const next = `${id}_${match[1]}${match[2] ?? ''}`;
+      const next = shapePartName(id, name.kind, name.suffix);
       if (!follows || findObject(doc, next)) continue;
       const old = o.id;
       o.id = next;

@@ -7,7 +7,9 @@ import { pointsError, resolveDoc, settleOps } from '../src/core/points.js';
 import { drawDocument } from '../src/core/draw.js';
 import { copyOps } from '../src/core/copy.js';
 import { deletePointsOps, unweld } from '../src/core/weld.js';
-import { crossingsOf, fillOps, gapAt, insidePolygon, nodeKeys, partsToMove, shapeFromPointsOps, shapeOf, styleProps, weldCrossingOps } from '../src/core/fill.js';
+import { fillOps, gapAt, insidePolygon, nodeKeys, shapeFromPointsOps, shapeOf, styleProps } from '../src/core/fill.js';
+import { elementOf, partsToMove, shapesOf } from '../src/core/shapes.js';
+import { crossingsOf, weldCrossingOps } from '../src/core/crossings.js';
 import { ellipsePoints, outlineOf, round2, transformPart, translate } from '../src/core/geometry.js';
 
 const schema = loadSchema();
@@ -291,4 +293,19 @@ test('undoing a rename gives back exactly the names it changed', () => {
   const { document, inverse } = applyOps(schema, mine, [{ op: 'rename', target: 'box', id: 'face' }]);
   assert.ok(find(document, 'face_fill') && find(document, 'face_stroke'));
   assert.deepEqual(applyOps(schema, document, inverse).document, mine, 'face_stroke stays: the rename did not touch it');
+});
+
+test('a shape belongs to the line it is named after; an element lists its shapes as fill and stroke pairs', () => {
+  const doc = layer(square);
+  const nodes = /** @type {any} */ (gapAt(resolveDoc(doc), 'ink', { x: 50, y: 50 })).nodes;
+  let after = apply(doc, shapeFromPointsOps(resolveDoc(doc), 'ink', nodes, { fill: '#ff0000', stroke: '#000000' }).ops);
+  const named = /** @type {any} */ (gapAt(resolveDoc(after), 'ink', { x: 50, y: 50 })).nodes;
+  after = apply(after, shapeFromPointsOps(resolveDoc(after), 'ink', named, { fill: '#00ff00', stroke: null }).ops);
+  after = apply(after, shapeFromPointsOps(resolveDoc(after), 'ink', named, { fill: '#0000ff', stroke: null }, 'glow').ops);
+  const box = find(after, 'box');
+  assert.equal(elementOf(after, find(after, 'box_stroke')).id, 'box');
+  assert.equal(elementOf(after, find(after, 'glow_fill')).id, 'box', 'named otherwise: the line it follows');
+  assert.equal(elementOf(after, box).id, 'box', 'an element is its own');
+  const shapes = shapesOf(after, box).map((s) => [s.key, s.fill?.id ?? null, s.stroke?.id ?? null]);
+  assert.deepEqual(shapes.sort(), [['box', 'box_fill', 'box_stroke'], ['box_2', 'box_fill_2', null], ['glow', 'glow_fill', null]].sort());
 });

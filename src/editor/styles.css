@@ -191,7 +191,7 @@ dialog h2 { margin-bottom: 12px; }
 .tools { display: flex; gap: 2px; }
 .tools button.icon.active { background: var(--accent); color: var(--on-accent); }
 .separator { width: 1px; height: 20px; background: var(--border); margin: 0 6px; }
-#canvas[data-tool="rect"], #canvas[data-tool="ellipse"], #canvas[data-tool="pen"], #canvas[data-tool="fill"] { cursor: crosshair; }
+#canvas[data-tool="rect"], #canvas[data-tool="ellipse"], #canvas[data-tool="pen"], #canvas[data-tool="shape"] { cursor: crosshair; }
 #canvas[data-tool="select"] .content [data-id] { cursor: default; }
 #canvas .line-hit { pointer-events: stroke; }
 #canvas .overlay * { vector-effect: non-scaling-stroke; pointer-events: none; }

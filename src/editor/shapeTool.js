@@ -9,10 +9,11 @@
 // `aia shape` and `aia crossings`.
 
 import { findObject } from '../core/document.js';
-import { crossingsOf, gapAt, nodeKeys, shapeFromPointsOps, shapeOf, styleProps, weldCrossingOps } from '../core/fill.js';
+import { gapAt, nodeKeys, shapeFromPointsOps, shapeOf, styleProps } from '../core/fill.js';
+import { crossingsOf, weldCrossingOps } from '../core/crossings.js';
 import { addPainter, onToolDown, paintOverlay } from './canvas.js';
 import { fromLayer, layerScreen, toLayer } from './pointEdit.js';
-import { activeVector, fillStyle, isHidden, isLocked, notify, run, state } from './state.js';
+import { activeVector, shapeStyle, isHidden, isLocked, notify, run, state } from './state.js';
 import { drag, element, screen, svg, toDoc } from './view.js';
 
 /**
@@ -134,7 +135,7 @@ export function createPicked() {
   if (!doc || !pickLayer || !picks.size) return false;
   let result;
   try {
-    result = shapeFromPointsOps(doc, pickLayer, picks, styleProps(fillStyle));
+    result = shapeFromPointsOps(doc, pickLayer, picks, styleProps(shapeStyle));
   } catch (e) {
     notify(e.message);
     return true;
@@ -146,7 +147,7 @@ export function createPicked() {
 
 /**
  * Welds two lines where they cross. The picked unnamed points after a point added on a line move up one place.
- * @param {import('../core/fill.js').Crossing} crossing
+ * @param {import('../core/crossings.js').Crossing} crossing
  */
 function weldCrossing(crossing) {
   const doc = state.document;
@@ -288,10 +289,10 @@ function paint(overlay, doc) {
   }
 }
 
-export function setupFillTool() {
-  onToolDown('fill', createDown);
+export function setupShapeTool() {
+  onToolDown('shape', createDown);
   svg.addEventListener('pointermove', (event) => {
-    if (state.tool !== 'fill' || event.buttons) return;
+    if (state.tool !== 'shape' || event.buttons) return;
     const p = toDoc(event);
     const layer = workLayer();
     const doc = state.document;
@@ -312,7 +313,7 @@ export function setupFillTool() {
     paintOverlay();
   });
   addPainter((overlay, doc) => {
-    if (state.tool !== 'fill') {
+    if (state.tool !== 'shape') {
       picks = new Set();
       hover = null;
       return;

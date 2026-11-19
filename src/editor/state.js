@@ -9,7 +9,7 @@ import { resolveDoc } from '../core/points.js';
  * @typedef {import('../core/document.js').Doc} Doc
  * @typedef {import('../core/operations.js').Operation} Operation
  * @typedef {{ id: string, name: string }} Tab
- * @typedef {'select' | 'move' | 'scale' | 'rotate' | 'pen' | 'rect' | 'ellipse' | 'fill'} Tool
+ * @typedef {'select' | 'move' | 'scale' | 'rotate' | 'pen' | 'rect' | 'ellipse' | 'shape'} Tool
  */
 
 const TABS_KEY = 'aia.tabs';
@@ -381,27 +381,28 @@ export function setDrawStyle(changes) {
 /** Whether the tool draws new shapes. @param {Tool} tool */
 export const isDrawTool = (tool) => tool === 'pen' || tool === 'rect' || tool === 'ellipse';
 
-const FILL_STYLE_KEY = 'aia.fillStyle';
+const SHAPE_STYLE_KEY = 'aia.shapeStyle';
 
 /**
  * The style the Create Shape tool gives the shapes it creates, kept apart from the drawing tools' (such a
  * shape usually has no stroke: the lines around it have theirs). Kept per person in this browser.
  * @type {typeof drawStyle}
  */
-export const fillStyle = (() => {
+export const shapeStyle = (() => {
   const fallback = { fill: '#c8c2d4', stroke: null, strokeWidth: 2, fillOpacity: 1, strokeOpacity: 1 };
   try {
-    return { ...fallback, ...JSON.parse(localStorage.getItem(FILL_STYLE_KEY) ?? '{}') };
+    // aia.fillStyle: where it was kept while the tool was called Fill & Stroke.
+    return { ...fallback, ...JSON.parse(localStorage.getItem(SHAPE_STYLE_KEY) ?? localStorage.getItem('aia.fillStyle') ?? '{}') };
   } catch {
     return fallback;
   }
 })();
 
-/** @param {Partial<typeof fillStyle>} changes */
-export function setFillStyle(changes) {
-  Object.assign(fillStyle, changes);
+/** @param {Partial<typeof shapeStyle>} changes */
+export function setShapeStyle(changes) {
+  Object.assign(shapeStyle, changes);
   try {
-    localStorage.setItem(FILL_STYLE_KEY, JSON.stringify(fillStyle));
+    localStorage.setItem(SHAPE_STYLE_KEY, JSON.stringify(shapeStyle));
   } catch {}
   changed();
 }

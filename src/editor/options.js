@@ -19,8 +19,8 @@ import {
   toggleCornersPicked,
   unweldPicked,
 } from './pointEdit.js';
-import { addPoint, autoWeld, drawStyle, editPoints, fillStyle, isDrawTool, penOptions, run, setDrawStyle, setFillStyle, state, toggleAddPoint, toggleAutoWeld, toggleSharpCorners } from './state.js';
-import { canCreate, createPicked, pickedCount } from './fillTool.js';
+import { addPoint, autoWeld, drawStyle, editPoints, shapeStyle, isDrawTool, penOptions, run, setDrawStyle, setShapeStyle, state, toggleAddPoint, toggleAutoWeld, toggleSharpCorners } from './state.js';
+import { canCreate, createPicked, pickedCount } from './shapeTool.js';
 import { colorSwatch } from './colorSwatch.js';
 import { isPart } from './schema.js';
 
@@ -53,9 +53,9 @@ bar.append(style, kind, label, actions);
 let styleFrom = '';
 
 /** The Create Shape tool's bar: the style of the shapes it creates, and Create shape for the picked points. */
-function renderFillStyle() {
+function renderShapeStyle() {
   const ready = canCreate();
-  const key = JSON.stringify({ fill: true, ...fillStyle, ready, picked: pickedCount() });
+  const key = JSON.stringify({ shape: true, ...shapeStyle, ready, picked: pickedCount() });
   if (key === styleFrom) return;
   styleFrom = key;
   style.replaceChildren();
@@ -64,11 +64,11 @@ function renderFillStyle() {
   width.type = 'number';
   width.min = '0';
   width.step = 'any';
-  width.value = String(fillStyle.strokeWidth);
+  width.value = String(shapeStyle.strokeWidth);
   width.title = 'Stroke width of the shapes it creates';
   width.addEventListener('change', () => {
     const n = Number(width.value);
-    if (width.value !== '' && n >= 0) setFillStyle({ strokeWidth: n });
+    if (width.value !== '' && n >= 0) setShapeStyle({ strokeWidth: n });
   });
   const fillLabel = document.createElement('span');
   fillLabel.textContent = 'Fill';
@@ -76,16 +76,16 @@ function renderFillStyle() {
   strokeLabel.textContent = 'Stroke';
   style.append(
     fillLabel,
-    colorSwatch({ kind: 'fill', value: fillStyle.fill, opacity: fillStyle.fillOpacity, nullable: true, title: 'The fill of the shapes it creates (None: no fill)', onChange: (c, a) => setFillStyle({ fill: c, ...(a === undefined ? {} : { fillOpacity: a }) }) }),
+    colorSwatch({ kind: 'fill', value: shapeStyle.fill, opacity: shapeStyle.fillOpacity, nullable: true, title: 'The fill of the shapes it creates (None: no fill)', onChange: (c, a) => setShapeStyle({ fill: c, ...(a === undefined ? {} : { fillOpacity: a }) }) }),
     strokeLabel,
-    colorSwatch({ kind: 'stroke', value: fillStyle.stroke, opacity: fillStyle.strokeOpacity, nullable: true, title: 'The stroke of the shapes it creates (None: only the lines’ own)', onChange: (c, a) => setFillStyle({ stroke: c, ...(a === undefined ? {} : { strokeOpacity: a }) }) }),
+    colorSwatch({ kind: 'stroke', value: shapeStyle.stroke, opacity: shapeStyle.strokeOpacity, nullable: true, title: 'The stroke of the shapes it creates (None: only the lines’ own)', onChange: (c, a) => setShapeStyle({ stroke: c, ...(a === undefined ? {} : { strokeOpacity: a }) }) }),
     width,
     button('bean', 'Create shape', ready ? 'Create the shape the picked points close, following the lines, with this fill and stroke (Enter)' : 'Pick the points around a shape first (or click inside a gap)', () => createPicked(), { disabled: !ready, main: true }),
   );
 }
 
 function renderStyle() {
-  if (state.tool === 'fill') return renderFillStyle();
+  if (state.tool === 'shape') return renderShapeStyle();
   const key = isDrawTool(state.tool) ? JSON.stringify({ ...drawStyle, pen: state.tool === 'pen', weld: autoWeld.on, sharp: penOptions.sharp }) : '';
   if (key === styleFrom) return;
   styleFrom = key;

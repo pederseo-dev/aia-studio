@@ -289,6 +289,13 @@ function controlsOf(vertices, i) {
 /** @param {Point} p @param {Point} q @param {number} t @returns {Point} */
 const lerp = (p, q, t) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
 
+/**
+ * The point at parameter t (0 to 1) of the stretch from a to b (a straight one is a cubic with its controls at its
+ * ends, as insertVertex and nearestOnOutline see it).
+ * @param {Vertex} a @param {Vertex} b @param {number} t @returns {Point}
+ */
+export const pointOnStretch = (a, b, t) => splitCubic(controlsOf([a, b], 0), t).at;
+
 /** De Casteljau: the point at t and the control points of both halves. @param {[Point, Point, Point, Point]} c @param {number} t */
 function splitCubic([p0, p1, p2, p3], t) {
   const p01 = lerp(p0, p1, t);

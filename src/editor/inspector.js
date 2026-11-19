@@ -17,11 +17,10 @@ import { applyTransformOps, isTransformed } from '../core/transform.js';
 import { showPreview } from './canvas.js';
 import { colorSwatch } from './colorSwatch.js';
 import { flipPoints } from './pointEdit.js';
-import { orderSelected } from './layers.js';
-import { orderOps } from '../core/order.js';
+import { orderObjects, orderSelected } from './layers.js';
 import { flipSelection } from './selectTool.js';
 import { drawStyle, isDrawTool, isLocked, run, select, setDrawStyle, state } from './state.js';
-import { followedLines as followedBy, followsOthers } from '../core/points.js';
+import { elementOf, shapesOf } from '../core/shapes.js';
 import { isPart, schema } from './schema.js';
 import { icon } from './icons.js';
 
@@ -287,58 +286,13 @@ function pointsSection() {
 }
 
 
-/** How Create Shape names a shape's parts: line_fill, line_stroke_2. */
-const SHAPE_NAME = /^(.+)_(fill|stroke)(_[0-9]+)?$/;
-
-/**
- * The element a part belongs to: the part itself when it is drawn with its own points, or, for a shape (a part that
- * follows lines), the line it is named after, else the first line it follows.
- * @param {Doc} doc @param {DocObject} part
- */
-function elementOf(doc, part) {
-  if (!followsOthers(part)) return part;
-  const lines = followedBy(part);
-  const named = SHAPE_NAME.exec(part.id)?.[1];
-  const id = named && lines.has(named) ? named : [...lines][0];
-  return findObject(doc, id) ?? part;
-}
-
-/**
- * The shapes on an element (made by Create Shape: they follow it), each its fill part and its stroke part. Parts
- * named as a pair (head_fill_2, head_stroke_2) are one shape; any other part is a shape of its own.
- * @param {Doc} doc @param {DocObject} element
- * @returns {{ key: string, fill?: DocObject, stroke?: DocObject }[]}
- */
-function shapesOf(doc, element) {
-  /** @type {Map<string, { key: string, fill?: DocObject, stroke?: DocObject }>} */
-  const shapes = new Map();
-  for (const o of doc.objects) {
-    if (o.parent !== element.parent || o.type !== 'path' || !followsOthers(o) || !followedBy(o).has(element.id)) continue;
-    const name = SHAPE_NAME.exec(o.id);
-    const key = name ? `${name[1]}${name[3] ?? ''}` : o.id;
-    const shape = shapes.get(key) ?? { key };
-    if (name) shape[/** @type {'fill' | 'stroke'} */ (name[2])] = o;
-    else Object.assign(shape, { ...(o.fill !== null ? { fill: o } : {}), ...(o.stroke !== null ? { stroke: o } : {}) });
-    shapes.set(key, shape);
-  }
-  return [...shapes.values()];
-}
-
 /** The shape last picked in the dropdown of each element, while nothing of a shape is selected. */
 const chosenShape = new Map();
 
-/** Raises or lowers some parts (not the selection). @param {string[]} ids @param {import('../core/order.js').OrderMove} how */
-function orderParts(ids, how) {
-  const doc = state.document;
-  if (!doc) return;
-  const ops = orderOps(doc, ids, how);
-  if (ops.length) run(ops, { note: `${how === 'up' || how === 'top' ? 'Raise' : 'Lower'} ${ids.join(', ')}` });
-}
-
 /** ▲ ▼ for some parts (Shift+click: to the top or bottom). @param {string[]} ids @param {boolean} enabled */
 const orderButtons = (ids, enabled) => [
-  iconButton('raise', `Raise ${ids.join(', ')} one place; Shift+click: to the top`, enabled, (e) => orderParts(ids, e.shiftKey ? 'top' : 'up')),
-  iconButton('lower', `Lower ${ids.join(', ')} one place; Shift+click: to the bottom`, enabled, (e) => orderParts(ids, e.shiftKey ? 'bottom' : 'down')),
+  iconButton('raise', `Raise ${ids.join(', ')} one place; Shift+click: to the top`, enabled, (e) => orderObjects(ids, e.shiftKey ? 'top' : 'up')),
+  iconButton('lower', `Lower ${ids.join(', ')} one place; Shift+click: to the bottom`, enabled, (e) => orderObjects(ids, e.shiftKey ? 'bottom' : 'down')),
 ];
 
 /** A section heading. @param {string} text @param {string} [help] */
@@ -358,17 +312,19 @@ function sectionHeading(text, help = '') {
  */
 function partSections(doc, part) {
   const element = elementOf(doc, part);
-  const spec = /** @type {import('../core/schema.js').ResolvedType} */ (schema.get('path'));
+  const spec = /** @type {import('../core/schema.js').ResolvedType} */ (schema.get(element.type));
   const own = [{ id: element.id, values: element }];
   const unlocked = !isLocked(element.id);
   const out = [
     sectionHeading(`Element: ${element.id}`, 'The part drawn with its own points: its order, fill and stroke.'),
     flipRow(unlocked),
     row('Order', 'Its place among the parts of the layer: higher is drawn over lower.', ...orderButtons([element.id], unlocked)),
-    propertyRow('visible', spec.properties.visible, own),
-    propertyRow('fill', spec.properties.fill, own, { bean: false }),
-    propertyRow('stroke', spec.properties.stroke, own, { bean: false }),
   ];
+  // Its properties as the schema has them (a new one shows by itself), its own fill and stroke as squares.
+  for (const [name, property] of Object.entries(spec.properties)) {
+    if (SHOWN_WITH.has(name) || HIDDEN_FOR_PARTS.has(name)) continue;
+    out.push(propertyRow(name, property, own, { bean: false }));
+  }
   const shapes = shapesOf(doc, element);
   out.push(sectionHeading('Shape', 'Shapes made with Create Shape (F) on this element: each a fill and a stroke that follow its lines.'));
   if (!shapes.length) {

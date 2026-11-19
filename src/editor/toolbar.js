@@ -15,14 +15,14 @@ export const TOOLS = {
   pen: { name: 'Pen', key: 'P', icon: 'pen', help: 'Click for corners, drag for curves; the first point closes, Enter ends a line, Esc cancels' },
   rect: { name: 'Rectangle', key: 'R', icon: 'rect', help: 'Drag on the canvas for a rectangular path; Shift for a square' },
   ellipse: { name: 'Ellipse', key: 'E', icon: 'ellipse', help: 'Drag on the canvas for an elliptical path; Shift for a circle' },
-  fill: { name: 'Create Shape', key: 'F', icon: 'bean', help: 'Pick the points around a shape (click, a box, or a click inside a gap; Shift adds or takes out, also dragging over points); a checkerboard shows when they close it, and Create shape (Enter) makes it. A click on a ring welds two crossing lines there. Esc clears the picks' },
+  shape: { name: 'Create Shape', key: 'F', icon: 'bean', help: 'Pick the points around a shape (click, a box, or a click inside a gap; Shift adds or takes out, also dragging over points); a checkerboard shows when they close it, and Create shape (Enter) makes it. A click on a ring welds two crossing lines there. Esc clears the picks' },
 };
 
 /** @type {{ id: string, name: string, tools: Tool[] }[]} */
 const GROUPS = [
   { id: 'transform', name: 'Transform', tools: ['select', 'move', 'scale', 'rotate'] },
   { id: 'draw', name: 'Draw', tools: ['pen', 'rect', 'ellipse'] },
-  { id: 'paint', name: 'Create Shape', tools: ['fill'] },
+  { id: 'shape', name: 'Create Shape', tools: ['shape'] },
 ];
 
 /** @type {Record<string, Tool>} the tool each group shows (the last one used in it) */

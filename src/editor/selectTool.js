@@ -29,7 +29,7 @@ import {
   worldOf,
 } from '../core/transform.js';
 import { copyOps } from '../core/copy.js';
-import { partsToMove } from '../core/fill.js';
+import { partsToMove } from '../core/shapes.js';
 import { addPainter, onToolDown, showPreview } from './canvas.js';
 import { editPoints, inShownLayer, isLocked, run, select, selectMany, selectedParts, state, toggleSelect } from './state.js';
 import { isPart } from './schema.js';

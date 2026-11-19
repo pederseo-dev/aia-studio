@@ -651,7 +651,17 @@ keeps the beans.
   `followStretch`, `stretchBetween`, the gap search, `partsToMove`, the rename cascade and the Inspector.
 - Texts of earlier designs (decision 10, the plan's note, the build plan row, «Left for later», the `holes` help, the
   guide, the shortcuts table, dead Inspector branches and a dead line in `weld.js`).
-Left for after the push (structure): split `server/aia.js` (≈1110 lines) by topic, move the crossings out of
-`src/core/fill.js` and reuse `geometry.js`'s cubic, move "which element a shape belongs to" (`elementOf`, `shapesOf`,
-now in `inspector.js`) to the core with tests, build the Element section from the schema (so caps and joins show by
-themselves), and rename the tool's internal names (`fill` → `shape`).
+Structure, after the push (2026-11-19):
+- `server/aia.js` is split by topic: `server/aia.js` (≈80 lines) puts the commands together and runs one;
+  `server/aia/common.js` has the errors, reading a command line, the answers and the helpers on the store
+  (`createContext`); `documents.js`, `points.js`, `shapes.js` and `output.js` have the commands of each topic.
+- `src/core/crossings.js` has `crossingsOf` and `weldCrossingOps` (out of `fill.js`, which gives it `lineStretches`);
+  `fill.js` samples stretches with `geometry.js`'s `pointOnStretch` (the same cubic as `insertVertex`).
+- `src/core/shapes.js` is the one place for elements and shapes: how a shape's parts are named (`shapePartName`,
+  `shapePartOf`, `freeShapeSuffix`), which element a shape belongs to (`elementOf`), the shapes on an element
+  (`shapesOf`, tested now) and what moves with a shape (`partsToMove`); `fill.js`, the `rename` cascade, the Inspector
+  and `aia` use it.
+- The Inspector's Element section lists the element's properties from the schema (so caps and joins will show by
+  themselves); the Layers panel and the Inspector share one order helper (`orderObjects`).
+- The tool's internal names follow its name: `'shape'`, `src/editor/shapeTool.js`, `shapeStyle` (kept under
+  `aia.shapeStyle`, read from the old `aia.fillStyle` once).
