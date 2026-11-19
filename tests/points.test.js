@@ -4,7 +4,8 @@ import { loadSchema } from '../server/schema.js';
 import { newDocument } from '../src/core/document.js';
 import { applyOps } from '../src/core/operations.js';
 import { drawDocument } from '../src/core/draw.js';
-import { movePointsOps, pointsNamed, resolveDoc, settleOps, syncShared } from '../src/core/points.js';
+import { movePointsOps, pointsError, pointsNamed, resolveDoc, settleOps, syncShared } from '../src/core/points.js';
+import { ellipsePoints } from '../src/core/geometry.js';
 
 const schema = loadSchema();
 const apply = (doc, ops) => applyOps(schema, doc, ops).document;
@@ -125,4 +126,19 @@ test('deleting the followed part in the editor leaves a plain outline where it w
   const after = apply(doc, settleOps(doc, [{ op: 'delete', target: 'jaw' }], loose));
   assert.deepEqual(vertex(after, 'skin', 0), { x: 0, y: 0 });
   assert.deepEqual(vertex(after, 'skin', 1), { x: 100, y: 0 });
+});
+
+test('checking the points of a big layer full of followed stretches stays quick (it runs on every batch)', () => {
+  // 500 circles and a fill following each one: 1000 shapes, 1000 followed stretches. Resolving the document once
+  // per stretch took about 9 s here; once for the whole check, a few ms.
+  const objects = [{ id: 'layer', type: 'vector', parent: null }];
+  for (let i = 0; i < 500; i++) {
+    const vertices = ellipsePoints({ x: (i % 20) * 40, y: Math.floor(i / 20) * 40, width: 36, height: 36 }, 8);
+    objects.push({ id: `c${i}`, type: 'path', parent: 'layer', vertices: vertices.map((v, k) => ({ ...v, name: `n${k}` })) });
+    objects.push({ id: `f${i}`, type: 'path', parent: 'layer', vertices: [{ ref: `c${i}.n0`, follow: `c${i}` }, { ref: `c${i}.n3`, follow: `c${i}` }, { ref: `c${i}.n6` }] });
+  }
+  const doc = /** @type {any} */ ({ aia: 1, meta: { name: 'big' }, objects });
+  const start = performance.now();
+  assert.equal(pointsError(doc), null);
+  assert.ok(performance.now() - start < 1000, `took ${Math.round(performance.now() - start)} ms`);
 });

@@ -156,6 +156,10 @@ function followedOutline(doc, part) {
  * @param {Doc} doc
  */
 export function pointsError(doc) {
+  // Resolved once, when the first followed stretch needs it (once per stretch made a batch on a layer of 1000 shapes
+  // take seconds).
+  /** @type {Doc | null} */
+  let resolved = null;
   for (const object of doc.objects) {
     const vertices = verticesOf(object);
     /** @type {Set<string>} */
@@ -166,7 +170,8 @@ export function pointsError(doc) {
         names.add(v.name);
       }
       if (v.follow) {
-        const stretch = followStretch(resolveDoc(doc), object, i);
+        resolved ??= resolveDoc(doc);
+        const stretch = followStretch(resolved, object, i);
         if ('error' in stretch) return stretch.error;
       }
       if (!v.ref) continue;

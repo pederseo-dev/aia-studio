@@ -85,7 +85,7 @@ A minimal runtime (plays a document without the DOM) exists from the first slice
 it. The export was the last phase of v1 and was never built, so the model was never checked against it; here it is
 checked from the start.
 
-### 6. Drawing: named parts, as in Moho but readable (2026-11-16, being tried out)
+### 6. Drawing: named parts, as in Moho but readable (2026-11-16)
 
 v1 kept drifting toward Moho's mesh and it kept getting harder for the AI: anonymous points (`p1`…`p47`), curves
 through them, shapes that paint curves and `loops` for regions, so every change meant rebuilding the topology in its
@@ -100,7 +100,7 @@ many shapes, fills and strokes inside one layer, and painting between lines.
   around a region; not a type of its own.
 - Each part draws as one SVG path, so the runtime resolves references and draws.
 
-It is being tried out in the editor first (see «Trying Design mode» below) before parts are built.
+It was tried out in the editor in the Design mode steps below; the model that came out of them is decision 10.
 
 ### 7. Try Design mode in the editor first (2026-11-16)
 
@@ -230,12 +230,37 @@ scaled with the layer transform of step 11, like any layer; `opacity` (0–1) is
   image` comes from the schema.
 Not yet: layer opacity for other layers, pasting a picture from the clipboard, deleting assets no layer uses.
 
+### 10. The drawing model (2026-11-18)
+
+Settles the drawing part of open topic 2, after trying decisions 6 and 8 in the Design mode steps (1–17). Bones and
+binding, pose vs clip, and params and drivers stay open.
+
+- **One kind of shape, the `path`:** vertices `{ x, y }` with optional curve handles `in` and `out`, relative to the
+  vertex. A point is smooth or broken by its handles (both there and opposite = smooth); nothing else is stored.
+  Rectangle, Ellipse and the Pen are tools that draw paths.
+- **Points have names, and one owner.** A vertex may have a `name`, unique in its part (`jaw.chin`). Another part of
+  the same layer shares it with `{ ref: "jaw.chin", in?, out? }`: same place, its own handles. A `ref` names the
+  owner's point, never another `ref`.
+- **A part passes through a point** when it owns it or shares it. This is what lets the model do what Moho's mesh
+  does (every curve through a point meets there) while points keep their names for the AI.
+- **Followed stretches:** a stretch of an outline can follow another part between two points that part passes
+  through: `{ ref, follow: "jaw", way? }` to the next vertex. The JSON keeps only the ends; the core expands it. The
+  followed part must not have followed stretches itself (a fill follows lines, not other fills). `way` is `"short"`
+  by default on a closed part; the Fill tool always writes it.
+- **Point groups** belong to the vector layer (`groups: { upper_lid: ["lid.top", …] }`).
+- **Layers:** vector (holds parts), group, image; any of them with a transform (x, y, rotation, scale, origin).
+- **No mesh and no region type.** A fill is a `path` whose outline follows the lines around it, made by the Fill tool
+  (the paint bucket) or `aia fill`, and placed under those lines. Moving or bending a line moves the fills that follow
+  it, because they are drawn from it.
+- **One rule in the core for each change**, used by the editor and by `aia` alike (welding, naming, deleting points,
+  following), and settled by the store for every origin.
+
 ## Open topics
 
 1. **Purpose and priority:** the live character in apps as the design driver (the runtime as the contract), with
    Animate scenes for video as a secondary use? Or both at the same level?
-2. **Document model:** drawing (mesh or not, regions), bones and binding, pose vs clip (one asset?), params and
-   drivers.
+2. **Document model:** bones and binding, pose vs clip (one asset?), params and drivers. (Drawing: decided, decision
+   10.)
 3. **The command language itself:** which commands, their syntax, what replaces the sugars inside `set`. A first cut
    is decision 9; the high-level commands are still open.
 4. **Guide and craft recipes:** guide split by topic (`aia guide <topic>`), and the craft recipes (drawing from a
@@ -444,6 +469,41 @@ Pen rows.
   for parts removed, the Pen's local `isSmooth` renamed `hasHandles`, `navigate.js` no longer imports `canvas.js`.
 - Found for the next stage (not fixed yet): a stretch can follow a part only between points of that part, so a fill
   cannot go on along another line from a junction where the second line only shares the point; the Fill tool needs
-  that first. Also: no curve crossings or region search yet, `pointsError` resolves the document once per followed
-  stretch, `server/aia.js` (≈950 lines) should be split by topic when `aia fill` comes, and the editor still does a
+  that first. Also: no curve crossings or region search yet, `server/aia.js` (≈950 lines) should be split by topic when `aia fill` comes, and the editor still does a
   few things with no command (flip points, move one handle).
+
+**Performance on big layers (2026-11-18).** Measured in the core with a layer of circles and a fill following each
+(as the Fill tool will make): resolving shared points and drawing grow in proportion (1000 shapes, 5500 points: about
+8 ms and 13 ms), but `pointsError`, which checks every batch, resolved the whole document once per followed stretch,
+so it grew with the square: 0.5 s at 400 shapes, 9 s at 1000. It now resolves once (21 ms at 1000), with a test that
+keeps it quick. Still to keep in mind: the editor redraws the whole SVG on each change and while dragging (fine for
+hundreds of shapes; with thousands, redraw only what changed), the runtime will need to update only what an animation
+changes instead of redrawing each frame (parts 6 and 7), and lookups by id walk the list of objects.
+
+## Next: the Fill tool (part 4)
+
+The direction agreed on 2026-11-18, on decision 10. As Moho's paint bucket: a click inside a region closed by lines
+of a vector layer makes a fill part whose outline follows those lines, under them, with the auto fill. The steps, in
+order; each one with its tests, closed as usual:
+
+1. **Follow from shared points** (the model change of decision 10). `followStretch` (`src/core/points.js`) and
+   `stretchBetween` (`src/core/weld.js`) find, in the followed part, the vertex that owns *or shares* each end, so a
+   stretch can go on along another line from a junction the Pen welded (today it is refused: the point belongs to
+   the first line). Refuse following a part that has followed stretches. `aia follow` and the editor's Follow get it
+   for free.
+2. **The region around a point**, in the core, without the DOM: the resolved outlines of a layer cut at the points
+   they pass through make a graph; the smallest closed loop around the clicked place is the region, as a list of
+   (point, part followed, way). Then `fillOps(doc, layer, at, style)`: one batch that creates the fill part (`ref` +
+   `follow` + an explicit `way` for each stretch), placed just under the lowest line it follows. A place that is not
+   closed gives an error that says so.
+3. **Lines that cross without a weld**: curve-to-curve crossings in `src/core/geometry.js`, and `fillOps` adds a
+   shared point at each crossing the region needs (`insertVertex` + `shareTargets`), in the same batch.
+4. **`aia fill <doc> <layer> --at x,y`** (style as `aia rect`: `--fill`, `--fill-opacity`) and its guide topic.
+   `server/aia.js` (≈950 lines) is split by topic first (documents, points, shapes, output).
+5. **The Fill tool in the editor**: a Draw tool (the paint bucket) that shows the region under the pointer before the
+   click and fills it with the auto fill.
+6. **Closing part 4**: the `ai-tester` (an AI fills the regions of a drawing with only the CLI), the `auditor` and
+   the `architecture` reviews.
+
+To decide when we get there: the tool's key; what a click on an existing fill does (recolor it with the auto fill,
+as Moho's paint bucket does, or nothing); whether a stroke-only outline (Moho's Stroke) is part of the same tool.
