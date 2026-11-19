@@ -3,7 +3,7 @@
 
 import { placeIcons } from './icons.js';
 import { actions, renderHeader, setupDropdowns, setupHeader } from './header.js';
-import { deleteSelected, render as renderLayers, renameSelected, setupLayers } from './layers.js';
+import { deleteSelected, orderSelected, render as renderLayers, renameSelected, setupLayers } from './layers.js';
 import { render as renderCanvas, setupCanvas } from './canvas.js';
 import { cancelPen, setupDrawTools } from './drawTools.js';
 import { nudgeSelection, setupSelectTool } from './selectTool.js';
@@ -85,6 +85,10 @@ document.addEventListener('keydown', (event) => {
   else if (event.key === 'Tab' && !ctrl) {
     if (!walkParts(event.shiftKey)) return;
   } else if (event.key === 'F2') renameSelected();
+  else if ((event.key === 'PageUp' || event.key === 'PageDown') && !ctrl) {
+    const up = event.key === 'PageUp';
+    orderSelected(event.shiftKey ? (up ? 'top' : 'bottom') : up ? 'up' : 'down');
+  }
   else if (!ctrl && !event.altKey && TOOL_KEYS[key]) setTool(TOOL_KEYS[key]);
   else return;
   event.preventDefault();

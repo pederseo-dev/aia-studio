@@ -2,9 +2,10 @@
 // renames, the eye hides, the padlock locks, and dragging reorders (on the middle of a group: into it).
 
 import { childrenOf, findObject, idFromName } from '../core/document.js';
+import { orderOps } from '../core/order.js';
 import { icon } from './icons.js';
 import { chooseImages } from './images.js';
-import { run, select, state, toggleSelect } from './state.js';
+import { isLocked, notify, run, select, state, toggleSelect } from './state.js';
 import { canContain, isPart, schema } from './schema.js';
 
 /**
@@ -60,6 +61,24 @@ export function deleteSelected() {
     ids.map((id) => ({ op: 'delete', target: id })),
     { select: selected.parent, note: ids.length > 1 ? `Delete ${ids.length} parts` : `Delete ${selected.id}` },
   );
+}
+
+const ORDER_NOTES = { up: 'Raise', down: 'Lower', top: 'Raise to the top', bottom: 'Lower to the bottom' };
+
+/**
+ * Raises or lowers what is selected among its siblings (Moho's Raise / Lower shape): Page Up / Page Down one place,
+ * with Shift to the top or bottom. Several move together and keep their order.
+ * @param {import('../core/order.js').OrderMove} how
+ */
+export function orderSelected(how) {
+  const doc = state.document;
+  const ids = state.selection.filter((id) => doc && findObject(doc, id));
+  if (!doc || !ids.length) return;
+  if (ids.some(isLocked)) return notify('Unlock it first');
+  const ops = orderOps(doc, ids, how);
+  if (!ops.length) return notify(how === 'up' || how === 'top' ? 'Already on top' : 'Already at the bottom');
+  const what = ids.length > 1 ? `${ids.length} ${ids.every((id) => isPart(findObject(doc, id)?.type ?? '')) ? 'parts' : 'objects'}` : ids[0];
+  run(ops, { note: `${ORDER_NOTES[how]} ${what}` });
 }
 
 export function renameSelected() {

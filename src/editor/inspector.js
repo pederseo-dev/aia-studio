@@ -6,13 +6,14 @@
 // being picked, a number being typed) the canvas shows it live; it is saved as one batch when done.
 // With a drawing tool active, a «New shapes» section sets the auto fill and auto stroke the tool gives new shapes.
 // While editing points, a «Points» section flips the picked points horizontally or vertically; otherwise a Flip row
-// flips the selected parts, or the selected layer.
+// flips the selected parts, or the selected layer, and an Order row raises or lowers them.
 
 import { findObject } from '../core/document.js';
 import { applyTransformOps, isTransformed } from '../core/transform.js';
 import { showPreview } from './canvas.js';
 import { colorSwatch } from './colorSwatch.js';
 import { flipPoints } from './pointEdit.js';
+import { orderSelected } from './layers.js';
 import { flipSelection } from './selectTool.js';
 import { drawStyle, isDrawTool, isLocked, run, setDrawStyle, state } from './state.js';
 import { schema } from './schema.js';
@@ -307,6 +308,29 @@ function flipRow(enabled) {
   );
 }
 
+/** Raise and lower the selected parts or layers among their siblings. @param {boolean} enabled */
+function orderRow(enabled) {
+  /** @param {string} text @param {string} help @param {import('../core/order.js').OrderMove} how */
+  const move = (text, help, how) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'small';
+    button.textContent = text;
+    button.title = enabled ? help : `${help} (unlock it first)`;
+    button.disabled = !enabled;
+    button.addEventListener('click', () => orderSelected(how));
+    return button;
+  };
+  return row(
+    'Order',
+    'What is higher in the order is drawn over what is below it, among the parts of a layer (or the layers of a group).',
+    move('Bottom', 'Lower to the bottom (Shift+Page Down)', 'bottom'),
+    move('Lower', 'Lower one place (Page Down)', 'down'),
+    move('Raise', 'Raise one place (Page Up)', 'up'),
+    move('Top', 'Raise to the top (Shift+Page Up)', 'top'),
+  );
+}
+
 /** @param {Target[]} targets */
 const typeOf = (targets) => (targets[0].id === 'meta' ? 'meta' : String(targets[0].values.type));
 
@@ -387,7 +411,10 @@ export function renderInspector() {
       help.textContent = spec.help;
       parts.push(help);
       const flippable = objects.length > 0 && !state.editing && objects.every((o) => o.type !== 'meta');
-      if (flippable) parts.push(flipRow(objects.every((o) => !isLocked(o.id))));
+      if (flippable) {
+        const unlocked = objects.every((o) => !isLocked(o.id));
+        parts.push(flipRow(unlocked), orderRow(unlocked));
+      }
       for (const [name, property] of Object.entries(spec.properties)) {
         if (!SHOWN_WITH.has(name)) parts.push(propertyRow(name, property, targets));
       }

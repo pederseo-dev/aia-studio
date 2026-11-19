@@ -45,6 +45,8 @@ Drawing by name, without writing vertices (the layer is made if it is not there)
   aia rect face mouth_box --box 100,80,200,60 --radius 8 --fill #e05555
   aia ellipse face head --box 200,100,400,400 --points 8 --names top,tr,right,br,bottom,bl,left,tl
   aia copy face ear_l --move 300,0 · aia transform face eye_l eye_r --scale 1.2 (together, around their center)
+  aia order face mouth --top (inside a layer, a part higher in the order is drawn over the ones below; --up, --down,
+  --top, --bottom)
 
 Topics: aia guide ops · aia guide paths · aia guide points · aia guide types · aia guide <type>`,
   },

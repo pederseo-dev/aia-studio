@@ -189,6 +189,11 @@ test('the AI draws, reshapes, deletes and copies by name, as the editor does', a
   assert.equal(/** @type {any[]} */ (doc.objects[1].vertices).length, 7);
   assert.deepEqual(/** @type {any[]} */ (doc.objects[2].vertices)[0], { x: 200, y: 100 }, 'the shared vertex kept its place');
   assert.match(await ok('copy face box --move 0,100'), /Made box_2/);
+  assert.match(await ok('order face box_2 --bottom'), /Moved box_2 to the bottom\.\nface, bottom to top: box_2, head, box/);
+  assert.match(await ok('order face box_2 --down'), /already at the bottom/);
+  assert.match((await aia.run('order face box_2 --up --top')).text, /one of --up, --down, --top or --bottom/);
+  assert.match((await aia.run('order face nope --up')).text, /no object "nope"/);
+  await ok('order face box_2 --top');
   assert.match(await ok('transform face box box_2 --rotate 90 --around 0,0'), /around 0, 0/);
   doc = (await store.get('face', 'ai')).document;
   assert.deepEqual(/** @type {any[]} */ (doc.objects.find((o) => o.id === 'box_2')?.vertices)[1], { x: -100, y: 400 });

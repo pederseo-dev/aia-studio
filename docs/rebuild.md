@@ -480,30 +480,50 @@ keeps it quick. Still to keep in mind: the editor redraws the whole SVG on each 
 hundreds of shapes; with thousands, redraw only what changed), the runtime will need to update only what an animation
 changes instead of redrawing each frame (parts 6 and 7), and lookups by id walk the list of objects.
 
-## Next: the Fill tool (part 4)
+## Next: Fill & Stroke (part 4)
 
-The direction agreed on 2026-11-18, on decision 10. As Moho's paint bucket: a click inside a region closed by lines
-of a vector layer makes a fill part whose outline follows those lines, under them, with the auto fill. The steps, in
-order; each one with its tests, closed as usual:
+Agreed on 2026-11-19, on decision 10 (replaces the paint bucket plan of 2026-11-18). Not a paint bucket: a **Fill &
+Stroke tool (F)** that works as a selector of its own. Over a closed gap between lines it shows the gap hatched, over a
+stretch of a line (between two points) it shows it thicker; a click marks or unmarks it (Shift: several), and the marks
+stay (editor only, not in the document) until an action of the tool's bar is applied or Esc. On marked gaps, **Fill**
+makes one part per gap whose outline follows the lines around it, just under the lowest of them, with the tool's fill
+and stroke (each with None, kept apart from the Pen's auto style); on a gap already filled, it recolors that fill. On
+marked stretches, **Stroke on / off** shows or hides the stroke of those stretches. Picking points stays in the points
+editing mode. Fill and stroke of one part go together (its stroke over its own fill); to order them apart, they are two
+parts, which is what lines plus fills already are. The steps, in order; each one with its tests, closed as usual:
 
-1. **Follow from shared points** (the model change of decision 10). `followStretch` (`src/core/points.js`) and
+1. **Raise and lower parts** (Moho's Raise / Lower shape): Page Up / Page Down move the picked parts one place up or
+   down in their layer, Shift+Page Up / Page Down to the top or bottom; several keep their order among themselves.
+   Buttons in the editor, and `aia order` for the AI. Dragging in Layers already does it by hand.
+2. **Follow from shared points** (the model change of decision 10). `followStretch` (`src/core/points.js`) and
    `stretchBetween` (`src/core/weld.js`) find, in the followed part, the vertex that owns *or shares* each end, so a
    stretch can go on along another line from a junction the Pen welded (today it is refused: the point belongs to
    the first line). Refuse following a part that has followed stretches. `aia follow` and the editor's Follow get it
    for free.
-2. **The region around a point**, in the core, without the DOM: the resolved outlines of a layer cut at the points
-   they pass through make a graph; the smallest closed loop around the clicked place is the region, as a list of
-   (point, part followed, way). Then `fillOps(doc, layer, at, style)`: one batch that creates the fill part (`ref` +
-   `follow` + an explicit `way` for each stretch), placed just under the lowest line it follows. A place that is not
-   closed gives an error that says so.
-3. **Lines that cross without a weld**: curve-to-curve crossings in `src/core/geometry.js`, and `fillOps` adds a
-   shared point at each crossing the region needs (`insertVertex` + `shareTargets`), in the same batch.
-4. **`aia fill <doc> <layer> --at x,y`** (style as `aia rect`: `--fill`, `--fill-opacity`) and its guide topic.
-   `server/aia.js` (≈950 lines) is split by topic first (documents, points, shapes, output).
-5. **The Fill tool in the editor**: a Draw tool (the paint bucket) that shows the region under the pointer before the
-   click and fills it with the auto fill.
-6. **Closing part 4**: the `ai-tester` (an AI fills the regions of a drawing with only the CLI), the `auditor` and
-   the `architecture` reviews.
+3. **Stretches without stroke, caps and joins**: a vertex's `edge: false` means the stretch from it to the next one
+   has no stroke (the fill still uses the whole outline); the editor and the runtime draw the stroke in runs. The
+   part's `strokeCap` (round, square, butt) and `strokeJoin` (round, miter, bevel) in the Inspector. `aia edge` for
+   the AI, caps and joins as style options.
+4. **The gap around a point**, in the core, without the DOM: the resolved outlines of a layer cut at the points they
+   pass through (only shared points count: lines that cross without a weld do not close a gap) make a graph; the
+   smallest closed loop around the place is the gap, as a list of (point, part followed, way). Then
+   `fillOps(doc, layer, at, style)`: one batch that creates the fill part (`ref` + `follow` + an explicit `way` for
+   each stretch), or recolors the fill already there. A place that is not closed gives an error that says so.
+   `aia fill <doc> <layer> --at x,y` (style as `aia rect`) and its guide topic; `server/aia.js` (≈950 lines) is split
+   by topic first (documents, points, shapes, output).
+5. **The Fill & Stroke tool in the editor** (F): the hatched gap or thick stretch under the pointer, the marks, and the
+   bar with the swatches and the actions. A gap that does not close shows nothing (or says to weld the crossing).
+6. **Closing part 4**: the `ai-tester` (an AI fills and strokes a drawing with only the CLI), the `auditor` and the
+   `architecture` reviews.
 
-To decide when we get there: the tool's key; what a click on an existing fill does (recolor it with the auto fill,
-as Moho's paint bucket does, or nothing); whether a stroke-only outline (Moho's Stroke) is part of the same tool.
+**Step 1, raise and lower (2026-11-19):** `orderOps(doc, ids, how)` in `src/core/order.js` gives the `move` ops that
+raise or lower objects among their siblings (`up`, `down`, `top`, `bottom`); several move together and keep their
+order, a run of them moves as one, ones already at the end stay, and objects of different parents move each among
+their own. In the editor, Page Up / Page Down (Shift: to the top or bottom) and an Order row in the Inspector (Bottom,
+Lower, Raise, Top, next to Flip) work on the selected parts or layers; locked ones are refused. `aia order <doc>
+<id>... --up | --down | --top | --bottom` answers with the new order, and `aia guide start` names it.
+
+Left for later: a stroke width per point (Moho's Line Width: SVG has no variable-width stroke, so the core and the
+runtime would have to build its outline), gaps with holes (a ring: one part has one outline), a point added by
+itself where two lines cross without a weld, several marked gaps joined into one part, Create shape from picked
+points in the points bar, a freehand lasso for picking points.

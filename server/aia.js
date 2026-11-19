@@ -5,7 +5,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { findObject, subtree } from '../src/core/document.js';
+import { childrenOf, findObject, subtree } from '../src/core/document.js';
 import { toSvg } from '../src/core/draw.js';
 import { guide } from '../src/core/guide.js';
 import {
@@ -29,6 +29,7 @@ import {
   verticesOf,
 } from '../src/core/geometry.js';
 import { copyOps } from '../src/core/copy.js';
+import { ORDER_MOVES, orderOps } from '../src/core/order.js';
 import { addImageOps, replaceImageOps } from '../src/core/images.js';
 import { applyTransformOps, isLayer as isLayerObject, transformOf, transformProps, worldOf } from '../src/core/transform.js';
 import { movePointsOps, pointsNamed, resolveDoc } from '../src/core/points.js';
@@ -46,8 +47,9 @@ import { bundleRuntime } from './bundle.js';
 
 export class AiaError extends Error {}
 
-const BOOLEAN_FLAGS = new Set(['yes', 'all', 'join', 'long', 'off', 'none', 'add', 'remove', 'delete', 'resolved', 'apply', 'skip', 'labels']);
+const BOOLEAN_FLAGS = new Set(['yes', 'all', 'join', 'long', 'off', 'none', 'add', 'remove', 'delete', 'resolved', 'apply', 'skip', 'labels', 'up', 'down', 'top', 'bottom']);
 const RENDER_MAX = 2000;
+const WHERE = { up: 'up one place', down: 'down one place', top: 'to the top', bottom: 'to the bottom' };
 
 /**
  * Splits one command line as a shell would (quotes group words), except that an unquoted [ or { starts a JSON value
@@ -513,6 +515,36 @@ export function createAia({ store, schema }) {
         const { ops, ids } = copyOps(doc, parts, move.x || move.y ? translate(move.x, move.y) : IDENTITY, to);
         await store.apply(id, ops, { origin: ORIGIN, note: `Copy ${names.join(', ')}` });
         return ok(`Made ${ids.join(', ')}.`);
+      },
+    },
+
+    order: {
+      usage: 'aia order <doc> <id>... --up | --down | --top | --bottom',
+      summary: 'Raises or lowers parts (or layers) among their siblings: one place, or to the top or bottom',
+      details:
+        'Inside a layer, a part higher in the order is drawn over the ones below it. Several move together and keep\n' +
+        'their order among themselves; each moves inside its own layer. Example: aia order face mouth --top',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const doc = await resolved(id);
+        const names = args.positional.slice(1);
+        if (!names.length) throw new AiaError('Missing the parts or layers to raise or lower');
+        const hows = ORDER_MOVES.filter((how) => args.flags[how] === true);
+        if (hows.length !== 1) throw new AiaError('Say one of --up, --down, --top or --bottom');
+        const [how] = hows;
+        let ops;
+        try {
+          ops = orderOps(doc, names, how);
+        } catch (e) {
+          throw new AiaError(e.message);
+        }
+        const where = WHERE[how];
+        if (!ops.length) return ok(`${names.join(', ')}: already ${how === 'up' || how === 'top' ? 'on top' : 'at the bottom'}, nothing changed.`);
+        await store.apply(id, ops, { origin: ORIGIN, note: `Order ${names.join(', ')} ${where}` });
+        const after = (await store.get(id, ORIGIN)).document;
+        const parents = [...new Set(names.map((n) => findObject(after, n)?.parent ?? null))];
+        const lines = parents.map((p) => `${p ?? 'the document'}, bottom to top: ${childrenOf(after, p).map((o) => o.id).join(', ')}`);
+        return ok(`Moved ${names.join(', ')} ${where}.\n${lines.join('\n')}`);
       },
     },
 
