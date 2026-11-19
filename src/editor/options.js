@@ -19,7 +19,8 @@ import {
   toggleCornersPicked,
   unweldPicked,
 } from './pointEdit.js';
-import { addPoint, autoWeld, drawStyle, editPoints, isDrawTool, penOptions, run, setDrawStyle, state, toggleAddPoint, toggleAutoWeld, toggleSharpCorners } from './state.js';
+import { addPoint, autoWeld, drawStyle, editPoints, fillStyle, isDrawTool, penOptions, run, setDrawStyle, setFillStyle, state, toggleAddPoint, toggleAutoWeld, toggleSharpCorners } from './state.js';
+import { fillMarked, markedCount } from './fillTool.js';
 import { colorSwatch } from './colorSwatch.js';
 import { isPart } from './schema.js';
 
@@ -51,7 +52,40 @@ bar.append(style, kind, label, actions);
 /** @type {string} what the style controls were last built from */
 let styleFrom = '';
 
+/** The Fill & Stroke tool's bar: the style it fills with, and Fill for the marked gaps. */
+function renderFillStyle() {
+  const marked = markedCount();
+  const key = JSON.stringify({ fill: true, ...fillStyle, marked });
+  if (key === styleFrom) return;
+  styleFrom = key;
+  style.replaceChildren();
+  style.hidden = false;
+  const width = document.createElement('input');
+  width.type = 'number';
+  width.min = '0';
+  width.step = 'any';
+  width.value = String(fillStyle.strokeWidth);
+  width.title = 'Stroke width of the fills';
+  width.addEventListener('change', () => {
+    const n = Number(width.value);
+    if (width.value !== '' && n >= 0) setFillStyle({ strokeWidth: n });
+  });
+  const fillLabel = document.createElement('span');
+  fillLabel.textContent = 'Fill';
+  const strokeLabel = document.createElement('span');
+  strokeLabel.textContent = 'Stroke';
+  style.append(
+    fillLabel,
+    colorSwatch({ kind: 'fill', value: fillStyle.fill, opacity: fillStyle.fillOpacity, nullable: true, title: 'The fill the gaps get (None: no fill)', onChange: (c, a) => setFillStyle({ fill: c, ...(a === undefined ? {} : { fillOpacity: a }) }) }),
+    strokeLabel,
+    colorSwatch({ kind: 'stroke', value: fillStyle.stroke, opacity: fillStyle.strokeOpacity, nullable: true, title: 'The stroke around the gaps (None: only the lines’ own)', onChange: (c, a) => setFillStyle({ stroke: c, ...(a === undefined ? {} : { strokeOpacity: a }) }) }),
+    width,
+    button('bean', marked > 1 ? `Fill ${marked} gaps` : 'Fill', 'Fill the marked gaps with this style; a gap already filled is recolored (Enter)', () => fillMarked(), { disabled: !marked, main: true }),
+  );
+}
+
 function renderStyle() {
+  if (state.tool === 'fill') return renderFillStyle();
   const key = isDrawTool(state.tool) ? JSON.stringify({ ...drawStyle, pen: state.tool === 'pen', weld: autoWeld.on, sharp: penOptions.sharp }) : '';
   if (key === styleFrom) return;
   styleFrom = key;

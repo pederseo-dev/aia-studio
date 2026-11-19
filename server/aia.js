@@ -30,6 +30,7 @@ import {
 } from '../src/core/geometry.js';
 import { copyOps } from '../src/core/copy.js';
 import { ORDER_MOVES, orderOps } from '../src/core/order.js';
+import { fillOps } from '../src/core/fill.js';
 import { addImageOps, replaceImageOps } from '../src/core/images.js';
 import { applyTransformOps, isLayer as isLayerObject, transformOf, transformProps, worldOf } from '../src/core/transform.js';
 import { movePointsOps, pointsNamed, resolveDoc } from '../src/core/points.js';
@@ -515,6 +516,35 @@ export function createAia({ store, schema }) {
         const { ops, ids } = copyOps(doc, parts, move.x || move.y ? translate(move.x, move.y) : IDENTITY, to);
         await store.apply(id, ops, { origin: ORIGIN, note: `Copy ${names.join(', ')}` });
         return ok(`Made ${ids.join(', ')}.`);
+      },
+    },
+
+    fill: {
+      usage: 'aia fill <doc> <layer> --at x,y [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1]',
+      summary: 'Fills the gap around x,y that the lines of a vector layer close (or recolors the fill already there)',
+      details:
+        'As the editor’s Fill & Stroke tool. x,y is in the layer’s coordinates. The new part follows the lines around\n' +
+        'the gap (bend a line and the fill bends with it) and goes just under the lowest of them; unnamed points of\n' +
+        'those lines get a name so the fill can share them. Without --stroke it has no stroke. Only welded points join\n' +
+        'lines: two lines that cross without a weld do not close a gap. On a gap already filled it changes that fill’s\n' +
+        'style instead. Example: aia fill face ink --at 120,80 --fill #f0c040',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const layer = need(args, 1, 'the vector layer');
+        const at = pair(args, 'at');
+        if (!at) throw new AiaError('Say where: --at x,y (in the layer’s coordinates)');
+        const doc = await resolved(id);
+        let result;
+        try {
+          result = fillOps(doc, layer, at, styleFlags(args), { stroke: null });
+        } catch (e) {
+          throw new AiaError(e.message);
+        }
+        if (!result.ops.length) return ok(`${result.id} already fills that gap; say --fill or --stroke to recolor it.`);
+        await store.apply(id, result.ops, { origin: ORIGIN, note: result.note });
+        const part = findObject((await store.get(id, ORIGIN)).document, result.id);
+        const lines = [...new Set(verticesOf(/** @type {any} */ (part)).map((v) => v.follow))].join(', ');
+        return ok(result.made ? `Made ${result.id}, following ${lines}, under them.` : `Recolored ${result.id}.`);
       },
     },
 

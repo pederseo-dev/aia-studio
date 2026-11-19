@@ -532,6 +532,19 @@ line to follow among the parts through both points that do not follow others: th
 of the first point, then any other, and says why when there is none. `aia follow` and the editor's Follow got it with
 no change of their own (their help says so); the guide's points topic explains it.
 
+**Steps 4 and 5, a first Fill & Stroke tool (2026-11-19):** brought ahead of step 3 so the person can try it.
+`src/core/fill.js`: the lines of a layer (its shown parts that do not follow others) make a graph with a node at each
+vertex (one node where lines share a point) and an edge along each stretch (sampled curves); its faces, without the
+spurs of open ends, are the gaps, and `gapAt` gives the smallest one that holds the place. `fillOps` cuts the gap into
+stretches (one per run along a line, at least two, never from a point back to itself), names the unnamed points they
+start at, and creates `fill_N` with `{ ref, follow, way? }` vertices just under the lowest line it follows; on a gap
+already filled (a fill holding the place with about its area) it sets the style instead. `aia fill <doc> <layer> --at
+x,y` (style flags as `aia rect`; no stroke unless told) and a line in the guide's points topic. In the editor, the
+Fill & Stroke tool (F, the bean icon, its own group): the gap under the pointer hatched, a click marks it (again:
+unmarks; Shift: several), Fill in the bar or Enter fills the marked gaps in one step, Esc clears them. Its fill and
+stroke (default: no stroke) are kept apart from the drawing tools' auto style. Not yet: stroke on / off of stretches
+and caps / joins (step 3), marking stretches with the tool, and the split of `server/aia.js` (now ≈1050 lines).
+
 Left for later: a stroke width per point (Moho's Line Width: SVG has no variable-width stroke, so the core and the
 runtime would have to build its outline), gaps with holes (a ring: one part has one outline), a point added by
 itself where two lines cross without a weld, several marked gaps joined into one part, Create shape from picked

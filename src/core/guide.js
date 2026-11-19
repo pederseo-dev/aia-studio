@@ -125,6 +125,8 @@ From ear_l to ear_r this outline goes along jaw (its points and curves in betwee
 points jaw passes through: its own, or points of another part that jaw shares too (where two lines were welded), so a
 fill can turn from one line onto the next at their junction. On a closed jaw it takes the short way; "way": "long"
 takes the other. A part that follows others is never followed: fills follow lines, not other fills.
+Usually you do not write these by hand: aia fill face ink --at 120,80 --fill #f0c040 fills the gap the lines of a
+layer close around that place, with a part that follows them, under them (weld lines where they meet first).
   aia follow face skin.0 skin.1       (--long: the other way; --off: stop following)
 
 Moving points by name, without sending the vertices again (the vertices that share them follow):

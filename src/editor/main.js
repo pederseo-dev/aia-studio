@@ -6,6 +6,7 @@ import { actions, renderHeader, setupDropdowns, setupHeader } from './header.js'
 import { deleteSelected, orderSelected, render as renderLayers, renameSelected, setupLayers } from './layers.js';
 import { render as renderCanvas, setupCanvas } from './canvas.js';
 import { cancelPen, setupDrawTools } from './drawTools.js';
+import { clearMarks, fillMarked, setupFillTool } from './fillTool.js';
 import { nudgeSelection, setupSelectTool } from './selectTool.js';
 import { deletePoints, nudgePoints, setupPointEdit, stopEditing } from './pointEdit.js';
 import { copy, cut, duplicate, paste } from './clipboard.js';
@@ -24,6 +25,7 @@ setupToolbar();
 setupLayers();
 setupCanvas();
 setupDrawTools();
+setupFillTool();
 setupSelectTool();
 setupPointEdit();
 setupJson();
@@ -46,7 +48,7 @@ onChange(() => {
 });
 
 /** @type {Record<string, typeof state.tool>} */
-const TOOL_KEYS = { v: 'select', m: 'move', s: 'scale', t: 'rotate', p: 'pen', r: 'rect', e: 'ellipse' };
+const TOOL_KEYS = { v: 'select', m: 'move', s: 'scale', t: 'rotate', p: 'pen', r: 'rect', e: 'ellipse', f: 'fill' };
 /** @type {Record<string, [number, number]>} */
 const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
@@ -72,7 +74,11 @@ document.addEventListener('keydown', (event) => {
   } else if (ctrl && key === 'v') {
     if (!paste()) return;
   } else if (event.altKey && key === 'w') actions.close();
-  else if (event.key === 'Escape' && stopEditing()) {
+  else if (event.key === 'Escape' && state.tool === 'fill' && clearMarks()) {
+    // the marked gaps were cleared
+  } else if (event.key === 'Enter' && state.tool === 'fill' && fillMarked()) {
+    // the marked gaps were filled
+  } else if (event.key === 'Escape' && stopEditing()) {
     // point editing ended
   } else if (arrow && !ctrl) {
     const step = event.shiftKey ? 10 : 1;

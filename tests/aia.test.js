@@ -204,3 +204,18 @@ test('the AI draws, reshapes, deletes and copies by name, as the editor does', a
   assert.equal((await store.get('face', 'ai')).document.objects.some((o) => o.id === 'box_2'), false);
   assert.match((await aia.run('transform face box face')).text, /layers turn one at a time/);
 });
+
+test('aia fill fills the gap the lines close, under them, and recolors it the second time', async () => {
+  await ok('new "Face" --width 400 --height 300');
+  await ok('rect face ink box --box 0,0,100,100 --fill none');
+  assert.match(await ok('fill face ink --at 50,50 --fill #f0c040'), /Made fill_1, following box, under them/);
+  let doc = (await store.get('face', 'ai')).document;
+  assert.deepEqual(doc.objects.filter((o) => o.parent === 'ink').map((o) => o.id), ['fill_1', 'box']);
+  assert.equal(/** @type {any} */ (doc.objects.find((o) => o.id === 'fill_1')).stroke, null);
+  assert.match(await ok('fill face ink --at 20,20'), /already fills that gap/);
+  assert.match(await ok('fill face ink --at 20,20 --fill #3366cc'), /Recolored fill_1/);
+  doc = (await store.get('face', 'ai')).document;
+  assert.equal(/** @type {any} */ (doc.objects.find((o) => o.id === 'fill_1')).fill, '#3366cc');
+  assert.match((await aia.run('fill face ink --at 300,300')).text, /no lines of ink close a gap/);
+  assert.match((await aia.run('fill face ink')).text, /--at x,y/);
+});

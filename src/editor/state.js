@@ -9,7 +9,7 @@ import { resolveDoc } from '../core/points.js';
  * @typedef {import('../core/document.js').Doc} Doc
  * @typedef {import('../core/operations.js').Operation} Operation
  * @typedef {{ id: string, name: string }} Tab
- * @typedef {'select' | 'move' | 'scale' | 'rotate' | 'pen' | 'rect' | 'ellipse'} Tool
+ * @typedef {'select' | 'move' | 'scale' | 'rotate' | 'pen' | 'rect' | 'ellipse' | 'fill'} Tool
  */
 
 const TABS_KEY = 'aia.tabs';
@@ -380,6 +380,31 @@ export function setDrawStyle(changes) {
 
 /** Whether the tool draws new shapes. @param {Tool} tool */
 export const isDrawTool = (tool) => tool === 'pen' || tool === 'rect' || tool === 'ellipse';
+
+const FILL_STYLE_KEY = 'aia.fillStyle';
+
+/**
+ * The style the Fill & Stroke tool gives the gaps it fills, kept apart from the drawing tools' (a fill usually has
+ * no stroke: the lines around it have theirs). Kept per person in this browser.
+ * @type {typeof drawStyle}
+ */
+export const fillStyle = (() => {
+  const fallback = { fill: '#c8c2d4', stroke: null, strokeWidth: 2, fillOpacity: 1, strokeOpacity: 1 };
+  try {
+    return { ...fallback, ...JSON.parse(localStorage.getItem(FILL_STYLE_KEY) ?? '{}') };
+  } catch {
+    return fallback;
+  }
+})();
+
+/** @param {Partial<typeof fillStyle>} changes */
+export function setFillStyle(changes) {
+  Object.assign(fillStyle, changes);
+  try {
+    localStorage.setItem(FILL_STYLE_KEY, JSON.stringify(fillStyle));
+  } catch {}
+  changed();
+}
 
 /** Auto weld (point editing): an open end dropped on another open end welds them. Kept per person in this browser. */
 export const autoWeld = { on: (() => { try { return localStorage.getItem('aia.autoWeld') !== 'off'; } catch { return true; } })() };
