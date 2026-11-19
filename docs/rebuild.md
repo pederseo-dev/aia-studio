@@ -569,3 +569,11 @@ Left for later: a stroke width per point (Moho's Line Width: SVG has no variable
 runtime would have to build its outline), gaps with holes (a ring: one part has one outline), a point added by
 itself where two lines cross without a weld, several marked gaps joined into one part, Create shape from picked
 points in the points bar, a freehand lasso for picking points.
+
+**Fixes after trying Create Shape (2026-11-19):** moving, turning, scaling or flipping a fill (Select and its tools,
+`aia transform`) pulled only the shared points of its lines, so the other points of those lines stayed where they
+were; now `partsToMove` (`src/core/fill.js`) moves the lines a fill follows, whole (and the fill itself only if it
+has points of its own). Clicking inside a line picks the fill under it (a line is picked by its stroke), so this was
+also why lines seemed not to be pickable. Shapes inside a gap that cross each other or its lines without a weld made
+holes that cancelled out (even-odd); the gap search now says to weld them where they cross instead of filling.
+`aia fill` names the lines of the holes too.

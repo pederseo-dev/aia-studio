@@ -35,6 +35,31 @@ const TINY = 1e-6;
 /** Whether a part follows others (a fill): those are not lines, so they close no gap. @param {DocObject} part */
 export const followsOthers = (part) => verticesOf(part).some((v) => v.follow) || holesOf(part).some((hole) => hole.some((v) => v.follow));
 
+/**
+ * What moves when parts are moved, turned or scaled: a fill is drawn from the lines it follows, so moving it moves
+ * those lines whole (moving its shared points alone would pull only those points of the lines). The fill itself
+ * moves too only when it has points of its own.
+ * @param {Doc} doc @param {DocObject[]} parts
+ * @returns {DocObject[]}
+ */
+export function partsToMove(doc, parts) {
+  /** @type {Map<string, DocObject>} */
+  const moving = new Map();
+  for (const part of parts) {
+    if (!followsOthers(part)) {
+      moving.set(part.id, part);
+      continue;
+    }
+    const all = [...verticesOf(part), ...holesOf(part).flat()];
+    for (const v of all) {
+      const line = v.follow ? findObject(doc, String(v.follow)) : undefined;
+      if (line) moving.set(line.id, line);
+    }
+    if (all.some((v) => !v.ref)) moving.set(part.id, part);
+  }
+  return [...moving.values()];
+}
+
 /** The node of a vertex: the point it is ("part.point"), or a key of its own for an unnamed one. @param {DocObject} part @param {Vertex} v @param {number} i */
 const nodeOf = (part, v, i) => pointIdOf(part, v) ?? `${part.id}#${i}`;
 
@@ -249,8 +274,11 @@ export function gapAt(doc, layer, at) {
   // The holes: the outsides of the other groups of lines that lie inside it, but not inside one another (a shape
   // inside a hole is in another gap).
   const found = /** @type {Face} */ (best);
-  const inside = [...outer.values()].filter((o) => o.component !== found.component && o.area < found.area && o.polygon.every((p) => insidePolygon(found.polygon, p)));
+  const inside = [...outer.values()].filter((o) => o.component !== found.component && o.area < found.area && o.polygon.some((p) => insidePolygon(found.polygon, p)));
   const holes = inside.filter((o) => !inside.some((other) => other !== o && other.area > o.area && o.polygon.every((p) => insidePolygon(other.polygon, p))));
+  // Lines that cross without a weld leave no clean gap: say so instead of filling something odd.
+  const crossing = holes.find((o, i) => crosses(o.polygon, found.polygon) || holes.some((other, j) => j > i && crosses(o.polygon, other.polygon)));
+  if (crossing) return { error: `lines of ${layer} cross without a weld around ${round(at.x)}, ${round(at.y)}: weld them where they cross (${partsOf(crossing.face, edges)})` };
   return {
     stretches: stretchesOf(found.face, edges),
     polygon: found.polygon,
@@ -262,6 +290,29 @@ export function gapAt(doc, layer, at) {
 
 /** @param {number} n */
 const round = (n) => Math.round(n * 100) / 100;
+
+/** The lines a face goes along. @param {number[]} face @param {HalfEdge[]} edges */
+const partsOf = (face, edges) => [...new Set(face.map((h) => edges[h].part))].join(', ');
+
+/** Whether two segments cross. @param {Point} a @param {Point} b @param {Point} c @param {Point} d */
+function segmentsCross(a, b, c, d) {
+  const side = (/** @type {Point} */ p, /** @type {Point} */ q, /** @type {Point} */ r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const d1 = side(c, d, a);
+  const d2 = side(c, d, b);
+  const d3 = side(a, b, c);
+  const d4 = side(a, b, d);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
+/** Whether two closed outlines cross each other. @param {Point[]} p @param {Point[]} q */
+function crosses(p, q) {
+  for (let i = 0; i < p.length; i++) {
+    const a = p[i];
+    const b = p[(i + 1) % p.length];
+    for (let j = 0; j < q.length; j++) if (segmentsCross(a, b, q[j], q[(j + 1) % q.length])) return true;
+  }
+  return false;
+}
 
 /**
  * The fill of a layer that already fills a gap: a part that follows others, holds the place and has about the

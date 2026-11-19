@@ -29,6 +29,7 @@ import {
   worldOf,
 } from '../core/transform.js';
 import { copyOps } from '../core/copy.js';
+import { partsToMove } from '../core/fill.js';
 import { addPainter, onToolDown, showPreview } from './canvas.js';
 import { editPoints, inShownLayer, isLocked, run, select, selectMany, selectedParts, state, toggleSelect } from './state.js';
 import { isPart } from './schema.js';
@@ -126,7 +127,8 @@ function changesFor(s, m) {
     const matrix = multiply(conjugate(m, parentWorldOf(doc, s.layer)), layerMatrix(doc, s.layer));
     changes.set(s.layer.id, transformProps(doc, s.layer, decompose(doc, s.layer, matrix)));
   }
-  for (const part of s.parts) changes.set(part.id, transformPart(part, conjugate(m, worldOf(doc, part.id))));
+  // A fill moves the lines it follows (see partsToMove).
+  for (const part of partsToMove(doc, s.parts)) changes.set(part.id, transformPart(part, conjugate(m, worldOf(doc, part.id))));
   return changes;
 }
 

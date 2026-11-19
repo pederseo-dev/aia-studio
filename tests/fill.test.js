@@ -6,8 +6,8 @@ import { applyOps } from '../src/core/operations.js';
 import { pointsError, resolveDoc, settleOps } from '../src/core/points.js';
 import { drawDocument } from '../src/core/draw.js';
 import { copyOps } from '../src/core/copy.js';
-import { fillOps, gapAt, insidePolygon, styleProps } from '../src/core/fill.js';
-import { ellipsePoints, outlineOf, translate } from '../src/core/geometry.js';
+import { fillOps, gapAt, insidePolygon, partsToMove, styleProps } from '../src/core/fill.js';
+import { ellipsePoints, outlineOf, round2, transformPart, translate } from '../src/core/geometry.js';
 
 const schema = loadSchema();
 const apply = (doc, ops) => applyOps(schema, doc, ops).document;
@@ -133,4 +133,26 @@ test('holes are checked like outlines, renamed with their lines, and copied as p
   assert.deepEqual(find(renamed, 'f').holes[0][0], { ref: 'slit.a' });
   const { ops } = copyOps(resolveDoc(withHole), [find(resolveDoc(withHole), 'f')], translate(10, 0));
   assert.deepEqual(ops[0].props.holes[0][0], { x: 30, y: 20 });
+});
+
+test('moving a fill moves the lines it follows, whole', () => {
+  const circle = (id, size) => ({ id, vertices: ellipsePoints({ x: 100 - size / 2, y: 100 - size / 2, width: size, height: size }, 8) });
+  const { after, id } = fill(layer(circle('outer', 200), circle('inner', 100)), { x: 100, y: 20 });
+  const resolved = resolveDoc(after);
+  const moving = partsToMove(resolved, [find(resolved, id)]);
+  assert.deepEqual(moving.map((p) => p.id).sort(), ['inner', 'outer'], 'its lines, not the fill (it has no points of its own)');
+  const ops = moving.map((part) => ({ op: 'set', target: part.id, props: transformPart(part, translate(30, 0)) }));
+  const moved = applyOps(schema, after, settleOps(after, ops, loose)).document;
+  assert.equal(pointsError(moved), null);
+  for (const line of ['outer', 'inner']) {
+    find(moved, line).vertices.forEach((v, i) => assert.equal(v.x, round2(find(after, line).vertices[i].x + 30), `${line}.${i} moved`));
+  }
+});
+
+test('shapes inside a gap that cross each other or its lines without a weld leave no gap to fill', () => {
+  const circle = (id, x, y, size) => ({ id, vertices: ellipsePoints({ x, y, width: size, height: size }, 4) });
+  const doc = layer(circle('big', 0, 0, 300), circle('a', 60, 100, 100), circle('b', 120, 100, 100));
+  assert.match(String(/** @type {any} */ (gapAt(resolveDoc(doc), 'ink', { x: 150, y: 20 })).error), /cross without a weld.*weld them where they cross/);
+  const apart = layer(circle('big', 0, 0, 300), circle('a', 40, 100, 80), circle('b', 180, 100, 80));
+  assert.equal(/** @type {any} */ (gapAt(resolveDoc(apart), 'ink', { x: 150, y: 20 })).holes.length, 2);
 });

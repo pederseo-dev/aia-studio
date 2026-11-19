@@ -30,7 +30,7 @@ import {
 } from '../src/core/geometry.js';
 import { copyOps } from '../src/core/copy.js';
 import { ORDER_MOVES, orderOps } from '../src/core/order.js';
-import { fillOps } from '../src/core/fill.js';
+import { fillOps, partsToMove } from '../src/core/fill.js';
 import { addImageOps, replaceImageOps } from '../src/core/images.js';
 import { applyTransformOps, isLayer as isLayerObject, transformOf, transformProps, worldOf } from '../src/core/transform.js';
 import { movePointsOps, pointsNamed, resolveDoc } from '../src/core/points.js';
@@ -187,13 +187,15 @@ export function createAia({ store, schema }) {
    * @param {Args} args @param {string} id @param {any} doc @param {string[]} names
    */
   const transformParts = async (args, id, doc, names) => {
-    const parts = names.map((n) => {
+    const named = names.map((n) => {
       const part = findObject(doc, n);
       if (!part || part.type !== 'path') throw new AiaError(`"${n}" is not a part: layers turn one at a time, around their origin`);
       return part;
     });
+    // A fill moves the lines it follows.
+    const parts = partsToMove(doc, named);
     if (new Set(parts.map((p) => p.parent)).size > 1) throw new AiaError('the parts are in different layers: transform them layer by layer');
-    const box = bounds(parts);
+    const box = bounds(named);
     const pivot = pair(args, 'around') ?? (box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : { x: 0, y: 0 });
     const move = pair(args, 'move') ?? { x: 0, y: 0 };
     const degrees = args.flags.rotate === undefined ? 0 : Number(args.flags.rotate);
@@ -545,7 +547,9 @@ export function createAia({ store, schema }) {
         await store.apply(id, result.ops, { origin: ORIGIN, note: result.note });
         const part = findObject((await store.get(id, ORIGIN)).document, result.id);
         const lines = [...new Set(verticesOf(/** @type {any} */ (part)).map((v) => v.follow))].join(', ');
-        return ok(result.made ? `Made ${result.id}, following ${lines}, under them.` : `Recolored ${result.id}.`);
+        const holes = /** @type {any[][]} */ (part?.holes ?? []).map((hole) => [...new Set(hole.map((v) => v.follow))].join(', '));
+        const cut = holes.length ? `, with ${holes.length === 1 ? 'a hole' : `${holes.length} holes`} along ${holes.join('; ')}` : '';
+        return ok(result.made ? `Made ${result.id}, following ${lines}${cut}, under them.` : `Recolored ${result.id}.`);
       },
     },
 
@@ -626,7 +630,8 @@ export function createAia({ store, schema }) {
           const box = bounds([object]);
           const pivot = originOf(object) ?? (box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : { x: 0, y: 0 });
           const m = multiply(translate(move.x, move.y), around(pivot, multiply(rotate(degrees), scale(sx, sy))));
-          ops = [{ op: 'set', target, props: transformPart(object, m) }];
+          // A fill moves the lines it follows.
+          ops = partsToMove(doc, [object]).map((part) => ({ op: 'set', target: part.id, props: transformPart(part, m) }));
         } else throw new AiaError(`${target} is a ${object.type}: only layers and parts transform`);
         await store.apply(id, ops, { origin: ORIGIN, note: `Transform ${target}` });
         const after = (await store.get(id, ORIGIN)).document;
