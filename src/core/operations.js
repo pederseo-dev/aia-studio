@@ -5,11 +5,12 @@
 //   { op: 'set',    target: 'head' | 'meta', props: { locked: true } }   ← the default value removes the property
 //   { op: 'delete', target: 'head' }                                     ← with everything inside it
 //   { op: 'move',   target: 'head', parent: 'body' | null, index?: 0 }   ← index among the new siblings; none = on top
-//   { op: 'rename', target: 'head', id: 'face' }   ← references follow; shapes named after it (head_fill) too
+//   { op: 'rename', target: 'head', id: 'face' }   ← references follow; shapes named after it (head_fill) too,
+//                                                     unless alone: true (how undo renames them back, one by one)
 
 import { ID, childrenOf, findObject, subtree, treeOrder } from './document.js';
 import { valueError } from './schema.js';
-import { pointsError, renamePointRefs } from './points.js';
+import { followedLines, pointsError, renamePointRefs } from './points.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc
@@ -108,27 +109,31 @@ const HANDLERS = {
     return [before];
   },
 
-  rename(schema, doc, { target, id }) {
+  rename(schema, doc, { target, id, alone = false }) {
     const object = needObject(doc, target);
     if (id === target) return [];
     checkNewId(doc, id);
     object.id = id;
     for (const o of doc.objects) if (o.parent === target) o.parent = id;
     renamePointRefs(doc, target, id);
+    /** @type {Operation[]} */
+    const back = [{ op: 'rename', target: id, id: target, alone: true }];
+    if (alone) return back;
     // Shapes still named after it (head_fill, head_stroke_2, as Create Shape names them) that follow it take the new
-    // name; a fill named otherwise keeps its name. Undoing the rename renames them back the same way.
+    // name; a shape named otherwise keeps its name. Undo renames back exactly these, each alone.
     const derived = new RegExp(`^${target}_(fill|stroke)(_[0-9]+)?$`);
     for (const o of doc.objects) {
       const match = derived.exec(o.id);
       if (!match) continue;
-      const follows = [...((/** @type {any[]} */ (o.vertices)) ?? []), ...((/** @type {any[][]} */ (o.holes)) ?? []).flat()].some((v) => v.follow === id);
+      const follows = followedLines(o).has(id);
       const next = `${id}_${match[1]}${match[2] ?? ''}`;
       if (!follows || findObject(doc, next)) continue;
       const old = o.id;
       o.id = next;
       renamePointRefs(doc, old, next);
+      back.push({ op: 'rename', target: next, id: old, alone: true });
     }
-    return [{ op: 'rename', target: id, id: target }];
+    return back;
   },
 };
 

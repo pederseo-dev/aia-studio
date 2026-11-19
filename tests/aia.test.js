@@ -205,18 +205,20 @@ test('the AI draws, reshapes, deletes and copies by name, as the editor does', a
   assert.match((await aia.run('transform face box face')).text, /layers turn one at a time/);
 });
 
-test('aia fill fills the gap the lines close, under them, and recolors it the second time', async () => {
+test('aia fill makes a shape in the gap the lines close, under them; shapes add up as in the editor', async () => {
   await ok('new "Face" --width 400 --height 300');
   await ok('rect face ink box --box 0,0,100,100 --fill none');
-  assert.match(await ok('fill face ink --at 50,50 --fill #f0c040'), /Made box_fill, following box, under them/);
+  assert.match(await ok('fill face ink --at 50,50 --fill #f0c040'), /Made box_fill\. It follows box\./);
   let doc = (await store.get('face', 'ai')).document;
   assert.deepEqual(doc.objects.filter((o) => o.parent === 'ink').map((o) => o.id), ['box_fill', 'box']);
   assert.equal(/** @type {any} */ (doc.objects.find((o) => o.id === 'box_fill')).stroke, null);
-  assert.match(await ok('fill face ink --at 20,20'), /already fills that gap/);
-  assert.match(await ok('fill face ink --at 20,20 --fill #3366cc'), /Recolored box_fill/);
+  assert.match(await ok('fill face ink --at 20,20 --fill #3366cc --stroke #000000 --id glass'), /Made glass_fill and glass_stroke \(its fill and its stroke/);
   doc = (await store.get('face', 'ai')).document;
-  assert.equal(/** @type {any} */ (doc.objects.find((o) => o.id === 'box_fill')).fill, '#3366cc');
+  assert.deepEqual(doc.objects.filter((o) => o.parent === 'ink').map((o) => o.id), ['box_fill', 'glass_fill', 'glass_stroke', 'box'], 'the new shape goes just under the line, over the older one');
+  assert.equal(/** @type {any} */ (doc.objects.find((o) => o.id === 'box_fill')).fill, '#f0c040', 'the first shape is left as it was');
   assert.match((await aia.run('fill face ink --at 300,300')).text, /no lines of ink close a gap/);
+  assert.match((await aia.run('fill face ink --at 50,50 --id 9x')).text, /--id is a name/);
+  assert.match((await aia.run('crossings face ink --weld 3')).text, /cross nowhere without a point: there is nothing to weld/);
   assert.match((await aia.run('fill face ink')).text, /--at x,y/);
 });
 

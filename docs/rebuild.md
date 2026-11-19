@@ -96,8 +96,8 @@ many shapes, fills and strokes inside one layer, and painting between lines.
   **named points** (`chin`, `mouth_corner_l`) and **point groups** (`upper_lid`), like Moho's point groups.
 - **Welding is explicit:** a vertex can reference a point of another part (`jaw.chin`), and a stretch of an outline
   can follow another part's curve between two points (what v1's `loops` did, inside a named part).
-- Moho's **paint bucket is a tool** (and an `aia` command) that creates a part whose outline follows the lines
-  around a region; not a type of its own.
+- Filling between lines is a tool, as Moho's **Create Shape** (and `aia shape` / `aia fill`): it creates parts whose
+  outline follows the lines around a region; not a type of its own (decision 10).
 - Each part draws as one SVG path, so the runtime resolves references and draws.
 
 It was tried out in the editor in the Design mode steps below; the model that came out of them is decision 10.
@@ -246,15 +246,17 @@ binding, pose vs clip, and params and drivers stay open.
 - **Followed stretches:** a stretch of an outline can follow another part between two points that part passes
   through: `{ ref, follow: "jaw", way? }` to the next vertex. The JSON keeps only the ends; the core expands it. The
   followed part must not have followed stretches itself (a fill follows lines, not other fills). `way` is `"short"`
-  by default on a closed part; the Fill tool always writes it.
+  by default on a closed part; Create Shape writes `"long"` where its stretch goes the long way.
 - **Point groups** belong to the vector layer (`groups: { upper_lid: ["lid.top", …] }`).
 - **Layers:** vector (holds parts), group, image; any of them with a transform (x, y, rotation, scale, origin).
 - **Holes** (2026-11-19): a `path` may have `holes`, closed outlines cut out of its fill (drawn even-odd), each a list
   of vertices like its own but without names; they share points and follow lines as the outline does. A hole whose
   shared point is deleted goes away with it.
-- **No mesh and no region type.** A fill is a `path` whose outline follows the lines around it, made by the Fill tool
-  (the paint bucket) or `aia fill`, and placed under those lines. Moving or bending a line moves the fills that follow
-  it, because they are drawn from it.
+- **No mesh and no region type.** What fills a region is a **shape**, made by Create Shape (the editor's tool, `aia
+  shape`, `aia fill`): two `path` parts whose outlines follow the lines around it, `<line>_fill` (only the fill) and
+  `<line>_stroke` (only the stroke), placed under those lines, each with its own place in the order. Moving or bending
+  a line moves the shapes that follow it, because they are drawn from it. A part drawn with its own points (Pen,
+  Rectangle, Ellipse) is an **element** and keeps its own fill and stroke: the two ways live side by side.
 - **One rule in the core for each change**, used by the editor and by `aia` alike (welding, naming, deleting points,
   following), and settled by the store for every origin.
 
@@ -283,7 +285,7 @@ not start while the open topics it depends on are undecided. «From v1» names t
 | 1 ✅ | **Base** | `electron/main.js`, `server/folder.js`, `server/app.js` (rewrite) | — |
 | 2 ✅ | **Thin slice, end to end**, with simple shapes (rect, ellipse, path, group, styles): document, schema, operations, store with history and undo by origin, live notices, SVG/PNG render, a minimal runtime, the `aia` CLI with `help` and `guide <topic>`, the thin MCP (`aia(command)` + `render`) | keep: `geometry`, `curves`, `paths`, `render/svg`, `server/png`, `server/events`; rewrite: `document`, `schema`, `operations` (no sugars inside `set`), `server/store`, `guide` | topics 2 (the basics) and 3 |
 | 3 (mostly) | **Editor base**: canvas, Layers, an inspector generated from the schema, selection and transform, a console with the `aia` commands (built in the Design mode steps; the console is still missing) | rewrite: `editor/state`, `canvas`, `layers`, `inspector`, `transform` (small files, no global state) | topic 5 |
-| 4 | **Drawing**: one drawing model (paths with named, shared and followed points: decisions 6 and 8, no mesh), the Fill tool for regions, Fill / Stroke | the idea of v1's `regions` (painting between lines); written new on `core/points`, `core/weld`; editor drawing tools | topic 2 (its drawing part) |
+| 4 | **Drawing**: one drawing model (paths with named, shared and followed points: decisions 6 and 8, no mesh), Create Shape for regions (shapes with holes), the stroke of stretches | the idea of v1's `regions` (painting between lines); written new on `core/points`, `core/weld`; editor drawing tools | topic 2 (its drawing part) |
 | 5 | **Skeleton and binding** | rewrite: `core/skeleton`, `bindPoints`; `editor/bones` | topic 2 |
 | 6 | **Animation**: poses and clips, params and drivers, the timeline | rewrite: `core/animation`, `blend`, `poseValues`; `editor/timeline`, `poses`, `parameters` | topic 2 |
 | 7 | **Runtime and export**: `.aia` + the JS runtime for apps, the manifest, video and Lottie | rewrite: `core/live`, `manifest` | topics 1 and 6 |
@@ -485,11 +487,17 @@ changes instead of redrawing each frame (parts 6 and 7), and lookups by id walk 
 
 ## Next: Fill & Stroke (part 4)
 
-**Changed later on 2026-11-19:** the tool is **Create Shape** (F, the bean) and does only the fill for now; the stroke
-(stretches on / off, caps, joins) is thought out after it. Over a gap it shows it hatched, with its holes clear. A click
-selects: an empty gap is marked (Shift: several), a filled gap selects its fill part; **Create shape** in the bar (or
-Enter) fills the marked gaps. Shapes inside a gap that do not touch its lines (a donut's middle) are **holes** of the
-fill (decision 10 grew `holes`). The plan below is the earlier one, kept for its steps.
+**Where it stands (2026-11-19, read this first):** the tool is **Create Shape** (F, the bean), as Moho's: it picks
+**points** of a layer's lines (a click, Shift to add or take out, a box, or a click inside a gap for all the points
+around it); a checkerboard shows when they close a shape, and Create shape (Enter) makes it. Where lines cross without
+a point a ring shows, and a click welds them there. A **shape** is two parts that follow the lines, `<line>_fill` and
+`<line>_stroke`, under them, each with its own order; shapes add up (Moho) and are renamed with their line. Shapes
+inside a gap that do not touch it are **holes**. The Inspector shows, for one part, its **Element** (own order, fill
+and stroke: square swatches) and its **Shape** section (a dropdown, delete, each shape's fill and stroke as beans with
+their own order). `aia shape`, `aia fill`, `aia crossings` and `aia order` do the same for the AI. Still to do: the
+stroke of stretches (step 3: on / off, caps, joins) and the structure items of the closing review (end of this
+section). The plan just below is the earlier one and the step notes after it are history: where they disagree with
+this paragraph, this paragraph is right.
 
 Agreed on 2026-11-19, on decision 10 (replaces the paint bucket plan of 2026-11-18). Not a paint bucket: a **Fill &
 Stroke tool (F)** that works as a selector of its own. Over a closed gap between lines it shows the gap hatched, over a
@@ -566,9 +574,9 @@ editor a click on an empty gap marks it, on a filled one selects its fill (Shift
 only outlined, Create shape (Enter) makes the marked ones and selects them, and the Inspector shows a part's holes.
 
 Left for later: a stroke width per point (Moho's Line Width: SVG has no variable-width stroke, so the core and the
-runtime would have to build its outline), gaps with holes (a ring: one part has one outline), a point added by
-itself where two lines cross without a weld, several marked gaps joined into one part, Create shape from picked
-points in the points bar, a freehand lasso for picking points.
+runtime would have to build its outline), crossings that stay apart instead of welded (a shape would follow a
+computed crossing; decided against for now: they are welded, as in Moho), a freehand lasso for picking points, a
+closed line of only 2 points (it is not drawn closed either, so it closes no gap).
 
 **Fixes after trying Create Shape (2026-11-19):** moving, turning, scaling or flipping a fill (Select and its tools,
 `aia transform`) pulled only the shared points of its lines, so the other points of those lines stayed where they
@@ -593,7 +601,7 @@ invisible band of 10 px around them to be picked by (`addLineHits` in the canvas
 `facesOf` (shared with `shapeOf`), `gapOf` builds a gap with its holes and its `nodes`, `shapeOps` writes the part.
 
 **Shapes accumulate, named after their line (2026-11-19):** as in Moho, Create Shape on the same points adds another
-shape each time (useful for animation); `aia fill` on a filled gap still recolors it. Kept as they are: the two ways to
+shape each time (useful for animation); `aia fill` on a filled gap did recolor it then (now it adds a shape too). Kept as they are: the two ways to
 paint (a part's own fill and stroke, or shapes that follow lines) live side by side, the designer's choice. A new shape
 is named after the line it goes along most (`head_fill`, `head_fill_2`). References already go by id and follow a
 rename (like SQL's ON UPDATE CASCADE); now the `rename` op also renames the shapes still named after the line that
@@ -620,3 +628,30 @@ of the shapes on that element, Delete for the one picked, and its Fill and Strok
 click on a shape on the canvas shows the element it belongs to (the line it is named after, else the first it
 follows) with that shape picked. The drawing tools' bar and «New shapes» use square swatches; Create Shape's bar
 keeps the beans.
+
+**Closing review of part 4, fixes (2026-11-19):** the `auditor`, `architecture` and `ai-tester` reviews (report:
+`docs/ai-tests/2026-11-19-drawing.md`) found, and this fixed:
+- Unwelding or deleting a junction a shape follows was refused ("broken point"): `settleOps` now turns into plain
+  stretches those that followed fine before the batch and do not after it (the followed line no longer passes
+  through the point), in holes too.
+- Copying a shape (Ctrl+C / Ctrl+D, `aia copy`) failed or made a 2-point sliver: a copy of a part that follows lines
+  is its drawn outline and holes, as points of its own (`copyOps`).
+- Welding a crossing put the point far from it: on a straight stretch the sampled fraction is not the curve's
+  parameter (a straight stretch is a cubic with its controls at its ends: 3t² − 2t³), now converted (`curveT`); and
+  "at a point already there" is a distance (0.5 units), not a fraction of the stretch. A crossing through a vertex of
+  the other line is found now (touching counts, found once).
+- Undoing a rename renamed back shapes it had not renamed: `rename` returns the exact renames it did as its inverse,
+  each with `alone: true` (no cascade).
+- `aia fill` still recolored a filled gap with the one-part model: it now makes a shape like a click inside the gap
+  in the editor (`<line>_fill` + `<line>_stroke`, shapes add up); colors change with a `set` op. `aia fill` and `aia
+  shape` take `--id name`; a shape that does not close says where the picked stretches stop; `aia crossings --weld`
+  with none says there is nothing to weld.
+- Create Shape drops its picks when their layer is locked or hidden.
+- One rule for "follows others" and "the lines it follows" (`followsOthers`, `followedLines` in `points.js`), used by
+  `followStretch`, `stretchBetween`, the gap search, `partsToMove`, the rename cascade and the Inspector.
+- Texts of earlier designs (decision 10, the plan's note, the build plan row, «Left for later», the `holes` help, the
+  guide, the shortcuts table, dead Inspector branches and a dead line in `weld.js`).
+Left for after the push (structure): split `server/aia.js` (≈1110 lines) by topic, move the crossings out of
+`src/core/fill.js` and reuse `geometry.js`'s cubic, move "which element a shape belongs to" (`elementOf`, `shapesOf`,
+now in `inspector.js`) to the core with tests, build the Element section from the schema (so caps and joins show by
+themselves), and rename the tool's internal names (`fill` → `shape`).

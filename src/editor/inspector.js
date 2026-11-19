@@ -21,7 +21,7 @@ import { orderSelected } from './layers.js';
 import { orderOps } from '../core/order.js';
 import { flipSelection } from './selectTool.js';
 import { drawStyle, isDrawTool, isLocked, run, select, setDrawStyle, state } from './state.js';
-import { followsOthers } from '../core/fill.js';
+import { followedLines as followedBy, followsOthers } from '../core/points.js';
 import { isPart, schema } from './schema.js';
 import { icon } from './icons.js';
 
@@ -235,19 +235,6 @@ function propertyRow(key, spec, targets, { bean = true, extra = [] } = {}) {
   }
   if (spec.type === 'number' && spec.min === 0 && spec.max === 1) return row(labelOf(key), spec.help, ...unitSlider(value, live, change));
   if (spec.type === 'number') return row(labelOf(key), spec.help, numberField(spec, value, live, change));
-  if (spec.type === 'vertices') {
-    const span = document.createElement('span');
-    span.className = 'faint';
-    span.textContent = mixed ? 'mixed' : `${Array.isArray(value) ? value.length : 0} points (edit them on the canvas)`;
-    return row(labelOf(key), spec.help, span);
-  }
-  if (spec.type === 'holes') {
-    const span = document.createElement('span');
-    span.className = 'faint';
-    const count = Array.isArray(value) ? value.length : 0;
-    span.textContent = mixed ? 'mixed' : count ? `${count} (they follow the shapes inside)` : 'None';
-    return row(labelOf(key), spec.help, span);
-  }
   if (spec.type === 'pointGroups') {
     const span = document.createElement('span');
     span.className = 'faint';
@@ -299,9 +286,6 @@ function pointsSection() {
   return section;
 }
 
-/** The lines a part follows (in its outline and its holes). @param {DocObject} part */
-const followedBy = (part) =>
-  new Set([...(/** @type {any[]} */ (part.vertices ?? [])), ...(/** @type {any[][]} */ (part.holes ?? [])).flat()].map((v) => v.follow).filter(Boolean));
 
 /** How Create Shape names a shape's parts: line_fill, line_stroke_2. */
 const SHAPE_NAME = /^(.+)_(fill|stroke)(_[0-9]+)?$/;

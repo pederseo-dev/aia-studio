@@ -6,6 +6,7 @@ import { applyOps } from '../src/core/operations.js';
 import { pointsError, resolveDoc, settleOps } from '../src/core/points.js';
 import { drawDocument } from '../src/core/draw.js';
 import { copyOps } from '../src/core/copy.js';
+import { deletePointsOps, unweld } from '../src/core/weld.js';
 import { crossingsOf, fillOps, gapAt, insidePolygon, nodeKeys, partsToMove, shapeFromPointsOps, shapeOf, styleProps, weldCrossingOps } from '../src/core/fill.js';
 import { ellipsePoints, outlineOf, round2, transformPart, translate } from '../src/core/geometry.js';
 
@@ -41,8 +42,7 @@ const fillHolds = (doc, id, at) => {
 
 test('a click inside a shape fills it with a part that follows it, under it; its points get names', () => {
   const doc = layer(square);
-  const { after, id, made } = fill(doc, { x: 50, y: 50 });
-  assert.ok(made);
+  const { after, id } = fill(doc, { x: 50, y: 50 });
   assert.deepEqual(childrenOf(after, 'ink').map((o) => o.id), [id, 'box'], 'the fill goes under the line');
   const part = find(after, id);
   assert.equal(part.fill, '#f0c040');
@@ -84,7 +84,7 @@ test('a line welded across a shape splits it into two gaps; each fill follows bo
   assert.equal(childrenOf(below.after, 'ink')[0].id, below.id);
 });
 
-test('an open end inside a gap does not cut it, and filling a filled gap recolors that fill', () => {
+test('an open end inside a gap does not cut it, and filling a filled gap adds another shape, as in Moho', () => {
   const doc = layer(
     { ...square, vertices: square.vertices.map((v, i) => (i === 0 ? { ...v, name: 'tl' } : v)) },
     { id: 'hair', closed: false, fill: null, vertices: [{ ref: 'box.tl' }, { x: 50, y: 50 }] },
@@ -93,10 +93,9 @@ test('an open end inside a gap does not cut it, and filling a filled gap recolor
   assert.ok(fillHolds(first.after, first.id, { x: 20, y: 80 }), 'the whole square, around the open line');
   assert.ok(find(first.after, first.id).vertices.every((v) => v.follow === 'box'));
   const again = fill(first.after, { x: 20, y: 80 }, { fill: '#3366cc', stroke: '#000000', strokeWidth: 3 });
-  assert.equal(again.made, false);
-  assert.equal(again.id, first.id);
-  assert.deepEqual(again.ops, [{ op: 'set', target: first.id, props: { fill: '#3366cc', stroke: '#000000', strokeWidth: 3 } }]);
-  assert.equal(childrenOf(again.after, 'ink').length, 3, 'no new part');
+  assert.deepEqual(again.ids, ['box_fill_2', 'box_stroke_2'], 'its fill and its stroke, numbered as a pair');
+  assert.equal(find(again.after, first.id).fill, '#f0c040', 'the first shape is left as it was');
+  assert.equal(childrenOf(again.after, 'ink').length, 5);
 });
 
 test('a shape inside a gap is a hole of its fill; a shape inside that one is not', () => {
@@ -112,10 +111,9 @@ test('a shape inside a gap is a hole of its fill; a shape inside that one is not
   assert.equal((String(drawn.attrs.d).match(/M/g) ?? []).length, 2, 'the outline and the hole');
   // Inside the hole is another gap: the inner circle around the dot.
   const middle = fill(ring.after, { x: 100, y: 70 });
-  assert.equal(middle.made, true);
   assert.equal(find(middle.after, middle.id).holes.length, 1, 'the dot');
-  // The ring is filled: clicking it again finds that fill.
-  assert.equal(fill(middle.after, { x: 100, y: 15 }).made, false);
+  // Filling the ring again adds another shape.
+  assert.equal(fill(middle.after, { x: 100, y: 15 }).id, 'outer_fill_2');
   // Bending the inner circle bends the hole.
   const bent = apply(ring.after, [{ op: 'set', target: 'inner', props: { vertices: find(ring.after, 'inner').vertices.map((v, i) => (i === 0 ? { ...v, y: v.y - 30 } : v)) } }]);
   assert.match(String(drawDocument(bent).nodes[0].children.find((n) => n.attrs['data-id'] === ring.id).attrs.d), /20 /);
@@ -167,7 +165,7 @@ test('picked points make a shape as in Moho: all around it, with the holes picke
   const disc = shapeOf(doc, 'ink', nodesOf('outer'));
   assert.ok(!('error' in disc) && disc.holes.length === 0);
   const some = shapeOf(doc, 'ink', nodesOf('outer').slice(0, 3));
-  assert.ok('error' in some && /do not close a shape/.test(some.error));
+  assert.ok('error' in some && /do not close a shape: the picked stretches stop at outer.0, outer.2/.test(some.error));
   assert.equal(/** @type {any} */ (some).shown.length, 2, 'the picked stretches, to show them');
   const { ops } = shapeFromPointsOps(doc, 'ink', nodesOf('outer', 'inner'), { fill: '#ff0000' });
   const after = apply(layer(circle('outer', 200), circle('inner', 100), { id: 'hair', closed: false, fill: null, vertices: [{ x: 0, y: 0 }, { x: 5, y: 5 }] }), ops);
@@ -201,8 +199,8 @@ test('lines that cross without a point are found, and welding a crossing opens t
 test('a fill is named after the line it follows most, and renaming the line renames its fills', () => {
   const first = fill(layer(square), { x: 50, y: 50 });
   assert.equal(first.id, 'box_fill');
-  const second = fill(first.after, { x: 50, y: 50 });
-  assert.equal(second.made, false, 'aia fill on a filled gap recolors it');
+  assert.equal(fill(first.after, { x: 50, y: 50 }).id, 'box_fill_2', 'aia fill on a filled gap adds another, as the editor does');
+  assert.equal(fillOps(resolveDoc(first.after), 'ink', { x: 50, y: 50 }, { fill: '#00ff00' }, 'shine').id, 'shine_fill', 'or named as asked');
   const two = apply(first.after, shapeFromPointsOps(resolveDoc(first.after), 'ink', /** @type {any} */ (gapAt(resolveDoc(first.after), 'ink', { x: 50, y: 50 })).nodes, { fill: '#00ff00' }).ops);
   assert.ok(find(two, 'box_fill_2'), 'Create Shape on the same points adds another, as in Moho');
   const three = apply(two, shapeFromPointsOps(resolveDoc(two), 'ink', /** @type {any} */ (gapAt(resolveDoc(two), 'ink', { x: 50, y: 50 })).nodes, { fill: '#0000ff' }).ops);
@@ -230,4 +228,67 @@ test('a shape with fill and stroke is two parts, named as a pair, and renamed wi
   const renamed = apply(two, [{ op: 'rename', target: 'box', id: 'frame' }]);
   assert.deepEqual(childrenOf(renamed, 'ink').map((o) => o.id).sort(), ['frame', 'frame_fill', 'frame_stroke', 'frame_stroke_2']);
   assert.throws(() => shapeFromPointsOps(resolveDoc(doc), 'ink', nodes, { fill: null, stroke: null }), /needs a fill or a stroke/);
+});
+
+test('unwelding or deleting a junction a shape follows makes that stretch plain instead of refusing', () => {
+  const doc = layer(
+    { id: 'a', closed: false, fill: null, vertices: [{ x: 0, y: 0, name: 'p' }, { x: 100, y: 0 }, { x: 100, y: 100, name: 'q' }] },
+    { id: 'b', closed: false, fill: null, vertices: [{ ref: 'a.q' }, { x: 0, y: 100 }, { ref: 'a.p' }] },
+  );
+  const { after, id } = fill(doc, { x: 50, y: 50 });
+  for (const ops of [
+    unweld(resolveDoc(after), [{ part: 'b', index: 0 }]),
+    deletePointsOps(resolveDoc(after), [{ part: 'b', index: 0 }]).ops,
+  ]) {
+    const done = applyOps(schema, after, settleOps(after, ops, loose)).document;
+    assert.equal(pointsError(done), null);
+    assert.ok(find(done, id).vertices.some((v) => !v.follow), 'the stretch along b from that point is plain now');
+    assert.ok(find(done, id).vertices.some((v) => v.follow === 'a'), 'the stretch along a still follows it');
+  }
+});
+
+test('a copy of a shape is the shape as drawn, with its holes, as points of its own', () => {
+  const circle = (id, size) => ({ id, vertices: ellipsePoints({ x: 100 - size / 2, y: 100 - size / 2, width: size, height: size }, 4) });
+  const { after, id } = fill(layer(circle('outer', 200), circle('inner', 100)), { x: 100, y: 20 });
+  const resolved = resolveDoc(after);
+  const { ops } = copyOps(resolved, [find(resolved, id)], translate(300, 0));
+  const copied = apply(after, ops);
+  const copy = find(copied, ops[0].id);
+  assert.ok(copy.vertices.length >= 4 && copy.vertices.every((v) => !v.ref && !v.follow), 'the drawn outline, not 2 shared points');
+  assert.ok(copy.holes[0].length >= 4 && copy.holes[0].every((v) => !v.ref && !v.follow));
+  assert.ok(insidePolygon(outlineOf(find(resolveDoc(copied), copy.id)), { x: 400, y: 20 }), 'moved with it');
+});
+
+test('a crossing through a vertex is found, and welding near a point uses it without moving the line', () => {
+  const through = resolveDoc(layer(
+    { id: 'h', closed: false, fill: null, vertices: [{ x: 0, y: 50 }, { x: 100, y: 50 }] },
+    { id: 'v', closed: false, fill: null, vertices: [{ x: 50, y: 0 }, { x: 50, y: 50 }, { x: 50, y: 100 }] },
+  ));
+  const found = crossingsOf(through, 'ink');
+  assert.equal(found.length, 1, 'once, though two stretches of v touch h there');
+  assert.deepEqual([found[0].x, found[0].y], [50, 50]);
+  // A long line crossed 15 units from its end: a point is added there; the end stays where it is.
+  let doc = layer(
+    { id: 'a', closed: false, fill: null, vertices: [{ x: 0, y: 0 }, { x: 1000, y: 0 }] },
+    { id: 'b', closed: false, fill: null, vertices: [{ x: 15, y: -100 }, { x: 15, y: 100 }] },
+  );
+  const [crossing] = crossingsOf(resolveDoc(doc), 'ink');
+  doc = applyOps(schema, doc, settleOps(doc, weldCrossingOps(resolveDoc(doc), crossing).ops, loose)).document;
+  const a = outlineOf(find(resolveDoc(doc), 'a'));
+  assert.deepEqual([a[0].x, a[0].y, a[a.length - 1].x], [0, 0, 1000]);
+  assert.equal(a.length, 3);
+  assert.deepEqual([a[1].x, a[1].y], [15, 0], 'the new point is where they cross (a straight stretch is a cubic: its t is not the fraction)');
+  const b = outlineOf(find(resolveDoc(doc), 'b'));
+  assert.deepEqual([b[0].x, b[1].x, b[1].y, b[2].x], [15, 15, 0, 15], 'b keeps its shape too');
+});
+
+test('undoing a rename gives back exactly the names it changed', () => {
+  const doc = layer(square);
+  const nodes = /** @type {any} */ (gapAt(resolveDoc(doc), 'ink', { x: 50, y: 50 })).nodes;
+  const shaped = apply(doc, shapeFromPointsOps(resolveDoc(doc), 'ink', nodes, { fill: '#ff0000', stroke: '#000000' }).ops);
+  // The stroke is renamed by hand to a name that looks derived from another line.
+  const mine = apply(shaped, [{ op: 'rename', target: 'box_stroke', id: 'face_stroke' }]);
+  const { document, inverse } = applyOps(schema, mine, [{ op: 'rename', target: 'box', id: 'face' }]);
+  assert.ok(find(document, 'face_fill') && find(document, 'face_stroke'));
+  assert.deepEqual(applyOps(schema, document, inverse).document, mine, 'face_stroke stays: the rename did not touch it');
 });

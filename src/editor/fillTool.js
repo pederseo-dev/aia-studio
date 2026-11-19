@@ -37,7 +37,12 @@ let box = null;
 function workLayer() {
   const doc = state.document;
   if (!doc) return null;
-  if (pickLayer && findObject(doc, pickLayer)) return pickLayer;
+  // Picks in a layer that was locked or hidden since are dropped: nothing is made or welded there.
+  if (pickLayer && (!findObject(doc, pickLayer) || isLocked(pickLayer) || isHidden(pickLayer))) {
+    picks = new Set();
+    pickLayer = null;
+  }
+  if (pickLayer) return pickLayer;
   const active = activeVector();
   if (active) return isLocked(active.id) ? null : active.id;
   const layers = doc.objects.filter((o) => o.type === 'vector' && !isHidden(o.id) && !isLocked(o.id)).reverse();
@@ -125,6 +130,7 @@ function pick(nodes, layer, add) {
 /** Create shape (Enter): makes the shape the picked points close. @returns {boolean} whether something was picked */
 export function createPicked() {
   const doc = state.document;
+  workLayer();
   if (!doc || !pickLayer || !picks.size) return false;
   let result;
   try {

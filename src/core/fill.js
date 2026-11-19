@@ -1,19 +1,23 @@
-// Create Shape (part 4 of docs/rebuild.md): the gap around a place, closed by the lines of a vector layer, and the
-// batch that fills it with a part whose outline follows those lines (decision 10), for the editor's Create Shape
-// tool and `aia fill`. Groups of lines that lie inside a gap without touching it (the inside of a donut) are its
-// holes: the fill gets one hole per group, following its outside.
+// Create Shape (part 4 of docs/rebuild.md), as Moho's: the shape that picked points of a vector layer's lines close, or
+// the gap around a place, and the batch that makes it, for the editor's Create Shape tool and `aia shape` / `aia
+// fill`. A shape is two parts that follow those lines, under them: line_fill (only the fill) and line_stroke (only
+// the stroke), each with its own place in the order. Groups of lines inside a gap that do not touch it (the middle of
+// a donut) are its holes, each following its outside. Where lines cross without a point, crossingsOf finds the places
+// and weldCrossingOps welds them there.
 //
 // The lines of a layer (its parts that do not follow others) make a graph: a node at each of their vertices (the
 // same node where two lines share a point), an edge along each stretch between two vertices. Only shared points join
 // lines: two lines that cross without a weld do not close a gap. The faces of that graph are the gaps; the one
 // around the place is the smallest face that holds it. A gap's outline is cut into stretches, each along one line,
-// and the fill part has one vertex per stretch: a reference to the point where the stretch starts, following that
+// and a shape's part has one vertex per stretch: a reference to the point where the stretch starts, following that
 // line to the next one (unnamed points of the lines get a name in the same batch).
 
 import { childrenOf, findObject, idFromName } from './document.js';
 import { holeOutlinesOf, holesOf, insertVertex, outlineOf, verticesOf } from './geometry.js';
 import { weld } from './weld.js';
-import { nextPointName, pointIdOf } from './points.js';
+import { followedLines, followsOthers, nextPointName, pointIdOf } from './points.js';
+
+export { followsOthers };
 
 /**
  * @typedef {import('./document.js').Doc} Doc
@@ -33,9 +37,8 @@ import { nextPointName, pointIdOf } from './points.js';
 
 const SAMPLES = 12; // points along each curved stretch, to find the gaps
 const TINY = 1e-6;
+const NEAR = 0.5; // units: a crossing this near a point of a line is at that point (or at a point they share)
 
-/** Whether a part follows others (a fill): those are not lines, so they close no gap. @param {DocObject} part */
-export const followsOthers = (part) => verticesOf(part).some((v) => v.follow) || holesOf(part).some((hole) => hole.some((v) => v.follow));
 
 /**
  * What moves when parts are moved, turned or scaled: a fill is drawn from the lines it follows, so moving it moves
@@ -52,12 +55,11 @@ export function partsToMove(doc, parts) {
       moving.set(part.id, part);
       continue;
     }
-    const all = [...verticesOf(part), ...holesOf(part).flat()];
-    for (const v of all) {
-      const line = v.follow ? findObject(doc, String(v.follow)) : undefined;
+    for (const id of followedLines(part)) {
+      const line = findObject(doc, id);
       if (line) moving.set(line.id, line);
     }
-    if (all.some((v) => !v.ref)) moving.set(part.id, part);
+    if ([...verticesOf(part), ...holesOf(part).flat()].some((v) => !v.ref)) moving.set(part.id, part);
   }
   return [...moving.values()];
 }
@@ -336,7 +338,16 @@ export function shapeOf(doc, layer, nodes) {
   const { outer } = facesOf(sub);
   const outline = [...outer.values()].sort((x, y) => y.area - x.area)[0];
   const shown = sub.filter((h) => h.forward).map((h) => h.points);
-  if (!outline) return { error: picked.size ? 'the picked points do not close a shape: pick every point around it' : 'pick the points around a shape', shown };
+  if (!outline) {
+    if (!picked.size) return { error: 'pick the points around a shape', shown };
+    // Where the picked stretches stop: picked points with fewer than two picked stretches.
+    /** @type {Map<string, number>} */
+    const degree = new Map([...picked].map((n) => [n, 0]));
+    for (const h of sub) degree.set(h.a, (degree.get(h.a) ?? 0) + 1);
+    const ends = [...degree].filter(([, d]) => d < 2).map(([n]) => n.replace('#', '.'));
+    const where = ends.length ? `: the picked stretches stop at ${ends.slice(0, 6).join(', ')}${ends.length > 6 ? '…' : ''}` : '';
+    return { error: `the picked points do not close a shape${where} (pick the points that join them all around)`, shown };
+  }
   const gap = gapOf(outline, outer, sub, layer);
   return 'error' in gap ? { ...gap, shown } : gap;
 }
@@ -377,30 +388,6 @@ function crosses(p, q) {
   return false;
 }
 
-/**
- * The fill of a layer that already fills a gap: a part that follows others, holds the place and has about the
- * gap's area.
- * @param {Doc} doc resolved @param {string} layer @param {Gap} gap @param {Point} at
- */
-export function fillOfGap(doc, layer, gap, at) {
-  return childrenOf(doc, layer).find((part) => {
-    if (part.type !== 'path' || !followsOthers(part) || part.fill === null) return false;
-    const polygon = outlineSamples(part);
-    if (!insidePolygon(polygon, at) || holeOutlinesOf(part).some((hole) => insidePolygon(closedSamples(hole), at))) return false;
-    return Math.abs(Math.abs(signedArea(polygon)) - gap.area) <= gap.area * 0.02 + 1;
-  });
-}
-
-/** @param {Vertex[]} outline @returns {Point[]} a closed outline as points */
-const closedSamples = (outline) => outline.flatMap((v, i) => sample(v, outline[(i + 1) % outline.length]).slice(0, -1));
-
-/** @param {DocObject} part @returns {Point[]} */
-function outlineSamples(part) {
-  const outline = outlineOf(part);
-  const n = outline.length;
-  return outline.flatMap((v, i) => (i + 1 < n || part.closed !== false ? sample(v, outline[(i + 1) % n]).slice(0, -1) : [{ x: v.x, y: v.y }]));
-}
-
 /** The props a style gives a fill part. @param {FillStyle} style */
 export function styleProps(style) {
   /** @type {Record<string, unknown>} */
@@ -416,44 +403,41 @@ export function styleProps(style) {
 }
 
 /**
- * The batch that fills the gap around a place: a new part whose outline follows the lines around it, just under the
- * lowest of them, or, when a fill is already there, that fill recolored.
+ * The batch that makes a shape in the gap around a place, as a click inside it and Create shape do in the editor: a
+ * fill part and a stroke part that follow the lines around it (and its holes), just under the lowest of them. Shapes
+ * add up, as in Moho; a shape's colors change with `set`.
  * @param {Doc} doc resolved @param {string} layer @param {Point} at in the layer's coordinates
- * @param {Record<string, unknown>} props the style to give it (see styleProps)
- * @param {Record<string, unknown>} [fresh] what only a new fill gets, under props (an `aia fill` without --stroke
- *   makes a fill without stroke, but recolors a fill's stroke only when told)
- * @returns {{ ops: Operation[], id: string, made: boolean, note: string }} no ops when a fill is there and props is empty
+ * @param {Record<string, unknown>} props its style (see styleProps) @param {string} [name] what to name it after
+ *   instead of its main line (name_fill, name_stroke)
+ * @returns {{ ops: Operation[], id: string, ids: string[], note: string }}
  */
-export function fillOps(doc, layer, at, props, fresh = {}) {
+export function fillOps(doc, layer, at, props, name) {
   const gap = gapAt(doc, layer, at);
   if ('error' in gap) throw new Error(gap.error);
-  const existing = fillOfGap(doc, layer, gap, at);
-  if (existing) {
-    const ops = Object.keys(props).length ? [{ op: 'set', target: existing.id, props }] : [];
-    return { ops, id: existing.id, made: false, note: `Recolor ${existing.id}` };
-  }
-  return { ...shapeOps(doc, layer, gap, { ...fresh, ...props }), made: true };
+  return shapeOps(doc, layer, gap, props, name);
 }
 
 /**
  * The batch that creates a shape from some picked points of a layer's lines (Moho's Create Shape).
  * @param {Doc} doc resolved @param {string} layer @param {Iterable<string>} nodes @param {Record<string, unknown>} props
+ * @param {string} [name] what to name it after instead of its main line
  * @returns {{ ops: Operation[], id: string, ids: string[], note: string }}
  */
-export function shapeFromPointsOps(doc, layer, nodes, props) {
+export function shapeFromPointsOps(doc, layer, nodes, props, name) {
   const shape = shapeOf(doc, layer, nodes);
   if ('error' in shape) throw new Error(shape.error);
-  return shapeOps(doc, layer, shape, props);
+  return shapeOps(doc, layer, shape, props, name);
 }
 
 /**
  * The batch that creates a shape for a gap: a fill part and a stroke part, each with one vertex per stretch, sharing
  * the point it starts at and following its line; just under the lowest line it follows.
  * @param {Doc} doc resolved @param {string} layer @param {Gap} gap @param {Record<string, unknown>} props
+ * @param {string} [name] what to name its parts after (name_fill, name_stroke) instead of its main line
  * @returns {{ ops: Operation[], id: string, ids: string[], note: string }} ids: the fill part and the stroke part
  *   it made (one of them when the other is None)
  */
-function shapeOps(doc, layer, gap, props) {
+function shapeOps(doc, layer, gap, props, name) {
   // Unnamed points where a stretch starts get a name, so the fill can share them.
   /** @type {Map<string, Vertex[]>} */
   const renamed = new Map();
@@ -488,7 +472,7 @@ function shapeOps(doc, layer, gap, props) {
   const hasFill = props.fill !== null;
   const hasStroke = props.stroke !== undefined && props.stroke !== null;
   if (!hasFill && !hasStroke) throw new Error('a shape needs a fill or a stroke (both are None)');
-  const base = mainLine(gap);
+  const base = name ?? mainLine(gap);
   const free = (/** @type {string} */ x) => x !== 'meta' && !findObject(doc, x);
   let suffix = '';
   for (let n = 2; !free(`${base}_fill${suffix}`) || !free(`${base}_stroke${suffix}`); n++) suffix = `_${n}`;
@@ -565,16 +549,19 @@ export function crossingsOf(doc, layer) {
       const { h: p, box: pb } = stretches[i];
       const { h: q, box: qb } = stretches[j];
       if (p.part === q.part || pb.x1 < qb.x0 || qb.x1 < pb.x0 || pb.y1 < qb.y0 || qb.y1 < pb.y0) continue;
-      const shared = [p.a, p.b].filter((n) => n === q.a || n === q.b);
+      // Where the two lines already share a point is not a crossing.
+      const sharedAt = [
+        ...(p.a === q.a || p.a === q.b ? [p.points[0]] : []),
+        ...(p.b === q.a || p.b === q.b ? [p.points[p.points.length - 1]] : []),
+      ];
       for (let k = 0; k + 1 < p.points.length; k++) {
         for (let m = 0; m + 1 < q.points.length; m++) {
+          // Touching counts too (a line through the other's vertex), so the same place can come from two pieces.
           const hit = meet(p.points[k], p.points[k + 1], q.points[m], q.points[m + 1]);
-          if (!hit) continue;
-          const tp = (k + hit.u) / (p.points.length - 1);
-          const tq = (m + hit.v) / (q.points.length - 1);
-          // Next to a point the two lines already share is not a crossing.
-          const ends = [tp < 0.02 && p.a, tp > 0.98 && p.b].filter(Boolean);
-          if (ends.some((n) => shared.includes(/** @type {string} */ (n)))) continue;
+          if (!hit || sharedAt.some((s) => Math.hypot(s.x - hit.x, s.y - hit.y) < NEAR)) continue;
+          if (found.some((c) => c.a.part === p.part && c.b.part === q.part && Math.hypot(c.x - hit.x, c.y - hit.y) < NEAR)) continue;
+          const tp = curveT(p, k, hit.u);
+          const tq = curveT(q, m, hit.v);
           found.push({ x: hit.x, y: hit.y, a: { part: p.part, segment: p.from, t: tp }, b: { part: q.part, segment: q.from, t: tq } });
         }
       }
@@ -584,6 +571,24 @@ export function crossingsOf(doc, layer) {
   return found;
 }
 
+/**
+ * How far along its stretch (as the curve's parameter, which is what insertVertex takes) a place is, from the sample
+ * piece it is on. A straight stretch is one piece drawn as a cubic with its controls at its ends, so its parameter is
+ * not the fraction of its length: 3t² − 2t³ = that fraction.
+ * @param {HalfEdge} h @param {number} piece @param {number} along 0 to 1 within the piece
+ */
+function curveT(h, piece, along) {
+  if (h.points.length > 2) return (piece + along) / (h.points.length - 1);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 40; i++) {
+    const t = (lo + hi) / 2;
+    if (3 * t * t - 2 * t * t * t < along) lo = t;
+    else hi = t;
+  }
+  return (lo + hi) / 2;
+}
+
 /** @param {Point[]} points */
 function boxOf(points) {
   const xs = points.map((p) => p.x);
@@ -591,9 +596,8 @@ function boxOf(points) {
   return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
 }
 
-/** Where two segments cross, and how far along each (0 to 1), or null. @param {Point} a @param {Point} b @param {Point} c @param {Point} d */
+/** Where two segments cross or touch, and how far along each (0 to 1), or null (also when they are parallel). @param {Point} a @param {Point} b @param {Point} c @param {Point} d */
 function meet(a, b, c, d) {
-  if (!segmentsCross(a, b, c, d)) return null;
   const rx = b.x - a.x;
   const ry = b.y - a.y;
   const sx = d.x - c.x;
@@ -602,10 +606,11 @@ function meet(a, b, c, d) {
   if (Math.abs(den) < TINY) return null;
   const u = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den;
   const v = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
-  return { x: a.x + u * rx, y: a.y + u * ry, u, v };
+  const edge = 1e-9;
+  if (u < -edge || u > 1 + edge || v < -edge || v > 1 + edge) return null;
+  return { x: a.x + u * rx, y: a.y + u * ry, u: Math.min(1, Math.max(0, u)), v: Math.min(1, Math.max(0, v)) };
 }
 
-const AT_END = 0.02; // how near the end of a stretch (0 to 1) a crossing is at that end's point
 
 /**
  * The batch that welds two lines where they cross: a point on each (added, unless the crossing is at a point the
@@ -616,10 +621,11 @@ const AT_END = 0.02; // how near the end of a stretch (0 to 1) a crossing is at 
  *   added (the points after them moved up one place)
  */
 export function weldCrossingOps(doc, crossing) {
-  /** @param {{ part: string, segment: number, t: number }} on @returns {number | null} the point it is at, if any */
+  /** @param {{ part: string, segment: number, t: number }} on @returns {number | null} the point of the line it is at, if any */
   const pointAt = (on) => {
-    const n = verticesOf(/** @type {DocObject} */ (findObject(doc, on.part))).length;
-    return on.t < AT_END ? on.segment : on.t > 1 - AT_END ? (on.segment + 1) % n : null;
+    const vertices = verticesOf(/** @type {DocObject} */ (findObject(doc, on.part)));
+    const ends = [on.segment, (on.segment + 1) % vertices.length];
+    return ends.find((i) => Math.hypot(vertices[i].x - crossing.x, vertices[i].y - crossing.y) < NEAR) ?? null;
   };
   const a = /** @type {DocObject} */ (findObject(doc, crossing.a.part));
   /** @type {{ part: string, index: number }[]} */

@@ -33,7 +33,7 @@ import { ORDER_MOVES, orderOps } from '../src/core/order.js';
 import { crossingsOf, fillOps, nodeKeys, partsToMove, shapeFromPointsOps, weldCrossingOps } from '../src/core/fill.js';
 import { addImageOps, replaceImageOps } from '../src/core/images.js';
 import { applyTransformOps, isLayer as isLayerObject, transformOf, transformProps, worldOf } from '../src/core/transform.js';
-import { movePointsOps, pointsNamed, resolveDoc, settleOps } from '../src/core/points.js';
+import { followedLines, movePointsOps, pointsNamed, resolveDoc, settleOps } from '../src/core/points.js';
 import { applyOps } from '../src/core/operations.js';
 import { deletePointsOps, followOps, groupOps, namePoint, unweld, weld } from '../src/core/weld.js';
 import { svgToPng } from './png.js';
@@ -52,6 +52,14 @@ export class AiaError extends Error {}
 const BOOLEAN_FLAGS = new Set(['yes', 'all', 'join', 'long', 'off', 'none', 'add', 'remove', 'delete', 'resolved', 'apply', 'skip', 'labels', 'up', 'down', 'top', 'bottom']);
 const RENDER_MAX = 2000;
 const WHERE = { up: 'up one place', down: 'down one place', top: 'to the top', bottom: 'to the bottom' };
+/** What `aia shape` and `aia fill` make, for their help. */
+const SHAPE_PARTS =
+  'A shape is made of two\n' +
+  'parts that follow those lines (bend a line and they bend with it), just under the lowest of them: <line>_fill (only\n' +
+  'the fill) and <line>_stroke (only the stroke; none without --stroke), named after the line it goes along most, or\n' +
+  '--id name (name_fill, name_stroke). Each has its own place in the order (aia order). Shapes add up, as in Moho: a\n' +
+  'second one on the same gap is <line>_fill_2; change its colors with a set op (aia ops). Renaming the line renames\n' +
+  'its shapes. Example: aia fill face ink --at 120,80 --fill #f0c040 --stroke #8a5a3c';
 
 /**
  * Splits one command line as a shell would (quotes group words), except that an unquoted [ or { starts a JSON value
@@ -223,6 +231,17 @@ export function createAia({ store, schema }) {
   };
 
   /** --fill, --stroke (a color or none), --stroke-width and --fill-opacity, --stroke-opacity (0 to 1), as part props. @param {Args} args */
+  /** --id: what a new shape's parts are named after (name_fill, name_stroke), instead of its main line. @param {Args} args */
+  const shapeName = (args) => {
+    const name = args.flags.id;
+    if (name === undefined) return undefined;
+    if (typeof name !== 'string' || !/^[a-z][a-z0-9_]*$/.test(name)) throw new AiaError('--id is a name: lowercase letters, digits and _, starting with a letter');
+    return name;
+  };
+
+  /** What a new shape is, for the answer. @param {string[]} ids */
+  const madeShape = (ids) => `Made ${ids.join(' and ')}${ids.length > 1 ? ' (its fill and its stroke, each with its own place in the order)' : ''}.`;
+
   const styleFlags = (args) => {
     /** @type {Record<string, unknown>} */
     const props = {};
@@ -523,13 +542,11 @@ export function createAia({ store, schema }) {
     },
 
     shape: {
-      usage: 'aia shape <doc> <layer> <point>... [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1]',
+      usage: 'aia shape <doc> <layer> <point>... [--id name] [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1]',
       summary: 'Creates a shape from the points around it, as Moho’s Create Shape (the editor’s Create Shape tool)',
       details:
         'Name every point around the shape (part.point, part.index or layer.group), and the points around its holes\n' +
-        'too. The stretches between two named points make the outline; points on dead ends are left out. The shape\n' +
-        'follows those lines and goes under them. Without --stroke it has no stroke. Lines that cross without a point\n' +
-        'need one there first: aia crossings. Example: aia shape face ink head.0 head.1 head.2 head.3 --fill #f0c040',
+        'too. The stretches between two named points make the outline; points on dead ends are left out. ' + SHAPE_PARTS,
       run: async (args) => {
         const id = need(args, 0, 'the document id');
         const layer = need(args, 1, 'the vector layer');
@@ -543,12 +560,12 @@ export function createAia({ store, schema }) {
         if (!nodes.length) throw new AiaError('Name the points around the shape');
         let result;
         try {
-          result = shapeFromPointsOps(doc, layer, nodes, { stroke: null, ...styleFlags(args) });
+          result = shapeFromPointsOps(doc, layer, nodes, { stroke: null, ...styleFlags(args) }, shapeName(args));
         } catch (e) {
           throw new AiaError(e.message);
         }
         await store.apply(id, result.ops, { origin: ORIGIN, note: result.note });
-        return ok(`Made ${result.ids.join(' and ')}.`);
+        return ok(madeShape(result.ids));
       },
     },
 
@@ -571,6 +588,7 @@ export function createAia({ store, schema }) {
           return ok(list.map((c, i) => `${i + 1}. ${c.a.part} × ${c.b.part} at ${round(c.x)}, ${round(c.y)}`).join('\n'));
         }
         const count = which === 'all' ? list.length : 1;
+        if (!list.length) throw new AiaError(`The lines of ${layer} cross nowhere without a point: there is nothing to weld`);
         if (which !== 'all' && !(Number(which) >= 1 && Number(which) <= list.length)) throw new AiaError(`--weld is a number from 1 to ${list.length}, or all`);
         /** @type {Operation[]} */
         const ops = [];
@@ -590,15 +608,12 @@ export function createAia({ store, schema }) {
     },
 
     fill: {
-      usage: 'aia fill <doc> <layer> --at x,y [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1]',
-      summary: 'Fills the gap around x,y that the lines of a vector layer close (or recolors the fill already there)',
+      usage: 'aia fill <doc> <layer> --at x,y [--id name] [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1]',
+      summary: 'Creates a shape in the gap around x,y that the lines of a vector layer close (a click inside it in Create Shape)',
       details:
-        'As the editor’s Create Shape tool. x,y is in the layer’s coordinates. The new part follows the lines around\n' +
-        'the gap (bend a line and the fill bends with it) and goes just under the lowest of them; unnamed points of\n' +
-        'those lines get a name so the fill can share them. Shapes inside the gap that do not touch its lines (the\n' +
-        'middle of a donut) become holes of the fill, each following its shape. Without --stroke it has no stroke.\n' +
-        'Only welded points join lines: two lines that cross without a weld do not close a gap. On a gap already\n' +
-        'filled it changes that fill’s style instead. Example: aia fill face ink --at 120,80 --fill #f0c040',
+        'x,y is in the layer’s coordinates (after moving a layer, they move with it). Shapes inside the gap that do not\n' +
+        'touch its lines (the middle of a donut) become holes, each following its shape. Only welded points join lines:\n' +
+        'two lines that cross without a point do not close a gap (aia crossings). ' + SHAPE_PARTS,
       run: async (args) => {
         const id = need(args, 0, 'the document id');
         const layer = need(args, 1, 'the vector layer');
@@ -607,17 +622,15 @@ export function createAia({ store, schema }) {
         const doc = await resolved(id);
         let result;
         try {
-          result = fillOps(doc, layer, at, styleFlags(args), { stroke: null });
+          result = fillOps(doc, layer, at, { stroke: null, ...styleFlags(args) }, shapeName(args));
         } catch (e) {
           throw new AiaError(e.message);
         }
-        if (!result.ops.length) return ok(`${result.id} already fills that gap; say --fill or --stroke to recolor it.`);
         await store.apply(id, result.ops, { origin: ORIGIN, note: result.note });
         const part = findObject((await store.get(id, ORIGIN)).document, result.id);
-        const lines = [...new Set(verticesOf(/** @type {any} */ (part)).map((v) => v.follow))].join(', ');
-        const holes = /** @type {any[][]} */ (part?.holes ?? []).map((hole) => [...new Set(hole.map((v) => v.follow))].join(', '));
-        const cut = holes.length ? `, with ${holes.length === 1 ? 'a hole' : `${holes.length} holes`} along ${holes.join('; ')}` : '';
-        return ok(result.made ? `Made ${result.id}, following ${lines}${cut}, under them.` : `Recolored ${result.id}.`);
+        const lines = [...followedLines(/** @type {any} */ (part))].join(', ');
+        const holes = (/** @type {any[][]} */ (part?.holes ?? [])).length;
+        return ok(`${madeShape(result.ids)} It follows ${lines}${holes ? `, with ${holes === 1 ? 'a hole' : `${holes} holes`}` : ''}.`);
       },
     },
 

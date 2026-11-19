@@ -384,7 +384,7 @@ export const isDrawTool = (tool) => tool === 'pen' || tool === 'rect' || tool ==
 const FILL_STYLE_KEY = 'aia.fillStyle';
 
 /**
- * The style the Create Shape tool gives the shapes it creates in gaps, kept apart from the drawing tools' (such a
+ * The style the Create Shape tool gives the shapes it creates, kept apart from the drawing tools' (such a
  * shape usually has no stroke: the lines around it have theirs). Kept per person in this browser.
  * @type {typeof drawStyle}
  */

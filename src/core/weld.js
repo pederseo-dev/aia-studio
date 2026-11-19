@@ -8,7 +8,7 @@
 
 import { findObject, idFromName } from './document.js';
 import { closeOutline, endOf, insertVertex, joinOutlines, roundVertex, verticesOf } from './geometry.js';
-import { nextPointName, passIndex, pointIdOf, pointOf, splitRef } from './points.js';
+import { followsOthers, nextPointName, passIndex, pointIdOf, pointOf, splitRef } from './points.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc
@@ -269,7 +269,6 @@ export function stretchBetween(doc, a, b) {
   const [from, fromVertex, toVertex] = before(a, b) ? [a, first.vertex, second.vertex] : before(b, a) ? [b, second.vertex, first.vertex] : [null, null, null];
   if (!from || !fromVertex || !toVertex) throw new WeldError('the two points must be next to each other in their part');
   const part = first.part;
-  const ids = [pointIdOf(part, fromVertex), pointIdOf(part, toVertex)];
   const [idA, idB] = [pointIdOf(part, fromVertex), pointIdOf(part, toVertex)];
   if (!idA || !idB) throw new WeldError('both points must be welded to the part to follow (weld them first)');
   // The parts that pass through both points (own them or share them): of those that do not follow others, the one
@@ -277,7 +276,7 @@ export function stretchBetween(doc, a, b) {
   const through = doc.objects.filter(
     (o) => o.type === 'path' && o.id !== part.id && o.parent === part.parent && passIndex(o, idA) >= 0 && passIndex(o, idB) >= 0,
   );
-  const lines = through.filter((o) => !verticesOf(o).some((v) => v.follow));
+  const lines = through.filter((o) => !followsOthers(o));
   const owner = fromVertex.ref ? splitRef(fromVertex.ref)[0] : null;
   const rank = (/** @type {DocObject} */ o) => (o.id === fromVertex.follow ? 0 : o.id === owner ? 1 : 2);
   const other = lines.sort((x, y) => rank(x) - rank(y))[0]?.id ?? (fromVertex.follow ? String(fromVertex.follow) : null);

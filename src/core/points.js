@@ -50,6 +50,12 @@ export function pointOf(doc, ref) {
 /** Every vertex of a part: its outline's and its holes'. @param {DocObject} o */
 const allVertices = (o) => [...verticesOf(o), ...holesOf(o).flat()];
 
+/** The parts a part follows, in its outline and its holes (a shape follows lines; a line follows none). @param {DocObject} part */
+export const followedLines = (part) => new Set(allVertices(part).flatMap((v) => (v.follow ? [String(v.follow)] : [])));
+
+/** Whether a part follows others (a shape): those are not lines, so they close no gap and are not followed. @param {DocObject} part */
+export const followsOthers = (part) => allVertices(part).some((v) => v.follow);
+
 /** Whether a document has any shared vertex. @param {Doc} doc */
 const hasRefs = (doc) => doc.objects.some((o) => allVertices(o).some((v) => v.ref));
 
@@ -122,7 +128,7 @@ export function followStretch(doc, part, i) {
   if (!other || other.type !== 'path') return { error: `${where}, but there is no such part` };
   if (other.id === part.id) return { error: `${where}: a part cannot follow itself` };
   if (other.parent !== part.parent) return { error: `${where}, which is in another layer` };
-  if (verticesOf(other).some((w) => w.follow)) return { error: `${where}, which follows other parts itself: follow lines, not parts that follow` };
+  if (followsOthers(other)) return { error: `${where}, which follows other parts itself: follow lines, not parts that follow` };
   const next = vertices[nextIndex];
   const idA = pointIdOf(part, v);
   const idB = pointIdOf(part, next);
@@ -401,29 +407,36 @@ export function settleOps(doc, ops, apply) {
     if (!groups || Object.values(groups).every((members) => members.every((m) => !lost(m)))) continue;
     fix(o, { groups: Object.fromEntries(Object.entries(groups).map(([g, members]) => [g, members.filter((m) => !lost(m))])) });
   }
-  // Followed stretches broken by what this batch took away (the part they follow, or the points at their ends)
-  // become plain stretches.
+  // Followed stretches broken by what this batch took away (the part they follow, the points at their ends, or the
+  // followed line no longer passing through one of them, as when a junction is unwelded) become plain stretches; in
+  // holes too.
   const final = fixes.size ? apply(after, [...fixes].map(([target, props]) => ({ op: 'set', target, props }))) : after;
   const shown = resolveDoc(final);
-  for (const o of final.objects) {
-    const vertices = verticesOf(o);
+  /**
+   * Which stretches of an outline broke here: it followed fine before this batch and does not now.
+   * @param {DocObject} now the outline as a part, resolved after the batch @param {DocObject | undefined} was the same, before
+   */
+  const brokenIn = (now, was) => {
+    const vertices = verticesOf(now);
     const n = vertices.length;
-    /** @param {number} i */
-    const tookAway = (i) => {
-      const followed = String(vertices[i].follow);
-      if (!findObject(doc, followed)) return false;
+    return vertices.map((v, i) => {
+      if (!v.follow || !('error' in followStretch(shown, now, i))) return false;
+      const followed = String(v.follow);
       const next = i + 1 < n ? i + 1 : 0;
-      return !findObject(final, followed) || unshared.has(`${o.id}:${i}`) || unshared.has(`${o.id}:${next}`);
-    };
-    const broken = vertices.map((v, i) => !!v.follow && 'error' in followStretch(shown, o, i) && tookAway(i));
-    if (!broken.some(Boolean)) continue;
-    fix(o, {
-      vertices: vertices.map((v, i) => {
-        if (!broken[i]) return v;
-        const { follow: _follow, way: _way, ...rest } = v;
-        return rest;
-      }),
+      const tookAway = !!findObject(doc, followed) && (!findObject(final, followed) || unshared.has(`${now.id}:${i}`) || unshared.has(`${now.id}:${next}`));
+      const old = was && verticesOf(was)[i];
+      const workedBefore = !!old && old.follow === v.follow && old.ref === v.ref && !('error' in followStretch(resolved, /** @type {DocObject} */ (was), i));
+      return tookAway || workedBefore;
     });
+  };
+  for (const o of final.objects) {
+    const now = /** @type {DocObject} */ (findObject(shown, o.id));
+    const was = findObject(resolved, o.id);
+    const broken = brokenIn(now, was);
+    const holes = holesOf(now);
+    const brokenHoles = holes.map((hole, h) => brokenIn(holeAsPart(now, hole), was && holesOf(was)[h] ? holeAsPart(was, holesOf(was)[h]) : undefined));
+    if (broken.some(Boolean)) fix(o, { vertices: verticesOf(o).map((v, i) => (broken[i] ? plain(v) : v)) });
+    if (brokenHoles.some((b) => b.some(Boolean))) fix(o, { holes: holesOf(o).map((hole, h) => hole.map((v, i) => (brokenHoles[h][i] ? plain(v) : v))) });
   }
   return [...first, ...[...fixes].map(([target, props]) => ({ op: 'set', target, props }))];
 }

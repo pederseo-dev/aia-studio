@@ -6,6 +6,6 @@
   "properties": {
     "vertices": { "type": "vertices", "default": [], "description": "Vertices: [{ x, y, in?: { x, y }, out?: { x, y }, name? }] or a shared point [{ ref: \"part.point\", in?, out? }], handles relative to their vertex.", "help": "The vertices of the outline." },
     "closed": { "type": "boolean", "default": true, "description": "If true, the last vertex joins the first one.", "help": "Joins the last vertex to the first one." },
-    "holes": { "type": "holes", "default": [], "description": "Holes cut out of a closed outline's fill (a ring, a donut): a list of closed outlines, each a list of vertices as in vertices (x, y with handles, or a shared point { ref }, and follow / way), but without names. A fill made by aia fill around shapes that lie inside its gap gets one hole per shape, each following it.", "help": "Holes cut out of the fill (made by Fill & Stroke around shapes inside a gap)." }
+    "holes": { "type": "holes", "default": [], "description": "Holes cut out of a closed outline's fill (a ring, a donut): a list of closed outlines, each a list of vertices as in vertices (x, y with handles, or a shared point { ref }, and follow / way), but without names. A shape made by Create Shape (aia shape, aia fill) around lines that lie inside its gap gets one hole per group of them, each following it.", "help": "Holes cut out of the fill (Create Shape makes them around shapes inside a gap)." }
   }
 }

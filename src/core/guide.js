@@ -74,8 +74,9 @@ The properties of each type: aia guide types, then aia guide <type>.`,
   },
   paths: {
     title: 'Paths: vertices, curves, open lines',
-    text: `A path is { vertices, closed } plus the part's style (fill, stroke, strokeWidth, fillOpacity,
-strokeOpacity, visible).
+    text: `A path is { vertices, closed, holes? } plus the part's style (fill, stroke, strokeWidth, fillOpacity,
+strokeOpacity, visible). holes are closed outlines cut out of its fill (a donut); shapes made by aia fill / aia shape
+get them by themselves.
 A vertex is { "x": 10, "y": 20 } (a corner). A curve vertex adds tangent handles relative to it:
   "in"  { x, y }  toward the previous vertex
   "out" { x, y }  toward the next one
@@ -125,10 +126,14 @@ From ear_l to ear_r this outline goes along jaw (its points and curves in betwee
 points jaw passes through: its own, or points of another part that jaw shares too (where two lines were welded), so a
 fill can turn from one line onto the next at their junction. On a closed jaw it takes the short way; "way": "long"
 takes the other. A part that follows others is never followed: fills follow lines, not other fills.
-Usually you do not write these by hand: aia fill face ink --at 120,80 --fill #f0c040 fills the gap the lines of a
-layer close around that place, with a part that follows them, under them (weld lines where they meet first).
-As Moho's Create Shape, aia shape face ink head.0 head.1 mouth.0 … makes one from the points around it (and around
-its holes). Where lines cross without a point, aia crossings face ink lists the places and --weld all welds them.
+Usually you do not write these by hand. A shape (Moho's Create Shape) fills a gap between lines with two parts that
+follow them, under them: <line>_fill (only the fill) and <line>_stroke (only the stroke, when --stroke is given),
+named after the line it goes along most (or --id name), each with its own place in the order (aia order):
+  aia fill face ink --at 120,80 --fill #f0c040        the gap the lines close around that place
+  aia shape face ink head.0 head.1 mouth.0 …          the points around it (and around its holes)
+Shapes inside the gap that do not touch its lines become holes. Shapes add up: a second one is head_fill_2; recolor
+one with a set op. Renaming a line renames its shapes (head_fill → face_fill). Only welded points join lines: where
+lines cross without a point, aia crossings face ink lists the places and --weld all welds them there.
   aia follow face skin.0 skin.1       (--long: the other way; --off: stop following)
 
 Moving points by name, without sending the vertices again (the vertices that share them follow):
