@@ -2,9 +2,10 @@
 // layer's lines, and when the picked points close a shape it shows it with a checkerboard (holes clear); Create shape
 // in the bar (or Enter) makes it, a part that follows those lines, under them. Picking: a click on a point picks it
 // (Shift: adds or takes it out), a drag picks the points in a box (Shift: adds), and a click inside a gap picks all
-// the points around it and its holes (Shift: adds them). Where two lines cross without a point, a hollow ring shows;
-// a click on it welds them there (a point on each), so the shapes on each side can be made. Esc clears the picks.
-// The shapes and crossings come from the core (core/fill.js), the same as `aia fill` and `aia weld-crossing`.
+// the points around it and its holes (Shift: adds them, or takes them out when they are all picked). Where two
+// lines cross without a point, a ring shows; a click on it welds them there (a point on each), so the shapes on each
+// side can be made. Esc clears the picks. The shapes and crossings come from the core (core/fill.js), the same as
+// `aia shape` and `aia crossings`.
 
 import { findObject } from '../core/document.js';
 import { crossingsOf, gapAt, nodeKeys, shapeFromPointsOps, shapeOf, styleProps, weldCrossingOps } from '../core/fill.js';
@@ -104,11 +105,19 @@ export function clearPicks() {
   return true;
 }
 
-/** @param {Iterable<string>} nodes @param {string} layer @param {boolean} add */
+/**
+ * Picks points. With Shift (add) they are added, or, when they are all picked already, taken out: Shift+click again
+ * in a gap (or Shift+box over the same points) unpicks them.
+ * @param {string[]} nodes @param {string} layer @param {boolean} add
+ */
 function pick(nodes, layer, add) {
   if (!add || pickLayer !== layer) picks = new Set();
   pickLayer = layer;
-  for (const node of nodes) picks.add(node);
+  const all = nodes.length > 0 && nodes.every((node) => picks.has(node));
+  for (const node of nodes) {
+    if (add && all) picks.delete(node);
+    else picks.add(node);
+  }
   notify('');
 }
 
