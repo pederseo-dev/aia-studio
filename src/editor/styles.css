@@ -31,7 +31,7 @@ body {
   overflow: hidden;
 }
 
-button, input {
+button, input, select {
   font: inherit;
   color: inherit;
   background: var(--panel-2);
@@ -43,7 +43,7 @@ button { cursor: pointer; }
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: 0.4; cursor: default; }
 button.active, button.main { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
-input:focus, button:focus-visible { outline: 1px solid var(--accent); outline-offset: 0; }
+input:focus, select:focus, button:focus-visible { outline: 1px solid var(--accent); outline-offset: 0; }
 kbd { font: 11px ui-monospace, monospace; color: var(--soft); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; }
 .ico { display: block; }
 .spacer { flex: 1; }
@@ -322,6 +322,10 @@ dialog h2 { margin-bottom: 12px; }
 .inspector .prop .controls input[type="number"] { flex: 1; min-width: 0; }
 .inspector .prop .controls input.width { flex: 0 0 64px; }
 .inspector button.small { height: 22px; padding: 0 6px; font-size: 11px; }
+.inspector button.icon-only { width: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.inspector button.icon-only .ico { width: 16px; height: 16px; }
+.inspector .shape-select { flex: 1; min-width: 0; height: 24px; }
+.inspector .shape-select option, .inspector .shape-select optgroup { background: var(--panel); color: var(--text); }
 .inspector :is(.new-shapes, .points-section) { margin: 0 -10px 8px; padding: 6px 10px 8px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .inspector h3 { margin: 0 0 4px; font-size: 11px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
 .options .draw-style { display: flex; align-items: center; gap: 6px; padding-right: 10px; margin-right: 2px; border-right: 1px solid var(--border); white-space: nowrap; color: var(--soft); }

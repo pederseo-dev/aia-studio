@@ -34,6 +34,12 @@ export const ICONS = {
   unweld: stroke('<path d="M3.5 17c3 0 4.5-2 6-4.5M20.5 17c-3 0-4.5-2-6-4.5"/><circle cx="9.5" cy="11" r="1.8" fill="currentColor"/><circle cx="14.5" cy="11" r="1.8" fill="currentColor"/>'),
   // Add point: a curved line with a point on it and a plus.
   addPoint: stroke('<path d="M3.5 18c3-8 8-10 12-8"/><rect x="8.3" y="10.8" width="3" height="3" fill="currentColor"/><path d="M18 3.5v6M15 6.5h6"/>'),
+  // Flip: two mirrored halves around a dashed axis.
+  flipH: stroke('<path d="M12 3.5v17" stroke-dasharray="2 2"/><path d="M9.5 7 4 17h5.5zM14.5 7 20 17h-5.5z"/>'),
+  flipV: stroke('<path d="M3.5 12h17" stroke-dasharray="2 2"/><path d="M7 9.5 17 4v5.5zM7 14.5 17 20v-5.5z"/>'),
+  // Order: an arrow up or down over a stack.
+  raise: stroke('<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 18.5h14M5 21h14"/>'),
+  lower: stroke('<path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 18.5h14M5 21h14"/>'),
   check: stroke('<path d="m5 12.5 4.5 4.5L19 7.5"/>'),
   corner: stroke('<path d="M5 19 12 6l7 13"/><rect x="10.5" y="4.5" width="3" height="3" fill="currentColor"/>'),
   curve: stroke('<path d="M5 19C7 9 17 9 19 19"/><path d="M6 10h12" stroke-dasharray="2 2"/><rect x="10.5" y="9.5" width="3" height="3" fill="currentColor"/>'),

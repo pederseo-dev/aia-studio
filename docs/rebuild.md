@@ -601,3 +601,8 @@ follow it (`head_fill_2` → `face_fill_2`), and leaves a shape named otherwise 
 Inspector shows, for a line, a Shapes row with the shapes that follow it (a click selects one), and for a shape, a
 Follows row with its lines. In Create Shape, Shift on a point toggles it and dragging on toggles the points passed
 over the same way; Shift+box toggles each point in it; Shift+click again in a picked gap unpicks it.
+
+**Inspector touch-ups (2026-11-19):** Flip and Order are icon buttons (Order: Raise and Lower; Shift+click goes to the
+top or bottom); a part's Vertices, Holes, Closed and Origin are no longer shown (they are edited on the canvas); the
+Shapes row became a **Shape** dropdown just above Fill and Stroke, with the line and the shapes that follow it,
+picking one selects it. `select` takes the controls' dark style.

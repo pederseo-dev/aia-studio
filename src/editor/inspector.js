@@ -6,7 +6,9 @@
 // being picked, a number being typed) the canvas shows it live; it is saved as one batch when done.
 // With a drawing tool active, a «New shapes» section sets the auto fill and auto stroke the tool gives new shapes.
 // While editing points, a «Points» section flips the picked points horizontally or vertically; otherwise a Flip row
-// flips the selected parts, or the selected layer, and an Order row raises or lowers them.
+// flips the selected parts, or the selected layer, and an Order row raises or lowers them (icon buttons). A part's
+// points, holes, closing and pivot are edited on the canvas, so they are not shown; above its Fill, a Shape dropdown
+// lists its line and the shapes that follow it, to pick one.
 
 import { findObject } from '../core/document.js';
 import { applyTransformOps, isTransformed } from '../core/transform.js';
@@ -17,7 +19,8 @@ import { orderSelected } from './layers.js';
 import { flipSelection } from './selectTool.js';
 import { drawStyle, isDrawTool, isLocked, run, select, setDrawStyle, state } from './state.js';
 import { followsOthers } from '../core/fill.js';
-import { schema } from './schema.js';
+import { isPart, schema } from './schema.js';
+import { icon } from './icons.js';
 
 /**
  * @typedef {import('../core/schema.js').PropertySpec} PropertySpec
@@ -35,6 +38,8 @@ const COMPANIONS = /** @type {Record<string, string>} */ ({ stroke: 'strokeWidth
 /** A color's opacity, set in its swatch's popover. */
 const OPACITY_OF = /** @type {Record<string, string>} */ ({ fill: 'fillOpacity', stroke: 'strokeOpacity' });
 const SHOWN_WITH = new Set([...Object.values(COMPANIONS), ...Object.values(OPACITY_OF)]);
+/** A part's properties that are edited on the canvas, not in the Inspector (its points, holes, closing, pivot). */
+const HIDDEN_FOR_PARTS = new Set(['vertices', 'holes', 'closed', 'originX']);
 
 const MIXED = Symbol('mixed');
 
@@ -272,108 +277,86 @@ function pointsSection() {
   const heading = document.createElement('h3');
   heading.textContent = 'Points';
   const picked = state.points.length > 0;
-  /** @param {string} text @param {string} help @param {boolean} horizontal */
-  const flip = (text, help, horizontal) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'small';
-    button.textContent = text;
-    button.title = picked ? help : `${help} (pick some points first)`;
-    button.disabled = !picked;
-    button.addEventListener('click', () => flipPoints(horizontal));
-    return button;
-  };
   section.append(
     heading,
     row(
       'Flip',
       'Mirror the picked points and their curve handles across the middle of their box.',
-      flip('Horizontal', 'Flip the picked points horizontally (left ↔ right)', true),
-      flip('Vertical', 'Flip the picked points vertically (top ↔ bottom)', false),
+      iconButton('flipH', 'Flip the picked points horizontally (left ↔ right)', picked, () => flipPoints(true), 'pick some points first'),
+      iconButton('flipV', 'Flip the picked points vertically (top ↔ bottom)', picked, () => flipPoints(false), 'pick some points first'),
     ),
   );
   return section;
 }
 
 /**
- * The shapes that go with a part: for a line, the fills that follow it (Create Shape adds one each time, as Moho);
- * for a fill, the lines it follows. Null for anything else.
+ * The parts that go together with a part, for the Shape dropdown: the lines (those it follows, or itself) and the
+ * shapes that follow them (Create Shape adds one each time, as Moho). Null when it is alone.
  * @param {import('../core/document.js').Doc} doc @param {import('../core/document.js').DocObject} part
- * @returns {{ label: string, help: string, ids: string[] } | null}
+ * @returns {{ id: string, lines: string[], shapes: string[] } | null}
  */
 function linksOf(doc, part) {
   if (part.type !== 'path') return null;
   /** @param {import('../core/document.js').DocObject} o */
   const followed = (o) => new Set([...(/** @type {any[]} */ (o.vertices ?? [])), ...(/** @type {any[][]} */ (o.holes ?? [])).flat()].map((v) => v.follow).filter(Boolean));
-  if (followsOthers(part)) return { label: 'Follows', help: 'The lines this shape follows: bend them and it bends with them.', ids: [...followed(part)] };
-  const ids = doc.objects.filter((o) => o.parent === part.parent && followsOthers(o) && followed(o).has(part.id)).map((o) => o.id);
-  return { label: 'Shapes', help: 'The fills that follow this line (Create Shape adds one each time). Click one to select it.', ids };
+  const lines = followsOthers(part) ? [...followed(part)] : [part.id];
+  const shapes = doc.objects.filter((o) => o.parent === part.parent && followsOthers(o) && lines.some((l) => followed(o).has(l))).map((o) => o.id);
+  return lines.length + shapes.length > 1 ? { id: part.id, lines, shapes } : null;
 }
 
-/** The shapes or lines that go with the selected part, each a button that selects it. @param {{ label: string, help: string, ids: string[] }} links */
+/** The Shape dropdown: the line and the shapes that follow it; picking one selects it. @param {{ id: string, lines: string[], shapes: string[] }} links */
 function linksRow(links) {
-  if (!links.ids.length) {
-    const none = document.createElement('span');
-    none.className = 'faint';
-    none.textContent = 'None';
-    return row(links.label, links.help, none);
+  const choose = document.createElement('select');
+  choose.className = 'shape-select';
+  for (const [group, ids] of /** @type {const} */ ([['Line', links.lines], ['Shapes', links.shapes]])) {
+    if (!ids.length) continue;
+    const box = document.createElement('optgroup');
+    box.label = group;
+    for (const id of ids) box.append(new Option(id, id, false, id === links.id));
+    choose.append(box);
   }
-  const buttons = links.ids.map((id) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'small';
-    button.textContent = id;
-    button.title = `Select ${id}`;
-    button.addEventListener('click', () => select(id));
-    return button;
-  });
-  const count = document.createElement('span');
-  count.className = 'faint';
-  count.textContent = String(links.ids.length);
-  return row(links.label, links.help, count, ...buttons);
+  choose.addEventListener('change', () => select(choose.value));
+  return row(
+    'Shape',
+    'The line and the shapes that follow it (Create Shape adds one each time): pick one to see and change its fill and stroke.',
+    choose,
+  );
+}
+
+/**
+ * A small button with only an icon.
+ * @param {Parameters<typeof icon>[0]} name @param {string} help @param {boolean} enabled
+ * @param {(event: MouseEvent) => void} onClick @param {string} [why] what to do first when it is disabled
+ */
+function iconButton(name, help, enabled, onClick, why = 'unlock it first') {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'small icon-only';
+  button.innerHTML = icon(name);
+  button.title = enabled ? help : `${help} (${why})`;
+  button.setAttribute('aria-label', help);
+  button.disabled = !enabled;
+  button.addEventListener('click', onClick);
+  return button;
 }
 
 /** Flip of the selected parts or layer. @param {boolean} enabled */
 function flipRow(enabled) {
-  /** @param {string} text @param {string} help @param {boolean} horizontal */
-  const flip = (text, help, horizontal) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'small';
-    button.textContent = text;
-    button.title = enabled ? help : `${help} (unlock it first)`;
-    button.disabled = !enabled;
-    button.addEventListener('click', () => flipSelection(horizontal));
-    return button;
-  };
   return row(
     'Flip',
     'Mirror what is selected across the middle of its box.',
-    flip('Horizontal', 'Flip horizontally (left ↔ right)', true),
-    flip('Vertical', 'Flip vertically (top ↔ bottom)', false),
+    iconButton('flipH', 'Flip horizontally (left ↔ right)', enabled, () => flipSelection(true)),
+    iconButton('flipV', 'Flip vertically (top ↔ bottom)', enabled, () => flipSelection(false)),
   );
 }
 
-/** Raise and lower the selected parts or layers among their siblings. @param {boolean} enabled */
+/** Raise and lower the selected parts or layers among their siblings (Shift+click: to the top or bottom). @param {boolean} enabled */
 function orderRow(enabled) {
-  /** @param {string} text @param {string} help @param {import('../core/order.js').OrderMove} how */
-  const move = (text, help, how) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'small';
-    button.textContent = text;
-    button.title = enabled ? help : `${help} (unlock it first)`;
-    button.disabled = !enabled;
-    button.addEventListener('click', () => orderSelected(how));
-    return button;
-  };
   return row(
     'Order',
     'What is higher in the order is drawn over what is below it, among the parts of a layer (or the layers of a group).',
-    move('Bottom', 'Lower to the bottom (Shift+Page Down)', 'bottom'),
-    move('Lower', 'Lower one place (Page Down)', 'down'),
-    move('Raise', 'Raise one place (Page Up)', 'up'),
-    move('Top', 'Raise to the top (Shift+Page Up)', 'top'),
+    iconButton('raise', 'Raise one place (Page Up); Shift+click: to the top', enabled, (e) => orderSelected(e.shiftKey ? 'top' : 'up')),
+    iconButton('lower', 'Lower one place (Page Down); Shift+click: to the bottom', enabled, (e) => orderSelected(e.shiftKey ? 'bottom' : 'down')),
   );
 }
 
@@ -463,11 +446,13 @@ export function renderInspector() {
         parts.push(flipRow(unlocked), orderRow(unlocked));
       }
       for (const [name, property] of Object.entries(spec.properties)) {
-        if (!SHOWN_WITH.has(name)) parts.push(propertyRow(name, property, targets));
+        if (SHOWN_WITH.has(name) || (isPart(typeOf(targets)) && HIDDEN_FOR_PARTS.has(name))) continue;
+        // The Shape dropdown goes just above Fill and Stroke, which it is for.
+        if (name === 'fill' && links) parts.push(linksRow(links));
+        parts.push(propertyRow(name, property, targets));
       }
       const only = objects.length === 1 ? objects[0] : null;
       if (only?.type === 'vector' && isTransformed(only)) parts.push(applyTransformRow(only));
-      if (links) parts.push(linksRow(links));
     }
   }
   panel.replaceChildren(...parts);
