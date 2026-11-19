@@ -7,16 +7,18 @@
 // With a drawing tool active, a «New shapes» section sets the auto fill and auto stroke the tool gives new shapes.
 // While editing points, a «Points» section flips the picked points horizontally or vertically; otherwise a Flip row
 // flips the selected parts, or the selected layer, and an Order row raises or lowers them (icon buttons). A part's
-// points, holes, closing and pivot are edited on the canvas, so they are not shown; above its Fill, the Shape row
-// lists its line and the shapes that follow it, to pick one, and raises, lowers or deletes the one picked (for one
-// part it takes the place of the Order row).
+// points, holes, closing and pivot are edited on the canvas, so they are not shown. One selected part shows two
+// sections: its Element (the part drawn with its own points: order, fill and stroke, square swatches) and its Shape
+// (the shapes Create Shape made on it: a dropdown, delete, and each one's fill and stroke with their own order, as
+// beans); a click on a shape on the canvas shows the element it belongs to with that shape picked.
 
 import { findObject } from '../core/document.js';
 import { applyTransformOps, isTransformed } from '../core/transform.js';
 import { showPreview } from './canvas.js';
 import { colorSwatch } from './colorSwatch.js';
 import { flipPoints } from './pointEdit.js';
-import { deleteSelected, orderSelected } from './layers.js';
+import { orderSelected } from './layers.js';
+import { orderOps } from '../core/order.js';
 import { flipSelection } from './selectTool.js';
 import { drawStyle, isDrawTool, isLocked, run, select, setDrawStyle, state } from './state.js';
 import { followsOthers } from '../core/fill.js';
@@ -25,6 +27,8 @@ import { icon } from './icons.js';
 
 /**
  * @typedef {import('../core/schema.js').PropertySpec} PropertySpec
+ * @typedef {import('../core/document.js').Doc} Doc
+ * @typedef {import('../core/document.js').DocObject} DocObject
  * @typedef {{ id: string, values: Record<string, unknown> }} Target
  */
 
@@ -169,8 +173,13 @@ function row(label, help, ...controls) {
   return line;
 }
 
-/** The control(s) of one property of the targets. @param {string} key @param {PropertySpec} spec @param {Target[]} targets */
-function propertyRow(key, spec, targets) {
+/**
+ * The control(s) of one property of the targets.
+ * @param {string} key @param {PropertySpec} spec @param {Target[]} targets
+ * @param {{ bean?: boolean, extra?: HTMLElement[] }} [options] bean: a fill or stroke swatch is a bean (a shape's)
+ *   instead of a square (an element's own); extra: controls after it on the row
+ */
+function propertyRow(key, spec, targets, { bean = true, extra = [] } = {}) {
   const value = valueOf(targets, key, spec);
   const mixed = value === MIXED;
   const change = (/** @type {unknown} */ v) => save(targets, { [key]: v });
@@ -183,7 +192,7 @@ function propertyRow(key, spec, targets) {
     /** The color and, when the popover set one, its opacity. @param {string | null} color @param {number | undefined} alpha */
     const props = (color, alpha) => ({ [key]: color, ...(opacityKey && alpha !== undefined ? { [opacityKey]: alpha } : {}) });
     const swatch = colorSwatch({
-      kind: key === 'fill' || key === 'stroke' ? key : undefined,
+      kind: bean && (key === 'fill' || key === 'stroke') ? key : undefined,
       value: mixed ? undefined : /** @type {string | null} */ (value),
       nullable: spec.nullable,
       mixed,
@@ -193,12 +202,12 @@ function propertyRow(key, spec, targets) {
       onCancel: () => showPreview(null),
     });
     const companion = COMPANIONS[key];
-    if (!companion) return row(labelOf(key), spec.help, swatch);
+    if (!companion) return row(labelOf(key), spec.help, swatch, ...extra);
     const other = /** @type {PropertySpec} */ (schema.get(typeOf(targets))?.properties[companion]);
     const width = numberField(other, valueOf(targets, companion, other), (n) => preview(targets, { [companion]: n }), (n) => save(targets, { [companion]: n }));
     width.classList.add('width');
     width.title = other.help;
-    return row(labelOf(key), `${spec.help} ${other.help}`, swatch, width);
+    return row(labelOf(key), `${spec.help} ${other.help}`, swatch, ...extra, width);
   }
 
   if (key === 'originX') {
@@ -290,46 +299,137 @@ function pointsSection() {
   return section;
 }
 
+/** The lines a part follows (in its outline and its holes). @param {DocObject} part */
+const followedBy = (part) =>
+  new Set([...(/** @type {any[]} */ (part.vertices ?? [])), ...(/** @type {any[][]} */ (part.holes ?? [])).flat()].map((v) => v.follow).filter(Boolean));
+
+/** How Create Shape names a shape's parts: line_fill, line_stroke_2. */
+const SHAPE_NAME = /^(.+)_(fill|stroke)(_[0-9]+)?$/;
+
 /**
- * The parts that go together with a part, for the Shape dropdown: the lines (those it follows, or itself) and the
- * shapes that follow them (Create Shape adds one each time, as Moho). Null for anything but a part.
- * @param {import('../core/document.js').Doc} doc @param {import('../core/document.js').DocObject} part
- * @returns {{ id: string, lines: string[], shapes: string[] } | null}
+ * The element a part belongs to: the part itself when it is drawn with its own points, or, for a shape (a part that
+ * follows lines), the line it is named after, else the first line it follows.
+ * @param {Doc} doc @param {DocObject} part
  */
-function linksOf(doc, part) {
-  if (part.type !== 'path') return null;
-  /** @param {import('../core/document.js').DocObject} o */
-  const followed = (o) => new Set([...(/** @type {any[]} */ (o.vertices ?? [])), ...(/** @type {any[][]} */ (o.holes ?? [])).flat()].map((v) => v.follow).filter(Boolean));
-  const lines = followsOthers(part) ? [...followed(part)] : [part.id];
-  const shapes = doc.objects.filter((o) => o.parent === part.parent && followsOthers(o) && lines.some((l) => followed(o).has(l))).map((o) => o.id);
-  return { id: part.id, lines, shapes };
+function elementOf(doc, part) {
+  if (!followsOthers(part)) return part;
+  const lines = followedBy(part);
+  const named = SHAPE_NAME.exec(part.id)?.[1];
+  const id = named && lines.has(named) ? named : [...lines][0];
+  return findObject(doc, id) ?? part;
 }
 
 /**
- * The Shape row: a dropdown with the line and the shapes that follow it (picking one selects it), and buttons that
- * raise, lower or delete the one selected.
- * @param {{ id: string, lines: string[], shapes: string[] }} links @param {boolean} enabled
+ * The shapes on an element (made by Create Shape: they follow it), each its fill part and its stroke part. Parts
+ * named as a pair (head_fill_2, head_stroke_2) are one shape; any other part is a shape of its own.
+ * @param {Doc} doc @param {DocObject} element
+ * @returns {{ key: string, fill?: DocObject, stroke?: DocObject }[]}
  */
-function linksRow(links, enabled) {
+function shapesOf(doc, element) {
+  /** @type {Map<string, { key: string, fill?: DocObject, stroke?: DocObject }>} */
+  const shapes = new Map();
+  for (const o of doc.objects) {
+    if (o.parent !== element.parent || o.type !== 'path' || !followsOthers(o) || !followedBy(o).has(element.id)) continue;
+    const name = SHAPE_NAME.exec(o.id);
+    const key = name ? `${name[1]}${name[3] ?? ''}` : o.id;
+    const shape = shapes.get(key) ?? { key };
+    if (name) shape[/** @type {'fill' | 'stroke'} */ (name[2])] = o;
+    else Object.assign(shape, { ...(o.fill !== null ? { fill: o } : {}), ...(o.stroke !== null ? { stroke: o } : {}) });
+    shapes.set(key, shape);
+  }
+  return [...shapes.values()];
+}
+
+/** The shape last picked in the dropdown of each element, while nothing of a shape is selected. */
+const chosenShape = new Map();
+
+/** Raises or lowers some parts (not the selection). @param {string[]} ids @param {import('../core/order.js').OrderMove} how */
+function orderParts(ids, how) {
+  const doc = state.document;
+  if (!doc) return;
+  const ops = orderOps(doc, ids, how);
+  if (ops.length) run(ops, { note: `${how === 'up' || how === 'top' ? 'Raise' : 'Lower'} ${ids.join(', ')}` });
+}
+
+/** ▲ ▼ for some parts (Shift+click: to the top or bottom). @param {string[]} ids @param {boolean} enabled */
+const orderButtons = (ids, enabled) => [
+  iconButton('raise', `Raise ${ids.join(', ')} one place; Shift+click: to the top`, enabled, (e) => orderParts(ids, e.shiftKey ? 'top' : 'up')),
+  iconButton('lower', `Lower ${ids.join(', ')} one place; Shift+click: to the bottom`, enabled, (e) => orderParts(ids, e.shiftKey ? 'bottom' : 'down')),
+];
+
+/** A section heading. @param {string} text @param {string} [help] */
+function sectionHeading(text, help = '') {
+  const h = document.createElement('h3');
+  h.className = 'section';
+  h.textContent = text;
+  h.title = help;
+  return h;
+}
+
+/**
+ * The two sections of one selected part: its element (its own order, fill and stroke: square swatches) and the
+ * shapes Create Shape made on it (a dropdown, delete, and each one's fill and stroke with their own order: beans).
+ * @param {Doc} doc @param {DocObject} part the selected part (an element, or a shape's part)
+ * @returns {HTMLElement[]}
+ */
+function partSections(doc, part) {
+  const element = elementOf(doc, part);
+  const spec = /** @type {import('../core/schema.js').ResolvedType} */ (schema.get('path'));
+  const own = [{ id: element.id, values: element }];
+  const unlocked = !isLocked(element.id);
+  const out = [
+    sectionHeading(`Element: ${element.id}`, 'The part drawn with its own points: its order, fill and stroke.'),
+    flipRow(unlocked),
+    row('Order', 'Its place among the parts of the layer: higher is drawn over lower.', ...orderButtons([element.id], unlocked)),
+    propertyRow('visible', spec.properties.visible, own),
+    propertyRow('fill', spec.properties.fill, own, { bean: false }),
+    propertyRow('stroke', spec.properties.stroke, own, { bean: false }),
+  ];
+  const shapes = shapesOf(doc, element);
+  out.push(sectionHeading('Shape', 'Shapes made with Create Shape (F) on this element: each a fill and a stroke that follow its lines.'));
+  if (!shapes.length) {
+    const none = document.createElement('p');
+    none.className = 'empty';
+    none.textContent = 'None. Create Shape (F) makes them.';
+    out.push(none);
+    return out;
+  }
+  const holding = shapes.find((sh) => sh.fill?.id === part.id || sh.stroke?.id === part.id);
+  const current = holding ?? shapes.find((sh) => sh.key === chosenShape.get(element.id)) ?? shapes[0];
+  chosenShape.set(element.id, current.key);
   const choose = document.createElement('select');
   choose.className = 'shape-select';
-  for (const [group, ids] of /** @type {const} */ ([['Line', links.lines], ['Shapes', links.shapes]])) {
-    if (!ids.length) continue;
-    const box = document.createElement('optgroup');
-    box.label = group;
-    for (const id of ids) box.append(new Option(id, id, false, id === links.id));
-    choose.append(box);
-  }
-  choose.addEventListener('change', () => select(choose.value));
-  choose.disabled = links.lines.length + links.shapes.length < 2;
-  return row(
-    'Shape',
-    'The line and the shapes that follow it (Create Shape adds one each time): pick one to see and change its fill and stroke, raise or lower it, or delete it.',
-    choose,
-    iconButton('raise', `Raise ${links.id} one place (Page Up); Shift+click: to the top`, enabled, (e) => orderSelected(e.shiftKey ? 'top' : 'up')),
-    iconButton('lower', `Lower ${links.id} one place (Page Down); Shift+click: to the bottom`, enabled, (e) => orderSelected(e.shiftKey ? 'bottom' : 'down')),
-    iconButton('delete', `Delete ${links.id} (Del); shapes that follow a deleted line keep their outline`, enabled, () => deleteSelected()),
+  shapes.forEach((sh, i) => {
+    const ids = [sh.fill?.id, sh.stroke?.id].filter((x, k, all) => x && all.indexOf(x) === k);
+    choose.append(new Option(`Shape ${i + 1}: ${ids.join(' + ')}`, sh.key, false, sh === current));
+  });
+  choose.disabled = shapes.length < 2;
+  choose.addEventListener('change', () => {
+    const next = shapes.find((sh) => sh.key === choose.value);
+    chosenShape.set(element.id, choose.value);
+    if (next) select(/** @type {DocObject} */ (next.fill ?? next.stroke).id);
+  });
+  const parts = [...new Set([current.fill?.id, current.stroke?.id].filter((x) => !!x))];
+  const remove = iconButton('delete', `Delete this shape (${parts.join(' and ')}); the element stays`, unlocked, () =>
+    run(
+      parts.map((id) => ({ op: 'delete', target: id })),
+      { select: element.id, note: `Delete ${parts.join(' and ')}` },
+    ),
   );
+  out.push(row('Shape', 'Pick a shape of this element to change its fill and stroke, raise or lower them, or delete it.', choose, remove));
+  /** @param {'fill' | 'stroke'} key */
+  const paint = (key) => {
+    const holder = current[key];
+    if (!holder) {
+      const none = document.createElement('span');
+      none.className = 'faint';
+      none.textContent = 'None';
+      return row(labelOf(key), `This shape has no ${key} part.`, none);
+    }
+    return propertyRow(key, spec.properties[key], [{ id: holder.id, values: holder }], { extra: orderButtons([holder.id], !isLocked(holder.id)) });
+  };
+  out.push(paint('fill'), paint('stroke'));
+  return out;
 }
 
 /**
@@ -379,7 +479,6 @@ function newShapesSection() {
   const heading = document.createElement('h3');
   heading.textContent = 'New shapes';
   const fill = colorSwatch({
-    kind: 'fill',
     value: drawStyle.fill,
     opacity: drawStyle.fillOpacity,
     nullable: true,
@@ -387,7 +486,6 @@ function newShapesSection() {
     onChange: (c, a) => setDrawStyle({ fill: c, ...(a === undefined ? {} : { fillOpacity: a }) }),
   });
   const stroke = colorSwatch({
-    kind: 'stroke',
     value: drawStyle.stroke,
     opacity: drawStyle.strokeOpacity,
     nullable: true,
@@ -428,8 +526,11 @@ export function renderInspector() {
     targets = objects.map((o) => ({ id: o.id, values: o }));
     heading = objects.length > 1 ? `${objects.length} parts` : objects[0].id;
   } else heading = `${objects.length} selected`;
-  const links = objects.length === 1 && state.document ? linksOf(state.document, objects[0]) : null;
-  const key = JSON.stringify([state.active, targets, drawing && drawStyle, state.editing, state.points.length > 0, links]);
+  // One part: its element and its shapes, with what they are made of (so a change to any of them rebuilds).
+  const single = objects.length === 1 && objects[0].type === 'path' && !state.editing ? objects[0] : null;
+  const element = single ? elementOf(doc, single) : null;
+  const related = element ? [element, ...shapesOf(doc, element).flatMap((sh) => [sh.fill, sh.stroke])] : [];
+  const key = JSON.stringify([state.active, targets, drawing && drawStyle, state.editing, state.points.length > 0, related, element && chosenShape.get(element.id)]);
   if (key === builtFrom) return;
   builtFrom = key;
   title.textContent = heading;
@@ -437,7 +538,9 @@ export function renderInspector() {
   const parts = [];
   if (drawing) parts.push(newShapesSection());
   if (state.editing) parts.push(pointsSection());
-  if (!targets.length) {
+  if (single) {
+    parts.push(...partSections(doc, single));
+  } else if (!targets.length) {
     const p = document.createElement('p');
     p.className = 'empty';
     p.textContent = 'Different kinds of things are selected.';
@@ -452,14 +555,10 @@ export function renderInspector() {
       const flippable = objects.length > 0 && !state.editing && objects.every((o) => o.type !== 'meta');
       if (flippable) {
         const unlocked = objects.every((o) => !isLocked(o.id));
-        // One part raises and lowers from its Shape row.
-        parts.push(flipRow(unlocked));
-        if (!links) parts.push(orderRow(unlocked));
+        parts.push(flipRow(unlocked), orderRow(unlocked));
       }
       for (const [name, property] of Object.entries(spec.properties)) {
         if (SHOWN_WITH.has(name) || (isPart(typeOf(targets)) && HIDDEN_FOR_PARTS.has(name))) continue;
-        // The Shape dropdown goes just above Fill and Stroke, which it is for.
-        if (name === 'fill' && links) parts.push(linksRow(links, objects.every((o) => !isLocked(o.id))));
         parts.push(propertyRow(name, property, targets));
       }
       const only = objects.length === 1 ? objects[0] : null;

@@ -609,3 +609,14 @@ picking one selects it. `select` takes the controls' dark style.
 The Shape row also has Raise and Lower (Shift+click: top or bottom) and Delete for the part picked in it, so with
 one part selected the Order row is not shown (it stays for a layer or several parts); the row shows for a lone line
 too, with its dropdown disabled.
+
+**Element and Shape in the Inspector (2026-11-19):** a part drawn with its own points (Pen, Rectangle, Ellipse) is an
+**element**: its fill and stroke are its own. What Create Shape makes are **shapes**, apart, on top of the element's
+lines: a shape with fill and stroke is now two parts, `head_fill` and `head_stroke` (the stroke over the fill, both
+under the line; numbered as a pair, `head_fill_2` with `head_stroke_2`; only one when the other is None), so each has
+its own place in the order; renaming the line renames both. With one part selected the Inspector shows two
+sections: **Element: head** (Flip, Order ▲▼, Visible, Fill and Stroke with square swatches) and **Shape** (a dropdown
+of the shapes on that element, Delete for the one picked, and its Fill and Stroke as beans, each with its own ▲▼). A
+click on a shape on the canvas shows the element it belongs to (the line it is named after, else the first it
+follows) with that shape picked. The drawing tools' bar and «New shapes» use square swatches; Create Shape's bar
+keeps the beans.

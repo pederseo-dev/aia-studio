@@ -384,7 +384,7 @@ function crosses(p, q) {
  */
 export function fillOfGap(doc, layer, gap, at) {
   return childrenOf(doc, layer).find((part) => {
-    if (part.type !== 'path' || !followsOthers(part)) return false;
+    if (part.type !== 'path' || !followsOthers(part) || part.fill === null) return false;
     const polygon = outlineSamples(part);
     if (!insidePolygon(polygon, at) || holeOutlinesOf(part).some((hole) => insidePolygon(closedSamples(hole), at))) return false;
     return Math.abs(Math.abs(signedArea(polygon)) - gap.area) <= gap.area * 0.02 + 1;
@@ -438,7 +438,7 @@ export function fillOps(doc, layer, at, props, fresh = {}) {
 /**
  * The batch that creates a shape from some picked points of a layer's lines (Moho's Create Shape).
  * @param {Doc} doc resolved @param {string} layer @param {Iterable<string>} nodes @param {Record<string, unknown>} props
- * @returns {{ ops: Operation[], id: string, note: string }}
+ * @returns {{ ops: Operation[], id: string, ids: string[], note: string }}
  */
 export function shapeFromPointsOps(doc, layer, nodes, props) {
   const shape = shapeOf(doc, layer, nodes);
@@ -447,10 +447,11 @@ export function shapeFromPointsOps(doc, layer, nodes, props) {
 }
 
 /**
- * The batch that creates a fill part for a gap: one vertex per stretch, sharing the point it starts at and following
- * its line; just under the lowest line it follows.
+ * The batch that creates a shape for a gap: a fill part and a stroke part, each with one vertex per stretch, sharing
+ * the point it starts at and following its line; just under the lowest line it follows.
  * @param {Doc} doc resolved @param {string} layer @param {Gap} gap @param {Record<string, unknown>} props
- * @returns {{ ops: Operation[], id: string, note: string }}
+ * @returns {{ ops: Operation[], id: string, ids: string[], note: string }} ids: the fill part and the stroke part
+ *   it made (one of them when the other is None)
  */
 function shapeOps(doc, layer, gap, props) {
   // Unnamed points where a stretch starts get a name, so the fill can share them.
@@ -480,11 +481,32 @@ function shapeOps(doc, layer, gap, props) {
   const holes = gap.holes.map((hole) => hole.map(vertexOf));
   const siblings = childrenOf(doc, layer);
   const index = Math.min(...[...gap.stretches, ...gap.holes.flat()].map((s) => siblings.findIndex((o) => o.id === s.part)));
-  const id = idFromName(`${mainLine(gap)}_fill`, (x) => x === 'meta' || !!findObject(doc, x));
+  // A shape's fill and its stroke are two parts (head_fill, head_stroke), so each has its place in the order; the
+  // stroke over the fill. The same number for both: head_fill_2 goes with head_stroke_2.
+  const fillProps = Object.fromEntries(Object.entries(props).filter(([k]) => k === 'fill' || k === 'fillOpacity'));
+  const strokeProps = Object.fromEntries(Object.entries(props).filter(([k]) => k.startsWith('stroke')));
+  const hasFill = props.fill !== null;
+  const hasStroke = props.stroke !== undefined && props.stroke !== null;
+  if (!hasFill && !hasStroke) throw new Error('a shape needs a fill or a stroke (both are None)');
+  const base = mainLine(gap);
+  const free = (/** @type {string} */ x) => x !== 'meta' && !findObject(doc, x);
+  let suffix = '';
+  for (let n = 2; !free(`${base}_fill${suffix}`) || !free(`${base}_stroke${suffix}`); n++) suffix = `_${n}`;
+  const shape = { vertices, ...(holes.length ? { holes } : {}) };
   /** @type {Operation[]} */
   const ops = [...renamed].map(([target, list]) => ({ op: 'set', target, props: { vertices: list.map(storedOnly) } }));
-  ops.push({ op: 'create', type: 'path', id, parent: layer, index, props: { vertices, ...(holes.length ? { holes } : {}), ...props } });
-  return { ops, id, note: `Create shape ${id}` };
+  /** @type {string[]} */
+  const ids = [];
+  if (hasFill) {
+    ids.push(`${base}_fill${suffix}`);
+    ops.push({ op: 'create', type: 'path', id: ids[0], parent: layer, index, props: { ...shape, ...fillProps, stroke: null } });
+  }
+  if (hasStroke) {
+    const id = `${base}_stroke${suffix}`;
+    ops.push({ op: 'create', type: 'path', id, parent: layer, index: index + ids.length, props: { ...shape, fill: null, ...strokeProps } });
+    ids.push(id);
+  }
+  return { ops, id: ids[0], ids, note: `Create shape ${ids.join(' + ')}` };
 }
 
 /** The line a gap's outline goes along most: a fill is named after it (head_fill). @param {Gap} gap */

@@ -134,7 +134,7 @@ export function createPicked() {
     return true;
   }
   picks = new Set();
-  run(result.ops, { note: result.note, select: result.id });
+  run(result.ops, { note: result.note, select: result.ids[0] });
   return true;
 }
 

@@ -548,7 +548,7 @@ export function createAia({ store, schema }) {
           throw new AiaError(e.message);
         }
         await store.apply(id, result.ops, { origin: ORIGIN, note: result.note });
-        return ok(`Made ${result.id}.`);
+        return ok(`Made ${result.ids.join(' and ')}.`);
       },
     },
 

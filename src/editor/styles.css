@@ -328,6 +328,8 @@ dialog h2 { margin-bottom: 12px; }
 .inspector .shape-select option, .inspector .shape-select optgroup { background: var(--panel); color: var(--text); }
 .inspector :is(.new-shapes, .points-section) { margin: 0 -10px 8px; padding: 6px 10px 8px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .inspector h3 { margin: 0 0 4px; font-size: 11px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
+.inspector h3.section { margin: 10px -10px 6px; padding: 8px 10px 0; border-top: 1px solid var(--border); }
+.inspector h3.section:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
 .options .draw-style { display: flex; align-items: center; gap: 6px; padding-right: 10px; margin-right: 2px; border-right: 1px solid var(--border); white-space: nowrap; color: var(--soft); }
 .options .draw-style input[type="number"] { width: 52px; height: 22px; }
 /* A switch is lit while on: its icon and name in the accent color, on a tinted background. */

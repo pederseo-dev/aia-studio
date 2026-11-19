@@ -213,3 +213,21 @@ test('a fill is named after the line it follows most, and renaming the line rena
   assert.equal(pointsError(document), null);
   assert.deepEqual(applyOps(schema, document, inverse).document, mine, 'undo renames them back');
 });
+
+test('a shape with fill and stroke is two parts, named as a pair, and renamed with its line', () => {
+  const doc = layer(square);
+  const nodes = /** @type {any} */ (gapAt(resolveDoc(doc), 'ink', { x: 50, y: 50 })).nodes;
+  const first = shapeFromPointsOps(resolveDoc(doc), 'ink', nodes, { fill: '#ff0000', stroke: '#000000', strokeWidth: 4 });
+  assert.deepEqual(first.ids, ['box_fill', 'box_stroke']);
+  const one = apply(doc, first.ops);
+  assert.deepEqual(childrenOf(one, 'ink').map((o) => o.id), ['box_fill', 'box_stroke', 'box'], 'fill under its stroke, both under the line');
+  assert.deepEqual([find(one, 'box_fill').stroke, find(one, 'box_stroke').fill, find(one, 'box_stroke').strokeWidth], [null, null, 4]);
+  // The square's points got names: they are picked by those now.
+  const named = /** @type {any} */ (gapAt(resolveDoc(one), 'ink', { x: 50, y: 50 })).nodes;
+  const second = shapeFromPointsOps(resolveDoc(one), 'ink', named, { fill: null, stroke: '#0000ff' });
+  assert.deepEqual(second.ids, ['box_stroke_2'], 'only a stroke: one part, numbered as a pair');
+  const two = apply(one, second.ops);
+  const renamed = apply(two, [{ op: 'rename', target: 'box', id: 'frame' }]);
+  assert.deepEqual(childrenOf(renamed, 'ink').map((o) => o.id).sort(), ['frame', 'frame_fill', 'frame_stroke', 'frame_stroke_2']);
+  assert.throws(() => shapeFromPointsOps(resolveDoc(doc), 'ink', nodes, { fill: null, stroke: null }), /needs a fill or a stroke/);
+});
