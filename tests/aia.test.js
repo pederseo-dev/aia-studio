@@ -219,3 +219,18 @@ test('aia fill fills the gap the lines close, under them, and recolors it the se
   assert.match((await aia.run('fill face ink --at 300,300')).text, /no lines of ink close a gap/);
   assert.match((await aia.run('fill face ink')).text, /--at x,y/);
 });
+
+test('aia crossings welds lines that cross, and aia shape makes a shape from the points around it', async () => {
+  await ok('new "Face" --width 400 --height 300');
+  await ok('ellipse face ink a --box 0,0,100,100 --fill none');
+  await ok('ellipse face ink b --box 60,0,100,100 --fill none');
+  assert.match(await ok('crossings face ink'), /1\. a × b at 80/);
+  assert.match(await ok('crossings face ink --weld all'), /Welded 2 crossings/);
+  assert.match(await ok('crossings face ink'), /cross nowhere/);
+  // The lens in the middle: the points of a and b around it.
+  const doc = (await store.get('face', 'ai')).document;
+  const named = doc.objects.flatMap((o) => (/** @type {any[]} */ (o.vertices ?? [])).filter((v) => v.name).map((v) => `${o.id}.${v.name}`));
+  assert.equal(named.length, 2, 'b got a named point at each crossing');
+  assert.match(await ok(`shape face ink ${named.join(' ')} a.2 b.4`), /Made fill_1/);
+  assert.match((await aia.run('shape face ink a.0')).text, /do not close a shape/);
+});

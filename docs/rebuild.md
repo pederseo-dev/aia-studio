@@ -577,3 +577,17 @@ has points of its own). Clicking inside a line picks the fill under it (a line i
 also why lines seemed not to be pickable. Shapes inside a gap that cross each other or its lines without a weld made
 holes that cancelled out (even-odd); the gap search now says to weld them where they cross instead of filling.
 `aia fill` names the lines of the holes too.
+
+**Create Shape as in Moho (2026-11-19):** after reading Moho's manual (Create Shape picks the points around a shape;
+a checkerboard shows when they close it; Space makes it; holes by picking their points too; a shape turns from one
+line onto another only at a point), the tool picks **points**: a click on a point (Shift: adds or takes it out), a
+box (Shift: adds), or a click inside a gap (the points around it and its holes). `shapeOf(doc, layer, nodes)` in
+`src/core/fill.js` takes the stretches between picked points (dead ends left out); the outside of the biggest group is
+the outline and the outsides of the others inside it are holes; when nothing closes, it gives the picked stretches
+to show. The checkerboard shows the shape, Create shape (Enter; Space pans the view) makes it. Lines that cross
+without a point: `crossingsOf` finds the places (on the sampled curves) and the tool shows a green ring at each; a
+click on it welds the two lines there (`weldCrossingOps`: a point added on each, or the one already there, the
+second sharing the first's), so they stay welded from then on, as in Moho. `aia shape <doc> <layer> <point>...` and
+`aia crossings <doc> <layer> [--weld n | all]` do the same for the AI. With Select, lines without fill get an
+invisible band of 10 px around them to be picked by (`addLineHits` in the canvas). Code: `graphOf` now uses
+`facesOf` (shared with `shapeOf`), `gapOf` builds a gap with its holes and its `nodes`, `shapeOps` writes the part.

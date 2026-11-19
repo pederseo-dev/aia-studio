@@ -20,7 +20,7 @@ import {
   unweldPicked,
 } from './pointEdit.js';
 import { addPoint, autoWeld, drawStyle, editPoints, fillStyle, isDrawTool, penOptions, run, setDrawStyle, setFillStyle, state, toggleAddPoint, toggleAutoWeld, toggleSharpCorners } from './state.js';
-import { createMarked, markedCount } from './fillTool.js';
+import { canCreate, createPicked, pickedCount } from './fillTool.js';
 import { colorSwatch } from './colorSwatch.js';
 import { isPart } from './schema.js';
 
@@ -52,10 +52,10 @@ bar.append(style, kind, label, actions);
 /** @type {string} what the style controls were last built from */
 let styleFrom = '';
 
-/** The Create Shape tool's bar: the style of the shapes it creates, and Create shape for the marked gaps. */
+/** The Create Shape tool's bar: the style of the shapes it creates, and Create shape for the picked points. */
 function renderFillStyle() {
-  const marked = markedCount();
-  const key = JSON.stringify({ fill: true, ...fillStyle, marked });
+  const ready = canCreate();
+  const key = JSON.stringify({ fill: true, ...fillStyle, ready, picked: pickedCount() });
   if (key === styleFrom) return;
   styleFrom = key;
   style.replaceChildren();
@@ -80,7 +80,7 @@ function renderFillStyle() {
     strokeLabel,
     colorSwatch({ kind: 'stroke', value: fillStyle.stroke, opacity: fillStyle.strokeOpacity, nullable: true, title: 'The stroke of the shapes it creates (None: only the lines’ own)', onChange: (c, a) => setFillStyle({ stroke: c, ...(a === undefined ? {} : { strokeOpacity: a }) }) }),
     width,
-    button('bean', marked > 1 ? `Create ${marked} shapes` : 'Create shape', 'Create a shape in each marked gap, following the lines around it, with this fill and stroke (Enter)', () => createMarked(), { disabled: !marked, main: true }),
+    button('bean', 'Create shape', ready ? 'Create the shape the picked points close, following the lines, with this fill and stroke (Enter)' : 'Pick the points around a shape first (or click inside a gap)', () => createPicked(), { disabled: !ready, main: true }),
   );
 }
 

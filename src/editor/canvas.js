@@ -78,7 +78,10 @@ export function render() {
   });
   const content = element('g', { class: 'content' });
   content.append(...drawing.nodes.map(toElement));
-  if (GHOST_TOOLS.includes(state.tool)) addGhosts(content, doc);
+  if (GHOST_TOOLS.includes(state.tool)) {
+    addGhosts(content, doc);
+    addLineHits(content);
+  }
   overlay = /** @type {SVGGElement} */ (element('g', { class: 'overlay' }));
   artboard.append(background, content, overlay);
   svg.replaceChildren(defs, artboard);
@@ -121,6 +124,20 @@ function addGhosts(content, doc) {
       if (el) items.push(el);
     }
     group.replaceChildren(...items);
+  }
+}
+
+const LINE_HIT = 10; // screen px, how wide the band around a line without fill is where a click picks it
+
+/**
+ * Lines without fill are picked by their stroke, which is thin; an invisible wider band right after each one (so in
+ * its place among the parts) makes them easy to pick, even over a fill under them.
+ * @param {Element} content
+ */
+function addLineHits(content) {
+  for (const line of content.querySelectorAll('path[data-id][fill="none"][stroke]')) {
+    const hit = element('path', { d: line.getAttribute('d') ?? '', 'data-id': line.getAttribute('data-id') ?? '', class: 'line-hit', fill: 'none', stroke: 'transparent', 'stroke-width': screen(LINE_HIT) });
+    line.after(hit);
   }
 }
 

@@ -30,10 +30,11 @@ import {
 } from '../src/core/geometry.js';
 import { copyOps } from '../src/core/copy.js';
 import { ORDER_MOVES, orderOps } from '../src/core/order.js';
-import { fillOps, partsToMove } from '../src/core/fill.js';
+import { crossingsOf, fillOps, nodeKeys, partsToMove, shapeFromPointsOps, weldCrossingOps } from '../src/core/fill.js';
 import { addImageOps, replaceImageOps } from '../src/core/images.js';
 import { applyTransformOps, isLayer as isLayerObject, transformOf, transformProps, worldOf } from '../src/core/transform.js';
-import { movePointsOps, pointsNamed, resolveDoc } from '../src/core/points.js';
+import { movePointsOps, pointsNamed, resolveDoc, settleOps } from '../src/core/points.js';
+import { applyOps } from '../src/core/operations.js';
 import { deletePointsOps, followOps, groupOps, namePoint, unweld, weld } from '../src/core/weld.js';
 import { svgToPng } from './png.js';
 import { bundleRuntime } from './bundle.js';
@@ -518,6 +519,73 @@ export function createAia({ store, schema }) {
         const { ops, ids } = copyOps(doc, parts, move.x || move.y ? translate(move.x, move.y) : IDENTITY, to);
         await store.apply(id, ops, { origin: ORIGIN, note: `Copy ${names.join(', ')}` });
         return ok(`Made ${ids.join(', ')}.`);
+      },
+    },
+
+    shape: {
+      usage: 'aia shape <doc> <layer> <point>... [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1]',
+      summary: 'Creates a shape from the points around it, as Moho’s Create Shape (the editor’s Create Shape tool)',
+      details:
+        'Name every point around the shape (part.point, part.index or layer.group), and the points around its holes\n' +
+        'too. The stretches between two named points make the outline; points on dead ends are left out. The shape\n' +
+        'follows those lines and goes under them. Without --stroke it has no stroke. Lines that cross without a point\n' +
+        'need one there first: aia crossings. Example: aia shape face ink head.0 head.1 head.2 head.3 --fill #f0c040',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const layer = need(args, 1, 'the vector layer');
+        const doc = await resolved(id);
+        const keys = nodeKeys(doc, layer);
+        const nodes = points(doc, args.positional.slice(2)).map((p) => {
+          const key = keys.get(`${p.part}:${p.index}`);
+          if (!key) throw new AiaError(`${p.part}.${p.index} is not a point of a line of ${layer}`);
+          return key.node;
+        });
+        if (!nodes.length) throw new AiaError('Name the points around the shape');
+        let result;
+        try {
+          result = shapeFromPointsOps(doc, layer, nodes, { stroke: null, ...styleFlags(args) });
+        } catch (e) {
+          throw new AiaError(e.message);
+        }
+        await store.apply(id, result.ops, { origin: ORIGIN, note: result.note });
+        return ok(`Made ${result.id}.`);
+      },
+    },
+
+    crossings: {
+      usage: 'aia crossings <doc> <layer> [--weld n | --weld all]',
+      summary: 'Where lines of a layer cross without a point, and welds them there (a point on each, shared)',
+      details:
+        'A shape turns from one line onto another only at a point (as in Moho), so where two lines cross without one\n' +
+        'nothing can be filled on either side. Without --weld it lists the crossings, numbered; --weld n welds one,\n' +
+        '--weld all welds them all. Both lines keep their shape; from then on they are welded there.',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const layer = need(args, 1, 'the vector layer');
+        let doc = await resolved(id);
+        if (findObject(doc, layer)?.type !== 'vector') throw new AiaError(`there is no vector layer "${layer}"`);
+        const list = crossingsOf(doc, layer);
+        const which = args.flags.weld;
+        if (which === undefined) {
+          if (!list.length) return ok(`The lines of ${layer} cross nowhere without a point.`);
+          return ok(list.map((c, i) => `${i + 1}. ${c.a.part} × ${c.b.part} at ${round(c.x)}, ${round(c.y)}`).join('\n'));
+        }
+        const count = which === 'all' ? list.length : 1;
+        if (which !== 'all' && !(Number(which) >= 1 && Number(which) <= list.length)) throw new AiaError(`--weld is a number from 1 to ${list.length}, or all`);
+        /** @type {Operation[]} */
+        const ops = [];
+        // One at a time on a copy, since each weld adds points (the next crossings move to other stretches).
+        let stored = (await store.get(id, ORIGIN)).document;
+        for (let k = 0; k < count; k++) {
+          const crossing = which === 'all' ? crossingsOf(doc, layer)[0] : list[Number(which) - 1];
+          if (!crossing) break;
+          const step = settleOps(stored, weldCrossingOps(doc, crossing).ops, (d, o) => applyOps(schema, d, o, { checkPoints: false }).document);
+          stored = applyOps(schema, stored, step).document;
+          doc = resolveDoc(stored);
+          ops.push(...step);
+        }
+        await store.apply(id, ops, { origin: ORIGIN, note: `Weld ${count === 1 ? 'a crossing' : `${count} crossings`} of ${layer}` });
+        return ok(`Welded ${count === 1 ? 'the crossing' : `${count} crossings`}; the shapes on each side can be made now.`);
       },
     },
 

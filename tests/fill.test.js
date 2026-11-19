@@ -6,7 +6,7 @@ import { applyOps } from '../src/core/operations.js';
 import { pointsError, resolveDoc, settleOps } from '../src/core/points.js';
 import { drawDocument } from '../src/core/draw.js';
 import { copyOps } from '../src/core/copy.js';
-import { fillOps, gapAt, insidePolygon, partsToMove, styleProps } from '../src/core/fill.js';
+import { crossingsOf, fillOps, gapAt, insidePolygon, nodeKeys, partsToMove, shapeFromPointsOps, shapeOf, styleProps, weldCrossingOps } from '../src/core/fill.js';
 import { ellipsePoints, outlineOf, round2, transformPart, translate } from '../src/core/geometry.js';
 
 const schema = loadSchema();
@@ -155,4 +155,45 @@ test('shapes inside a gap that cross each other or its lines without a weld leav
   assert.match(String(/** @type {any} */ (gapAt(resolveDoc(doc), 'ink', { x: 150, y: 20 })).error), /cross without a weld.*weld them where they cross/);
   const apart = layer(circle('big', 0, 0, 300), circle('a', 40, 100, 80), circle('b', 180, 100, 80));
   assert.equal(/** @type {any} */ (gapAt(resolveDoc(apart), 'ink', { x: 150, y: 20 })).holes.length, 2);
+});
+
+test('picked points make a shape as in Moho: all around it, with the holes picked too; dead ends are left out', () => {
+  const circle = (id, size) => ({ id, vertices: ellipsePoints({ x: 100 - size / 2, y: 100 - size / 2, width: size, height: size }, 4) });
+  const doc = resolveDoc(layer(circle('outer', 200), circle('inner', 100), { id: 'hair', closed: false, fill: null, vertices: [{ x: 0, y: 0 }, { x: 5, y: 5 }] }));
+  const keys = nodeKeys(doc, 'ink');
+  const nodesOf = (...parts) => [...keys].filter(([k]) => parts.includes(k.split(':')[0])).map(([, v]) => v.node);
+  const ring = shapeOf(doc, 'ink', nodesOf('outer', 'inner', 'hair'));
+  assert.ok(!('error' in ring) && ring.holes.length === 1, 'the outer circle with the inner one as a hole; the open line is left out');
+  const disc = shapeOf(doc, 'ink', nodesOf('outer'));
+  assert.ok(!('error' in disc) && disc.holes.length === 0);
+  const some = shapeOf(doc, 'ink', nodesOf('outer').slice(0, 3));
+  assert.ok('error' in some && /do not close a shape/.test(some.error));
+  assert.equal(/** @type {any} */ (some).shown.length, 2, 'the picked stretches, to show them');
+  const { ops } = shapeFromPointsOps(doc, 'ink', nodesOf('outer', 'inner'), { fill: '#ff0000' });
+  const after = apply(layer(circle('outer', 200), circle('inner', 100), { id: 'hair', closed: false, fill: null, vertices: [{ x: 0, y: 0 }, { x: 5, y: 5 }] }), ops);
+  assert.equal(pointsError(after), null);
+  assert.equal(find(after, 'fill_1').holes.length, 1);
+  // Clicking in a gap gives its points.
+  const gap = gapAt(doc, 'ink', { x: 100, y: 20 });
+  assert.ok(!('error' in gap));
+  assert.deepEqual(new Set(gap.nodes), new Set(nodesOf('outer', 'inner')));
+});
+
+test('lines that cross without a point are found, and welding a crossing opens the gaps on both sides', () => {
+  const circle = (id, x) => ({ id, vertices: ellipsePoints({ x, y: 0, width: 100, height: 100 }, 4) });
+  let doc = layer(circle('a', 0), circle('b', 60));
+  const crossings = crossingsOf(resolveDoc(doc), 'ink');
+  assert.equal(crossings.length, 2);
+  for (const c of crossings) assert.ok(Math.abs(c.x - 80) < 1, `a crossing near x 80: ${c.x}`);
+  assert.match(String(/** @type {any} */ (gapAt(resolveDoc(doc), 'ink', { x: 80, y: 50 })).error ?? ''), /^$|cross/);
+  for (let i = 0; i < 2; i++) {
+    const [first] = crossingsOf(resolveDoc(doc), 'ink');
+    doc = applyOps(schema, doc, settleOps(doc, weldCrossingOps(resolveDoc(doc), first).ops, loose)).document;
+    assert.equal(pointsError(doc), null);
+  }
+  assert.equal(crossingsOf(resolveDoc(doc), 'ink').length, 0, 'both welded');
+  const lens = fill(doc, { x: 80, y: 50 });
+  assert.ok(fillHolds(lens.after, lens.id, { x: 80, y: 50 }) && !fillHolds(lens.after, lens.id, { x: 20, y: 50 }) && !fillHolds(lens.after, lens.id, { x: 140, y: 50 }));
+  const moon = fill(lens.after, { x: 20, y: 50 });
+  assert.ok(fillHolds(moon.after, moon.id, { x: 20, y: 50 }) && !fillHolds(moon.after, moon.id, { x: 80, y: 50 }));
 });

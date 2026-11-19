@@ -11,7 +11,8 @@
 // line to the next one (unnamed points of the lines get a name in the same batch).
 
 import { childrenOf, findObject, idFromName } from './document.js';
-import { holeOutlinesOf, holesOf, outlineOf, verticesOf } from './geometry.js';
+import { holeOutlinesOf, holesOf, insertVertex, outlineOf, verticesOf } from './geometry.js';
+import { weld } from './weld.js';
 import { nextPointName, pointIdOf } from './points.js';
 
 /**
@@ -24,8 +25,8 @@ import { nextPointName, pointIdOf } from './points.js';
  *   one way along the stretch of `part` from vertex `from` to vertex `to` (forward: in the order of its vertices),
  *   between the nodes `a` and `b`
  * @typedef {{ part: string, from: number, to: number, a: string, b: string, forward: boolean }} Stretch
- * @typedef {{ stretches: Stretch[], polygon: Point[], area: number, holes: Stretch[][], holePolygons: Point[][] }} Gap
- *   area: inside its outline (its holes not taken away)
+ * @typedef {{ stretches: Stretch[], polygon: Point[], area: number, holes: Stretch[][], holePolygons: Point[][], nodes: string[] }} Gap
+ *   area: inside its outline (its holes not taken away); nodes: the points around it and its holes
  * @typedef {{ fill?: string | null, stroke?: string | null, strokeWidth?: number, fillOpacity?: number, strokeOpacity?: number }} FillStyle
  */
 
@@ -122,6 +123,7 @@ const graphs = new WeakMap();
 /**
  * The half-edges of a layer's lines and the faces they make (each a cycle of half-edge indices).
  * @param {Doc} doc resolved @param {string} layer
+ * @returns {Graph}
  */
 function graphOf(doc, layer) {
   let byLayer = graphs.get(doc);
@@ -130,8 +132,7 @@ function graphOf(doc, layer) {
   if (known) return known;
   /** @type {HalfEdge[]} */
   const edges = [];
-  for (const part of childrenOf(doc, layer)) {
-    if (part.type !== 'path' || part.visible === false || followsOthers(part)) continue;
+  for (const part of linesOf(doc, layer)) {
     const vertices = verticesOf(part);
     const n = vertices.length;
     const count = part.closed !== false && n > 2 ? n : n - 1;
@@ -146,6 +147,21 @@ function graphOf(doc, layer) {
       edges.push({ part: part.id, from: j, to: i, forward: false, a: b, b: a, points: [...points].reverse(), twin: k });
     }
   }
+  const graph = { edges, ...facesOf(edges) };
+  byLayer.set(layer, graph);
+  return graph;
+}
+
+/** The lines of a layer: its shown parts that do not follow others. @param {Doc} doc @param {string} layer */
+const linesOf = (doc, layer) => childrenOf(doc, layer).filter((part) => part.type === 'path' && part.visible !== false && !followsOthers(part));
+
+/**
+ * The faces some half-edges make (each half-edge's twin must be among them), without spurs, and the outside of each
+ * group of joined lines.
+ * @param {HalfEdge[]} edges
+ * @returns {{ faces: Face[], outer: Map<number, Face> }}
+ */
+function facesOf(edges) {
   // Around each node, the half-edges leaving it by angle; a face goes on, at the end of each half-edge, along the
   // one that leaves that node next clockwise from where it came in (so each face is walked with itself on one side).
   /** @type {Map<string, number[]>} */
@@ -198,9 +214,7 @@ function graphOf(doc, layer) {
     faces.push(f);
     if (!outer.has(component) || /** @type {Face} */ (outer.get(component)).area < area) outer.set(component, f);
   }
-  const graph = { edges, faces, outer };
-  byLayer.set(layer, graph);
-  return graph;
+  return { faces, outer };
 }
 
 /** A face without the spurs it walks out and back along (an open end inside a gap). @param {number[]} face @param {HalfEdge[]} edges */
@@ -271,21 +285,68 @@ export function gapAt(doc, layer, at) {
     if (!best || f.area < best.area) best = f;
   }
   if (!best) return { error: `no lines of ${layer} close a gap around ${round(at.x)}, ${round(at.y)} (lines that cross must be welded where they meet)` };
-  // The holes: the outsides of the other groups of lines that lie inside it, but not inside one another (a shape
-  // inside a hole is in another gap).
-  const found = /** @type {Face} */ (best);
+  return gapOf(best, outer, edges, `${layer} around ${round(at.x)}, ${round(at.y)}`);
+}
+
+/**
+ * A gap from the face that is its outline: the outsides of the other groups of lines that lie inside it, but not
+ * inside one another (a shape inside a hole is in another gap), are its holes.
+ * @param {Face} found @param {Map<number, Face>} outer @param {HalfEdge[]} edges @param {string} where for the error
+ * @returns {Gap | { error: string }}
+ */
+function gapOf(found, outer, edges, where) {
   const inside = [...outer.values()].filter((o) => o.component !== found.component && o.area < found.area && o.polygon.some((p) => insidePolygon(found.polygon, p)));
   const holes = inside.filter((o) => !inside.some((other) => other !== o && other.area > o.area && o.polygon.every((p) => insidePolygon(other.polygon, p))));
   // Lines that cross without a weld leave no clean gap: say so instead of filling something odd.
   const crossing = holes.find((o, i) => crosses(o.polygon, found.polygon) || holes.some((other, j) => j > i && crosses(o.polygon, other.polygon)));
-  if (crossing) return { error: `lines of ${layer} cross without a weld around ${round(at.x)}, ${round(at.y)}: weld them where they cross (${partsOf(crossing.face, edges)})` };
+  if (crossing) return { error: `lines of ${where} cross without a weld: weld them where they cross (${partsOf(crossing.face, edges)})` };
   return {
     stretches: stretchesOf(found.face, edges),
     polygon: found.polygon,
     area: found.area,
     holes: holes.map((o) => stretchesOf(o.face, edges)),
     holePolygons: holes.map((o) => o.polygon),
+    nodes: [...new Set([found, ...holes].flatMap((f) => f.face.map((h) => edges[h].a)))],
   };
+}
+
+/**
+ * The shape some points of a layer's lines make, as Moho's Create Shape sees it: the stretches between two picked
+ * points (dead ends left out); the outside of the biggest group they make is the outline, and the outsides of the
+ * other groups inside it are holes. When they close nothing, the error says so, and `shown` has the picked
+ * stretches as points, to show them.
+ * @param {Doc} doc resolved @param {string} layer @param {Iterable<string>} nodes points as nodeKeys gives them
+ * @returns {Gap | { error: string, shown: Point[][] }}
+ */
+export function shapeOf(doc, layer, nodes) {
+  const picked = new Set(nodes);
+  const { edges } = graphOf(doc, layer);
+  /** @type {Map<number, number>} */
+  const index = new Map();
+  /** @type {HalfEdge[]} */
+  const chosen = [];
+  edges.forEach((h, k) => {
+    if (!picked.has(h.a) || !picked.has(h.b)) return;
+    index.set(k, chosen.length);
+    chosen.push(h);
+  });
+  const sub = chosen.map((h) => ({ ...h, twin: /** @type {number} */ (index.get(h.twin)) }));
+  const { outer } = facesOf(sub);
+  const outline = [...outer.values()].sort((x, y) => y.area - x.area)[0];
+  const shown = sub.filter((h) => h.forward).map((h) => h.points);
+  if (!outline) return { error: picked.size ? 'the picked points do not close a shape: pick every point around it' : 'pick the points around a shape', shown };
+  const gap = gapOf(outline, outer, sub, layer);
+  return 'error' in gap ? { ...gap, shown } : gap;
+}
+
+/** The node of every vertex of a layer's lines, by "part:index" (what the editor picks). @param {Doc} doc @param {string} layer */
+export function nodeKeys(doc, layer) {
+  /** @type {Map<string, { node: string, at: Point }>} */
+  const keys = new Map();
+  for (const part of linesOf(doc, layer)) {
+    verticesOf(part).forEach((v, i) => keys.set(`${part.id}:${i}`, { node: nodeOf(part, v, i), at: { x: v.x, y: v.y } }));
+  }
+  return keys;
 }
 
 /** @param {number} n */
@@ -369,6 +430,27 @@ export function fillOps(doc, layer, at, props, fresh = {}) {
     const ops = Object.keys(props).length ? [{ op: 'set', target: existing.id, props }] : [];
     return { ops, id: existing.id, made: false, note: `Recolor ${existing.id}` };
   }
+  return { ...shapeOps(doc, layer, gap, { ...fresh, ...props }), made: true };
+}
+
+/**
+ * The batch that creates a shape from some picked points of a layer's lines (Moho's Create Shape).
+ * @param {Doc} doc resolved @param {string} layer @param {Iterable<string>} nodes @param {Record<string, unknown>} props
+ * @returns {{ ops: Operation[], id: string, note: string }}
+ */
+export function shapeFromPointsOps(doc, layer, nodes, props) {
+  const shape = shapeOf(doc, layer, nodes);
+  if ('error' in shape) throw new Error(shape.error);
+  return shapeOps(doc, layer, shape, props);
+}
+
+/**
+ * The batch that creates a fill part for a gap: one vertex per stretch, sharing the point it starts at and following
+ * its line; just under the lowest line it follows.
+ * @param {Doc} doc resolved @param {string} layer @param {Gap} gap @param {Record<string, unknown>} props
+ * @returns {{ ops: Operation[], id: string, note: string }}
+ */
+function shapeOps(doc, layer, gap, props) {
   // Unnamed points where a stretch starts get a name, so the fill can share them.
   /** @type {Map<string, Vertex[]>} */
   const renamed = new Map();
@@ -399,8 +481,8 @@ export function fillOps(doc, layer, at, props, fresh = {}) {
   const id = idFromName('fill_1', (x) => x === 'meta' || !!findObject(doc, x));
   /** @type {Operation[]} */
   const ops = [...renamed].map(([target, list]) => ({ op: 'set', target, props: { vertices: list.map(storedOnly) } }));
-  ops.push({ op: 'create', type: 'path', id, parent: layer, index, props: { vertices, ...(holes.length ? { holes } : {}), ...fresh, ...props } });
-  return { ops, id, made: true, note: `Fill a gap of ${layer}` };
+  ops.push({ op: 'create', type: 'path', id, parent: layer, index, props: { vertices, ...(holes.length ? { holes } : {}), ...props } });
+  return { ops, id, note: `Create shape ${id}` };
 }
 
 /** A vertex as it is saved: a shared one without the x, y resolving gave it. @param {Vertex} v */
@@ -422,4 +504,109 @@ function longWay(part, s) {
   const behind = (s.from - s.to + n) % n;
   const short = ahead <= behind;
   return s.forward !== short;
+}
+
+/**
+ * @typedef {{ x: number, y: number, a: { part: string, segment: number, t: number }, b: { part: string, segment: number, t: number } }} Crossing
+ *   where two lines cross without a shared point: the stretch of each and how far along it (0 to 1)
+ */
+
+/** @type {WeakMap<Doc, Map<string, Crossing[]>>} */
+const crossingCache = new WeakMap();
+
+/**
+ * Where the lines of a layer cross each other without a shared point (Moho needs a point there too, to turn from one
+ * line onto the other). Found on the sampled curves, so a place is within a fraction of a unit.
+ * @param {Doc} doc resolved @param {string} layer
+ * @returns {Crossing[]}
+ */
+export function crossingsOf(doc, layer) {
+  let byLayer = crossingCache.get(doc);
+  if (!byLayer) crossingCache.set(doc, (byLayer = new Map()));
+  const known = byLayer.get(layer);
+  if (known) return known;
+  const stretches = graphOf(doc, layer).edges.filter((h) => h.forward).map((h) => ({ h, box: boxOf(h.points) }));
+  /** @type {Crossing[]} */
+  const found = [];
+  for (let i = 0; i < stretches.length; i++) {
+    for (let j = i + 1; j < stretches.length; j++) {
+      const { h: p, box: pb } = stretches[i];
+      const { h: q, box: qb } = stretches[j];
+      if (p.part === q.part || pb.x1 < qb.x0 || qb.x1 < pb.x0 || pb.y1 < qb.y0 || qb.y1 < pb.y0) continue;
+      const shared = [p.a, p.b].filter((n) => n === q.a || n === q.b);
+      for (let k = 0; k + 1 < p.points.length; k++) {
+        for (let m = 0; m + 1 < q.points.length; m++) {
+          const hit = meet(p.points[k], p.points[k + 1], q.points[m], q.points[m + 1]);
+          if (!hit) continue;
+          const tp = (k + hit.u) / (p.points.length - 1);
+          const tq = (m + hit.v) / (q.points.length - 1);
+          // Next to a point the two lines already share is not a crossing.
+          const ends = [tp < 0.02 && p.a, tp > 0.98 && p.b].filter(Boolean);
+          if (ends.some((n) => shared.includes(/** @type {string} */ (n)))) continue;
+          found.push({ x: hit.x, y: hit.y, a: { part: p.part, segment: p.from, t: tp }, b: { part: q.part, segment: q.from, t: tq } });
+        }
+      }
+    }
+  }
+  byLayer.set(layer, found);
+  return found;
+}
+
+/** @param {Point[]} points */
+function boxOf(points) {
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+}
+
+/** Where two segments cross, and how far along each (0 to 1), or null. @param {Point} a @param {Point} b @param {Point} c @param {Point} d */
+function meet(a, b, c, d) {
+  if (!segmentsCross(a, b, c, d)) return null;
+  const rx = b.x - a.x;
+  const ry = b.y - a.y;
+  const sx = d.x - c.x;
+  const sy = d.y - c.y;
+  const den = rx * sy - ry * sx;
+  if (Math.abs(den) < TINY) return null;
+  const u = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den;
+  const v = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
+  return { x: a.x + u * rx, y: a.y + u * ry, u, v };
+}
+
+const AT_END = 0.02; // how near the end of a stretch (0 to 1) a crossing is at that end's point
+
+/**
+ * The batch that welds two lines where they cross: a point on each (added, unless the crossing is at a point the
+ * line already has), the second sharing the first's, as Moho's Add Point with auto weld on a crossing. Both lines
+ * keep their shape.
+ * @param {Doc} doc resolved @param {Crossing} crossing
+ * @returns {{ ops: Operation[], note: string, added: { part: string, index: number }[] }} added: where points were
+ *   added (the points after them moved up one place)
+ */
+export function weldCrossingOps(doc, crossing) {
+  /** @param {{ part: string, segment: number, t: number }} on @returns {number | null} the point it is at, if any */
+  const pointAt = (on) => {
+    const n = verticesOf(/** @type {DocObject} */ (findObject(doc, on.part))).length;
+    return on.t < AT_END ? on.segment : on.t > 1 - AT_END ? (on.segment + 1) % n : null;
+  };
+  const a = /** @type {DocObject} */ (findObject(doc, crossing.a.part));
+  /** @type {{ part: string, index: number }[]} */
+  const added = [];
+  /** @type {Operation[]} */
+  const ops = [];
+  let index = pointAt(crossing.a);
+  let withPoint = doc;
+  if (index === null) {
+    const inserted = insertVertex(a, crossing.a.segment, crossing.a.t);
+    index = inserted.index;
+    added.push({ part: a.id, index });
+    ops.push({ op: 'set', target: a.id, props: { vertices: inserted.vertices } });
+    withPoint = { ...doc, objects: doc.objects.map((o) => (o.id === a.id ? { ...a, vertices: inserted.vertices } : o)) };
+  }
+  // a's point goes onto b's line there (b gets a point, or uses the one it has) and shares it.
+  const onB = pointAt(crossing.b);
+  if (onB === null) added.push({ part: crossing.b.part, index: crossing.b.segment + 1 });
+  const target = onB === null ? { part: crossing.b.part, segment: crossing.b.segment, t: crossing.b.t } : { part: crossing.b.part, index: onB };
+  const welded = weld(withPoint, { part: a.id, index }, target);
+  return { ops: [...ops, ...welded.ops], note: `Weld ${a.id} and ${crossing.b.part} where they cross`, added };
 }

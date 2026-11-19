@@ -127,6 +127,8 @@ fill can turn from one line onto the next at their junction. On a closed jaw it 
 takes the other. A part that follows others is never followed: fills follow lines, not other fills.
 Usually you do not write these by hand: aia fill face ink --at 120,80 --fill #f0c040 fills the gap the lines of a
 layer close around that place, with a part that follows them, under them (weld lines where they meet first).
+As Moho's Create Shape, aia shape face ink head.0 head.1 mouth.0 … makes one from the points around it (and around
+its holes). Where lines cross without a point, aia crossings face ink lists the places and --weld all welds them.
   aia follow face skin.0 skin.1       (--long: the other way; --off: stop following)
 
 Moving points by name, without sending the vertices again (the vertices that share them follow):
