@@ -178,7 +178,7 @@ export function renderOptions() {
   );
 }
 
-/** The Follow button: the stretch between two picked shared points follows the curve of the part they share. */
+/** The Follow button: the stretch between two picked welded points follows the curve of a part through both. */
 function followButton() {
   const follows = pickedFollows();
   const b = button(
@@ -186,7 +186,7 @@ function followButton() {
     follows ? 'Unfollow' : 'Follow',
     follows
       ? 'The stretch between the picked points stops following the other part (Alt+click: follow it the other way round)'
-      : 'The stretch between the two picked points follows the curve of the part they share points with (Alt+click: the long way round)',
+      : 'The stretch between the two picked points follows the curve of the line welded to both (Alt+click: the long way round)',
     () => {},
     { disabled: !canFollow() },
   );

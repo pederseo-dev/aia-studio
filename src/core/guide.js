@@ -121,8 +121,10 @@ The commands do this by name, without writing vertices (points are part.point or
 Following a curve: a stretch of an outline can go along another part's outline instead of having its own curve,
 so a fill and a line drawn over the same points stay together when the line is curved:
   "vertices": [{ "ref": "jaw.ear_l", "follow": "jaw" }, { "ref": "jaw.ear_r" }, { "x": 50, "y": 200 }]
-From ear_l to ear_r this outline goes along jaw (its points and curves in between). Both ends of the stretch share
-points of jaw. On a closed jaw it takes the short way; "way": "long" takes the other.
+From ear_l to ear_r this outline goes along jaw (its points and curves in between). Both ends of the stretch are
+points jaw passes through: its own, or points of another part that jaw shares too (where two lines were welded), so a
+fill can turn from one line onto the next at their junction. On a closed jaw it takes the short way; "way": "long"
+takes the other. A part that follows others is never followed: fills follow lines, not other fills.
   aia follow face skin.0 skin.1       (--long: the other way; --off: stop following)
 
 Moving points by name, without sending the vertices again (the vertices that share them follow):

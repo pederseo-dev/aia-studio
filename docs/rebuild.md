@@ -523,6 +523,15 @@ their own. In the editor, Page Up / Page Down (Shift: to the top or bottom) and 
 Lower, Raise, Top, next to Flip) work on the selected parts or layers; locked ones are refused. `aia order <doc>
 <id>... --up | --down | --top | --bottom` answers with the new order, and `aia guide start` names it.
 
+**Step 2, follow from shared points (2026-11-19):** a followed stretch's ends are points the followed part *passes
+through*: `pointIdOf` and `passIndex` (`src/core/points.js`) say which point a vertex is (the one it shares, or its own
+named one) and where a part owns or shares it, and `followStretch` walks the followed part between those indices. So
+a fill goes on along a second line from the junction where the Pen welded it to the first (the second line only
+shares that point). Following a part that follows others is refused. `stretchBetween` (`src/core/weld.js`) picks the
+line to follow among the parts through both points that do not follow others: the one followed now, then the owner
+of the first point, then any other, and says why when there is none. `aia follow` and the editor's Follow got it with
+no change of their own (their help says so); the guide's points topic explains it.
+
 Left for later: a stroke width per point (Moho's Line Width: SVG has no variable-width stroke, so the core and the
 runtime would have to build its outline), gaps with holes (a ring: one part has one outline), a point added by
 itself where two lines cross without a weld, several marked gaps joined into one part, Create shape from picked

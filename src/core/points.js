@@ -7,7 +7,9 @@
 // - A vector layer may have point groups: groups: { upper_lid: ['lid.top', 'brow.mid'] }, named points of its parts.
 // - A stretch of an outline may follow another part's curve: { ref: 'jaw.ear_l', follow: 'jaw' }, { ref: 'jaw.chin' }
 //   draws from ear_l to chin along jaw's own outline (its points and curves in between), so it changes when jaw
-//   does. Both ends share points of jaw; on a closed jaw it goes the short way, or the other with way: 'long'.
+//   does. Both ends are points jaw passes through: points jaw owns, or points of a third part that jaw shares too
+//   (a junction where two lines were welded). On a closed jaw it goes the short way, or the other with way: 'long'.
+//   The followed part must not follow others itself (a fill follows lines, not other fills).
 //
 // The stored document keeps references as they are; resolveDoc fills in where each shared vertex is, for drawing and
 // for the editor. settleOps turns a batch written against the resolved document (shared vertices with x, y) into one
@@ -76,6 +78,18 @@ export function resolveDoc(doc) {
   return placed;
 }
 
+/**
+ * The point a vertex is, as "part.point": the point it shares, or its own when it has a name; null otherwise.
+ * @param {DocObject} part @param {Vertex} v
+ */
+export const pointIdOf = (part, v) => (v.ref ? String(v.ref) : v.name ? `${part.id}.${v.name}` : null);
+
+/**
+ * Where a part passes through a point ("part.point"): the index of its vertex that owns it or shares it, or -1.
+ * @param {DocObject} part @param {string} id
+ */
+export const passIndex = (part, id) => verticesOf(part).findIndex((v) => pointIdOf(part, v) === id);
+
 /** @param {Vertex} v @returns {Vertex} the vertex with its handles swapped (walked the other way) */
 const flipped = (v) => ({ x: v.x, y: v.y, ...(v.out ? { in: v.out } : {}), ...(v.in ? { out: v.in } : {}) });
 
@@ -95,13 +109,16 @@ export function followStretch(doc, part, i) {
   if (!other || other.type !== 'path') return { error: `${where}, but there is no such part` };
   if (other.id === part.id) return { error: `${where}: a part cannot follow itself` };
   if (other.parent !== part.parent) return { error: `${where}, which is in another layer` };
+  if (verticesOf(other).some((w) => w.follow)) return { error: `${where}, which follows other parts itself: follow lines, not parts that follow` };
   const next = vertices[nextIndex];
-  const a = v.ref ? pointOf(doc, v.ref) : null;
-  const b = next.ref ? pointOf(doc, next.ref) : null;
-  if (!a || !b || a.part.id !== other.id || b.part.id !== other.id) {
-    return { error: `${where}: this point and the next one must both share points of ${other.id} (ref "${other.id}.…")` };
+  const idA = pointIdOf(part, v);
+  const idB = pointIdOf(part, next);
+  const a = { index: idA ? passIndex(other, idA) : -1 };
+  const b = { index: idB ? passIndex(other, idB) : -1 };
+  if (a.index < 0 || b.index < 0) {
+    return { error: `${where}: this point and the next one must both be points ${other.id} passes through (weld them to it first)` };
   }
-  if (a.index === b.index) return { error: `${where}: this point and the next one share the same point of ${other.id}` };
+  if (a.index === b.index) return { error: `${where}: this point and the next one are the same point of ${other.id}` };
   const path = verticesOf(other);
   const n = path.length;
   const otherClosed = other.closed !== false;

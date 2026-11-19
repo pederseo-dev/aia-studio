@@ -8,7 +8,7 @@
 
 import { findObject, idFromName } from './document.js';
 import { closeOutline, endOf, insertVertex, joinOutlines, roundVertex, verticesOf } from './geometry.js';
-import { nextPointName, pointOf, splitRef } from './points.js';
+import { nextPointName, passIndex, pointIdOf, pointOf, splitRef } from './points.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc
@@ -268,10 +268,28 @@ export function stretchBetween(doc, a, b) {
   const before = (x, y) => (x.index + 1 < n ? x.index + 1 === y.index : closed && y.index === 0);
   const [from, fromVertex, toVertex] = before(a, b) ? [a, first.vertex, second.vertex] : before(b, a) ? [b, second.vertex, first.vertex] : [null, null, null];
   if (!from || !fromVertex || !toVertex) throw new WeldError('the two points must be next to each other in their part');
-  if (!fromVertex.ref || !toVertex.ref) throw new WeldError('both points must share points of the part to follow (weld them first)');
-  const other = splitRef(fromVertex.ref)[0];
-  if (splitRef(toVertex.ref)[0] !== other) throw new WeldError(`the two points share points of different parts (${fromVertex.ref}, ${toVertex.ref})`);
-  return { part: first.part, index: from.index, other, follows: fromVertex.follow === other, long: fromVertex.way === 'long' };
+  const part = first.part;
+  const ids = [pointIdOf(part, fromVertex), pointIdOf(part, toVertex)];
+  const [idA, idB] = [pointIdOf(part, fromVertex), pointIdOf(part, toVertex)];
+  if (!idA || !idB) throw new WeldError('both points must be welded to the part to follow (weld them first)');
+  // The parts that pass through both points (own them or share them): of those that do not follow others, the one
+  // followed now first, then the owner of the first point, then any other.
+  const through = doc.objects.filter(
+    (o) => o.type === 'path' && o.id !== part.id && o.parent === part.parent && passIndex(o, idA) >= 0 && passIndex(o, idB) >= 0,
+  );
+  const lines = through.filter((o) => !verticesOf(o).some((v) => v.follow));
+  const owner = fromVertex.ref ? splitRef(fromVertex.ref)[0] : null;
+  const rank = (/** @type {DocObject} */ o) => (o.id === fromVertex.follow ? 0 : o.id === owner ? 1 : 2);
+  const other = lines.sort((x, y) => rank(x) - rank(y))[0]?.id ?? (fromVertex.follow ? String(fromVertex.follow) : null);
+  if (!other) {
+    const follower = through.length > 0;
+    throw new WeldError(
+      follower
+        ? 'the only part through both points follows other parts itself: follow lines, not parts that follow'
+        : 'no other part passes through both points (weld them to the same line first)',
+    );
+  }
+  return { part, index: from.index, other, follows: fromVertex.follow === other, long: fromVertex.way === 'long' };
 }
 
 /**

@@ -114,7 +114,7 @@ test('a followed stretch draws along the other part, and changes with it', () =>
 
 test('a followed stretch needs both ends on the part it follows, and renaming keeps it', () => {
   const doc = followed();
-  assert.throws(() => apply(doc, [{ op: 'set', target: 'skin', props: { vertices: [{ ref: 'jaw.ear_l', follow: 'jaw' }, { x: 9, y: 9 }, { x: 50, y: 200 }] } }]), /must both share points of jaw/);
+  assert.throws(() => apply(doc, [{ op: 'set', target: 'skin', props: { vertices: [{ ref: 'jaw.ear_l', follow: 'jaw' }, { x: 9, y: 9 }, { x: 50, y: 200 }] } }]), /must both be points jaw passes through/);
   assert.throws(() => apply(doc, [{ op: 'set', target: 'skin', props: { vertices: [{ ref: 'jaw.ear_l', follow: 'nose' }, { ref: 'jaw.ear_r' }] } }]), /no such part/);
   assert.throws(() => apply(doc, [{ op: 'set', target: 'skin', props: { vertices: [{ x: 0, y: 0, way: 'long' }, { x: 1, y: 1 }] } }]), /"way" can only be "long", next to "follow"/);
   const renamed = apply(doc, [{ op: 'rename', target: 'jaw', id: 'mandible' }]);

@@ -696,10 +696,11 @@ export function createAia({ store, schema }) {
 
     follow: {
       usage: 'aia follow <doc> <point> <point> [--long | --off]',
-      summary: 'The stretch between two neighbor points follows the curve of the part they share points with',
+      summary: 'The stretch between two neighbor points follows the curve of another part that passes through both',
       details:
-        'Both points are in one part, next to each other, and share points of another part (weld them first). The\n' +
-        'stretch then goes along that part’s outline: the short way, or --long the other. --off stops it.',
+        'Both points are in one part, next to each other, and welded to another part: points it owns, or points it\n' +
+        'shares too (where two lines meet). The stretch then goes along that part’s outline: the short way, or --long\n' +
+        'the other. --off stops it. A part that follows others is not followed (a fill follows lines, not fills).',
       run: async (args) => {
         const id = need(args, 0, 'the document id');
         const doc = await resolved(id);

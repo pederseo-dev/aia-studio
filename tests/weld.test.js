@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { loadSchema } from '../server/schema.js';
 import { newDocument } from '../src/core/document.js';
 import { applyOps } from '../src/core/operations.js';
+import { OUTLINE } from '../src/core/geometry.js';
 import { resolveDoc, settleOps } from '../src/core/points.js';
 import { WeldError, followOps, groupOps, namePoint, shareTargets, unweld, weld } from '../src/core/weld.js';
 
@@ -71,6 +72,40 @@ test('follow needs two neighbor points that share points of one other part', () 
   // The stretch goes from skin.0 to skin.1, whichever was named first.
   assert.deepEqual(vertices(doc, 'skin')[0], { ref: 'jaw.chin', follow: 'jaw' });
   assert.deepEqual(vertices(doc, 'skin')[1], { ref: 'jaw.jaw_1' });
+});
+
+test('a stretch goes on along another line from a junction where that line only shares the point', () => {
+  // cheek starts at jaw.chin (it shares it, as the Pen welds) and curves to a point of its own.
+  let doc = save(face(), [
+    { op: 'create', type: 'path', id: 'cheek', parent: 'head', props: { closed: false, fill: null, vertices: [
+      { ref: 'jaw.chin', out: { x: 40, y: 0 } }, { x: 150, y: 20, name: 'end', in: { x: 0, y: 30 } },
+    ] } },
+    { op: 'create', type: 'path', id: 'patch', parent: 'head', props: { vertices: [{ x: 0, y: 0 }, { ref: 'jaw.chin' }, { ref: 'cheek.end' }] } },
+  ]);
+  doc = run(doc, (d) => weld(d, { part: 'patch', index: 0 }, { part: 'jaw', index: 0 }));
+  doc = run(doc, (d) => followOps(d, { part: 'patch', index: 0 }, { part: 'patch', index: 1 }, 'short').ops);
+  // From the chin on, the line through both points is cheek (jaw does not pass through cheek.end).
+  doc = run(doc, (d) => followOps(d, { part: 'patch', index: 1 }, { part: 'patch', index: 2 }, 'short').ops);
+  assert.deepEqual(vertices(doc, 'patch').map((v) => v.follow ?? null), ['jaw', 'cheek', null]);
+  // Its outline takes cheek's curve, and bends when cheek does.
+  const outline = (d) => /** @type {any} */ (resolveDoc(d).objects.find((o) => o.id === 'patch'))[OUTLINE];
+  assert.deepEqual(outline(doc)[1].out, { x: 40, y: 0 });
+  doc = save(doc, [{ op: 'set', target: 'cheek', props: { vertices: [{ ref: 'jaw.chin', out: { x: 10, y: 40 } }, { x: 150, y: 20, name: 'end' }] } }]);
+  assert.deepEqual(outline(doc)[1].out, { x: 10, y: 40 });
+  // A part that follows others is never followed: written by hand it is refused, and Follow takes the line instead.
+  const over = [{ ref: 'jaw.chin' }, { ref: 'cheek.end' }, { x: 300, y: 300 }];
+  assert.throws(
+    () => save(doc, [{ op: 'create', type: 'path', id: 'over', parent: 'head', props: { vertices: [{ ...over[0], follow: 'patch' }, ...over.slice(1)] } }]),
+    /follows other parts itself/,
+  );
+  doc = save(doc, [{ op: 'create', type: 'path', id: 'over', parent: 'head', props: { vertices: over } }]);
+  doc = run(doc, (d) => followOps(d, { part: 'over', index: 0 }, { part: 'over', index: 1 }, 'short').ops);
+  assert.equal(vertices(doc, 'over')[0].follow, 'cheek');
+});
+
+test('follow says why when no line passes through both points', () => {
+  let doc = save(face(), [{ op: 'create', type: 'path', id: 'skin', parent: 'head', props: { vertices: [{ ref: 'jaw.chin' }, { ref: 'mouth.corner' }, { x: 0, y: 100 }] } }]);
+  assert.throws(() => followOps(resolveDoc(doc), { part: 'skin', index: 0 }, { part: 'skin', index: 1 }, 'short'), /no other part passes through both points/);
 });
 
 test('shareTargets welds several new vertices at once, on points and on lines of the same part', () => {
