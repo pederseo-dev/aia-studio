@@ -1,7 +1,8 @@
 // The Create Shape tool (F), as Moho's Create Shape (part 4 of docs/rebuild.md): it picks the points of a vector
 // layer's lines, and when the picked points close a shape it shows it with a checkerboard (holes clear); Create shape
 // in the bar (or Enter) makes it, a part that follows those lines, under them. Picking: a click on a point picks it
-// (Shift: adds or takes it out), a drag picks the points in a box (Shift: adds), and a click inside a gap picks all
+// (Shift: adds or takes it out, and dragging on from it does the same to the points passed over), a drag picks the
+// points in a box (Shift: toggles each one in it), and a click inside a gap picks all
 // the points around it and its holes (Shift: adds them, or takes them out when they are all picked). Where two
 // lines cross without a point, a ring shows; a click on it welds them there (a point on each), so the shapes on each
 // side can be made. Esc clears the picks. The shapes and crossings come from the core (core/fill.js), the same as
@@ -107,7 +108,7 @@ export function clearPicks() {
 
 /**
  * Picks points. With Shift (add) they are added, or, when they are all picked already, taken out: Shift+click again
- * in a gap (or Shift+box over the same points) unpicks them.
+ * in a gap unpicks its points.
  * @param {string[]} nodes @param {string} layer @param {boolean} add
  */
 function pick(nodes, layer, add) {
@@ -171,12 +172,25 @@ function createDown(event) {
   // A crossing next to a point: the nearer one.
   if (crossing && (!near || crossing.distance < near.distance)) return weldCrossing(crossing.crossing);
   if (near) {
-    if (event.shiftKey && pickLayer === layer) {
-      if (picks.has(near.node)) picks.delete(near.node);
-      else picks.add(near.node);
-      return notify('');
-    }
-    return pick([near.node], layer, false);
+    if (!event.shiftKey || pickLayer !== layer) return pick([near.node], layer, false);
+    // Shift on a point toggles it, and dragging on does the same to the points passed over: unpicks them if this
+    // one was picked, picks them if not.
+    const unpick = picks.has(near.node);
+    /** @param {string} node */
+    const brush = (node) => (unpick ? picks.delete(node) : picks.add(node));
+    brush(near.node);
+    notify('');
+    drag(
+      event,
+      (p) => {
+        const over = pointNear(p);
+        if (!over || picks.has(over.node) !== unpick) return;
+        brush(over.node);
+        notify('');
+      },
+      () => {},
+    );
+    return;
   }
   let moved = false;
   drag(
@@ -199,7 +213,14 @@ function createDown(event) {
           const w = fromLayer(layer, at);
           return w.x >= x0 && w.x <= x1 && w.y >= y0 && w.y <= y1;
         });
-        return pick(inside.map((k) => k.node), layer, e.shiftKey);
+        const nodes = [...new Set(inside.map((k) => k.node))];
+        if (!e.shiftKey || pickLayer !== layer) return pick(nodes, layer, false);
+        // Shift+box toggles each point in it: the picked ones are unpicked, the others picked.
+        for (const node of nodes) {
+          if (picks.has(node)) picks.delete(node);
+          else picks.add(node);
+        }
+        return notify('');
       }
       // A click inside a gap picks the points around it.
       const gap = gapAt(doc, layer, toLayer(layer, p));
