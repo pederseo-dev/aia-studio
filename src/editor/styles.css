@@ -335,6 +335,9 @@ dialog h2 { margin-bottom: 12px; }
 .inspector button.small { height: 22px; padding: 0 6px; font-size: 11px; }
 .inspector button.icon-only { width: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .inspector button.icon-only .ico { width: 16px; height: 16px; }
+/* A choice as icon buttons (stroke cap and join): the one set lit in the accent color. */
+.inspector .choice-buttons { display: inline-flex; gap: 2px; }
+.inspector .choice-buttons button[aria-pressed="true"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 .inspector .shape-select { flex: 1; min-width: 0; height: 24px; }
 .inspector .shape-select option, .inspector .shape-select optgroup { background: var(--panel); color: var(--text); }
 .inspector :is(.new-shapes, .points-section) { margin: 0 -10px 8px; padding: 6px 10px 8px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--accent) 6%, transparent); }

@@ -1,17 +1,18 @@
 // The Hide Edge tool (H), as Moho's Hide Edge (step 3 of part 4 in docs/rebuild.md): the stretch of a stroke under
 // the pointer lights up (of the topmost element or shape stroke there, in a shown and unlocked layer; with Alt, of the
 // one under it, as a shape's stroke under its line); a click hides it, without touching the fill, and a click on a
-// hidden one shows it again. Hidden stretches show as a faint dashed
-// line while the tool is on, so they can be found. The stretches and the batch come from the core (core/edges.js),
+// hidden one shows it again. As in Moho, pressing and dragging over the lines does the same to every stretch passed
+// over (hides them, or shows them when the first one was hidden), in one step when released. Hidden stretches show as
+// a faint dashed line while the tool is on, so they can be found. The stretches and the batch come from the core (core/edges.js),
 // the same as `aia edge`.
 
 import { findObject } from '../core/document.js';
 import { DEFAULTS, pathData } from '../core/draw.js';
-import { edgeOps, hiddenStretches, isHidden as isHiddenStretch, stretchNear, stretchVertices } from '../core/edges.js';
+import { edgesOps, hiddenStretches, isHidden as isHiddenStretch, stretchNear, stretchVertices } from '../core/edges.js';
 import { addPainter, onToolDown, paintOverlay } from './canvas.js';
 import { fromLayer, layerScreen, toLayer } from './pointEdit.js';
 import { isHidden, isLocked, notify, run, state } from './state.js';
-import { element, svg, toDoc } from './view.js';
+import { drag, element, screen, svg, toDoc } from './view.js';
 
 /**
  * @typedef {import('../core/document.js').Doc} Doc
@@ -23,8 +24,12 @@ import { element, svg, toDoc } from './view.js';
 
 const HIT = 6; // screen px around a stroke (besides half its width)
 
+const STEP = 3; // screen px between the places looked at along a drag (so a fast drag skips no stretch)
+
 /** @type {Stretch | null} the stretch under the pointer */
 let hover = null;
+/** @type {{ hide: boolean, stretches: Stretch[] } | null} the stretches a drag passed over, and what it does to them */
+let sweep = null;
 
 /** The parts whose stroke the tool works on, the topmost first: shown, unlocked, with a stroke. @param {Doc} doc */
 function strokedParts(doc) {
@@ -72,21 +77,52 @@ function stretchPath(part, stretch) {
 function edgeDown(event) {
   const doc = state.document;
   if (!doc) return;
-  const stretch = stretchAt(doc, toDoc(event), event.altKey);
-  if (!stretch) return;
-  const hide = !isHiddenStretch(doc, stretch);
-  try {
-    const { ops, edge } = edgeOps(doc, stretch, hide);
-    run(ops, { note: `${hide ? 'Hide' : 'Show'} the edge ${edge[0]} – ${edge[1]} of ${stretch.part}` });
-  } catch (e) {
-    notify(e.message);
-  }
+  const under = event.altKey;
+  let last = toDoc(event);
+  const first = stretchAt(doc, last, under);
+  if (!first) return;
+  // The first stretch says what the drag does: hide, or show when it was hidden.
+  const current = { hide: !isHiddenStretch(doc, first), stretches: [first] };
+  sweep = current;
+  hover = null;
+  paintOverlay();
+  /** @param {Point} p */
+  const passOver = (p) => {
+    const stretch = stretchAt(doc, p, under);
+    if (stretch && !current.stretches.some((s) => same(s, stretch))) current.stretches.push(stretch);
+  };
+  drag(
+    event,
+    (p) => {
+      // The places in between, so a quick drag skips nothing.
+      const steps = Math.max(1, Math.ceil(Math.hypot(p.x - last.x, p.y - last.y) / screen(STEP)));
+      for (let k = 1; k <= steps; k++) passOver({ x: last.x + ((p.x - last.x) * k) / steps, y: last.y + ((p.y - last.y) * k) / steps });
+      last = p;
+      paintOverlay();
+    },
+    () => {
+      sweep = null;
+      try {
+        const { ops, edges } = edgesOps(doc, current.stretches, current.hide);
+        if (!ops.length) return paintOverlay();
+        const what = edges.length === 1 ? `the edge ${edges[0][0]} – ${edges[0][1]}` : `${edges.length} edges`;
+        run(ops, { note: `${current.hide ? 'Hide' : 'Show'} ${what}` });
+      } catch (e) {
+        notify(e.message);
+      }
+    },
+  );
 }
 
 /** @param {SVGGElement} overlay @param {Doc} doc */
 function paint(overlay, doc) {
   for (const part of strokedParts(doc)) {
     for (const stretch of hiddenStretches(part)) overlay.append(element('path', { d: stretchPath(part, stretch), class: 'edge-hidden' }));
+  }
+  // The stretches a drag passed over: what they will look like (gone, or back).
+  for (const stretch of sweep?.stretches ?? []) {
+    const swept = findObject(doc, stretch.part);
+    if (swept) overlay.append(element('path', { d: stretchPath(swept, stretch), class: `edge-hover${sweep?.hide ? '' : ' hidden'}` }));
   }
   const part = hover ? findObject(doc, hover.part) : undefined;
   if (part && hover) {

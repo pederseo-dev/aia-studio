@@ -67,30 +67,61 @@ export function isHidden(doc, { part: id, hole, index }) {
 }
 
 /**
- * The batch that hides or shows a drawn stretch, naming the points at its ends that have no name.
- * @param {Doc} doc resolved @param {Stretch} stretch @param {boolean} hide
- * @returns {{ ops: Operation[], edge: [string, string], named: string[] }} named: the points that got a name
+ * The ends of a drawn stretch, as what each drawn vertex is, or why it is no stretch.
+ * @param {Doc} doc resolved @param {Stretch} stretch
  */
-export function edgeOps(doc, { part: id, hole, index }, hide) {
+function endsOf(doc, { part: id, hole, index }) {
   const part = needPart(doc, id);
   const outline = strokedOutline(part, hole);
   const count = outline ? stretchEnds(outline).length : 0;
   if (!outline || index < 0 || index >= count) throw new WeldError(`${id} draws no stretch ${index}${hole >= 0 ? ` in hole ${hole}` : ''}`);
   const n = outline.points.length;
-  const ends = [outline.points[index], outline.points[(index + 1) % n]];
-  /** @type {PointAt[]} */
-  const unnamed = [];
-  for (const end of ends) {
-    if (end.id) continue;
-    if (!end.at) throw new WeldError(`that stretch is in a hole of ${id} between points of the hole’s own, which take no names: weld the hole to a line first`);
-    unnamed.push(end.at);
+  return { part, outline, ends: [outline.points[index], outline.points[(index + 1) % n]] };
+}
+
+/**
+ * The batch that hides or shows a drawn stretch, naming the points at its ends that have no name.
+ * @param {Doc} doc resolved @param {Stretch} stretch @param {boolean} hide
+ * @returns {{ ops: Operation[], edge: [string, string], named: string[] }} named: the points that got a name
+ */
+export function edgeOps(doc, stretch, hide) {
+  const { part, outline, ends } = endsOf(doc, stretch);
+  if (ends.some((end) => !end.id && !end.at)) {
+    throw new WeldError(`that stretch is in a hole of ${part.id} between points of the hole’s own, which take no names: weld the hole to a line first`);
   }
-  const { refs, changes } = namedRefs(doc, unnamed);
-  let named = 0;
-  const edge = /** @type {[string, string]} */ (ends.map((end) => end.id ?? refs[named++]));
-  const was = hiddenFlags(part, outline)[index];
-  if (was === hide) throw new WeldError(`the stretch ${edge[0]} – ${edge[1]} of ${id} is ${hide ? 'hidden' : 'shown'} already`);
-  return { ops: [...vertexOps(changes), { op: 'set', target: id, props: { hiddenEdges: withEdge(part, edge, hide) } }], edge, named: refs };
+  if (hiddenFlags(part, outline)[stretch.index] === hide) {
+    const named = ends.map((end) => end.id ?? 'an unnamed point');
+    throw new WeldError(`the stretch ${named[0]} – ${named[1]} of ${part.id} is ${hide ? 'hidden' : 'shown'} already`);
+  }
+  const { ops, edges, named } = edgesOps(doc, [stretch], hide);
+  return { ops, edge: edges[0], named };
+}
+
+/**
+ * The batch that hides or shows several drawn stretches at once (a drag of the Hide Edge tool), in one step: the
+ * points at their ends that have no name get one, all together. Stretches already so, and ones between a hole's own
+ * points (which take no names), are left out.
+ * @param {Doc} doc resolved @param {Stretch[]} stretches @param {boolean} hide
+ * @returns {{ ops: Operation[], edges: [string, string][], named: string[] }}
+ */
+export function edgesOps(doc, stretches, hide) {
+  const todo = stretches.map((stretch) => ({ stretch, ...endsOf(doc, stretch) })).filter(({ part, outline, ends, stretch }) => hiddenFlags(part, outline)[stretch.index] !== hide && ends.every((end) => end.id || end.at));
+  /** @type {Map<string, PointAt>} the unnamed points, once each */
+  const unnamed = new Map();
+  for (const { ends } of todo) for (const end of ends) if (!end.id && end.at) unnamed.set(`${end.at.part}:${end.at.index}`, end.at);
+  const { refs, changes } = namedRefs(doc, [...unnamed.values()]);
+  const nameOf = new Map([...unnamed.keys()].map((key, i) => [key, refs[i]]));
+  /** @type {Map<string, Edge[]>} the hidden edges of each part changed */
+  const after = new Map();
+  /** @type {[string, string][]} */
+  const edges = [];
+  for (const { part, ends } of todo) {
+    const edge = /** @type {[string, string]} */ (ends.map((end) => end.id ?? String(nameOf.get(`${end.at?.part}:${end.at?.index}`))));
+    after.set(part.id, withEdge({ ...part, hiddenEdges: after.get(part.id) ?? hiddenEdgesOf(part) }, edge, hide));
+    edges.push(edge);
+  }
+  const set = [...after].map(([target, list]) => ({ op: 'set', target, props: { hiddenEdges: list } }));
+  return { ops: [...vertexOps(changes), ...set], edges, named: refs };
 }
 
 /**

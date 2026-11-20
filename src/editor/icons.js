@@ -47,6 +47,14 @@ export const ICONS = {
   bean: stroke(`<path d="${BEAN}" transform="rotate(-30 12 12)"/>`),
   // Select Shape: the pointer over a bean.
   selectShape: stroke('<path d="M14.5 6.5c3 0 5.5 2 5.5 4.5S17.5 16 14 16s-4.5-1.5-4.5-4" stroke-dasharray="2 2"/><path d="M4 3.5 4 15l3-3 2 4.5 2-1-2-4.3h4.3z" fill="currentColor"/>'),
+  // Stroke caps: the end of a thick line (its outline), the dot where the line itself ends.
+  capButt: stroke('<path d="M3 7.5h10v9H3"/><circle cx="13" cy="12" r="1.3" fill="currentColor"/>'),
+  capRound: stroke('<path d="M3 7.5h10a4.5 4.5 0 0 1 0 9H3"/><circle cx="13" cy="12" r="1.3" fill="currentColor"/>'),
+  capSquare: stroke('<path d="M3 7.5h14.5v9H3"/><circle cx="13" cy="12" r="1.3" fill="currentColor"/>'),
+  // Stroke joins: the outside of a thick corner.
+  joinMiter: stroke('<path d="M4.5 20V4.5H20"/><path d="M10 20V10h10"/>'),
+  joinRound: stroke('<path d="M4.5 20v-9A6.5 6.5 0 0 1 11 4.5h9"/><path d="M10 20V10h10"/>'),
+  joinBevel: stroke('<path d="M4.5 20v-9.5l6-6H20"/><path d="M10 20V10h10"/>'),
   // Hide Edge: a square with one side dashed.
   hideEdge: stroke('<path d="M19 5H5v14h14"/><path d="M19 5v14" stroke-dasharray="2 2.5"/><rect x="17.5" y="3.5" width="3" height="3" fill="currentColor"/><rect x="17.5" y="17.5" width="3" height="3" fill="currentColor"/>'),
   path: stroke('<path d="M4 17c3-9 6-11 9-6s5 3 7-4"/><circle cx="4" cy="17" r="1.3" fill="currentColor"/><circle cx="20" cy="7" r="1.3" fill="currentColor"/>'),

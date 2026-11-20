@@ -8,7 +8,7 @@ import { drawDocument } from '../src/core/draw.js';
 import { copyOps } from '../src/core/copy.js';
 import { deletePointsOps, namePoint } from '../src/core/weld.js';
 import { gapAt, shapeFromPointsOps } from '../src/core/fill.js';
-import { edgeOps, hiddenStretches, stretchBetweenPoints, stretchNear } from '../src/core/edges.js';
+import { edgeOps, edgesOps, hiddenStretches, stretchBetweenPoints, stretchNear } from '../src/core/edges.js';
 import { insertVertex, translate } from '../src/core/geometry.js';
 
 const schema = loadSchema();
@@ -170,4 +170,21 @@ test('joining two lines or closing one keeps their hidden edges', async () => {
   doc = settled(doc, weld(resolveDoc(doc), { part: 'b', index: ends }, { part: 'b', index: 0 }).ops);
   assert.equal(find(doc, 'b').closed, undefined);
   assert.equal(find(doc, 'b').hiddenEdges.length, 2);
+});
+
+test('several stretches hide in one step, on a line and on its shape alike, naming a shared point once', () => {
+  const doc = layer(square);
+  const nodes = /** @type {any} */ (gapAt(resolveDoc(doc), 'ink', { x: 50, y: 50 })).nodes;
+  const shaped = apply(doc, shapeFromPointsOps(resolveDoc(doc), 'ink', nodes, { fill: null, stroke: '#000000' }).ops);
+  const resolved = resolveDoc(shaped);
+  const onShape = stretchNear(find(resolved, 'box_stroke'), { x: 100, y: 50 }, 3);
+  const stretches = [{ part: 'box', hole: -1, index: 0 }, { part: 'box', hole: -1, index: 1 }, { part: 'box', hole: -1, index: 1 }, { ...onShape, distance: undefined }];
+  const { ops, edges } = edgesOps(resolved, stretches, true);
+  const after = settled(shaped, ops);
+  assert.equal(find(after, 'box').hiddenEdges.length, 2, 'the same stretch twice counts once');
+  assert.equal(find(after, 'box_stroke').hiddenEdges.length, 1);
+  assert.deepEqual([...find(after, 'box_stroke').hiddenEdges[0]].sort(), [...find(after, 'box').hiddenEdges[1]].sort(), 'the right side: the same points of the line in both');
+  assert.equal(edges.length, 4);
+  // Already hidden ones are left out.
+  assert.deepEqual(edgesOps(resolveDoc(after), stretches.slice(0, 2), true).ops, []);
 });

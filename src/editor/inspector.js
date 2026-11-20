@@ -155,6 +155,36 @@ function unitSlider(value, onInput, onChange) {
   return [slider, percent];
 }
 
+/** The icons of a choice's values, where it has them (the buttons show what each one does). */
+const CHOICE_ICONS = /** @type {Record<string, Record<string, Parameters<typeof icon>[0]>>} */ ({
+  strokeCap: { round: 'capRound', square: 'capSquare', butt: 'capButt' },
+  strokeJoin: { round: 'joinRound', miter: 'joinMiter', bevel: 'joinBevel' },
+});
+
+/**
+ * The control of a choice: a row of icon buttons, the one set pressed, when its values have icons; else a dropdown.
+ * @param {string} key @param {PropertySpec} spec @param {unknown} value or MIXED @param {(value: string) => void} onChange
+ * @returns {HTMLElement}
+ */
+function choiceControl(key, spec, value, onChange) {
+  const icons = CHOICE_ICONS[key];
+  const values = spec.values ?? [];
+  if (!icons || !values.every((v) => icons[v])) return choiceSelect(spec, value, onChange);
+  const group = document.createElement('div');
+  group.className = 'choice-buttons';
+  group.setAttribute('role', 'group');
+  group.setAttribute('aria-label', labelOf(key));
+  for (const v of values) {
+    const name = v[0].toUpperCase() + v.slice(1);
+    const button = iconButton(icons[v], `${labelOf(key)}: ${name}`, true, () => {
+      if (v !== value) onChange(v);
+    });
+    button.setAttribute('aria-pressed', String(v === value));
+    group.append(button);
+  }
+  return group;
+}
+
 /**
  * A dropdown of a property's values (strokeCap: round, square, butt).
  * @param {PropertySpec} spec @param {unknown} value or MIXED @param {(value: string) => void} onChange
@@ -249,7 +279,7 @@ function propertyRow(key, spec, targets, { bean = true, extra = [] } = {}) {
   }
   if (spec.type === 'number' && spec.min === 0 && spec.max === 1) return row(labelOf(key), spec.help, ...unitSlider(value, live, change));
   if (spec.type === 'number') return row(labelOf(key), spec.help, numberField(spec, value, live, change));
-  if (spec.type === 'choice') return row(labelOf(key), spec.help, choiceSelect(spec, value, change));
+  if (spec.type === 'choice') return row(labelOf(key), spec.help, choiceControl(key, spec, value, change));
   if (spec.type === 'pointGroups') {
     const span = document.createElement('span');
     span.className = 'faint';
@@ -392,7 +422,7 @@ function partSections(doc, part) {
     /** @param {string} key */
     const pick = (key) => {
       const property = /** @type {PropertySpec} */ (spec.properties[key]);
-      return choiceSelect(property, valueOf(target, key, property), (v) => save(target, { [key]: v }));
+      return choiceControl(key, property, valueOf(target, key, property), (v) => save(target, { [key]: v }));
     };
     out.push(row('Cap / join', `${spec.properties.strokeCap.help} ${spec.properties.strokeJoin.help}`, pick('strokeCap'), pick('strokeJoin')));
   }
