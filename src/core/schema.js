@@ -4,8 +4,8 @@
 
 /**
  * @typedef {{
- *   type: 'string' | 'number' | 'boolean' | 'color' | 'asset' | 'vertices' | 'holes' | 'pointGroups',
- *   default: unknown, nullable?: boolean, min?: number, max?: number,
+ *   type: 'string' | 'number' | 'boolean' | 'color' | 'asset' | 'vertices' | 'holes' | 'pointGroups' | 'edges' | 'choice',
+ *   default: unknown, nullable?: boolean, min?: number, max?: number, values?: string[],
  *   description: string, help: string,
  * }} PropertySpec
  * @typedef {{
@@ -86,9 +86,29 @@ export function valueError(spec, value) {
       return holesError(value);
     case 'pointGroups':
       return groupsError(value);
+    case 'edges':
+      return edgesError(value);
+    case 'choice':
+      return typeof value === 'string' && (spec.values ?? []).includes(value) ? null : `must be one of: ${(spec.values ?? []).join(', ')}`;
     default:
       return `has an unknown property type "${spec.type}"`;
   }
+}
+
+/** A list of hidden edges: pairs of two different named points. @param {unknown} value */
+function edgesError(value) {
+  const example = 'must be a list of pairs of points, like [["head.p2", "head.p3"]]';
+  if (!Array.isArray(value)) return example;
+  /** @type {Set<string>} */
+  const seen = new Set();
+  for (const [i, edge] of value.entries()) {
+    if (!Array.isArray(edge) || edge.length !== 2 || edge.some((p) => typeof p !== 'string' || !POINT_REF.test(p))) return `edge ${i} ${example}`;
+    if (edge[0] === edge[1]) return `edge ${i} names the same point twice`;
+    const key = [...edge].sort().join(' ');
+    if (seen.has(key)) return `edge ${i} is there twice (${edge[0]} – ${edge[1]})`;
+    seen.add(key);
+  }
+  return null;
 }
 
 /** @param {unknown} value */

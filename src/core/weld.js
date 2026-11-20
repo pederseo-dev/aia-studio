@@ -8,7 +8,7 @@
 
 import { findObject, idFromName } from './document.js';
 import { closeOutline, endOf, insertVertex, joinOutlines, roundVertex, verticesOf } from './geometry.js';
-import { followsOthers, nextPointName, passIndex, pointIdOf, pointOf, splitRef } from './points.js';
+import { followsOthers, hiddenEdgesOf, nextPointName, passIndex, pointIdOf, pointOf, redirectEdges, splitRef } from './points.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc
@@ -42,13 +42,20 @@ export const vertexOps = (changes) => [...changes].map(([id, vertices]) => ({ op
 
 /**
  * After a point stops being "old" (it now shares "next", or was renamed to it): the vertices that shared it and the
- * point groups that had it name "next" instead (null: the vertices keep their place as their own points, and the
- * groups drop it). Adds the new vertices to `changes` and returns the groups op, if any.
+ * point groups and hidden edges that had it name "next" instead (null: the vertices keep their place as their own
+ * points, the groups drop it, and settleOps drops the hidden edges that are no longer drawn). Adds the new vertices to
+ * `changes` and returns the ops for the groups and the hidden edges, if any.
  * @param {Doc} doc @param {string} layer @param {string} old @param {string | null} next
  * @param {Map<string, Vertex[]>} changes
  * @returns {Operation[]}
  */
 export function redirect(doc, layer, old, next, changes) {
+  const edgeOps = next ? redirectEdges(doc, layer, old, next) : [];
+  return [...redirectVertices(doc, layer, old, next, changes), ...edgeOps];
+}
+
+/** The vertices and groups part of `redirect`. @param {Doc} doc @param {string} layer @param {string} old @param {string | null} next @param {Map<string, Vertex[]>} changes */
+function redirectVertices(doc, layer, old, next, changes) {
   for (const o of doc.objects) {
     if (o.parent !== layer) continue;
     const vertices = changes.get(o.id) ?? verticesOf(o);
@@ -178,8 +185,9 @@ export function namePoint(doc, at, typed) {
   if (name === old) return { ops: [], name };
   const oldRef = old ? `${part.id}.${old}` : '';
   const groups = /** @type {Record<string, string[]>} */ (findObject(doc, String(part.parent))?.groups ?? {});
-  const used = !!old && (isShared(doc, part, vertex) || Object.values(groups).some((m) => m.includes(oldRef)));
-  if (!name && used) throw new WeldError(`${oldRef} is shared or in a group, so it keeps a name`);
+  const inEdge = doc.objects.some((o) => hiddenEdgesOf(o).some((e) => e.includes(oldRef)));
+  const used = !!old && (isShared(doc, part, vertex) || Object.values(groups).some((m) => m.includes(oldRef)) || inEdge);
+  if (!name && used) throw new WeldError(`${oldRef} is shared, in a group or at the end of a hidden edge, so it keeps a name`);
   /** @type {Map<string, Vertex[]>} */
   const changes = new Map();
   changes.set(

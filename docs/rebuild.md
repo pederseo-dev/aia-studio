@@ -525,6 +525,23 @@ separate shapes; the manual says nothing of caps or joins. Here:
   stale pairs, draw in runs) with tests; (b) caps and joins (schema, draw, Inspector, `aia` flags); (c) `aia edge` and
   the guide; (d) the Hide Edge tool; (e) closing: `auditor`, `architecture` and `ai-tester`.
 
+**Step 3a, the model (2026-11-20):** `hiddenEdges` on `path` (schema type `edges`: pairs of two different named
+points, no pair twice). `resolveDoc` keeps, next to the followed outline, what each drawn vertex is (its point id and
+the vertex it comes from: the part's own, or the followed line's); `strokedOutlines(part)` in `points.js` gives a
+part's outline and holes with those, `stretchEnds` the pair at each drawn stretch, `hiddenFlags` which ones are hidden.
+`pointsError` refuses a pair that is not a drawn stretch of its part (a pair is the same either way round; the
+closing side counts). Renaming a part renames the pairs (`renamePointRefs`); renaming a point or welding it into
+another renames them too (`redirect` in `weld.js`, through `redirectEdges`), and `aia name --none` keeps the name of
+a point a hidden edge uses. `settleOps` drops the pairs a batch made stale (a point gone, or a point added between the
+two ends) and leaves a pair that never named a drawn stretch, so it is refused with the reason. Drawing: a part that
+hides something is a `<g data-id>` with its fill whole (no stroke) and its stroke as runs of shown stretches
+(`strokeData` in `draw.js`; a closed outline starts after a hidden stretch so no run goes over its end); the stroke
+path carries the `data-id` too, so it is picked by its stroke like a line. A copy keeps its hidden stretches on its
+own points (named if they had no name; holes' are not copied, as their points take no names). `src/core/edges.js`
+has the ops for the editor and `aia`: `edgeOps` hides or shows a drawn stretch naming its unnamed ends (in the line a
+shape follows, when the end is one of its points), `stretchBetweenPoints` finds one by two points, `stretchNear` by
+the pointer. Tests: `tests/edges.test.js`.
+
 Agreed on 2026-11-19, on decision 10 (replaces the paint bucket plan of 2026-11-18). Not a paint bucket: a **Fill &
 Stroke tool (F)** that works as a selector of its own. Over a closed gap between lines it shows the gap hatched, over a
 stretch of a line (between two points) it shows it thicker; a click marks or unmarks it (Shift: several), and the marks

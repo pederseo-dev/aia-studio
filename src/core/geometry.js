@@ -306,11 +306,11 @@ function splitCubic([p0, p1, p2, p3], t) {
   return { p01, p012, at: lerp(p012, p123, t), p123, p23 };
 }
 
+/** How many stretches an outline of `count` vertices draws (a closed one of 2 is drawn open). @param {number} count @param {boolean} closed */
+export const stretchesIn = (count, closed) => (count < 2 ? 0 : closed && count > 2 ? count : count - 1);
+
 /** How many stretches an outline has. @param {DocObject} part */
-const stretchCount = (part) => {
-  const count = verticesOf(part).length;
-  return count < 2 ? 0 : part.closed !== false && count > 2 ? count : count - 1;
-};
+const stretchCount = (part) => stretchesIn(verticesOf(part).length, part.closed !== false);
 
 /**
  * The point of a part's outline nearest to `p`: which stretch (from vertex `segment` to the next), where along it

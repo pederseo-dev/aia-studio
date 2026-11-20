@@ -10,6 +10,9 @@
 //   does. Both ends are points jaw passes through: points jaw owns, or points of a third part that jaw shares too
 //   (a junction where two lines were welded). On a closed jaw it goes the short way, or the other with way: 'long'.
 //   The followed part must not follow others itself (a fill follows lines, not other fills).
+// - A part may hide stretches of its stroke: hiddenEdges: [['head.p2', 'head.p3']], each the two points at the ends of
+//   one stretch it draws (for a part that follows a line, a piece of that line between two of its points). The fill
+//   is not changed. Drawing knows the point at each drawn vertex (strokedOutlines).
 //
 // The stored document keeps references as they are; resolveDoc fills in where each shared vertex is, for drawing and
 // for the editor. settleOps turns a batch written against the resolved document (shared vertices with x, y) into one
@@ -17,7 +20,7 @@
 // stays where it was as a point of its own.
 
 import { ID, findObject } from './document.js';
-import { HOLES, OUTLINE, holesOf, round2, verticesOf } from './geometry.js';
+import { HOLES, OUTLINE, holeOutlinesOf, holesOf, outlineOf, round2, stretchesIn, verticesOf } from './geometry.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc
@@ -26,7 +29,17 @@ import { HOLES, OUTLINE, holesOf, round2, verticesOf } from './geometry.js';
  * @typedef {import('./operations.js').Operation} Operation
  * @typedef {Record<string, string[]>} PointGroups
  * @typedef {import('./geometry.js').Point} Point
+ * @typedef {[string, string]} Edge the two points at the ends of a drawn stretch, "part.point" each
+ * @typedef {{ id: string | null, at: { part: string, index: number } | null }} DrawnPoint what a drawn vertex is: its
+ *   point ("part.point", null when it has no name) and the vertex it comes from (null for a hole's own vertex)
+ * @typedef {{ vertices: Vertex[], points: DrawnPoint[], closed: boolean, hole: number }} StrokedOutline an
+ *   outline a part strokes (hole: which hole, or -1 for its own) and what each of its vertices is
  */
+
+/** What each vertex a part draws through is (parallel to outlineOf), set by resolveDoc; never saved. */
+const OUTLINE_POINTS = Symbol('outlinePoints');
+/** The same for its holes (parallel to holeOutlinesOf). */
+const HOLE_POINTS = Symbol('holePoints');
 
 /** "jaw.chin": a named point of a part. */
 export const POINT_REF = /^([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)$/;
@@ -90,9 +103,15 @@ export function resolveDoc(doc) {
     }),
   };
   for (const o of placed.objects) {
-    if (verticesOf(o).some((v) => v.follow)) /** @type {any} */ (o)[OUTLINE] = followedOutline(placed, o);
+    if (verticesOf(o).some((v) => v.follow)) {
+      const { outline, points } = followedOutline(placed, o);
+      Object.assign(o, { [OUTLINE]: outline, [OUTLINE_POINTS]: points });
+    }
     const holes = holesOf(o);
-    if (holes.some((hole) => hole.some((v) => v.follow))) /** @type {any} */ (o)[HOLES] = holes.map((hole) => followedOutline(placed, holeAsPart(o, hole)));
+    if (holes.some((hole) => hole.some((v) => v.follow))) {
+      const followed = holes.map((hole) => followedOutline(placed, holeAsPart(o, hole), true));
+      Object.assign(o, { [HOLES]: followed.map((f) => f.outline), [HOLE_POINTS]: followed.map((f) => f.points) });
+    }
   }
   return placed;
 }
@@ -115,7 +134,7 @@ const flipped = (v) => ({ x: v.x, y: v.y, ...(v.out ? { in: v.out } : {}), ...(v
 /**
  * The stretch from vertex `i` of a part to the next one along the part it follows, or why it cannot be.
  * @param {Doc} doc resolved @param {DocObject} part @param {number} i
- * @returns {{ error: string } | { startOut?: Point, inner: Vertex[], endIn?: Point }}
+ * @returns {{ error: string } | { startOut?: Point, inner: Vertex[], innerPoints: DrawnPoint[], endIn?: Point }}
  */
 export function followStretch(doc, part, i) {
   const vertices = verticesOf(part);
@@ -151,22 +170,30 @@ export function followStretch(doc, part, i) {
   }
   /** @type {Vertex[]} */
   const walked = [];
+  /** @type {DrawnPoint[]} */
+  const ids = [];
   for (let k = a.index; ; k = (k + (forward ? 1 : -1) + n) % n) {
     walked.push(forward ? path[k] : flipped(path[k]));
+    ids.push({ id: pointIdOf(other, path[k]), at: { part: other.id, index: k } });
     if (k === b.index) break;
   }
   const first = walked[0];
   const last = walked[walked.length - 1];
-  return { startOut: first.out, inner: walked.slice(1, -1).map((w) => ({ x: w.x, y: w.y, ...(w.in ? { in: w.in } : {}), ...(w.out ? { out: w.out } : {}) })), endIn: last.in };
+  return {
+    startOut: first.out,
+    inner: walked.slice(1, -1).map((w) => ({ x: w.x, y: w.y, ...(w.in ? { in: w.in } : {}), ...(w.out ? { out: w.out } : {}) })),
+    innerPoints: ids.slice(1, -1),
+    endIn: last.in,
+  };
 }
 
 /**
  * Where an outline with followed stretches goes: its own vertices with the other part's points in between, and the
- * handles at the ends of each stretch taken from that part.
- * @param {Doc} doc resolved @param {DocObject} part
- * @returns {Vertex[]}
+ * handles at the ends of each stretch taken from that part; and what each of those vertices is.
+ * @param {Doc} doc resolved @param {DocObject} part @param {boolean} [hole] whether it is a hole (holeAsPart)
+ * @returns {{ outline: Vertex[], points: DrawnPoint[] }}
  */
-function followedOutline(doc, part) {
+function followedOutline(doc, part, hole = false) {
   const vertices = verticesOf(part);
   const closed = part.closed !== false;
   const stretches = vertices.map((v, i) => {
@@ -176,15 +203,83 @@ function followedOutline(doc, part) {
   });
   /** @type {Vertex[]} */
   const outline = [];
+  /** @type {DrawnPoint[]} */
+  const points = [];
   for (const [i, v] of vertices.entries()) {
     const before = stretches[i > 0 ? i - 1 : closed ? vertices.length - 1 : -1];
     const after = stretches[i];
     const inHandle = before ? before.endIn : v.in;
     const outHandle = after ? after.startOut : v.out;
     outline.push({ x: v.x, y: v.y, ...(inHandle ? { in: inHandle } : {}), ...(outHandle ? { out: outHandle } : {}) });
-    if (after) outline.push(...after.inner);
+    points.push({ id: pointIdOf(part, v), at: hole ? null : { part: part.id, index: i } });
+    if (after) {
+      outline.push(...after.inner);
+      points.push(...after.innerPoints);
+    }
   }
-  return outline;
+  return { outline, points };
+}
+
+/**
+ * The outlines a part strokes: its own and its holes', with what each of their vertices is. Parts that follow others
+ * need a resolved document.
+ * @param {DocObject} part
+ * @returns {StrokedOutline[]}
+ */
+export function strokedOutlines(part) {
+  const closed = part.closed !== false;
+  const own = /** @type {DrawnPoint[]} */ (/** @type {any} */ (part)[OUTLINE_POINTS] ?? verticesOf(part).map((v, index) => ({ id: pointIdOf(part, v), at: { part: part.id, index } })));
+  const holePoints = /** @type {DrawnPoint[][]} */ (/** @type {any} */ (part)[HOLE_POINTS] ?? holesOf(part).map((hole) => hole.map((v) => ({ id: pointIdOf(part, v), at: null }))));
+  return [
+    { vertices: outlineOf(part), points: own, closed, hole: -1 },
+    ...(closed ? holeOutlinesOf(part).map((vertices, h) => ({ vertices, points: holePoints[h] ?? [], closed: true, hole: h })) : []),
+  ];
+}
+
+/** The same pair of points, whichever way it is written. @param {string} a @param {string} b */
+const edgeKey = (a, b) => (a < b ? `${a} ${b}` : `${b} ${a}`);
+
+/** The hidden edges of a part, as written. @param {DocObject} part @returns {Edge[]} */
+export const hiddenEdgesOf = (part) => /** @type {Edge[]} */ (Array.isArray(part.hiddenEdges) ? part.hiddenEdges : []);
+
+/**
+ * The pair of points at the ends of each stretch of an outline (null where an end is no named point).
+ * @param {{ points: DrawnPoint[], closed: boolean }} outline
+ * @returns {(Edge | null)[]}
+ */
+export function stretchEnds({ points, closed }) {
+  const n = points.length;
+  return Array.from({ length: stretchesIn(n, closed) }, (_, k) => {
+    const a = points[k].id;
+    const b = points[(k + 1) % n].id;
+    return a && b && a !== b ? /** @type {Edge} */ ([a, b]) : null;
+  });
+}
+
+/** The keys of every stretch a part draws. @param {DocObject} part resolved */
+const drawnEdgeKeys = (part) => new Set(strokedOutlines(part).flatMap((o) => stretchEnds(o).flatMap((e) => (e ? [edgeKey(...e)] : []))));
+
+/**
+ * Which stretches of an outline are hidden, one flag per stretch.
+ * @param {DocObject} part @param {{ points: DrawnPoint[], closed: boolean }} outline
+ */
+export function hiddenFlags(part, outline) {
+  const hidden = new Set(hiddenEdgesOf(part).map((e) => edgeKey(...e)));
+  return stretchEnds(outline).map((e) => !!e && hidden.has(edgeKey(...e)));
+}
+
+/** Whether a part hides some stretch of its stroke. @param {DocObject} part resolved */
+export const hidesEdges = (part) => hiddenEdgesOf(part).length > 0 && strokedOutlines(part).some((o) => hiddenFlags(part, o).some(Boolean));
+
+/**
+ * The hidden edges of a part with one stretch hidden or shown.
+ * @param {DocObject} part @param {Edge} edge @param {boolean} hide
+ * @returns {Edge[]}
+ */
+export function withEdge(part, edge, hide) {
+  const key = edgeKey(...edge);
+  const others = hiddenEdgesOf(part).filter((e) => edgeKey(...e) !== key);
+  return hide ? [...others, edge] : others;
 }
 
 /**
@@ -234,6 +329,15 @@ export function pointsError(doc) {
       const holeProblem = outlineError(holeAsPart(object, hole), `hole ${h} of ${object.id}`, h);
       if (holeProblem) return holeProblem;
     }
+    const edges = hiddenEdgesOf(object);
+    if (edges.length) {
+      resolved ??= resolveDoc(doc);
+      const drawn = drawnEdgeKeys(/** @type {DocObject} */ (findObject(resolved, object.id)));
+      const stray = edges.find((e) => !drawn.has(edgeKey(...e)));
+      if (stray) {
+        return `${object.id} hides the edge ${stray[0]} – ${stray[1]}, but it draws no stretch between those two points (they must be next to each other along its stroke)`;
+      }
+    }
     const groups = /** @type {PointGroups | undefined} */ (object.groups);
     for (const [group, members] of Object.entries(groups ?? {})) {
       for (const member of members) {
@@ -264,7 +368,27 @@ export function renamePointRefs(doc, from, to) {
     if (holesOf(o).length) o.holes = holesOf(o).map((hole) => hole.map(renamed));
     const groups = /** @type {PointGroups | undefined} */ (o.groups);
     if (groups) o.groups = Object.fromEntries(Object.entries(groups).map(([g, members]) => [g, members.map(rename)]));
+    if (hiddenEdgesOf(o).length) o.hiddenEdges = hiddenEdgesOf(o).map(([a, b]) => [rename(a), rename(b)]);
   }
+}
+
+/**
+ * The ops that make the hidden edges of a layer's parts that name a point name another one instead (a point
+ * renamed, or welded into another).
+ * @param {Doc} doc @param {string} layer @param {string} old @param {string} next
+ * @returns {Operation[]}
+ */
+export function redirectEdges(doc, layer, old, next) {
+  return doc.objects.flatMap((o) => {
+    const edges = hiddenEdgesOf(o);
+    if (o.parent !== layer || !edges.some((e) => e.includes(old))) return [];
+    const kept = edges.flatMap((e) => {
+      if (!e.includes(old)) return [e];
+      const [a, b] = e.map((p) => (p === old ? next : p));
+      return a === b ? [] : [/** @type {Edge} */ ([a, b])];
+    });
+    return [{ op: 'set', target: o.id, props: { hiddenEdges: kept } }];
+  });
 }
 
 /**
@@ -437,6 +561,20 @@ export function settleOps(doc, ops, apply) {
     const brokenHoles = holes.map((hole, h) => brokenIn(holeAsPart(now, hole), was && holesOf(was)[h] ? holeAsPart(was, holesOf(was)[h]) : undefined));
     if (broken.some(Boolean)) fix(o, { vertices: verticesOf(o).map((v, i) => (broken[i] ? plain(v) : v)) });
     if (brokenHoles.some((b) => b.some(Boolean))) fix(o, { holes: holesOf(o).map((hole, h) => hole.map((v, i) => (brokenHoles[h][i] ? plain(v) : v))) });
+  }
+  // Hidden edges this batch made stale (a point gone, or the two points no longer next to each other along the
+  // stroke, as when a point is added between them) are dropped. One that never named a drawn stretch is left, so
+  // the batch is refused with the reason.
+  const settled = fixes.size ? apply(after, [...fixes].map(([target, props]) => ({ op: 'set', target, props }))) : after;
+  const drawnNow = resolveDoc(settled);
+  for (const o of settled.objects) {
+    const edges = hiddenEdgesOf(o);
+    if (!edges.length) continue;
+    const now = drawnEdgeKeys(/** @type {DocObject} */ (findObject(drawnNow, o.id)));
+    const was = findObject(resolved, o.id);
+    const before = was ? drawnEdgeKeys(was) : new Set();
+    const kept = edges.filter((e) => now.has(edgeKey(...e)) || (!before.has(edgeKey(...e)) && !e.some(lost)));
+    if (kept.length !== edges.length) fix(o, { hiddenEdges: kept });
   }
   return [...first, ...[...fixes].map(([target, props]) => ({ op: 'set', target, props }))];
 }

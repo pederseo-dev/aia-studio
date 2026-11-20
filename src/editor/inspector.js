@@ -42,8 +42,8 @@ const COMPANIONS = /** @type {Record<string, string>} */ ({ stroke: 'strokeWidth
 /** A color's opacity, set in its swatch's popover. */
 const OPACITY_OF = /** @type {Record<string, string>} */ ({ fill: 'fillOpacity', stroke: 'strokeOpacity' });
 const SHOWN_WITH = new Set([...Object.values(COMPANIONS), ...Object.values(OPACITY_OF)]);
-/** A part's properties that are edited on the canvas, not in the Inspector (its points, holes, closing, pivot). */
-const HIDDEN_FOR_PARTS = new Set(['vertices', 'holes', 'closed', 'originX']);
+/** A part's properties that are edited on the canvas, not in the Inspector (its points, holes, closing, pivot, hidden edges). */
+const HIDDEN_FOR_PARTS = new Set(['vertices', 'holes', 'closed', 'originX', 'hiddenEdges']);
 
 const MIXED = Symbol('mixed');
 

@@ -1,11 +1,12 @@
 // How a document looks, as a tree of SVG elements ({ tag, attrs, children }). It does not use the DOM, so the same
 // function draws the editor's canvas (which turns it into elements), the AI's previews and, later, the runtime.
-// Every part is one <path>, every image layer one <image>; hidden layers and parts are left out. Where an image's file
+// Every part is one <path> (or a <g> with its fill and its stroke apart, when it hides stretches of its stroke), every
+// image layer one <image>; hidden layers and parts are left out. Where an image's file
 // is found depends on who draws: the editor asks the server, the PNG and the export put the file inside (data URLs).
 
 import { childrenOf } from './document.js';
-import { holeOutlinesOf, outlineOf } from './geometry.js';
-import { resolveDoc } from './points.js';
+import { holeOutlinesOf, outlineOf, stretchesIn } from './geometry.js';
+import { hiddenFlags, hidesEdges, resolveDoc, strokedOutlines } from './points.js';
 import { svgTransform } from './transform.js';
 
 /**
@@ -61,6 +62,74 @@ export function partData(part) {
 }
 
 /**
+ * The stroke of a part that hides some of its stretches, as path data: each outline in runs of shown stretches (a
+ * closed outline is opened where a stretch is hidden).
+ * @param {DocObject} part resolved
+ */
+export function strokeData(part) {
+  return strokedOutlines(part)
+    .map((outline) => {
+      const hidden = hiddenFlags(part, outline);
+      const { vertices, closed } = outline;
+      if (!hidden.some(Boolean)) return pathData(vertices, closed);
+      const n = vertices.length;
+      const count = stretchesIn(n, closed);
+      // A closed outline starts after a hidden stretch, so no run goes over its end.
+      const start = count === n ? hidden.indexOf(true) + 1 : 0;
+      let d = '';
+      /** @type {Vertex[]} */
+      let run = [];
+      for (let j = 0; j < count; j++) {
+        const k = (start + j) % count;
+        if (hidden[k]) {
+          if (run.length) d += pathData(run, false);
+          run = [];
+          continue;
+        }
+        if (!run.length) run.push(vertices[k]);
+        run.push(vertices[(k + 1) % n]);
+      }
+      return d + (run.length ? pathData(run, false) : '');
+    })
+    .join('');
+}
+
+/**
+ * A part: one <path> with its fill and stroke; or, when it hides stretches of its stroke, a <g> with the fill whole
+ * and the stroke in runs.
+ * @param {DocObject} part resolved
+ * @returns {SvgNode}
+ */
+function drawPart(part) {
+  const fill = part.fill === undefined ? DEFAULTS.fill : part.fill;
+  const stroke = part.stroke === undefined ? DEFAULTS.stroke : part.stroke;
+  /** @type {Record<string, string | number>} */
+  const fillAttrs = { fill: fill === null ? 'none' : String(fill) };
+  if (part.closed !== false && Array.isArray(part.holes) && part.holes.length) fillAttrs['fill-rule'] = 'evenodd';
+  if (fill !== null && part.fillOpacity !== undefined && part.fillOpacity !== 1) fillAttrs['fill-opacity'] = Number(part.fillOpacity);
+  /** @type {Record<string, string | number>} */
+  const strokeAttrs = {};
+  if (stroke !== null) {
+    strokeAttrs.stroke = String(stroke);
+    if (part.strokeOpacity !== undefined && part.strokeOpacity !== 1) strokeAttrs['stroke-opacity'] = Number(part.strokeOpacity);
+    strokeAttrs['stroke-width'] = Number(part.strokeWidth ?? DEFAULTS.strokeWidth);
+    strokeAttrs['stroke-linejoin'] = 'round';
+    strokeAttrs['stroke-linecap'] = 'round';
+  }
+  const id = part.id;
+  if (stroke === null || !hidesEdges(part)) return { tag: 'path', attrs: { 'data-id': id, d: partData(part), ...fillAttrs, ...strokeAttrs }, children: [] };
+  // The stroke path carries the id too, so it is picked by its stroke as a line is.
+  return {
+    tag: 'g',
+    attrs: { 'data-id': id },
+    children: [
+      ...(fill === null ? [] : [{ tag: 'path', attrs: { d: partData(part), ...fillAttrs }, children: [] }]),
+      { tag: 'path', attrs: { 'data-id': id, d: strokeData(part), fill: 'none', ...strokeAttrs }, children: [] },
+    ],
+  };
+}
+
+/**
  * @param {Doc} doc
  * @param {string | null} parent
  * @param {Required<DrawOptions>} options
@@ -77,20 +146,7 @@ function drawChildren(doc, parent, options) {
       nodes.push({ tag: 'g', attrs: { 'data-id': object.id, ...(transform ? { transform } : {}) }, children });
       continue;
     }
-    const fill = object.fill === undefined ? DEFAULTS.fill : object.fill;
-    const stroke = object.stroke === undefined ? DEFAULTS.stroke : object.stroke;
-    /** @type {Record<string, string | number>} */
-    const attrs = { 'data-id': object.id, d: partData(object), fill: fill === null ? 'none' : String(fill) };
-    if (object.closed !== false && Array.isArray(object.holes) && object.holes.length) attrs['fill-rule'] = 'evenodd';
-    if (fill !== null && object.fillOpacity !== undefined && object.fillOpacity !== 1) attrs['fill-opacity'] = Number(object.fillOpacity);
-    if (stroke !== null) {
-      attrs.stroke = String(stroke);
-      if (object.strokeOpacity !== undefined && object.strokeOpacity !== 1) attrs['stroke-opacity'] = Number(object.strokeOpacity);
-      attrs['stroke-width'] = Number(object.strokeWidth ?? DEFAULTS.strokeWidth);
-      attrs['stroke-linejoin'] = 'round';
-      attrs['stroke-linecap'] = 'round';
-    }
-    nodes.push({ tag: 'path', attrs, children: [] });
+    nodes.push(drawPart(object));
   }
   return nodes;
 }
