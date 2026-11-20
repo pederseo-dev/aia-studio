@@ -494,10 +494,36 @@ a point a ring shows, and a click welds them there. A **shape** is two parts tha
 `<line>_stroke`, under them, each with its own order; shapes add up (Moho) and are renamed with their line. Shapes
 inside a gap that do not touch it are **holes**. The Inspector shows, for one part, its **Element** (own order, fill
 and stroke: square swatches) and its **Shape** section (a dropdown, delete, each shape's fill and stroke as beans with
-their own order). `aia shape`, `aia fill`, `aia crossings` and `aia order` do the same for the AI. Still to do: the
-stroke of stretches (step 3: on / off, caps, joins) and the structure items of the closing review (end of this
-section). The plan just below is the earlier one and the step notes after it are history: where they disagree with
-this paragraph, this paragraph is right.
+their own order). `aia shape`, `aia fill`, `aia crossings` and `aia order` do the same for the AI. The structure
+items of the closing review are done. **Next: step 3, the stroke of stretches** (agreed on 2026-11-20, see "Step 3:
+Hide Edge, caps and joins" just below). The older plan after it and the step notes are history: where they disagree
+with this paragraph, this paragraph is right.
+
+### Step 3: Hide Edge, caps and joins (agreed 2026-11-20)
+
+In Moho (manual: Fill tools, Style window) the Hide Edge tool hides stretches of one shape's outline by clicking them,
+"without affecting the fill"; Line Width sets a width per point (click a point and drag); fill and outline are
+separate shapes; the manual says nothing of caps or joins. Here:
+- **Model:** a part may have `hiddenEdges`: the stretches of its stroke that are not drawn, each a pair of points
+  `["head.p2", "head.p3"]` (the two ends of one drawn stretch). The same for an element's own line and a shape's
+  `_stroke` part (whose followed stretch may pass several points of the line: the pair names exactly the drawn piece).
+  Unnamed points get a name when a stretch is hidden (as Create Shape does). The fill is unchanged; a part with hidden
+  edges draws its fill and its stroke apart (the stroke in runs, open where an edge is hidden). Renaming a part or a
+  point renames the pairs; a pair whose point is gone, or that is no longer a drawn stretch of the part, is dropped.
+  So drawing knows the ends of each drawn stretch, the followed outline (part[OUTLINE]) keeps each vertex's point.
+- **Caps and joins:** `strokeCap` (round, square, butt) and `strokeJoin` (round, miter, bevel) on a part, both
+  **round by default** (how strokes look today). They show by themselves in the Inspector's Element section (it comes
+  from the schema); in the Shape section they go with its Stroke row.
+- **Editor:** a **Hide Edge** tool of its own (key **H**), added to the tool selector (in the Create Shape group). The
+  stroke stretch under the pointer lights up (of the topmost element or `_stroke` part there); a click hides it, a
+  click on a hidden one shows it again; hidden stretches show as a faint dashed line so they can be found.
+- **AI:** `aia edge <doc> <part> <point> <point> --hide | --show`; `--stroke-cap` and `--stroke-join` in `rect`,
+  `ellipse`, `shape` and `fill`; the guide's points or paths topic explains `hiddenEdges`.
+- **Left out:** Line Width (a width per point). SVG has no variable-width stroke, so the core and the runtime would
+  build each stroke's outline; probably not added if it stays that costly.
+- Steps: (a) the model in the core (schema, resolve keeps point ids on drawn vertices, checks, rename, settle drops
+  stale pairs, draw in runs) with tests; (b) caps and joins (schema, draw, Inspector, `aia` flags); (c) `aia edge` and
+  the guide; (d) the Hide Edge tool; (e) closing: `auditor`, `architecture` and `ai-tester`.
 
 Agreed on 2026-11-19, on decision 10 (replaces the paint bucket plan of 2026-11-18). Not a paint bucket: a **Fill &
 Stroke tool (F)** that works as a selector of its own. Over a closed gap between lines it shows the gap hatched, over a
@@ -517,10 +543,8 @@ parts, which is what lines plus fills already are. The steps, in order; each one
    stretch can go on along another line from a junction the Pen welded (today it is refused: the point belongs to
    the first line). Refuse following a part that has followed stretches. `aia follow` and the editor's Follow get it
    for free.
-3. **Stretches without stroke, caps and joins**: a vertex's `edge: false` means the stretch from it to the next one
-   has no stroke (the fill still uses the whole outline); the editor and the runtime draw the stroke in runs. The
-   part's `strokeCap` (round, square, butt) and `strokeJoin` (round, miter, bevel) in the Inspector. `aia edge` for
-   the AI, caps and joins as style options.
+3. **Stretches without stroke, caps and joins** (replaced on 2026-11-20 by "Step 3: Hide Edge, caps and joins"
+   above: hidden stretches are pairs of points in `hiddenEdges`, not a vertex flag).
 4. **The gap around a point**, in the core, without the DOM: the resolved outlines of a layer cut at the points they
    pass through (only shared points count: lines that cross without a weld do not close a gap) make a graph; the
    smallest closed loop around the place is the gap, as a list of (point, part followed, way). Then
