@@ -621,6 +621,10 @@ shows them when the first one it met was hidden, in one step on release; its pat
 nothing; the swept stretches show lit while dragging). `edgesOps` in `core/edges.js` hides or shows several
 stretches at once, naming their unnamed points together (`edgeOps` is it for one, with its checks).
 
+**Pending (2026-11-20, the user's choice):** Select Shape, the icon buttons for caps and joins and the Hide Edge drag
+have had no `auditor`, `architecture` or `ai-tester` review yet; do it before closing part 4. They were checked in
+the editor only with simulated pointer events, so the user is trying them by hand.
+
 Agreed on 2026-11-19, on decision 10 (replaces the paint bucket plan of 2026-11-18). Not a paint bucket: a **Fill &
 Stroke tool (F)** that works as a selector of its own. Over a closed gap between lines it shows the gap hatched, over a
 stretch of a line (between two points) it shows it thicker; a click marks or unmarks it (Shift: several), and the marks
