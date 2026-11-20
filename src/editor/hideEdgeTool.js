@@ -6,6 +6,7 @@
 // the same as `aia edge`.
 
 import { findObject } from '../core/document.js';
+import { DEFAULTS, pathData } from '../core/draw.js';
 import { edgeOps, hiddenStretches, isHidden as isHiddenStretch, stretchNear, stretchVertices } from '../core/edges.js';
 import { addPainter, onToolDown, paintOverlay } from './canvas.js';
 import { fromLayer, layerScreen, toLayer } from './pointEdit.js';
@@ -43,7 +44,7 @@ function stretchAt(doc, p, under = false) {
   const hits = [];
   for (const part of strokedParts(doc)) {
     const layer = String(part.parent);
-    const reach = layerScreen(layer, HIT) + Number(part.strokeWidth ?? 2) / 2;
+    const reach = layerScreen(layer, HIT) + Number(part.strokeWidth ?? DEFAULTS.strokeWidth) / 2;
     const hit = stretchNear(part, toLayer(layer, p), reach);
     if (hit) hits.push({ part: hit.part, hole: hit.hole, index: hit.index });
     if (hits.length === (under ? 2 : 1)) break;
@@ -56,13 +57,15 @@ function stretchPath(part, stretch) {
   const layer = String(part.parent);
   const [a, b] = stretchVertices(part, stretch);
   if (!a || !b) return '';
-  const at = (/** @type {Point} */ p) => fromLayer(layer, p);
-  const p0 = at(a);
-  const p3 = at(b);
-  if (!a.out && !b.in) return `M${p0.x} ${p0.y}L${p3.x} ${p3.y}`;
-  const c1 = at({ x: a.x + (a.out?.x ?? 0), y: a.y + (a.out?.y ?? 0) });
-  const c2 = at({ x: b.x + (b.in?.x ?? 0), y: b.y + (b.in?.y ?? 0) });
-  return `M${p0.x} ${p0.y}C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${p3.x} ${p3.y}`;
+  /** A vertex and its handle toward the stretch, on the artboard. @param {Vertex} v @param {'in' | 'out'} side @returns {Vertex} */
+  const onArtboard = (v, side) => {
+    const p = fromLayer(layer, v);
+    const handle = v[side];
+    if (!handle) return p;
+    const q = fromLayer(layer, { x: v.x + handle.x, y: v.y + handle.y });
+    return { ...p, [side]: { x: q.x - p.x, y: q.y - p.y } };
+  };
+  return pathData([onArtboard(a, 'out'), onArtboard(b, 'in')], false);
 }
 
 /** @param {PointerEvent} event */

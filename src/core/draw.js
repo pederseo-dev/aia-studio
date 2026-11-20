@@ -6,7 +6,8 @@
 
 import { childrenOf } from './document.js';
 import { holeOutlinesOf, outlineOf, stretchesIn } from './geometry.js';
-import { hiddenFlags, hidesEdges, resolveDoc, strokedOutlines } from './points.js';
+import { resolveDoc, strokedOutlines } from './points.js';
+import { hiddenFlags, hidesEdges } from './edges.js';
 import { svgTransform } from './transform.js';
 
 /**
@@ -21,7 +22,8 @@ import { svgTransform } from './transform.js';
 /** @param {string} src */
 const besideTheDocument = (src) => `assets/${src}`;
 
-const DEFAULTS = { fill: '#c8c2d4', stroke: '#2b2926', strokeWidth: 2 };
+/** What a part draws with where it sets nothing (the schema's defaults). */
+export const DEFAULTS = { fill: '#c8c2d4', stroke: '#2b2926', strokeWidth: 2, strokeCap: 'round', strokeJoin: 'round' };
 
 /** @param {number} n */
 const r = (n) => Math.round(n * 100) / 100;
@@ -66,7 +68,7 @@ export function partData(part) {
  * closed outline is opened where a stretch is hidden).
  * @param {DocObject} part resolved
  */
-export function strokeData(part) {
+function strokeData(part) {
   return strokedOutlines(part)
     .map((outline) => {
       const hidden = hiddenFlags(part, outline);
@@ -113,8 +115,8 @@ function drawPart(part) {
     strokeAttrs.stroke = String(stroke);
     if (part.strokeOpacity !== undefined && part.strokeOpacity !== 1) strokeAttrs['stroke-opacity'] = Number(part.strokeOpacity);
     strokeAttrs['stroke-width'] = Number(part.strokeWidth ?? DEFAULTS.strokeWidth);
-    strokeAttrs['stroke-linejoin'] = String(part.strokeJoin ?? 'round');
-    strokeAttrs['stroke-linecap'] = String(part.strokeCap ?? 'round');
+    strokeAttrs['stroke-linejoin'] = String(part.strokeJoin ?? DEFAULTS.strokeJoin);
+    strokeAttrs['stroke-linecap'] = String(part.strokeCap ?? DEFAULTS.strokeCap);
   }
   const id = part.id;
   if (stroke === null || !hidesEdges(part)) return { tag: 'path', attrs: { 'data-id': id, d: partData(part), ...fillAttrs, ...strokeAttrs }, children: [] };

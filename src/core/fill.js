@@ -369,8 +369,8 @@ export function styleProps(style) {
   if (style.stroke) {
     if (style.strokeWidth !== undefined) props.strokeWidth = style.strokeWidth;
     if (style.strokeOpacity !== undefined && style.strokeOpacity !== 1) props.strokeOpacity = style.strokeOpacity;
-    if (style.strokeCap !== undefined && style.strokeCap !== 'round') props.strokeCap = style.strokeCap;
-    if (style.strokeJoin !== undefined && style.strokeJoin !== 'round') props.strokeJoin = style.strokeJoin;
+    if (style.strokeCap !== undefined) props.strokeCap = style.strokeCap;
+    if (style.strokeJoin !== undefined) props.strokeJoin = style.strokeJoin;
   }
   return props;
 }

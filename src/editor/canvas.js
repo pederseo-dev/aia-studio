@@ -5,6 +5,7 @@
 import { childrenOf } from '../core/document.js';
 import { drawDocument, partData } from '../core/draw.js';
 import { syncShared } from '../core/points.js';
+import { hidesAll } from '../core/edges.js';
 import { assetUrl } from './images.js';
 import { state } from './state.js';
 import { area, element, screen, svg, view } from './view.js';
@@ -94,7 +95,7 @@ const GHOST_HIT = 8; // screen px, how near the outline of an open ghost a click
 /** Why a part draws nothing: hidden, or empty (neither fill nor stroke); '' if it draws. @param {DocObject} part */
 export function ghostKind(part) {
   if (part.visible === false) return 'hidden';
-  return part.fill === null && part.stroke === null ? 'empty' : '';
+  return part.fill === null && (part.stroke === null || hidesAll(part)) ? 'empty' : '';
 }
 
 /** A ghost outline: a dashed line, and a transparent area (or a wide line, for an open one) to pick it. @param {DocObject} part @param {string} kind */

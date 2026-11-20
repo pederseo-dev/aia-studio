@@ -3,9 +3,9 @@
 
 import { findObject } from '../../src/core/document.js';
 import { insertVertex, nearestOnOutline, verticesOf } from '../../src/core/geometry.js';
-import { movePointsOps, pointsNamed } from '../../src/core/points.js';
+import { followedLines, movePointsOps, pointsNamed } from '../../src/core/points.js';
 import { deletePointsOps, followOps, groupOps, namePoint, unweld, weld } from '../../src/core/weld.js';
-import { edgeOps, stretchBetweenPoints } from '../../src/core/edges.js';
+import { edgeOps, isHidden, stretchBetweenPoints } from '../../src/core/edges.js';
 import { AiaError, ok } from './common.js';
 
 /**
@@ -190,21 +190,37 @@ export function pointsCommands(ctx) {
         'The fill is not changed. The two points are part.point or part.index, next to each other along the part’s\n' +
         'stroke: for an element, two of its own points; for a shape that follows a line (head_stroke), two points of\n' +
         'that line (head.2 head.3). Points without a name get one, since a hidden edge is the pair of their names\n' +
-        '(hiddenEdges on the part). Example: aia edge face head_stroke head.2 head.3 --hide',
+        '(hiddenEdges on the part). One stretch per command: for several, run it for each pair of neighbors.\n' +
+        'A shape’s stroke lies under its line, and the line draws its own stroke there too: to leave only the fill,\n' +
+        'hide the stretch in both (aia edge face head_stroke head.2 head.3 --hide, then aia edge face head head.2\n' +
+        'head.3 --hide), or give the line no stroke.',
       run: async (args) => {
         const id = need(args, 0, 'the document id');
         const doc = await resolved(id);
         const partId = need(args, 1, 'the part whose stroke it is');
         const a = onePoint(doc, need(args, 2, 'the first point'));
         const b = onePoint(doc, need(args, 3, 'the second point'));
+        if (args.positional.length > 4) throw new AiaError('aia edge takes two points, next to each other: run it once for each stretch');
         const hide = args.flags.hide === true;
         if (hide === (args.flags.show === true)) throw new AiaError('Say one of --hide or --show');
         const { ops, edge, named } = welding(() => edgeOps(doc, stretchBetweenPoints(doc, partId, a, b), hide));
         await store.apply(id, ops, { origin: ORIGIN, note: `${hide ? 'Hide' : 'Show'} an edge of ${partId}` });
-        const stroke = findObject(doc, partId)?.stroke;
-        const none = hide || stroke !== null ? '' : ` (${partId} has no stroke, so nothing shows there yet)`;
+        const part = /** @type {any} */ (findObject(doc, partId));
+        const none = part.stroke === null ? ` ${partId} has no stroke, so this changes nothing you can see.` : '';
+        // The lines a shape follows that still draw their own stroke over that stretch.
+        const over = hide
+          ? [...followedLines(part)].filter((line) => {
+              if (findObject(doc, line)?.stroke === null) return false;
+              try {
+                return !isHidden(doc, stretchBetweenPoints(doc, line, a, b));
+              } catch {
+                return false;
+              }
+            })
+          : [];
+        const still = over.length ? ` ${over.join(', ')} still draws its own stroke over it: to leave only the fill, aia edge ${id} ${over[0]} ${args.positional[2]} ${args.positional[3]} --hide.` : '';
         const names = named.length ? ` (named now: ${named.join(', ')})` : '';
-        return ok(`${hide ? 'Hid' : 'Showed'} the stroke of ${partId} between ${edge[0]} and ${edge[1]}${names}${none}.`);
+        return ok(`${hide ? 'Hid' : 'Showed'} the stroke of ${partId} between ${edge[0]} and ${edge[1]}${names}.${none}${still}`);
       },
     },
 

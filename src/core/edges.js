@@ -6,14 +6,15 @@
 
 import { findObject } from './document.js';
 import { nearestOnOutline } from './geometry.js';
-import { hiddenFlags, pointOf, stretchEnds, strokedOutlines, withEdge } from './points.js';
+import { edgeKey, hiddenEdgesOf, pointOf, stretchEnds, strokedOutlines } from './points.js';
 import { WeldError, namedRefs, vertexOps } from './weld.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc
  * @typedef {import('./document.js').DocObject} DocObject
  * @typedef {import('./operations.js').Operation} Operation
- * @typedef {import('./points.js').StrokedOutline} StrokedOutline
+ * @typedef {import('./points.js').DrawnPoint} DrawnPoint
+ * @typedef {import('./points.js').Edge} Edge
  * @typedef {import('./weld.js').PointAt} PointAt
  * @typedef {{ part: string, hole: number, index: number }} Stretch a drawn stretch: of which outline (hole, or -1
  *   for the part's own) and which one (from vertex `index` to the next)
@@ -27,7 +28,33 @@ function needPart(doc, id) {
 }
 
 /** @param {DocObject} part @param {number} hole */
-const outlineOf = (part, hole) => strokedOutlines(part).find((o) => o.hole === hole);
+const strokedOutline = (part, hole) => strokedOutlines(part).find((o) => o.hole === hole);
+
+/**
+ * Which stretches of an outline are hidden, one flag per stretch.
+ * @param {DocObject} part @param {{ points: DrawnPoint[], closed: boolean }} outline
+ */
+export function hiddenFlags(part, outline) {
+  const hidden = new Set(hiddenEdgesOf(part).map((e) => edgeKey(...e)));
+  return stretchEnds(outline).map((e) => !!e && hidden.has(edgeKey(...e)));
+}
+
+/** Whether a part hides some stretch of its stroke. @param {DocObject} part resolved */
+export const hidesEdges = (part) => hiddenEdgesOf(part).length > 0 && strokedOutlines(part).some((o) => hiddenFlags(part, o).some(Boolean));
+
+/**
+ * The hidden edges of a part with one stretch hidden or shown.
+ * @param {DocObject} part @param {Edge} edge @param {boolean} hide
+ * @returns {Edge[]}
+ */
+export function withEdge(part, edge, hide) {
+  const key = edgeKey(...edge);
+  const others = hiddenEdgesOf(part).filter((e) => edgeKey(...e) !== key);
+  return hide ? [...others, edge] : others;
+}
+
+/** Whether a part hides every stretch of its stroke. @param {DocObject} part resolved */
+export const hidesAll = (part) => hiddenEdgesOf(part).length > 0 && strokedOutlines(part).every((o) => hiddenFlags(part, o).every(Boolean));
 
 /**
  * Whether a drawn stretch is hidden.
@@ -35,7 +62,7 @@ const outlineOf = (part, hole) => strokedOutlines(part).find((o) => o.hole === h
  */
 export function isHidden(doc, { part: id, hole, index }) {
   const part = needPart(doc, id);
-  const outline = outlineOf(part, hole);
+  const outline = strokedOutline(part, hole);
   return !!outline && !!hiddenFlags(part, outline)[index];
 }
 
@@ -46,7 +73,7 @@ export function isHidden(doc, { part: id, hole, index }) {
  */
 export function edgeOps(doc, { part: id, hole, index }, hide) {
   const part = needPart(doc, id);
-  const outline = outlineOf(part, hole);
+  const outline = strokedOutline(part, hole);
   const count = outline ? stretchEnds(outline).length : 0;
   if (!outline || index < 0 || index >= count) throw new WeldError(`${id} draws no stretch ${index}${hole >= 0 ? ` in hole ${hole}` : ''}`);
   const n = outline.points.length;
@@ -112,7 +139,7 @@ export function stretchNear(part, p, reach) {
  * @param {DocObject} part resolved @param {Stretch} stretch
  */
 export function stretchVertices(part, { hole, index }) {
-  const outline = outlineOf(part, hole);
+  const outline = strokedOutline(part, hole);
   if (!outline || index < 0 || index >= stretchEnds(outline).length) return [];
   const n = outline.vertices.length;
   return [outline.vertices[index], outline.vertices[(index + 1) % n]];

@@ -269,3 +269,13 @@ test('aia edge hides and shows a stretch of a stroke by two points, on an elemen
   assert.match((await aia.run('edge face box box.a box.b --show')).text, /shown already/);
   assert.match(await ok('guide points'), /aia edge face head head\.2 head\.3 --hide/);
 });
+
+test('aia edge says when the line still draws over a shape’s stroke, when a part has no stroke, and takes two points only', async () => {
+  await ok('new "Face" --width 400 --height 300');
+  await ok('rect face ink box --box 0,0,100,100 --names a,b,c,d');
+  await ok('fill face ink --at 50,50 --stroke #ff0000');
+  assert.match(await ok('edge face box_stroke box.c box.d --hide'), /box still draws its own stroke over it: to leave only the fill, aia edge face box box\.c box\.d --hide/);
+  assert.doesNotMatch(await ok('edge face box box.c box.d --hide'), /still draws/);
+  assert.match(await ok('edge face box_fill box.a box.b --hide'), /box_fill has no stroke/);
+  assert.match((await aia.run('edge face box box.a box.b box.c --hide')).text, /takes two points/);
+});

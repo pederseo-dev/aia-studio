@@ -7,8 +7,8 @@
 // part: { part, segment, t } (the stretch from vertex `segment` to the next, t from 0 to 1).
 
 import { findObject, idFromName } from './document.js';
-import { closeOutline, endOf, insertVertex, joinOutlines, roundVertex, verticesOf } from './geometry.js';
-import { followsOthers, hiddenEdgesOf, nextPointName, passIndex, pointIdOf, pointOf, redirectEdges, splitRef } from './points.js';
+import { closeOutline, endOf, holesOf, insertVertex, joinOutlines, roundVertex, verticesOf } from './geometry.js';
+import { edgeKey, followsOthers, hiddenEdgesOf, nextPointName, passIndex, pointIdOf, pointOf, splitRef } from './points.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc
@@ -51,11 +51,18 @@ export const vertexOps = (changes) => [...changes].map(([id, vertices]) => ({ op
  */
 export function redirect(doc, layer, old, next, changes) {
   const edgeOps = next ? redirectEdges(doc, layer, old, next) : [];
-  return [...redirectVertices(doc, layer, old, next, changes), ...edgeOps];
-}
-
-/** The vertices and groups part of `redirect`. @param {Doc} doc @param {string} layer @param {string} old @param {string | null} next @param {Map<string, Vertex[]>} changes */
-function redirectVertices(doc, layer, old, next, changes) {
+  /** @param {Vertex} v @returns {Vertex} */
+  const moved = (v) => {
+    if (v.ref !== old) return v;
+    if (next) return { ...v, ref: next };
+    const { ref: _ref, ...own } = v;
+    return own;
+  };
+  // Holes share points as outlines do (a shape around a line inside it).
+  const holeOps = doc.objects.flatMap((o) =>
+    o.parent === layer && holesOf(o).some((hole) => hole.some((v) => v.ref === old)) ? [{ op: 'set', target: o.id, props: { holes: holesOf(o).map((hole) => hole.map(moved)) } }] : [],
+  );
+  edgeOps.unshift(...holeOps);
   for (const o of doc.objects) {
     if (o.parent !== layer) continue;
     const vertices = changes.get(o.id) ?? verticesOf(o);
@@ -71,15 +78,34 @@ function redirectVertices(doc, layer, old, next, changes) {
     );
   }
   const groups = /** @type {Record<string, string[]> | undefined} */ (findObject(doc, layer)?.groups);
-  if (!groups || !Object.values(groups).some((members) => members.includes(old))) return [];
+  if (!groups || !Object.values(groups).some((members) => members.includes(old))) return edgeOps;
   const renamed = Object.fromEntries(
     Object.entries(groups).map(([g, members]) => [g, [...new Set(members.flatMap((m) => (m !== old ? [m] : next ? [next] : [])))]]),
   );
-  return [{ op: 'set', target: layer, props: { groups: renamed } }];
+  return [{ op: 'set', target: layer, props: { groups: renamed } }, ...edgeOps];
+}
+
+/**
+ * The ops that make the hidden edges of a layer's parts that name a point name another one instead (a point
+ * renamed, or welded into another).
+ * @param {Doc} doc @param {string} layer @param {string} old @param {string} next
+ * @returns {Operation[]}
+ */
+export function redirectEdges(doc, layer, old, next) {
+  return doc.objects.flatMap((o) => {
+    const edges = hiddenEdgesOf(o);
+    if (o.parent !== layer || !edges.some((e) => e.includes(old))) return [];
+    const kept = edges.flatMap((e) => {
+      if (!e.includes(old)) return [e];
+      const [a, b] = e.map((p) => (p === old ? next : p));
+      return a === b ? [] : [/** @type {[string, string]} */ ([a, b])];
+    });
+    return [{ op: 'set', target: o.id, props: { hiddenEdges: kept } }];
+  });
 }
 
 /** Whether a named point of a part is shared by another. @param {Doc} doc @param {DocObject} part @param {Vertex} v */
-export const isShared = (doc, part, v) => !!v.name && doc.objects.some((o) => verticesOf(o).some((w) => w.ref === `${part.id}.${v.name}`));
+export const isShared = (doc, part, v) => !!v.name && doc.objects.some((o) => [...verticesOf(o), ...holesOf(o).flat()].some((w) => w.ref === `${part.id}.${v.name}`));
 
 /**
  * The point `a` of part `a.part` shares the point `bi` of part `b` (whose vertices are `bVertices`: one may have
@@ -131,13 +157,19 @@ export function weld(doc, moving, target, { merge = false } = {}) {
   const bEnd = endOf(b, target.index);
   if (a.id === b.id) {
     if (!aEnd || !bEnd || aEnd === bEnd) throw new WeldError(`within ${a.id}, only its two open ends weld (and that closes it)`);
-    return { ops: [{ op: 'set', target: b.id, props: closeOutline(b, bEnd) }], keep: b.id, pick: [], note: `Weld: close ${b.id}` };
+    const closed = closeOutline(b, bEnd);
+    const edges = edgesAfterMerge(b, hiddenEdgesOf(b), closed.vertices, 0);
+    return { ops: [{ op: 'set', target: b.id, props: { ...closed, ...(hiddenEdgesOf(b).length ? { hiddenEdges: edges } : {}) } }], keep: b.id, pick: [], note: `Weld: close ${b.id}` };
   }
   if (merge) {
     if (!aEnd || !bEnd) throw new WeldError('joining into one line needs two open ends of two lines');
+    const vertices = joinOutlines(a, aEnd, b, bEnd);
+    // a's hidden edges come along, named after b now; the two merged ends are one point.
+    const fromA = hiddenEdgesOf(a).map((e) => /** @type {[string, string]} */ (e.map((p) => (splitRef(p)[0] === a.id ? `${b.id}.${splitRef(p)[1]}` : p))));
+    const all = [...hiddenEdgesOf(b), ...fromA];
     return {
       ops: [
-        { op: 'set', target: b.id, props: { vertices: joinOutlines(a, aEnd, b, bEnd) } },
+        { op: 'set', target: b.id, props: { vertices, ...(all.length ? { hiddenEdges: edgesAfterMerge(b, all, vertices, verticesOf(a).length - 1) } : {}) } },
         { op: 'delete', target: a.id },
       ],
       keep: b.id,
@@ -146,6 +178,25 @@ export function weld(doc, moving, target, { merge = false } = {}) {
     };
   }
   return share(doc, moving, b, verticesOf(b), target.index);
+}
+
+/**
+ * The hidden edges of a part whose vertices became `vertices` by merging two ends into the one at `merged`: a name
+ * of the part that is gone (the end that lost its name) is the merged point now. Pairs left with one point twice, or
+ * twice the same, are dropped.
+ * @param {DocObject} part @param {[string, string][]} edges @param {Vertex[]} vertices @param {number} merged
+ * @returns {[string, string][]}
+ */
+function edgesAfterMerge(part, edges, vertices, merged) {
+  const names = new Set(vertices.map((v) => v.name));
+  const to = pointIdOf(part, vertices[merged]);
+  /** @type {Map<string, [string, string]>} */
+  const kept = new Map();
+  for (const e of edges) {
+    const [x, y] = e.map((p) => (splitRef(p)[0] !== part.id || names.has(splitRef(p)[1]) ? p : to));
+    if (x && y && x !== y) kept.set(edgeKey(x, y), [x, y]);
+  }
+  return [...kept.values()];
 }
 
 /**

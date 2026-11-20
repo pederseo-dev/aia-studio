@@ -394,7 +394,7 @@ function partSections(doc, part) {
       const property = /** @type {PropertySpec} */ (spec.properties[key]);
       return choiceSelect(property, valueOf(target, key, property), (v) => save(target, { [key]: v }));
     };
-    out.push(row('Cap / join', 'How the shape’s stroke ends (round, square, butt) and turns at corners (round, miter, bevel).', pick('strokeCap'), pick('strokeJoin')));
+    out.push(row('Cap / join', `${spec.properties.strokeCap.help} ${spec.properties.strokeJoin.help}`, pick('strokeCap'), pick('strokeJoin')));
   }
   return out;
 }

@@ -145,6 +145,8 @@ points next to each other along that stroke. For an element they are its own poi
 they are the line's points (the stretch between them is the piece hidden):
   aia edge face head head.2 head.3 --hide             (--show draws it again)
   aia edge face head_stroke head.chin head.4 --hide   the shape's stroke, between two points of head
+The line draws its own stroke over its shape's stroke: to leave only the fill there, hide the stretch in both (the
+answer says so), or give the line no stroke. One stretch per command, between two neighbor points.
 Points without a name get one (the part's hiddenEdges keeps pairs of names). A hidden edge whose point is deleted, or
 whose points stop being next to each other (a point added between them), is dropped.
 

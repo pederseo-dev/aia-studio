@@ -50,7 +50,7 @@ export function resolveSchema(definitions) {
 }
 
 import { ID } from './document.js';
-import { POINT_REF, groupsError } from './points.js';
+import { POINT_REF, edgeKey, groupsError } from './points.js';
 
 const COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -104,7 +104,7 @@ function edgesError(value) {
   for (const [i, edge] of value.entries()) {
     if (!Array.isArray(edge) || edge.length !== 2 || edge.some((p) => typeof p !== 'string' || !POINT_REF.test(p))) return `edge ${i} ${example}`;
     if (edge[0] === edge[1]) return `edge ${i} names the same point twice`;
-    const key = [...edge].sort().join(' ');
+    const key = edgeKey(edge[0], edge[1]);
     if (seen.has(key)) return `edge ${i} is there twice (${edge[0]} – ${edge[1]})`;
     seen.add(key);
   }

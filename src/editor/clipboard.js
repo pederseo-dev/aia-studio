@@ -29,7 +29,9 @@ export function duplicate() {
 export function copy() {
   const parts = selectedParts();
   if (!parts.length) return false;
-  copied = structuredClone(parts);
+  // A shallow copy keeps what resolveDoc set (the outline a shape draws, its drawn points); the document is never
+  // changed in place, so the vertices it shares stay as they are.
+  copied = parts.map((part) => ({ ...part }));
   navigator.clipboard?.writeText(JSON.stringify(copied, null, 2)).catch(() => {});
   return true;
 }

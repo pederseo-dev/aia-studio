@@ -5,7 +5,8 @@
 
 import { findObject, idFromName } from './document.js';
 import { IDENTITY, holeOutlinesOf, holesOf, outlineOf, transformPart } from './geometry.js';
-import { hiddenEdgesOf, hiddenFlags, nextPointName, strokedOutlines } from './points.js';
+import { hiddenEdgesOf, nextPointName, strokedOutlines } from './points.js';
+import { hiddenFlags } from './edges.js';
 
 /**
  * @typedef {import('./document.js').Doc} Doc

@@ -125,3 +125,49 @@ test('a copy keeps its hidden stretches, on its own points', () => {
   assert.ok(copy.hiddenEdges[0].every((p) => p.startsWith(`${copy.id}.`)));
   assert.equal(nodeOf(copied, copy.id).tag, 'g');
 });
+
+test('welding an end of a hidden edge into another point renames the pair; a pair left with one point twice is dropped', async () => {
+  const { weld } = await import('../src/core/weld.js');
+  const named = { ...square, vertices: square.vertices.map((v, i) => ({ ...v, name: `p${i}` })) };
+  const doc = apply(layer(named, { id: 'dot', closed: false, fill: null, vertices: [{ x: 100, y: 0, name: 'q' }, { x: 150, y: 0 }] }), [{ op: 'set', target: 'box', props: { hiddenEdges: [['box.p1', 'box.p2']] } }]);
+  // box.p1 shares dot.q from now on: the pair names dot.q.
+  const welded = settled(doc, weld(resolveDoc(doc), { part: 'box', index: 1 }, { part: 'dot', index: 0 }).ops);
+  assert.deepEqual(find(welded, 'box').hiddenEdges, [['dot.q', 'box.p2']]);
+  assert.equal(nodeOf(welded, 'box').tag, 'g', 'still hidden');
+});
+
+test('a stretch of a hole between its own points cannot be hidden (they take no names)', () => {
+  const doc = layer({ ...square, holes: [[{ x: 20, y: 20 }, { x: 80, y: 20 }, { x: 80, y: 80 }]] });
+  assert.throws(() => edgeOps(resolveDoc(doc), { part: 'box', hole: 0, index: 0 }, true), /take no names/);
+});
+
+test('renaming a point a hole shares renames the hole’s ref, and keeps the name while a hole shares it', () => {
+  const inner = { id: 'inn', vertices: [{ x: 30, y: 30, name: 'e' }, { x: 70, y: 30, name: 'f' }, { x: 70, y: 70, name: 'g' }] };
+  const doc = apply(layer(square, inner), [{ op: 'create', type: 'path', id: 'ring', parent: 'ink', props: { vertices: square.vertices, holes: [[{ ref: 'inn.e' }, { ref: 'inn.f' }, { ref: 'inn.g' }]] } }]);
+  const renamed = settled(doc, namePoint(resolveDoc(doc), { part: 'inn', index: 0 }, 'lefty').ops);
+  assert.equal(find(renamed, 'ring').holes[0][0].ref, 'inn.lefty', 'the hole is kept');
+  assert.throws(() => namePoint(resolveDoc(renamed), { part: 'inn', index: 0 }, ''), /keeps a name/);
+});
+
+test('a batch that writes a pair its own changes make stale is refused, not emptied', () => {
+  const doc = hide(layer({ ...square, vertices: square.vertices.map((v, i) => ({ ...v, name: `p${i}` })) }), { part: 'box', hole: -1, index: 0 });
+  const added = insertVertex(find(doc, 'box'), 1, 0.5).vertices;
+  const ops = [{ op: 'set', target: 'box', props: { vertices: added, hiddenEdges: [['box.p0', 'box.p1'], ['box.p1', 'box.p2']] } }];
+  assert.throws(() => apply(doc, settleOps(doc, ops, loose)), /draws no stretch/);
+});
+
+test('joining two lines or closing one keeps their hidden edges', async () => {
+  const { weld } = await import('../src/core/weld.js');
+  const line = (id, x) => ({ id, closed: false, fill: null, vertices: [0, 1, 2].map((i) => ({ x: x + i * 10, y: i * 5, name: `${id}${i}` })) });
+  let doc = apply(layer(line('a', 0), line('b', 40)), [
+    { op: 'set', target: 'a', props: { hiddenEdges: [['a.a0', 'a.a1']] } },
+    { op: 'set', target: 'b', props: { hiddenEdges: [['b.b1', 'b.b2']] } },
+  ]);
+  doc = settled(doc, weld(resolveDoc(doc), { part: 'a', index: 2 }, { part: 'b', index: 0 }, { merge: true }).ops);
+  assert.deepEqual(find(doc, 'b').hiddenEdges, [['b.b1', 'b.b2'], ['b.a0', 'b.a1']]);
+  // Closing: the end that goes away hands its pairs to the one that stays.
+  const ends = find(doc, 'b').vertices.length - 1;
+  doc = settled(doc, weld(resolveDoc(doc), { part: 'b', index: ends }, { part: 'b', index: 0 }).ops);
+  assert.equal(find(doc, 'b').closed, undefined);
+  assert.equal(find(doc, 'b').hiddenEdges.length, 2);
+});

@@ -237,7 +237,7 @@ export function strokedOutlines(part) {
 }
 
 /** The same pair of points, whichever way it is written. @param {string} a @param {string} b */
-const edgeKey = (a, b) => (a < b ? `${a} ${b}` : `${b} ${a}`);
+export const edgeKey = (a, b) => (a < b ? `${a} ${b}` : `${b} ${a}`);
 
 /** The hidden edges of a part, as written. @param {DocObject} part @returns {Edge[]} */
 export const hiddenEdgesOf = (part) => /** @type {Edge[]} */ (Array.isArray(part.hiddenEdges) ? part.hiddenEdges : []);
@@ -258,29 +258,6 @@ export function stretchEnds({ points, closed }) {
 
 /** The keys of every stretch a part draws. @param {DocObject} part resolved */
 const drawnEdgeKeys = (part) => new Set(strokedOutlines(part).flatMap((o) => stretchEnds(o).flatMap((e) => (e ? [edgeKey(...e)] : []))));
-
-/**
- * Which stretches of an outline are hidden, one flag per stretch.
- * @param {DocObject} part @param {{ points: DrawnPoint[], closed: boolean }} outline
- */
-export function hiddenFlags(part, outline) {
-  const hidden = new Set(hiddenEdgesOf(part).map((e) => edgeKey(...e)));
-  return stretchEnds(outline).map((e) => !!e && hidden.has(edgeKey(...e)));
-}
-
-/** Whether a part hides some stretch of its stroke. @param {DocObject} part resolved */
-export const hidesEdges = (part) => hiddenEdgesOf(part).length > 0 && strokedOutlines(part).some((o) => hiddenFlags(part, o).some(Boolean));
-
-/**
- * The hidden edges of a part with one stretch hidden or shown.
- * @param {DocObject} part @param {Edge} edge @param {boolean} hide
- * @returns {Edge[]}
- */
-export function withEdge(part, edge, hide) {
-  const key = edgeKey(...edge);
-  const others = hiddenEdgesOf(part).filter((e) => edgeKey(...e) !== key);
-  return hide ? [...others, edge] : others;
-}
 
 /**
  * What is wrong with the named points, shared points and point groups of a document, or null.
@@ -370,25 +347,6 @@ export function renamePointRefs(doc, from, to) {
     if (groups) o.groups = Object.fromEntries(Object.entries(groups).map(([g, members]) => [g, members.map(rename)]));
     if (hiddenEdgesOf(o).length) o.hiddenEdges = hiddenEdgesOf(o).map(([a, b]) => [rename(a), rename(b)]);
   }
-}
-
-/**
- * The ops that make the hidden edges of a layer's parts that name a point name another one instead (a point
- * renamed, or welded into another).
- * @param {Doc} doc @param {string} layer @param {string} old @param {string} next
- * @returns {Operation[]}
- */
-export function redirectEdges(doc, layer, old, next) {
-  return doc.objects.flatMap((o) => {
-    const edges = hiddenEdgesOf(o);
-    if (o.parent !== layer || !edges.some((e) => e.includes(old))) return [];
-    const kept = edges.flatMap((e) => {
-      if (!e.includes(old)) return [e];
-      const [a, b] = e.map((p) => (p === old ? next : p));
-      return a === b ? [] : [/** @type {Edge} */ ([a, b])];
-    });
-    return [{ op: 'set', target: o.id, props: { hiddenEdges: kept } }];
-  });
 }
 
 /**
@@ -563,17 +521,20 @@ export function settleOps(doc, ops, apply) {
     if (brokenHoles.some((b) => b.some(Boolean))) fix(o, { holes: holesOf(o).map((hole, h) => hole.map((v, i) => (brokenHoles[h][i] ? plain(v) : v))) });
   }
   // Hidden edges this batch made stale (a point gone, or the two points no longer next to each other along the
-  // stroke, as when a point is added between them) are dropped. One that never named a drawn stretch is left, so
-  // the batch is refused with the reason.
+  // stroke, as when a point is added between them) are dropped, if they were there before it. One that never named
+  // a drawn stretch, or that the batch wrote itself, is left, so the batch is refused with the reason.
   const settled = fixes.size ? apply(after, [...fixes].map(([target, props]) => ({ op: 'set', target, props }))) : after;
-  const drawnNow = resolveDoc(settled);
+  const drawnNow = settled.objects.some((o) => hiddenEdgesOf(o).length) ? resolveDoc(settled) : settled;
   for (const o of settled.objects) {
     const edges = hiddenEdgesOf(o);
     if (!edges.length) continue;
     const now = drawnEdgeKeys(/** @type {DocObject} */ (findObject(drawnNow, o.id)));
     const was = findObject(resolved, o.id);
     const before = was ? drawnEdgeKeys(was) : new Set();
-    const kept = edges.filter((e) => now.has(edgeKey(...e)) || (!before.has(edgeKey(...e)) && !e.some(lost)));
+    const had = new Set(hiddenEdgesOf(findObject(doc, o.id) ?? o).map((e) => edgeKey(...e)));
+    // A pair this batch wrote is the batch's own: pointsError says what is wrong with it.
+    const stale = (/** @type {Edge} */ e) => had.has(edgeKey(...e)) && !now.has(edgeKey(...e)) && (before.has(edgeKey(...e)) || e.some(lost));
+    const kept = edges.filter((e) => !stale(e));
     if (kept.length !== edges.length) fix(o, { hiddenEdges: kept });
   }
   return [...first, ...[...fixes].map(([target, props]) => ({ op: 'set', target, props }))];

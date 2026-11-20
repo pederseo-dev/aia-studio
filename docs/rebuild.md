@@ -495,8 +495,9 @@ a point a ring shows, and a click welds them there. A **shape** is two parts tha
 inside a gap that do not touch it are **holes**. The Inspector shows, for one part, its **Element** (own order, fill
 and stroke: square swatches) and its **Shape** section (a dropdown, delete, each shape's fill and stroke as beans with
 their own order). `aia shape`, `aia fill`, `aia crossings` and `aia order` do the same for the AI. The structure
-items of the closing review are done. **Next: step 3, the stroke of stretches** (agreed on 2026-11-20, see "Step 3:
-Hide Edge, caps and joins" just below). The older plan after it and the step notes are history: where they disagree
+items of the closing review are done. **Step 3, Hide Edge, caps and joins, is done** (2026-11-20, see "Step 3:
+Hide Edge, caps and joins" just below, with its closing review): `hiddenEdges`, `strokeCap` / `strokeJoin`, `aia
+edge` and the Hide Edge tool (H). The older plan after it and the step notes are history: where they disagree
 with this paragraph, this paragraph is right.
 
 ### Step 3: Hide Edge, caps and joins (agreed 2026-11-20)
@@ -564,6 +565,30 @@ screen pixels plus half the stroke width); a click hides it (`edgeOps`, one undo
 it again. While the tool is on, every hidden stretch shows as a faint dashed line, and the lit one is dashed when a
 click would show it. A shape's stroke lies under its line, so the line wins there: **Alt** takes the stroke under the
 topmost one (added after trying it). The shortcuts dialog has its row.
+
+**Step 3e, closing review (2026-11-20):** the `auditor`, `architecture` and `ai-tester` agents (report:
+`docs/ai-tests/2026-11-20-hide-edge.md`). Fixed:
+- Renaming a point that a hole shares dropped the hole (older than step 3): `redirect` in `weld.js` renames the
+  refs of holes too, and `isShared` counts holes, so `aia name --none` keeps such a name.
+- A batch that wrote a pair its own changes made stale was applied and the pair (and an older one) silently dropped:
+  `settleOps` now drops only pairs that were there before the batch; the batch's own go to `pointsError`.
+- Joining two lines (`--join`, Alt in the editor) lost the absorbed line's hidden edges, and closing a line lost the
+  pairs at the end that goes away: `edgesAfterMerge` carries them (renamed to the kept part and the merged point).
+- Ctrl+C / Ctrl+V of a shape pasted a 2-point sliver without its hidden edges (older than step 3): `structuredClone`
+  dropped the drawn outline `resolveDoc` sets under symbols; the clipboard keeps a shallow copy.
+- A line without fill whose stretches are all hidden drew nothing and could not be picked: it shows as a ghost.
+- `aia edge`: the "no stroke" note came out the wrong way round; a third point is refused (one stretch per command);
+  hiding a shape's stretch says when its line still draws its own stroke over it, with the command to hide that too
+  (the ai-tester needed 4 commands to leave only the fill at the chin); the help and the guide say so.
+- Structure (architecture): `hiddenFlags`, `hidesEdges`, `withEdge` moved to `edges.js` and `redirectEdges` to
+  `weld.js`, so `points.js` keeps only what checks and settling need; `settleOps` resolves for hidden edges only when
+  a part has some; draw's `DEFAULTS` holds the cap and join defaults (also used by the tool's reach); the tool's
+  highlight uses `pathData`; `edgeKey` is shared with the schema check; unused exports removed. Tests for welding an
+  end of a hidden edge, holes, joining and closing.
+Found and left for later: a shape around two lines welded only at their two ends (a lens, 2 drawn vertices) is drawn
+with one side only, and its two sides are one pair (older than step 3: `pathData` does not draw the closing side of
+a 2-vertex outline); unwelding an end of a hidden edge shows the stretch again (the vertex loses its name); the
+editor has no list of hidden stretches besides the dashed lines, and `aia show` is the AI's.
 
 Agreed on 2026-11-19, on decision 10 (replaces the paint bucket plan of 2026-11-18). Not a paint bucket: a **Fill &
 Stroke tool (F)** that works as a selector of its own. Over a closed gap between lines it shows the gap hatched, over a
