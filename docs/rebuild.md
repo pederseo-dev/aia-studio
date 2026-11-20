@@ -590,6 +590,29 @@ with one side only, and its two sides are one pair (older than step 3: `pathData
 a 2-vertex outline); unwelding an end of a hidden edge shows the stretch again (the vertex loses its name); the
 editor has no list of hidden stretches besides the dashed lines, and `aia show` is the AI's.
 
+### Step 4: Select Shape (agreed 2026-11-20)
+
+Asked by the user after step 3: with Select, a line, its `_fill` and its `_stroke` lie on top of each other, so it is
+hard to know which one a click took. As Moho's Select Shape, a tool of its own:
+- **Select Shape (Q)**, in the Create Shape group. Over the canvas, what a click would take is marked lightly, with
+  a small label (`head · element`, `head_fill · fill`, `head_stroke · stroke`): a fill tinted, a stroke as a band
+  along it. Near a stroke a click takes the topmost stroke there (a line or a `_stroke`); inside, the fill. An
+  **element** is taken whole (its own fill and stroke are one part); a shape's fill and stroke are taken apart.
+- **Alt+click** goes down through everything at that place (line → `_stroke` → `_fill` → …), from the one selected.
+- The selection stays lightly marked the same way, and the Inspector shows it (the element, with the shape picked).
+- **↑ / ↓** raise or lower the selected part one place in its layer, **Shift** to the top or bottom (the arrows do
+  not move anything in this tool). No ordering across layers and no list of the order (decided: not needed).
+- Nothing new for the AI: `aia order` orders already.
+
+**Built (2026-11-20):** `partsAt(doc, at, reach, include)` and `kindOf(part)` in `src/core/shapes.js` (no DOM, tested
+in `tests/fill.test.js`) give the parts drawn at a place of the artboard, topmost first, each as element, fill or
+stroke: near a stroke it draws (not a hidden stretch; reach plus half its width, in its layer's units) or inside its
+fill (its holes left out, curves sampled). `src/editor/selectShapeTool.js` (Q, in the Create Shape group: Create
+Shape, Select Shape, Hide Edge) marks the hovered part (a fill tinted, a stroke as a band, an element both, and a
+label `id · kind` by the pointer) and the selected ones more faintly; a click selects the topmost, Alt+click the one
+under the selected one (round to the top after the last); ↑ / ↓ in `main.js` call `orderSelected` (Shift: top or
+bottom), ← / → do nothing in this tool. The shortcuts dialog has its row.
+
 Agreed on 2026-11-19, on decision 10 (replaces the paint bucket plan of 2026-11-18). Not a paint bucket: a **Fill &
 Stroke tool (F)** that works as a selector of its own. Over a closed gap between lines it shows the gap hatched, over a
 stretch of a line (between two points) it shows it thicker; a click marks or unmarks it (Shift: several), and the marks

@@ -309,3 +309,17 @@ test('a shape belongs to the line it is named after; an element lists its shapes
   const shapes = shapesOf(after, box).map((s) => [s.key, s.fill?.id ?? null, s.stroke?.id ?? null]);
   assert.deepEqual(shapes.sort(), [['box', 'box_fill', 'box_stroke'], ['box_2', 'box_fill_2', null], ['glow', 'glow_fill', null]].sort());
 });
+
+test('partsAt: what is drawn at a place, topmost first, as element, fill or stroke', async () => {
+  const { partsAt } = await import('../src/core/shapes.js');
+  const doc = layer({ ...square, fill: null });
+  const nodes = /** @type {any} */ (gapAt(resolveDoc(doc), 'ink', { x: 50, y: 50 })).nodes;
+  const shaped = apply(doc, shapeFromPointsOps(resolveDoc(doc), 'ink', nodes, { fill: '#ff0000', stroke: '#000000', strokeWidth: 6 }).ops);
+  const at = (x, y) => partsAt(resolveDoc(shaped), { x, y }, 3);
+  assert.deepEqual(at(50, 1), [{ id: 'box', kind: 'element' }, { id: 'box_stroke', kind: 'stroke' }, { id: 'box_fill', kind: 'fill' }], 'on the side: the line, the shape’s stroke, then its fill');
+  assert.deepEqual(at(50, 50), [{ id: 'box_fill', kind: 'fill' }], 'inside: only the fill (the line has none)');
+  assert.deepEqual(at(300, 300), []);
+  // A moved layer: places are on the artboard.
+  const moved = apply(shaped, [{ op: 'set', target: 'ink', props: { x: 200 } }]);
+  assert.deepEqual(partsAt(resolveDoc(moved), { x: 250, y: 50 }, 3), [{ id: 'box_fill', kind: 'fill' }]);
+});

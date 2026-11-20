@@ -15,6 +15,7 @@ export const TOOLS = {
   pen: { name: 'Pen', key: 'P', icon: 'pen', help: 'Click for corners, drag for curves; the first point closes, Enter ends a line, Esc cancels' },
   rect: { name: 'Rectangle', key: 'R', icon: 'rect', help: 'Drag on the canvas for a rectangular path; Shift for a square' },
   ellipse: { name: 'Ellipse', key: 'E', icon: 'ellipse', help: 'Drag on the canvas for an elliptical path; Shift for a circle' },
+  shapeSelect: { name: 'Select Shape', key: 'Q', icon: 'selectShape', help: 'Shows what a click takes (an element whole, or a shape’s fill or stroke) and takes it; Alt+click goes down through what is under it. ↑ / ↓ raise or lower it in its layer (Shift: to the top or bottom)' },
   edge: { name: 'Hide Edge', key: 'H', icon: 'hideEdge', help: 'Click a stretch of a stroke to hide it, without touching the fill (Moho’s Hide Edge); click a hidden one, shown dashed, to show it again. Works on elements and on the strokes of shapes; Alt: the stroke under the topmost one (a shape’s stroke under its line)' },
   shape: { name: 'Create Shape', key: 'F', icon: 'bean', help: 'Pick the points around a shape (click, a box, or a click inside a gap; Shift adds or takes out, also dragging over points); a checkerboard shows when they close it, and Create shape (Enter) makes it. A click on a ring welds two crossing lines there. Esc clears the picks' },
 };
@@ -23,7 +24,7 @@ export const TOOLS = {
 const GROUPS = [
   { id: 'transform', name: 'Transform', tools: ['select', 'move', 'scale', 'rotate'] },
   { id: 'draw', name: 'Draw', tools: ['pen', 'rect', 'ellipse'] },
-  { id: 'shape', name: 'Create Shape', tools: ['shape', 'edge'] },
+  { id: 'shape', name: 'Create Shape', tools: ['shape', 'shapeSelect', 'edge'] },
 ];
 
 /** @type {Record<string, Tool>} the tool each group shows (the last one used in it) */

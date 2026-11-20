@@ -8,6 +8,7 @@ import { render as renderCanvas, setupCanvas } from './canvas.js';
 import { cancelPen, setupDrawTools } from './drawTools.js';
 import { clearPicks, createPicked, setupShapeTool } from './shapeTool.js';
 import { setupHideEdgeTool } from './hideEdgeTool.js';
+import { setupSelectShapeTool } from './selectShapeTool.js';
 import { nudgeSelection, setupSelectTool } from './selectTool.js';
 import { deletePoints, nudgePoints, setupPointEdit, stopEditing } from './pointEdit.js';
 import { copy, cut, duplicate, paste } from './clipboard.js';
@@ -28,6 +29,7 @@ setupCanvas();
 setupDrawTools();
 setupShapeTool();
 setupHideEdgeTool();
+setupSelectShapeTool();
 setupSelectTool();
 setupPointEdit();
 setupJson();
@@ -50,7 +52,7 @@ onChange(() => {
 });
 
 /** @type {Record<string, typeof state.tool>} */
-const TOOL_KEYS = { v: 'select', m: 'move', s: 'scale', t: 'rotate', p: 'pen', r: 'rect', e: 'ellipse', f: 'shape', h: 'edge' };
+const TOOL_KEYS = { v: 'select', m: 'move', s: 'scale', t: 'rotate', p: 'pen', r: 'rect', e: 'ellipse', f: 'shape', h: 'edge', q: 'shapeSelect' };
 /** @type {Record<string, [number, number]>} */
 const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
@@ -82,6 +84,11 @@ document.addEventListener('keydown', (event) => {
     // the shape of the picked points was made
   } else if (event.key === 'Escape' && stopEditing()) {
     // point editing ended
+  } else if (state.tool === 'shapeSelect' && arrow && !ctrl) {
+    // Select Shape: ↑ / ↓ order the selected part in its layer (Shift: to the top or bottom); the arrows move nothing.
+    if (!arrow[1]) return;
+    const up = arrow[1] < 0;
+    orderSelected(event.shiftKey ? (up ? 'top' : 'bottom') : up ? 'up' : 'down');
   } else if (arrow && !ctrl) {
     const step = event.shiftKey ? 10 : 1;
     const done = state.editing ? nudgePoints(arrow[0] * step, arrow[1] * step) : nudgeSelection(arrow[0] * step, arrow[1] * step);

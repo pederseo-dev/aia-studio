@@ -207,6 +207,13 @@ dialog h2 { margin-bottom: 12px; }
 #canvas .shape-point { fill: #fff; stroke: #4a90d9; stroke-width: 1; }
 #canvas .shape-point.picked { fill: var(--accent); stroke: var(--accent); }
 #canvas .shape-crossing { fill: none; stroke: #2bb673; stroke-width: 2; }
+/* Select Shape: what a click takes (hover) and what is taken (picked), lightly: a fill tinted, a stroke as a band. */
+#canvas .pick .pick-area { fill: var(--accent); opacity: 0.18; stroke: none; }
+#canvas .pick .pick-band { fill: none; stroke: var(--accent); stroke-width: 5; opacity: 0.45; stroke-linejoin: round; }
+#canvas .pick .pick-edge { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.8; }
+#canvas .pick.picked .pick-area { opacity: 0.12; }
+#canvas .pick.picked .pick-band { opacity: 0.3; stroke-dasharray: 6 3; }
+#canvas .pick-label { fill: #fff; stroke: #1e1d1b; stroke-width: 3; paint-order: stroke; font-family: inherit; }
 /* Hide Edge: hidden stretches faint and dashed; the stretch under the pointer lit (dashed when a click shows it). */
 #canvas .edge-hidden { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 4; opacity: 0.45; }
 #canvas .edge-hover { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; opacity: 0.85; }
