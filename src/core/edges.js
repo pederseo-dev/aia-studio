@@ -42,7 +42,7 @@ export function isHidden(doc, { part: id, hole, index }) {
 /**
  * The batch that hides or shows a drawn stretch, naming the points at its ends that have no name.
  * @param {Doc} doc resolved @param {Stretch} stretch @param {boolean} hide
- * @returns {{ ops: Operation[], edge: [string, string] }}
+ * @returns {{ ops: Operation[], edge: [string, string], named: string[] }} named: the points that got a name
  */
 export function edgeOps(doc, { part: id, hole, index }, hide) {
   const part = needPart(doc, id);
@@ -63,7 +63,7 @@ export function edgeOps(doc, { part: id, hole, index }, hide) {
   const edge = /** @type {[string, string]} */ (ends.map((end) => end.id ?? refs[named++]));
   const was = hiddenFlags(part, outline)[index];
   if (was === hide) throw new WeldError(`the stretch ${edge[0]} – ${edge[1]} of ${id} is ${hide ? 'hidden' : 'shown'} already`);
-  return { ops: [...vertexOps(changes), { op: 'set', target: id, props: { hiddenEdges: withEdge(part, edge, hide) } }], edge };
+  return { ops: [...vertexOps(changes), { op: 'set', target: id, props: { hiddenEdges: withEdge(part, edge, hide) } }], edge, named: refs };
 }
 
 /**

@@ -74,8 +74,8 @@ The properties of each type: aia guide types, then aia guide <type>.`,
   },
   paths: {
     title: 'Paths: vertices, curves, open lines',
-    text: `A path is { vertices, closed, holes? } plus the part's style (fill, stroke, strokeWidth, fillOpacity,
-strokeOpacity, visible). holes are closed outlines cut out of its fill (a donut); shapes made by aia fill / aia shape
+    text: `A path is { vertices, closed, holes?, hiddenEdges? } plus the part's style (fill, stroke, strokeWidth,
+fillOpacity, strokeOpacity, strokeCap, strokeJoin, visible). holes are closed outlines cut out of its fill (a donut); shapes made by aia fill / aia shape
 get them by themselves.
 A vertex is { "x": 10, "y": 20 } (a corner). A curve vertex adds tangent handles relative to it:
   "in"  { x, y }  toward the previous vertex
@@ -88,7 +88,11 @@ A smooth curve has in and out pointing opposite ways. A circle of radius r cente
    { "x": cx - r, "y": cy,     "in": { "x": 0, "y": k },  "out": { "x": 0, "y": -k } }]
 closed: true (the default) joins the last vertex to the first. An open line is "closed": false, usually with
 "fill": null. fill or stroke null = none. fillOpacity and strokeOpacity (0 to 1, default 1) make each one
-see-through: a shadow is a dark fill with "fillOpacity": 0.3.`,
+see-through: a shadow is a dark fill with "fillOpacity": 0.3.
+strokeCap is how the stroke ends (round, square, butt) and strokeJoin how it turns at corners (round, miter, bevel);
+both are round unless set (aia rect … --stroke-cap butt --stroke-join miter).
+hiddenEdges are stretches of the stroke that are not drawn, the fill untouched (Moho's Hide Edge), each the pair of
+named points at its two ends: "hiddenEdges": [["head.p2", "head.p3"]]. aia edge does it by name (aia guide points).`,
   },
   points: {
     title: 'Named points, shared points (welding) and point groups',
@@ -135,6 +139,14 @@ Shapes inside the gap that do not touch its lines become holes. Shapes add up: a
 one with a set op. Renaming a line renames its shapes (head_fill → face_fill). Only welded points join lines: where
 lines cross without a point, aia crossings face ink lists the places and --weld all welds them there.
   aia follow face skin.0 skin.1       (--long: the other way; --off: stop following)
+
+Hiding stretches of a stroke (Moho's Hide Edge), without touching the fill: name the part whose stroke it is and two
+points next to each other along that stroke. For an element they are its own points; for a shape that follows a line
+they are the line's points (the stretch between them is the piece hidden):
+  aia edge face head head.2 head.3 --hide             (--show draws it again)
+  aia edge face head_stroke head.chin head.4 --hide   the shape's stroke, between two points of head
+Points without a name get one (the part's hiddenEdges keeps pairs of names). A hidden edge whose point is deleted, or
+whose points stop being next to each other (a point added between them), is dropped.
 
 Moving points by name, without sending the vertices again (the vertices that share them follow):
   aia move face head.chin --to 400,470          one point to a place

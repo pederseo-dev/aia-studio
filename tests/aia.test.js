@@ -249,3 +249,23 @@ test('caps and joins: round by default, set with --stroke-cap and --stroke-join,
   assert.match((await aia.run('rect face ink b2 --box 0,0,10,10 --stroke-cap flat')).text, /--stroke-cap is one of: round, square, butt/);
   assert.match(await ok('guide path'), /strokeJoin.*one of round, miter, bevel/);
 });
+
+test('aia edge hides and shows a stretch of a stroke by two points, on an element and on a shape that follows a line', async () => {
+  await ok('new "Face" --width 400 --height 300');
+  await ok('rect face ink box --box 0,0,100,100 --names a,b,c,d');
+  assert.match(await ok('edge face box box.b box.c --hide'), /Hid the stroke of box between box\.b and box\.c\./);
+  await ok('fill face ink --at 50,50 --fill none --stroke #ff0000');
+  // The shape's stroke, between two of the square's points: by index, so they get names.
+  assert.match(await ok('edge face box_stroke box.c box.d --hide'), /between box\.c and box\.d/);
+  let doc = (await store.get('face', 'ai')).document;
+  const find = (id) => /** @type {any} */ (doc.objects.find((o) => o.id === id));
+  assert.deepEqual(find('box').hiddenEdges, [['box.b', 'box.c']]);
+  assert.deepEqual(find('box_stroke').hiddenEdges, [['box.c', 'box.d']]);
+  assert.match(await ok('edge face box box.c box.b --show'), /Showed/);
+  doc = (await store.get('face', 'ai')).document;
+  assert.equal(find('box').hiddenEdges, undefined);
+  assert.match((await aia.run('edge face box box.a box.c --hide')).text, /no stretch between these two points/);
+  assert.match((await aia.run('edge face box box.a box.b')).text, /--hide or --show/);
+  assert.match((await aia.run('edge face box box.a box.b --show')).text, /shown already/);
+  assert.match(await ok('guide points'), /aia edge face head head\.2 head\.3 --hide/);
+});

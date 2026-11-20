@@ -1,10 +1,11 @@
 // The `aia` commands of one topic. Points: move, delete, curve or corner, weld and unweld, name, add on a line,
-// follow a curve, group.
+// follow a curve, hide an edge, group.
 
 import { findObject } from '../../src/core/document.js';
 import { insertVertex, nearestOnOutline, verticesOf } from '../../src/core/geometry.js';
 import { movePointsOps, pointsNamed } from '../../src/core/points.js';
 import { deletePointsOps, followOps, groupOps, namePoint, unweld, weld } from '../../src/core/weld.js';
+import { edgeOps, stretchBetweenPoints } from '../../src/core/edges.js';
 import { AiaError, ok } from './common.js';
 
 /**
@@ -179,6 +180,31 @@ export function pointsCommands(ctx) {
         const { ops, note } = welding(() => followOps(doc, a, b, how));
         await store.apply(id, ops, { origin: ORIGIN, note });
         return ok(`${note}.`);
+      },
+    },
+
+    edge: {
+      usage: 'aia edge <doc> <part> <point> <point> --hide | --show',
+      summary: 'Hides or shows the stroke of a part between two points next to each other (Moho’s Hide Edge)',
+      details:
+        'The fill is not changed. The two points are part.point or part.index, next to each other along the part’s\n' +
+        'stroke: for an element, two of its own points; for a shape that follows a line (head_stroke), two points of\n' +
+        'that line (head.2 head.3). Points without a name get one, since a hidden edge is the pair of their names\n' +
+        '(hiddenEdges on the part). Example: aia edge face head_stroke head.2 head.3 --hide',
+      run: async (args) => {
+        const id = need(args, 0, 'the document id');
+        const doc = await resolved(id);
+        const partId = need(args, 1, 'the part whose stroke it is');
+        const a = onePoint(doc, need(args, 2, 'the first point'));
+        const b = onePoint(doc, need(args, 3, 'the second point'));
+        const hide = args.flags.hide === true;
+        if (hide === (args.flags.show === true)) throw new AiaError('Say one of --hide or --show');
+        const { ops, edge, named } = welding(() => edgeOps(doc, stretchBetweenPoints(doc, partId, a, b), hide));
+        await store.apply(id, ops, { origin: ORIGIN, note: `${hide ? 'Hide' : 'Show'} an edge of ${partId}` });
+        const stroke = findObject(doc, partId)?.stroke;
+        const none = hide || stroke !== null ? '' : ` (${partId} has no stroke, so nothing shows there yet)`;
+        const names = named.length ? ` (named now: ${named.join(', ')})` : '';
+        return ok(`${hide ? 'Hid' : 'Showed'} the stroke of ${partId} between ${edge[0]} and ${edge[1]}${names}${none}.`);
       },
     },
 

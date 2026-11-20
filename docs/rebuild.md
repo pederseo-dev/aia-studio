@@ -550,6 +550,13 @@ section has a Cap / join row under the shape's Stroke row, for its stroke part. 
 `aia rect`, `ellipse`, `shape` and `fill` (checked against the schema's values; for a shape, only its stroke part
 takes them).
 
+**Step 3c, `aia edge` (2026-11-20):** `aia edge <doc> <part> <point> <point> --hide | --show` (in
+`server/aia/points.js`): the two points are part.point or part.index, next to each other along the part's stroke (a
+shared vertex stands for the point it shares, so a shape's stretch is named by its line's points); unnamed ones get a
+name and the answer says which. Says why when the two points draw no stretch of that part, or it is hidden or shown
+already. The guide's paths topic explains `hiddenEdges`, `strokeCap` and `strokeJoin`; the points topic has `aia
+edge` for elements and shapes.
+
 Agreed on 2026-11-19, on decision 10 (replaces the paint bucket plan of 2026-11-18). Not a paint bucket: a **Fill &
 Stroke tool (F)** that works as a selector of its own. Over a closed gap between lines it shows the gap hatched, over a
 stretch of a line (between two points) it shows it thicker; a click marks or unmarks it (Shift: several), and the marks

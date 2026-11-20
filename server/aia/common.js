@@ -17,7 +17,7 @@ import { pointsNamed, resolveDoc } from '../../src/core/points.js';
 
 export class AiaError extends Error {}
 
-const BOOLEAN_FLAGS = new Set(['yes', 'all', 'join', 'long', 'off', 'none', 'add', 'remove', 'delete', 'resolved', 'apply', 'skip', 'labels', 'up', 'down', 'top', 'bottom']);
+const BOOLEAN_FLAGS = new Set(['yes', 'all', 'join', 'long', 'off', 'none', 'add', 'remove', 'delete', 'resolved', 'apply', 'skip', 'labels', 'up', 'down', 'top', 'bottom', 'hide', 'show']);
 
 /**
  * Splits one command line as a shell would (quotes group words), except that an unquoted [ or { starts a JSON value
