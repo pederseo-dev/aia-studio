@@ -218,6 +218,7 @@ dialog h2 { margin-bottom: 12px; }
 #canvas .edge-hidden { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 4; opacity: 0.45; }
 #canvas .edge-hover { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; opacity: 0.85; }
 #canvas .edge-hover.hidden { stroke-dasharray: 6 4; }
+#canvas .edge-trail { fill: none; stroke: var(--accent); stroke-width: 1; opacity: 0.6; }
 #canvas .pen-point { fill: #fff; stroke: var(--accent); stroke-width: 1.5; }
 #canvas .pen-start { fill: var(--accent); stroke: #fff; stroke-width: 1.5; }
 #canvas .pen-handle { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 2; }

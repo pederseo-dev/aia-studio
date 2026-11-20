@@ -616,8 +616,8 @@ bottom), ← / → do nothing in this tool. The shortcuts dialog has its row.
 **Touches asked by the user (2026-11-20):** Stroke cap and Stroke join in the Inspector (Element section and the
 Shape section's Cap / join row) are rows of icon buttons, the one set lit, instead of dropdowns (`choiceControl` in
 `inspector.js`: a choice whose values all have icons, `CHOICE_ICONS`; any other choice stays a dropdown). Hide Edge
-works as Moho's: press and drag over the lines and every stretch passed over is hidden, or shown when the first one
-was hidden, in one step on release (the places between two pointer moves are looked at too, so a quick drag skips
+works as Moho's: a drag from anywhere, on a line or not (clarified by the user), hides every stretch it crosses, or
+shows them when the first one it met was hidden, in one step on release; its path shows as a thin line meanwhile (the places between two pointer moves are looked at too, so a quick drag skips
 nothing; the swept stretches show lit while dragging). `edgesOps` in `core/edges.js` hides or shows several
 stretches at once, naming their unnamed points together (`edgeOps` is it for one, with its checks).
 

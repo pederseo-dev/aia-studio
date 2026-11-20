@@ -1,8 +1,9 @@
 // The Hide Edge tool (H), as Moho's Hide Edge (step 3 of part 4 in docs/rebuild.md): the stretch of a stroke under
 // the pointer lights up (of the topmost element or shape stroke there, in a shown and unlocked layer; with Alt, of the
 // one under it, as a shape's stroke under its line); a click hides it, without touching the fill, and a click on a
-// hidden one shows it again. As in Moho, pressing and dragging over the lines does the same to every stretch passed
-// over (hides them, or shows them when the first one was hidden), in one step when released. Hidden stretches show as
+// hidden one shows it again. As in Moho, a drag from anywhere (on a line or not) does the same to every stretch it
+// crosses (hides them, or shows them when the first one it met was hidden), in one step when released; its path shows
+// as a thin line while dragging. Hidden stretches show as
 // a faint dashed line while the tool is on, so they can be found. The stretches and the batch come from the core (core/edges.js),
 // the same as `aia edge`.
 
@@ -28,7 +29,7 @@ const STEP = 3; // screen px between the places looked at along a drag (so a fas
 
 /** @type {Stretch | null} the stretch under the pointer */
 let hover = null;
-/** @type {{ hide: boolean, stretches: Stretch[] } | null} the stretches a drag passed over, and what it does to them */
+/** @type {{ hide: boolean, stretches: Stretch[], trail: Point[] } | null} the stretches a drag crossed, what it does to them (the first one met decides), and where it went */
 let sweep = null;
 
 /** The parts whose stroke the tool works on, the topmost first: shown, unlocked, with a stroke. @param {Doc} doc */
@@ -79,18 +80,20 @@ function edgeDown(event) {
   if (!doc) return;
   const under = event.altKey;
   let last = toDoc(event);
-  const first = stretchAt(doc, last, under);
-  if (!first) return;
-  // The first stretch says what the drag does: hide, or show when it was hidden.
-  const current = { hide: !isHiddenStretch(doc, first), stretches: [first] };
+  /** @type {{ hide: boolean, stretches: Stretch[], trail: Point[] }} */
+  const current = { hide: true, stretches: [], trail: [last] };
   sweep = current;
   hover = null;
-  paintOverlay();
   /** @param {Point} p */
   const passOver = (p) => {
     const stretch = stretchAt(doc, p, under);
-    if (stretch && !current.stretches.some((s) => same(s, stretch))) current.stretches.push(stretch);
+    if (!stretch || current.stretches.some((s) => same(s, stretch))) return;
+    // The first stretch met says what the drag does: hide, or show when it was hidden.
+    if (!current.stretches.length) current.hide = !isHiddenStretch(doc, stretch);
+    current.stretches.push(stretch);
   };
+  passOver(last);
+  paintOverlay();
   drag(
     event,
     (p) => {
@@ -98,11 +101,13 @@ function edgeDown(event) {
       const steps = Math.max(1, Math.ceil(Math.hypot(p.x - last.x, p.y - last.y) / screen(STEP)));
       for (let k = 1; k <= steps; k++) passOver({ x: last.x + ((p.x - last.x) * k) / steps, y: last.y + ((p.y - last.y) * k) / steps });
       last = p;
+      current.trail.push(p);
       paintOverlay();
     },
     () => {
       sweep = null;
       try {
+        if (!current.stretches.length) return paintOverlay();
         const { ops, edges } = edgesOps(doc, current.stretches, current.hide);
         if (!ops.length) return paintOverlay();
         const what = edges.length === 1 ? `the edge ${edges[0][0]} – ${edges[0][1]}` : `${edges.length} edges`;
@@ -119,7 +124,8 @@ function paint(overlay, doc) {
   for (const part of strokedParts(doc)) {
     for (const stretch of hiddenStretches(part)) overlay.append(element('path', { d: stretchPath(part, stretch), class: 'edge-hidden' }));
   }
-  // The stretches a drag passed over: what they will look like (gone, or back).
+  // Where a drag went, and the stretches it crossed: what they will look like (gone, or back).
+  if (sweep && sweep.trail.length > 1) overlay.append(element('path', { d: `M${sweep.trail.map((p) => `${p.x} ${p.y}`).join('L')}`, class: 'edge-trail' }));
   for (const stretch of sweep?.stretches ?? []) {
     const swept = findObject(doc, stretch.part);
     if (swept) overlay.append(element('path', { d: stretchPath(swept, stretch), class: `edge-hover${sweep?.hide ? '' : ' hidden'}` }));
