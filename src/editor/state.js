@@ -9,7 +9,7 @@ import { resolveDoc } from '../core/points.js';
  * @typedef {import('../core/document.js').Doc} Doc
  * @typedef {import('../core/operations.js').Operation} Operation
  * @typedef {{ id: string, name: string }} Tab
- * @typedef {'select' | 'move' | 'scale' | 'rotate' | 'pen' | 'rect' | 'ellipse' | 'shape'} Tool
+ * @typedef {'select' | 'move' | 'scale' | 'rotate' | 'pen' | 'rect' | 'ellipse' | 'shape' | 'edge'} Tool
  */
 
 const TABS_KEY = 'aia.tabs';

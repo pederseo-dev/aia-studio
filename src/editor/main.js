@@ -7,6 +7,7 @@ import { deleteSelected, orderSelected, render as renderLayers, renameSelected, 
 import { render as renderCanvas, setupCanvas } from './canvas.js';
 import { cancelPen, setupDrawTools } from './drawTools.js';
 import { clearPicks, createPicked, setupShapeTool } from './shapeTool.js';
+import { setupHideEdgeTool } from './hideEdgeTool.js';
 import { nudgeSelection, setupSelectTool } from './selectTool.js';
 import { deletePoints, nudgePoints, setupPointEdit, stopEditing } from './pointEdit.js';
 import { copy, cut, duplicate, paste } from './clipboard.js';
@@ -26,6 +27,7 @@ setupLayers();
 setupCanvas();
 setupDrawTools();
 setupShapeTool();
+setupHideEdgeTool();
 setupSelectTool();
 setupPointEdit();
 setupJson();
@@ -48,7 +50,7 @@ onChange(() => {
 });
 
 /** @type {Record<string, typeof state.tool>} */
-const TOOL_KEYS = { v: 'select', m: 'move', s: 'scale', t: 'rotate', p: 'pen', r: 'rect', e: 'ellipse', f: 'shape' };
+const TOOL_KEYS = { v: 'select', m: 'move', s: 'scale', t: 'rotate', p: 'pen', r: 'rect', e: 'ellipse', f: 'shape', h: 'edge' };
 /** @type {Record<string, [number, number]>} */
 const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 

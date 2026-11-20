@@ -113,7 +113,7 @@ export function stretchNear(part, p, reach) {
  */
 export function stretchVertices(part, { hole, index }) {
   const outline = outlineOf(part, hole);
-  if (!outline) return [];
+  if (!outline || index < 0 || index >= stretchEnds(outline).length) return [];
   const n = outline.vertices.length;
   return [outline.vertices[index], outline.vertices[(index + 1) % n]];
 }

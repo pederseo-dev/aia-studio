@@ -557,6 +557,14 @@ name and the answer says which. Says why when the two points draw no stretch of 
 already. The guide's paths topic explains `hiddenEdges`, `strokeCap` and `strokeJoin`; the points topic has `aia
 edge` for elements and shapes.
 
+**Step 3d, the Hide Edge tool (2026-11-20):** `src/editor/hideEdgeTool.js`, key **H**, in the Create Shape group of the
+tool selector (icon: a square with one side dashed). The stretch of a stroke under the pointer lights up, of the
+topmost part there with a stroke (elements and `_stroke` parts, in shown and unlocked layers; the reach is a few
+screen pixels plus half the stroke width); a click hides it (`edgeOps`, one undo step), a click on a hidden one shows
+it again. While the tool is on, every hidden stretch shows as a faint dashed line, and the lit one is dashed when a
+click would show it. A shape's stroke lies under its line, so the line wins there: **Alt** takes the stroke under the
+topmost one (added after trying it). The shortcuts dialog has its row.
+
 Agreed on 2026-11-19, on decision 10 (replaces the paint bucket plan of 2026-11-18). Not a paint bucket: a **Fill &
 Stroke tool (F)** that works as a selector of its own. Over a closed gap between lines it shows the gap hatched, over a
 stretch of a line (between two points) it shows it thicker; a click marks or unmarks it (Shift: several), and the marks

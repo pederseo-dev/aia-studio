@@ -45,6 +45,8 @@ export const ICONS = {
   curve: stroke('<path d="M5 19C7 9 17 9 19 19"/><path d="M6 10h12" stroke-dasharray="2 2"/><rect x="10.5" y="9.5" width="3" height="3" fill="currentColor"/>'),
   // Create Shape: the bean of the fill and stroke swatches.
   bean: stroke(`<path d="${BEAN}" transform="rotate(-30 12 12)"/>`),
+  // Hide Edge: a square with one side dashed.
+  hideEdge: stroke('<path d="M19 5H5v14h14"/><path d="M19 5v14" stroke-dasharray="2 2.5"/><rect x="17.5" y="3.5" width="3" height="3" fill="currentColor"/><rect x="17.5" y="17.5" width="3" height="3" fill="currentColor"/>'),
   path: stroke('<path d="M4 17c3-9 6-11 9-6s5 3 7-4"/><circle cx="4" cy="17" r="1.3" fill="currentColor"/><circle cx="20" cy="7" r="1.3" fill="currentColor"/>'),
 };
 

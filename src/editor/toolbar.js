@@ -15,6 +15,7 @@ export const TOOLS = {
   pen: { name: 'Pen', key: 'P', icon: 'pen', help: 'Click for corners, drag for curves; the first point closes, Enter ends a line, Esc cancels' },
   rect: { name: 'Rectangle', key: 'R', icon: 'rect', help: 'Drag on the canvas for a rectangular path; Shift for a square' },
   ellipse: { name: 'Ellipse', key: 'E', icon: 'ellipse', help: 'Drag on the canvas for an elliptical path; Shift for a circle' },
+  edge: { name: 'Hide Edge', key: 'H', icon: 'hideEdge', help: 'Click a stretch of a stroke to hide it, without touching the fill (Moho’s Hide Edge); click a hidden one, shown dashed, to show it again. Works on elements and on the strokes of shapes; Alt: the stroke under the topmost one (a shape’s stroke under its line)' },
   shape: { name: 'Create Shape', key: 'F', icon: 'bean', help: 'Pick the points around a shape (click, a box, or a click inside a gap; Shift adds or takes out, also dragging over points); a checkerboard shows when they close it, and Create shape (Enter) makes it. A click on a ring welds two crossing lines there. Esc clears the picks' },
 };
 
@@ -22,7 +23,7 @@ export const TOOLS = {
 const GROUPS = [
   { id: 'transform', name: 'Transform', tools: ['select', 'move', 'scale', 'rotate'] },
   { id: 'draw', name: 'Draw', tools: ['pen', 'rect', 'ellipse'] },
-  { id: 'shape', name: 'Create Shape', tools: ['shape'] },
+  { id: 'shape', name: 'Create Shape', tools: ['shape', 'edge'] },
 ];
 
 /** @type {Record<string, Tool>} the tool each group shows (the last one used in it) */
