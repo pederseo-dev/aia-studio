@@ -47,6 +47,20 @@
       "description": "Stroke width in px.",
       "help": "Stroke width in px."
     },
+    "strokeCap": {
+      "type": "choice",
+      "values": ["round", "square", "butt"],
+      "default": "round",
+      "description": "How the stroke ends at the open ends of a line, and where a hidden edge opens it: round (a half circle past the end), square (a half square past the end) or butt (cut at the end).",
+      "help": "How the stroke ends: round, square or butt."
+    },
+    "strokeJoin": {
+      "type": "choice",
+      "values": ["round", "miter", "bevel"],
+      "default": "round",
+      "description": "How the stroke turns at a corner: round, miter (a sharp point) or bevel (the point cut off).",
+      "help": "How the stroke turns at corners: round, miter or bevel."
+    },
     "originX": {
       "type": "number",
       "default": null,

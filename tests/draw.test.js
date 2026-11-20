@@ -88,3 +88,12 @@ test('fill and stroke opacity draw as fill-opacity and stroke-opacity, and are k
     /fillOpacity.*at most 1/,
   );
 });
+
+test('caps and joins draw as stroke-linecap and stroke-linejoin, round by default, and take only their values', () => {
+  const layer = { op: 'create', type: 'vector', id: 'face' };
+  const doc = build([layer, { op: 'create', type: 'path', id: 'a', parent: 'face', props: { vertices: square } }, { op: 'create', type: 'path', id: 'b', parent: 'face', props: { vertices: square, strokeCap: 'square', strokeJoin: 'bevel' } }]);
+  const [a, b] = drawDocument(doc).nodes[0].children;
+  assert.deepEqual([a.attrs['stroke-linecap'], a.attrs['stroke-linejoin']], ['round', 'round']);
+  assert.deepEqual([b.attrs['stroke-linecap'], b.attrs['stroke-linejoin']], ['square', 'bevel']);
+  assert.throws(() => build([layer, { op: 'create', type: 'path', id: 'c', parent: 'face', props: { vertices: square, strokeJoin: 'sharp' } }]), /strokeJoin must be one of: round, miter, bevel/);
+});

@@ -34,7 +34,7 @@ export function shapesCommands(ctx) {
   const { store, schema, ORIGIN, need, number, resolved, points, transformParts, round, boxFlag, shapeName, madeShape, styleFlags, drawShape, pair } = ctx;
   return {
     rect: {
-      usage: 'aia rect <doc> <layer> <id> --box x,y,w,h [--radius r] [--names a,b,c,d] [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1]',
+      usage: 'aia rect <doc> <layer> <id> --box x,y,w,h [--radius r] [--names a,b,c,d] [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1] [--stroke-cap round|square|butt] [--stroke-join round|miter|bevel]',
       summary: 'Draws a rectangle (a path of 4 corners, or 8 points with rounded corners) into a vector layer',
       details:
         'The layer is made if there is none with that id. The box is in the layer’s coordinates. --names names its\n' +
@@ -49,7 +49,7 @@ export function shapesCommands(ctx) {
     },
 
     ellipse: {
-      usage: 'aia ellipse <doc> <layer> <id> --box x,y,w,h [--points n] [--names a,b,…] [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1]',
+      usage: 'aia ellipse <doc> <layer> <id> --box x,y,w,h [--points n] [--names a,b,…] [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1] [--stroke-cap round|square|butt] [--stroke-join round|miter|bevel]',
       summary: 'Draws an ellipse (a path of evenly round points, 4 by default) into a vector layer',
       details:
         'The layer is made if there is none with that id. The box is in the layer’s coordinates. --points gives more\n' +
@@ -87,7 +87,7 @@ export function shapesCommands(ctx) {
     },
 
     shape: {
-      usage: 'aia shape <doc> <layer> <point>... [--id name] [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1]',
+      usage: 'aia shape <doc> <layer> <point>... [--id name] [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1] [--stroke-cap round|square|butt] [--stroke-join round|miter|bevel]',
       summary: 'Creates a shape from the points around it, as Moho’s Create Shape (the editor’s Create Shape tool)',
       details:
         'Name every point around the shape (part.point, part.index or layer.group), and the points around its holes\n' +
@@ -153,7 +153,7 @@ export function shapesCommands(ctx) {
     },
 
     fill: {
-      usage: 'aia fill <doc> <layer> --at x,y [--id name] [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1]',
+      usage: 'aia fill <doc> <layer> --at x,y [--id name] [--fill c|none] [--stroke c|none] [--stroke-width n] [--fill-opacity 0-1] [--stroke-opacity 0-1] [--stroke-cap round|square|butt] [--stroke-join round|miter|bevel]',
       summary: 'Creates a shape in the gap around x,y that the lines of a vector layer close (a click inside it in Create Shape)',
       details:
         'x,y is in the layer’s coordinates (after moving a layer, they move with it). Shapes inside the gap that do not\n' +

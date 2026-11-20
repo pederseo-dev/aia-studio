@@ -236,3 +236,16 @@ test('aia crossings welds lines that cross, and aia shape makes a shape from the
   assert.match(await ok(`shape face ink ${named.join(' ')} a.2 b.4`), /Made (a|b)_fill./);
   assert.match((await aia.run('shape face ink a.0')).text, /do not close a shape/);
 });
+
+test('caps and joins: round by default, set with --stroke-cap and --stroke-join, on elements and shapes', async () => {
+  await ok('new "Face" --width 400 --height 300');
+  await ok('rect face ink box --box 0,0,100,100 --fill none --stroke-cap butt --stroke-join miter');
+  await ok('fill face ink --at 50,50 --stroke #000000 --stroke-join bevel');
+  const doc = (await store.get('face', 'ai')).document;
+  const find = (id) => /** @type {any} */ (doc.objects.find((o) => o.id === id));
+  assert.deepEqual([find('box').strokeCap, find('box').strokeJoin], ['butt', 'miter']);
+  assert.deepEqual([find('box_stroke').strokeCap, find('box_stroke').strokeJoin], [undefined, 'bevel'], 'round is the default, not written');
+  assert.equal(find('box_fill').strokeJoin, undefined, 'only the stroke part takes it');
+  assert.match((await aia.run('rect face ink b2 --box 0,0,10,10 --stroke-cap flat')).text, /--stroke-cap is one of: round, square, butt/);
+  assert.match(await ok('guide path'), /strokeJoin.*one of round, miter, bevel/);
+});

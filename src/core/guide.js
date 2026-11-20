@@ -157,7 +157,8 @@ export function guideTopics(schema) {
 
 /** @param {PropertySpec} p */
 function describeProperty(p) {
-  const kind = p.nullable ? `${p.type} or null` : p.type;
+  const type = p.values ? `one of ${p.values.join(', ')}` : p.type;
+  const kind = p.nullable ? `${type} or null` : type;
   const range = [p.min !== undefined ? `min ${p.min}` : '', p.max !== undefined ? `max ${p.max}` : ''].filter(Boolean).join(', ');
   return `${kind}, default ${JSON.stringify(p.default)}${range ? `, ${range}` : ''}`;
 }

@@ -113,8 +113,8 @@ function drawPart(part) {
     strokeAttrs.stroke = String(stroke);
     if (part.strokeOpacity !== undefined && part.strokeOpacity !== 1) strokeAttrs['stroke-opacity'] = Number(part.strokeOpacity);
     strokeAttrs['stroke-width'] = Number(part.strokeWidth ?? DEFAULTS.strokeWidth);
-    strokeAttrs['stroke-linejoin'] = 'round';
-    strokeAttrs['stroke-linecap'] = 'round';
+    strokeAttrs['stroke-linejoin'] = String(part.strokeJoin ?? 'round');
+    strokeAttrs['stroke-linecap'] = String(part.strokeCap ?? 'round');
   }
   const id = part.id;
   if (stroke === null || !hidesEdges(part)) return { tag: 'path', attrs: { 'data-id': id, d: partData(part), ...fillAttrs, ...strokeAttrs }, children: [] };

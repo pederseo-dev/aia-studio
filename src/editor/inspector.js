@@ -156,6 +156,21 @@ function unitSlider(value, onInput, onChange) {
 }
 
 /**
+ * A dropdown of a property's values (strokeCap: round, square, butt).
+ * @param {PropertySpec} spec @param {unknown} value or MIXED @param {(value: string) => void} onChange
+ */
+function choiceSelect(spec, value, onChange) {
+  const choose = document.createElement('select');
+  if (value === MIXED) choose.append(new Option('mixed', '', true, true));
+  for (const v of spec.values ?? []) choose.append(new Option(v[0].toUpperCase() + v.slice(1), v, false, v === value));
+  choose.title = spec.help;
+  choose.addEventListener('change', () => {
+    if (choose.value) onChange(choose.value);
+  });
+  return choose;
+}
+
+/**
  * @param {string} label @param {string} help @param {...HTMLElement} controls
  */
 function row(label, help, ...controls) {
@@ -234,6 +249,7 @@ function propertyRow(key, spec, targets, { bean = true, extra = [] } = {}) {
   }
   if (spec.type === 'number' && spec.min === 0 && spec.max === 1) return row(labelOf(key), spec.help, ...unitSlider(value, live, change));
   if (spec.type === 'number') return row(labelOf(key), spec.help, numberField(spec, value, live, change));
+  if (spec.type === 'choice') return row(labelOf(key), spec.help, choiceSelect(spec, value, change));
   if (spec.type === 'pointGroups') {
     const span = document.createElement('span');
     span.className = 'faint';
@@ -369,6 +385,17 @@ function partSections(doc, part) {
     return propertyRow(key, spec.properties[key], [{ id: holder.id, values: holder }], { extra: orderButtons([holder.id], !isLocked(holder.id)) });
   };
   out.push(paint('fill'), paint('stroke'));
+  // The stroke part's caps and joins go with its Stroke row.
+  const stroke = current.stroke;
+  if (stroke) {
+    const target = [{ id: stroke.id, values: stroke }];
+    /** @param {string} key */
+    const pick = (key) => {
+      const property = /** @type {PropertySpec} */ (spec.properties[key]);
+      return choiceSelect(property, valueOf(target, key, property), (v) => save(target, { [key]: v }));
+    };
+    out.push(row('Cap / join', 'How the shape’s stroke ends (round, square, butt) and turns at corners (round, miter, bevel).', pick('strokeCap'), pick('strokeJoin')));
+  }
   return out;
 }
 

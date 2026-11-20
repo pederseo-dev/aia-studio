@@ -208,7 +208,6 @@ export function createContext({ store, schema }) {
     return { x: n[0], y: n[1], width: n[2], height: n[3] };
   };
 
-  /** --fill, --stroke (a color or none), --stroke-width and --fill-opacity, --stroke-opacity (0 to 1), as part props. @param {Args} args */
   /** --id: what a new shape's parts are named after (name_fill, name_stroke), instead of its main line. @param {Args} args */
   const shapeName = (args) => {
     const name = args.flags.id;
@@ -220,6 +219,11 @@ export function createContext({ store, schema }) {
   /** What a new shape is, for the answer. @param {string[]} ids */
   const madeShape = (ids) => `Made ${ids.join(' and ')}${ids.length > 1 ? ' (its fill and its stroke, each with its own place in the order)' : ''}.`;
 
+  /**
+   * --fill, --stroke (a color or none), --stroke-width, --fill-opacity, --stroke-opacity (0 to 1), --stroke-cap and
+   * --stroke-join, as part props.
+   * @param {Args} args
+   */
   const styleFlags = (args) => {
     /** @type {Record<string, unknown>} */
     const props = {};
@@ -238,6 +242,13 @@ export function createContext({ store, schema }) {
       const n = Number(args.flags[flag]);
       if (!Number.isFinite(n) || n < 0 || n > 1) throw new AiaError(`--${flag} must be a number from 0 to 1`);
       props[key] = n;
+    }
+    for (const [flag, key] of [['stroke-cap', 'strokeCap'], ['stroke-join', 'strokeJoin']]) {
+      const value = args.flags[flag];
+      if (value === undefined) continue;
+      const values = /** @type {string[]} */ (schema.get('part')?.properties[key]?.values ?? []);
+      if (typeof value !== 'string' || !values.includes(value)) throw new AiaError(`--${flag} is one of: ${values.join(', ')}`);
+      props[key] = value;
     }
     return props;
   };

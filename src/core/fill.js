@@ -29,7 +29,7 @@ import { freeShapeSuffix, shapePartName } from './shapes.js';
  *   length: how long it is (to name a fill after the line it goes along most)
  * @typedef {{ stretches: Stretch[], polygon: Point[], area: number, holes: Stretch[][], holePolygons: Point[][], nodes: string[] }} Gap
  *   area: inside its outline (its holes not taken away); nodes: the points around it and its holes
- * @typedef {{ fill?: string | null, stroke?: string | null, strokeWidth?: number, fillOpacity?: number, strokeOpacity?: number }} FillStyle
+ * @typedef {{ fill?: string | null, stroke?: string | null, strokeWidth?: number, fillOpacity?: number, strokeOpacity?: number, strokeCap?: string, strokeJoin?: string }} FillStyle
  */
 
 const SAMPLES = 12; // points along each curved stretch, to find the gaps
@@ -369,6 +369,8 @@ export function styleProps(style) {
   if (style.stroke) {
     if (style.strokeWidth !== undefined) props.strokeWidth = style.strokeWidth;
     if (style.strokeOpacity !== undefined && style.strokeOpacity !== 1) props.strokeOpacity = style.strokeOpacity;
+    if (style.strokeCap !== undefined && style.strokeCap !== 'round') props.strokeCap = style.strokeCap;
+    if (style.strokeJoin !== undefined && style.strokeJoin !== 'round') props.strokeJoin = style.strokeJoin;
   }
   return props;
 }

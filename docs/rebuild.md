@@ -542,6 +542,14 @@ has the ops for the editor and `aia`: `edgeOps` hides or shows a drawn stretch n
 shape follows, when the end is one of its points), `stretchBetweenPoints` finds one by two points, `stretchNear` by
 the pointer. Tests: `tests/edges.test.js`.
 
+**Step 3b, caps and joins (2026-11-20):** `strokeCap` (round, square, butt) and `strokeJoin` (round, miter, bevel) on
+`part`, round by default (a new schema property type, `choice`, with its `values`; `aia guide <type>` shows them as
+"one of …"). Drawn as `stroke-linecap` / `stroke-linejoin` (the cap also shows where a hidden edge opens the stroke).
+In the Inspector they show by themselves in the Element section as dropdowns (Stroke cap, Stroke join), and the Shape
+section has a Cap / join row under the shape's Stroke row, for its stroke part. `--stroke-cap` and `--stroke-join` in
+`aia rect`, `ellipse`, `shape` and `fill` (checked against the schema's values; for a shape, only its stroke part
+takes them).
+
 Agreed on 2026-11-19, on decision 10 (replaces the paint bucket plan of 2026-11-18). Not a paint bucket: a **Fill &
 Stroke tool (F)** that works as a selector of its own. Over a closed gap between lines it shows the gap hatched, over a
 stretch of a line (between two points) it shows it thicker; a click marks or unmarks it (Shift: several), and the marks
